@@ -90,8 +90,16 @@ export default async function handler(req, res) {
             const phone = body.phone ? String(body.phone).slice(0, 60) : null;
             if (!email && !phone) return bad(res, 'Provide an email or phone.');
             const country = (req.headers['x-vercel-ip-country'] || '') || null;
+            // Referral attribution (?ref=<partner code>).
+            const refCode = body.ref ? String(body.ref).slice(0, 40) : null;
+            let referredBy = null;
+            if (refCode) {
+                const { data: ref } = await supabase.from('persons').select('id').eq('referral_code', refCode).maybeSingle();
+                referredBy = ref?.id || null;
+            }
             await supabase.from('landing_submissions').insert({
                 landing_page_id: page.id, name, email, phone, country,
+                referred_by: referredBy, ref_code: refCode,
                 meta: (body.meta && typeof body.meta === 'object') ? body.meta : null
             });
             const cc = page.contact;

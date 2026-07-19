@@ -87,6 +87,7 @@
   <button class="btn btn-white" onclick="location.href='/'"><span class="material-icons" style="font-size:17px;">home</span> Home</button>
   <button class="btn btn-white" id="sitesBtn" onclick="openSites()"><span class="material-icons" style="font-size:17px;">public</span> Embed Sites</button>
   <button class="btn btn-white" onclick="openLandingPages()"><span class="material-icons" style="font-size:17px;">web_asset</span> Landing Pages</button>
+  <button class="btn btn-white" onclick="openReferrals()"><span class="material-icons" style="font-size:17px;">share</span> Referrals</button>
   <button class="btn btn-brand" onclick="pickCampaignType()"><span class="material-icons" style="font-size:17px;">add</span> New Campaign</button>
 </div>
 
@@ -2023,7 +2024,61 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ i
   </div>
 </div>
 
+<!-- ── REFERRALS ── -->
+<div class="modal" id="referralsModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">share</span>
+      <h2 style="flex:1;">Partner Referrals</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('referralsModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body">
+      <div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+        <div style="font-weight:800;font-size:14px;margin-bottom:6px;">Get a partner's referral link</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px;">Search a partner and pick a landing page — share the generated link; leads captured through it are credited to them.</div>
+        <div class="row2">
+          <div><input class="inp" id="ref_search" placeholder="Search partner name / email…" oninput="refSearch()"></div>
+          <div><select class="inp" id="ref_page"><option value="">— choose a page —</option></select></div>
+        </div>
+        <div id="ref_results" style="margin-top:8px;"></div>
+        <div id="ref_linkout" style="margin-top:10px;"></div>
+      </div>
+      <div style="font-weight:800;font-size:14px;margin-bottom:8px;">Top referrers <span id="ref_total" class="muted" style="font-weight:400;font-size:12px;"></span></div>
+      <div id="ref_leaders"><div class="muted" style="text-align:center;padding:20px;">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
 <script>
+// ── REFERRALS ──
+async function openReferrals(){
+  document.getElementById('referralsModal').style.display='flex';
+  document.getElementById('ref_results').innerHTML=''; document.getElementById('ref_linkout').innerHTML=''; document.getElementById('ref_search').value='';
+  var r=await api({action:'referrals_report'});
+  var pageSel=document.getElementById('ref_page');
+  pageSel.innerHTML='<option value="">— choose a page —</option>'+((r.pages||[]).map(function(p){return '<option value="'+esc(p.slug)+'">'+esc(p.title||p.slug)+'</option>';}).join(''));
+  document.getElementById('ref_total').textContent=r.success?('· '+r.total+' referred leads'):'';
+  var box=document.getElementById('ref_leaders');
+  var leaders=(r.success&&r.leaders)||[];
+  box.innerHTML=leaders.length?('<table style="width:100%;"><thead><tr><th style="text-align:left;padding:6px 8px;">Partner</th><th class="num" style="padding:6px 8px;">Leads</th></tr></thead><tbody>'+leaders.map(function(l,i){return '<tr><td style="padding:6px 8px;">'+(i<3?['🥇','🥈','🥉'][i]+' ':'')+esc(l.name)+'<div class="muted" style="font-size:11px;">'+esc(l.email)+'</div></td><td class="num" style="padding:6px 8px;font-weight:800;color:var(--green);">'+l.leads+'</td></tr>';}).join('')+'</tbody></table>'):'<div class="muted" style="text-align:center;padding:20px;">No referred leads yet.</div>';
+}
+var _refTimer=null;
+function refSearch(){ if(_refTimer) clearTimeout(_refTimer); _refTimer=setTimeout(_refSearchNow,250); }
+var _refPartners=[];
+async function _refSearchNow(){
+  var q=document.getElementById('ref_search').value.trim(); var box=document.getElementById('ref_results');
+  if(q.length<2){ box.innerHTML=''; return; }
+  var r=await api({action:'referral_link',q:q}); _refPartners=(r.success&&r.partners)||[];
+  box.innerHTML=_refPartners.length?_refPartners.map(function(p,i){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;"><span style="flex:1;">'+esc(p.name||p.email)+'</span><button class="btn btn-neutral" style="padding:4px 9px;" onclick="refMakeLink('+i+')">Get link</button></div>';}).join(''):'<div class="muted" style="font-size:12px;">No partners found.</div>';
+}
+function refMakeLink(i){
+  var p=_refPartners[i]; if(!p) return;
+  var slug=document.getElementById('ref_page').value;
+  if(!slug){ Swal.fire('Pick a page','Choose a landing page first.','info'); return; }
+  var url=location.origin+'/p/'+slug+'?ref='+encodeURIComponent(p.code);
+  document.getElementById('ref_linkout').innerHTML='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px;font-size:12px;"><b>'+esc(p.name||p.email)+'</b> — referral link:<div style="display:flex;gap:6px;margin-top:6px;"><input class="inp" readonly value="'+esc(url)+'" onclick="this.select()" style="font-family:\'DM Mono\',monospace;font-size:11px;"><button class="btn btn-brand" onclick="copyText(\''+url+'\')">Copy</button></div></div>';
+}
+
 // ── LANDING PAGES ──
 var _lpState = { id:null, mode:'native' };
 function lapi(body){

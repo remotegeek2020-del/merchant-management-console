@@ -133,7 +133,7 @@ const ADMIN_ACTIONS = new Set([
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'site_pages', 'set_site_excluded', 'campaign_pages', 'ghl_locations',
-    'get_responses', 'export_responses', 'dashboard',
+    'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'scan_cta',
@@ -476,6 +476,41 @@ export default async function handler(req, res) {
                 const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
                 if (error) return bad(res, error.message);
                 return ok(res, { deleted: true });
+            }
+            // Referral report: leads captured per partner + published landing pages.
+            if (action === 'referrals_report') {
+                const { data: subs } = await supabase.from('landing_submissions')
+                    .select('referred_by, created_at').not('referred_by', 'is', null).limit(50000);
+                const tally = {};
+                (subs || []).forEach(s => { tally[s.referred_by] = (tally[s.referred_by] || 0) + 1; });
+                const ids = Object.keys(tally);
+                let names = {};
+                if (ids.length) {
+                    const { data: ppl } = await supabase.from('persons').select('id, full_name, email, referral_code').in('id', ids);
+                    (ppl || []).forEach(p => { names[p.id] = p; });
+                }
+                const leaders = ids.map(id => ({ id, leads: tally[id], name: names[id]?.full_name || 'Partner', email: names[id]?.email || '', code: names[id]?.referral_code || '' }))
+                    .sort((a, b) => b.leads - a.leads).slice(0, 100);
+                const { data: pages } = await supabase.from('landing_pages').select('slug, title').eq('is_published', true).order('title');
+                return ok(res, { leaders, total: (subs || []).length, pages: pages || [] });
+            }
+            // A partner's referral code (search by name/email) for building their link.
+            if (action === 'referral_link') {
+                const q = String(req.body.q || '').trim();
+                if (q.length < 2) return ok(res, { partners: [] });
+                const like = `%${q}%`;
+                const { data } = await supabase.from('persons')
+                    .select('id, full_name, email, referral_code')
+                    .or(`full_name.ilike.${like},email.ilike.${like}`).limit(15);
+                // Ensure a code exists for each match.
+                for (const p of (data || [])) {
+                    if (!p.referral_code) {
+                        const code = String(p.id).replace(/-/g, '').slice(0, 8);
+                        await supabase.from('persons').update({ referral_code: code }).eq('id', p.id);
+                        p.referral_code = code;
+                    }
+                }
+                return ok(res, { partners: (data || []).map(p => ({ id: p.id, name: p.full_name, email: p.email, code: p.referral_code })) });
             }
             // Aggregate performance dashboard across all campaigns.
             if (action === 'dashboard') {

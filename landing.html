@@ -34,6 +34,9 @@
   var m = location.pathname.match(/\/p\/([^\/?#]+)/);
   var slug = (m && m[1]) || qp('slug');
   var root = document.getElementById('root');
+  // Referral capture: remember ?ref across the visit so it rides on the submit.
+  var REF = qp('ref');
+  try { if (REF) localStorage.setItem('ppx_ref', REF); else REF = localStorage.getItem('ppx_ref') || ''; } catch (e) {}
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
   function bodyHtml(b){ b=b==null?'':String(b); return /<[a-z][\s\S]*>/i.test(b)?b:esc(b).replace(/\n/g,'<br>'); }
   function ctx(){ return { ref:document.referrer.slice(0,300), url:location.href.slice(0,300), utm_source:qp('utm_source'), utm_medium:qp('utm_medium'), utm_campaign:qp('utm_campaign') }; }
@@ -65,7 +68,7 @@
           if(!email && !phone){ alert('Please enter your email or phone.'); return; }
           if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ alert('Please enter a valid email.'); return; }
           var sub = form.querySelector('[type=submit],button'); if(sub){ sub.disabled=true; }
-          fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,name:name,email:email,phone:phone,meta:ctx()})})
+          fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,ref:REF,name:name,email:email,phone:phone,meta:ctx()})})
             .then(function(r){return r.json();}).then(function(d){
               if(d.success){ form.innerHTML='<div style="text-align:center;padding:24px;font-size:18px;font-weight:700;">✅ '+esc(p.thanks||'Thank you!')+'</div>'; }
               else { alert(d.message||'Something went wrong.'); if(sub) sub.disabled=false; }
@@ -160,7 +163,7 @@
     if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.textContent='Please enter a valid email.'; return; }
     var meta=ctx(); var d=window.__calcData||{}; meta.calc_volume=d.vol; meta.calc_rate=d.rate; meta.calc_savings=d.save;
     var btn=document.querySelector('#calc-out .lp-btn'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
-    fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,name:name,email:email,phone:phone,meta:meta})})
+    fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,ref:REF,name:name,email:email,phone:phone,meta:meta})})
       .then(function(r){return r.json();}).then(function(d2){
         if(d2.success){ document.getElementById('calc-out').innerHTML='<div style="text-align:center;padding:30px;"><div style="font-size:44px;">✅</div><div style="font-weight:800;font-size:18px;margin-top:8px;">'+esc((window.__lpPage&&window.__lpPage.thanks)||'Thanks! Your report is on the way.')+'</div></div>'; }
         else { msg.textContent=d2.message||'Something went wrong.'; if(btn){ btn.disabled=false; btn.textContent='Send me the report'; } }
@@ -178,7 +181,7 @@
     if((rq.indexOf('email')!==-1 || (!phone)) && !email){ msg.textContent='Please enter your email.'; return; }
     if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.textContent='Please enter a valid email.'; return; }
     var btn=document.querySelector('.lp-btn'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
-    fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,name:name,email:email,phone:phone,meta:ctx()})})
+    fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,ref:REF,name:name,email:email,phone:phone,meta:ctx()})})
       .then(function(r){return r.json();}).then(function(d){
         if(d.success){ document.getElementById('lp-form').innerHTML=''; root.querySelector('.lp-body').innerHTML='<div class="lp-thanks"><div class="ic">✅</div><div style="font-weight:800;font-size:20px;margin-top:10px;">'+esc(p.thanks||'Thank you!')+'</div></div>'; }
         else { msg.textContent=d.message||'Something went wrong.'; if(btn){ btn.disabled=false; btn.textContent=p.cta_label||'Get started'; } }
