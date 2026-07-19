@@ -47,6 +47,32 @@
 
   function render(p){
     document.title = p.title || p.headline || 'PayProTec';
+    window.__lpPage = p;
+    // Advanced (AI / custom-HTML) page: inject it full-width and wire its form.
+    if (p.custom_html && p.custom_html.trim()){
+      document.body.style.background = '#ffffff';
+      document.body.style.display = 'block';
+      document.body.style.padding = '0';
+      root.style.width = '100%';
+      root.innerHTML = p.custom_html;
+      var form = root.querySelector('#lead-form') || root.querySelector('form');
+      if (form){
+        form.addEventListener('submit', function(e){
+          e.preventDefault();
+          var get = function(n){ var el = form.querySelector('[name="'+n+'"]'); return el ? String(el.value||'').trim() : ''; };
+          var name=get('name'), email=get('email'), phone=get('phone');
+          if(!email && !phone){ alert('Please enter your email or phone.'); return; }
+          if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ alert('Please enter a valid email.'); return; }
+          var sub = form.querySelector('[type=submit],button'); if(sub){ sub.disabled=true; }
+          fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,name:name,email:email,phone:phone,meta:ctx()})})
+            .then(function(r){return r.json();}).then(function(d){
+              if(d.success){ form.innerHTML='<div style="text-align:center;padding:24px;font-size:18px;font-weight:700;">✅ '+esc(p.thanks||'Thank you!')+'</div>'; }
+              else { alert(d.message||'Something went wrong.'); if(sub) sub.disabled=false; }
+            }).catch(function(){ alert('Network error — please try again.'); if(sub) sub.disabled=false; });
+        });
+      }
+      return;
+    }
     var t = p.theme || {};
     var accent = t.accent || '#004990', btnText = t.btnText || '#fff', radius = (t.radius!=null?t.radius:16);
     var bg = t.bg || '#fff', titleCol = t.title || '#0f172a', textCol = t.text || '#475569';

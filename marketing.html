@@ -1897,6 +1897,26 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ i
       </div>
       <div class="muted" style="font-size:11px;margin-top:4px;">Public link: <b id="lpUrlHint">/p/…</b></div>
 
+      <!-- ── AI page ── -->
+      <div style="margin-top:14px;border:1.5px solid #ddd6fe;background:#f5f3ff;border-radius:12px;padding:14px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">✨</span>
+          <div style="flex:1;"><div style="font-weight:800;font-size:14px;color:#5b21b6;">AI page builder</div><div style="font-size:11px;color:#6d28d9;">Describe the page you want — Gemini designs a full page. Then refine or edit it.</div></div>
+          <button type="button" class="btn btn-brand" style="background:#7c3aed;" onclick="lpAiGenerate()"><span class="material-icons" style="font-size:16px;">auto_awesome</span> Generate</button>
+        </div>
+        <div id="lpAiActive" style="display:none;margin-top:12px;">
+          <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <input class="inp" id="lp_ai_refine" placeholder="Refine, e.g. “make the hero dark blue and add an FAQ”" style="flex:1;min-width:200px;">
+            <button type="button" class="btn btn-neutral" onclick="lpAiRefine()"><span class="material-icons" style="font-size:15px;">auto_fix_high</span> Refine</button>
+            <button type="button" class="btn btn-neutral" onclick="lpToggleHtml()">Edit HTML</button>
+            <button type="button" class="btn btn-neutral" style="color:var(--red);" onclick="lpClearAi()">Remove AI page</button>
+          </div>
+          <textarea class="inp" id="lp_custom_html" style="display:none;font-family:'DM Mono',monospace;font-size:11px;height:180px;" oninput="lpAiPreview()"></textarea>
+          <iframe id="lpAiFrame" style="width:100%;height:420px;border:1px solid var(--border);border-radius:10px;background:#fff;"></iframe>
+          <div class="muted" style="font-size:11px;margin-top:4px;">The AI page renders instead of the simple fields below. Its form captures leads (set the GHL sub-account/tags in “Capture form” to push them).</div>
+        </div>
+      </div>
+
       <label class="fld">Headline</label>
       <input class="inp" id="lp_headline" placeholder="Cut your processing fees — free 5-minute review" oninput="lpPreview()">
       <label class="fld">Sub-text</label>
@@ -2006,6 +2026,7 @@ function lpClear(){ var s=function(id,v){document.getElementById(id).value=v;}, 
   s('lp_r_name','');s('lp_r_email','req');s('lp_r_phone','');
   document.getElementById('lp_imgstate').textContent=''; document.getElementById('lp_tags').innerHTML='<div class="muted">Choose a sub-account to load tags.</div>';
   document.getElementById('lp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
+  document.getElementById('lp_custom_html').value=''; _lpState.customHtml=null; lpAiActivePanel(false);
   lpSetMode('native');
 }
 async function newLanding(){
@@ -2017,19 +2038,53 @@ async function newLanding(){
 }
 async function editLanding(id){
   var r=await lapi({action:'get_one',id:id}); if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
-  var p=r.page; _lpState={id:p.id,mode:(p.contact&&p.contact.mode==='ghl_form')?'ghl_form':'native'};
+  var p=r.page; _lpState={id:p.id,mode:(p.contact&&p.contact.mode==='ghl_form')?'ghl_form':'native',customHtml:p.custom_html||null};
   document.getElementById('lpEditorTitle').innerText='Edit Landing Page';
   lpClear(); lpRenderPresets();
+  if(p.custom_html){ document.getElementById('lp_custom_html').value=p.custom_html; lpAiPreview(); }
   var s=function(id,v){document.getElementById(id).value=v==null?'':v;}, c=function(id,v){document.getElementById(id).checked=!!v;};
   s('lp_title',p.title);s('lp_slug',p.slug);s('lp_headline',p.headline);s('lp_subtext',p.subtext);s('lp_image',p.image_url);s('lp_cta',p.cta_label);s('lp_thanks',p.thanks);
   var t=p.theme||{}; s('lp_bg',t.bg||'#ffffff');s('lp_titleCol',t.title||'#0a1628');s('lp_textCol',t.text||'#475569');s('lp_accent',t.accent||'#004990');s('lp_btnText',t.btnText||'#ffffff');s('lp_radius',t.radius!=null?t.radius:16);s('lp_align',t.align||'center');s('lp_btnStyle',t.btnStyle||'solid');
   var cc=p.contact||{}; c('lp_c_name',cc.name);c('lp_c_email',cc.email!==false);c('lp_c_phone',cc.phone);c('lp_push',cc.push);c('lp_publish',p.is_published);
   var rq=cc.required||[]; s('lp_r_name',rq.indexOf('name')!==-1?'req':'');s('lp_r_email',rq.indexOf('email')!==-1?'req':'');s('lp_r_phone',rq.indexOf('phone')!==-1?'req':'');
-  lpSetMode(_lpState.mode);
+  lpSetMode(cc.mode==='ghl_form'?'ghl_form':'native');
   await lpPopulateLocations(cc.ghl_location_id||'');
   if(cc.ghl_location_id){ await lpOnGhlLoc(); (cc.ghl_tags||[]).forEach(function(tg){var el=document.querySelector('#lp_tags .lp-tag[value="'+(window.CSS&&CSS.escape?CSS.escape(tg):tg)+'"]'); if(el) el.checked=true;}); if(cc.ghl_form_id) document.getElementById('lp_ghl_form').value=cc.ghl_form_id; document.getElementById('lpTagsWrap').style.display=document.getElementById('lp_push').checked?'block':'none'; }
   document.getElementById('landingEditor').style.display='flex'; lpPreview();
 }
+// ── AI page ──
+function lpAiActivePanel(show){
+  document.getElementById('lpAiActive').style.display=show?'block':'none';
+}
+function lpAiPreview(){
+  var html=document.getElementById('lp_custom_html').value||'';
+  _lpState.customHtml=html.trim()||null;
+  var frame=document.getElementById('lpAiFrame');
+  frame.srcdoc='<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;">'+html+'</body>';
+  lpAiActivePanel(!!_lpState.customHtml);
+}
+async function lpAiGenerate(){
+  var r=await Swal.fire({title:'Describe your landing page',input:'textarea',inputPlaceholder:'e.g. A bold page for restaurants offering free terminals and next-day funding, with a savings guarantee and a form asking name, email, phone.',inputAttributes:{style:'height:120px;'},showCancelButton:true,confirmButtonText:'✨ Generate',confirmButtonColor:'#7c3aed'});
+  if(!r.isConfirmed || !r.value) return;
+  Swal.fire({title:'Designing your page…',html:'Gemini is building it — this can take ~20–40s.',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
+  var g=await lapi({action:'ai_generate',prompt:r.value});
+  if(!g.success){ Swal.fire('AI error',g.message||'Failed.','error'); return; }
+  Swal.close();
+  document.getElementById('lp_custom_html').value=g.html;
+  lpAiPreview();
+}
+async function lpAiRefine(){
+  var instr=document.getElementById('lp_ai_refine').value.trim(); if(!instr){ return; }
+  if(!_lpState.customHtml){ Swal.fire('Generate first','Generate a page, then refine it.','info'); return; }
+  Swal.fire({title:'Applying your change…',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
+  var g=await lapi({action:'ai_generate',prompt:instr,existing_html:_lpState.customHtml});
+  if(!g.success){ Swal.fire('AI error',g.message||'Failed.','error'); return; }
+  Swal.close();
+  document.getElementById('lp_custom_html').value=g.html; document.getElementById('lp_ai_refine').value=''; lpAiPreview();
+}
+function lpToggleHtml(){ var t=document.getElementById('lp_custom_html'); t.style.display=t.style.display==='none'?'block':'none'; }
+function lpClearAi(){ _lpState.customHtml=null; document.getElementById('lp_custom_html').value=''; lpAiActivePanel(false); }
+
 function lpSetMode(m){ _lpState.mode=m;
   document.getElementById('lpmNativeBtn').classList.toggle('on',m==='native');
   document.getElementById('lpmGhlBtn').classList.toggle('on',m==='ghl_form');
@@ -2103,7 +2158,8 @@ async function saveLanding(){
   if(_lpState.mode==='native' && !document.getElementById('lp_c_name').checked && !document.getElementById('lp_c_email').checked && !document.getElementById('lp_c_phone').checked){ Swal.fire('Pick a field','Enable at least one capture field.','warning'); return; }
   if(_lpState.mode==='ghl_form' && !document.getElementById('lp_ghl_form').value){ Swal.fire('Pick a form','Choose a HighLevel form or switch to native fields.','warning'); return; }
   var page={ id:_lpState.id, title:title, slug:g('lp_slug'), headline:headline, subtext:g('lp_subtext'), image_url:g('lp_image')||null,
-    theme:lpBuildTheme(), contact:lpBuildContact(), cta_label:g('lp_cta')||null, thanks:g('lp_thanks')||null, is_published:document.getElementById('lp_publish').checked };
+    theme:lpBuildTheme(), contact:lpBuildContact(), cta_label:g('lp_cta')||null, thanks:g('lp_thanks')||null,
+    custom_html:_lpState.customHtml||null, is_published:document.getElementById('lp_publish').checked };
   var r=await lapi({action:'save',page:page});
   if(!r.success){ Swal.fire('Error',r.message||'Save failed.','error'); return; }
   document.getElementById('landingEditor').style.display='none';

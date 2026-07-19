@@ -6,6 +6,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession } from './_validate.js';
 import { ghlUpsertContact } from './_ghl.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+export const config = { api: { bodyParser: { sizeLimit: '4mb' } }, maxDuration: 120 };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -20,7 +23,44 @@ const bad = (res, message, status = 400) => res.status(status).json({ success: f
 function slugify(s) {
     return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 }
-const PUBLIC_FIELDS = 'id, slug, title, headline, subtext, image_url, theme, contact, cta_label, thanks, is_published';
+const PUBLIC_FIELDS = 'id, slug, title, headline, subtext, image_url, theme, contact, cta_label, thanks, is_published, custom_html';
+
+// Strip anything unsafe/non-self-contained from AI/hand HTML (scripts, iframes,
+// external/event handlers) so a published page can't run arbitrary JS.
+function sanitizePageHtml(html) {
+    let h = String(html || '');
+    h = h.replace(/```html/gi, '').replace(/```/g, '').trim();
+    // Keep only the body if a full doc came back.
+    const bodyM = h.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    if (bodyM) h = bodyM[1];
+    h = h.replace(/<!doctype[^>]*>/gi, '').replace(/<\/?html[^>]*>/gi, '').replace(/<head[\s\S]*?<\/head>/gi, '');
+    h = h.replace(/<script[\s\S]*?<\/script>/gi, '');
+    h = h.replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+    h = h.replace(/\son\w+\s*=\s*"[^"]*"/gi, '').replace(/\son\w+\s*=\s*'[^']*'/gi, '');
+    h = h.replace(/javascript:/gi, '');
+    return h.trim();
+}
+
+async function generatePageHtml(userPrompt, existingHtml) {
+    if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview', generationConfig: { temperature: 0.8 } });
+    const rules = `You design high-converting, modern, responsive LANDING PAGES for PayProTec (a payment-processing / merchant-services company).
+Return ONLY HTML for the page body — no markdown fences, no <html>, <head>, <body>, and NO <script> tags.
+STRICT RULES:
+- Self-contained: use a single <style> block (scope selectors under a wrapper class you create) and/or inline styles. No external CSS, fonts, images, or JS.
+- Do not reference external images. Use CSS gradients/shapes/emoji for visuals instead of <img> with external src.
+- Modern, clean, conversion-focused: a strong hero with headline + subhead, benefits/features, social proof, and a clear lead-capture section.
+- Mobile responsive (use flexbox/grid, relative units, media queries).
+- MUST include exactly one lead form: <form id="lead-form"> containing at minimum <input name="email" type="email" placeholder="Email"> plus <input name="name"> and/or <input name="phone"> as appropriate, and a submit <button type="submit">. Do NOT add any form action or JS — the platform wires submission automatically.
+- Keep copy realistic for merchant services (lower processing fees, next-day funding, free terminals, dedicated support, etc.) unless the user says otherwise.`;
+    const prompt = existingHtml
+        ? `${rules}\n\nHere is the CURRENT page HTML:\n${existingHtml}\n\nApply this change and return the FULL updated page HTML:\n"${userPrompt}"`
+        : `${rules}\n\nCreate a landing page for this request:\n"${userPrompt}"`;
+    const result = await model.generateContent(prompt);
+    const text = (await result.response).text();
+    return sanitizePageHtml(text);
+}
 
 export default async function handler(req, res) {
     cors(res);
@@ -85,6 +125,15 @@ export default async function handler(req, res) {
             if (!data) return bad(res, 'Not found', 404);
             return ok(res, { page: data });
         }
+        if (action === 'ai_generate') {
+            const p = String(body.prompt || '').trim();
+            if (!p) return bad(res, 'Describe the page you want.');
+            try {
+                const html = await generatePageHtml(p, body.existing_html ? String(body.existing_html) : null);
+                if (!html) return bad(res, 'The AI returned nothing — try rephrasing.');
+                return ok(res, { html });
+            } catch (e) { return bad(res, 'AI error: ' + (e.message || 'unknown'), 500); }
+        }
         if (action === 'save') {
             const p = body.page || {};
             let slug = slugify(p.slug || p.title);
@@ -93,6 +142,7 @@ export default async function handler(req, res) {
                 slug, title: p.title || null, headline: p.headline || null, subtext: p.subtext || null,
                 image_url: p.image_url || null, theme: p.theme || null, contact: p.contact || null,
                 cta_label: p.cta_label || null, thanks: p.thanks || 'Thanks! We\'ll be in touch shortly.',
+                custom_html: p.custom_html ? sanitizePageHtml(p.custom_html) : null,
                 is_published: !!p.is_published, updated_at: new Date().toISOString()
             };
             if (p.id) {
