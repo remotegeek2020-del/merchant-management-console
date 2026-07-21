@@ -82,29 +82,19 @@ export default async function handler(req, res) {
             const { data: cfg } = await supabase
                 .from('prime49_task_automation_config').select('*').eq('id', 1).maybeSingle();
 
-            // Partner-level Prime49, matching the Prime49 Merchants report: any
-            // merchant under an AGENT that has >=1 prime49 identifier, across ALL
-            // of that agent's id_strings (not just the flagged one). Optional
-            // enrollment-date range — default covers 2026 (the report view); clear
-            // `start_date` to reach back to the very first Prime49 merchant.
+            // Agent-level Prime49 — the merchant's OWN agent ID must be flagged
+            // prime49 (matches the live automation and what staff verify per
+            // merchant). Optional enrollment-date range — default covers 2026;
+            // clear `start_date` to reach back to the very first Prime49 merchant.
             const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
             const startDate = (req.body.start_date === '' || isDate(req.body.start_date)) ? req.body.start_date
                             : '2026-01-01';   // undefined/invalid → default to the report window
             const endDate   = isDate(req.body.end_date) ? req.body.end_date : null;
             const IN_CHUNK = 200;
 
-            const { data: primeAgents } = await supabase
-                .from('agent_identifiers').select('agent_id').eq('prime49', true).limit(10000);
-            const agentUuids = [...new Set((primeAgents || []).map(r => r.agent_id).filter(Boolean))];
-            if (!agentUuids.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
-
-            let idStrings = [];
-            for (let i = 0; i < agentUuids.length; i += IN_CHUNK) {
-                const { data } = await supabase
-                    .from('agent_identifiers').select('id_string').in('agent_id', agentUuids.slice(i, i + IN_CHUNK)).limit(10000);
-                (data || []).forEach(r => { if (r.id_string) idStrings.push(r.id_string); });
-            }
-            idStrings = [...new Set(idStrings)];
+            const { data: p49Ids } = await supabase
+                .from('agent_identifiers').select('id_string').eq('prime49', true).limit(10000);
+            const idStrings = [...new Set((p49Ids || []).map(r => r.id_string).filter(Boolean))];
             if (!idStrings.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
 
             // Every merchant on those agent IDs, within the chosen enrollment range.
