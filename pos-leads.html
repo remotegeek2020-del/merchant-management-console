@@ -8,8 +8,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
-  :root{--blue:#004990;--muted:#94a3b8;--border:#e2e8f0;--green:#16a34a;--red:#dc2626;}
-  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f1f5f9;color:#0f172a;}
+  :root{--blue:#ea580c;--muted:#94a3b8;--border:#e2e8f0;--green:#16a34a;--red:#dc2626;}
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#fff7ed;color:#0f172a;}
+  .brandbar{background:linear-gradient(135deg,#9a3412,#ea580c);color:#fff;padding:9px 22px;display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;}
+  .brandbar .dot{width:9px;height:9px;border-radius:50%;background:#fed7aa;}
+  .brandbar a{color:#fff;text-decoration:none;margin-left:auto;opacity:.9;display:flex;align-items:center;gap:4px;}
   .top{background:#fff;border-bottom:1px solid var(--border);padding:14px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
   .top h1{font-size:18px;font-weight:800;margin:0;flex:1;}
   .btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
@@ -30,9 +33,13 @@
 </style>
 </head>
 <body>
+<div class="brandbar">
+  <span class="dot"></span> POS EXPRESS · Sub-Account Workspace
+  <a href="/"><span class="material-icons" style="font-size:15px;">swap_horiz</span> Exit to PayProTec Portal</a>
+</div>
 <div class="top">
-  <a href="/" class="btn btn-n" style="text-decoration:none;">← Home</a>
-  <h1>POS Express Leads</h1>
+  <span class="material-icons" style="color:#ea580c;">point_of_sale</span>
+  <h1>POS Express — Lead Pipeline</h1>
   <button class="btn btn-n" onclick="openConfig()"><span class="material-icons" style="font-size:15px;vertical-align:middle;">settings</span> Webhook</button>
   <button class="btn btn-n" onclick="load()">Refresh</button>
 </div>
