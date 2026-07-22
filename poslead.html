@@ -116,6 +116,12 @@
   var agentTimer=null, midTimer=null, statementUrl='';
   var agent=document.getElementById('agent'), st=document.getElementById('agentStatus');
   function qp(n){ try{ return new URLSearchParams(location.search).get(n)||''; }catch(e){ return ''; } }
+  // Form-only embed mode (?embed=1): hide the hero + fill 100% width, to drop
+  // into the existing Webflow layout exactly where the HighLevel iframe sits.
+  if(qp('embed')==='1' || qp('form')==='1'){
+    var hero=document.querySelector('.hero'); if(hero) hero.style.display='none';
+    var fw=document.querySelector('.form-wrap'); if(fw){ fw.style.maxWidth='100%'; fw.style.paddingTop='14px'; }
+  }
   function pos(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
   function val(id){ return document.getElementById(id).value.trim(); }
   function set(id,v){ document.getElementById(id).value=v==null?'':v; }
