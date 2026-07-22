@@ -255,6 +255,7 @@ export default async function handler(req, res) {
                 access_terminal_types: user.access_terminal_types,
                 access_all_tasks: user.access_all_tasks,
                 access_task_dashboard: user.access_task_dashboard,
+                access_pos_express: user.access_pos_express,
                 can_delete_tickets: user.can_delete_tickets,
                 can_manage_retired_units: user.can_manage_retired_units,
                 can_edit_legacy_terminal_type: user.can_edit_legacy_terminal_type

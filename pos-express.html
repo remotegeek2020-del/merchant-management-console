@@ -49,9 +49,11 @@
 <body>
 <div class="sidebar">
   <div class="sb-head"><div class="sb-brand"><span class="material-icons">point_of_sale</span> POS Express</div><div class="sb-sub">Sub-Account</div></div>
-  <div class="switcher">
-    <a href="/"><span class="material-icons" style="font-size:16px;">apartment</span> PayProTec Portal</a>
-    <a href="/pos-express" class="cur"><span class="material-icons" style="font-size:16px;">point_of_sale</span> POS Express</a>
+  <div style="margin:12px 14px 4px;">
+    <select onchange="if(this.value)location.href=this.value" style="width:100%;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:9px;padding:9px 10px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;">
+      <option value="/pos-express" selected>🧾 POS Express</option>
+      <option value="/">🏢 PayProTec Portal</option>
+    </select>
   </div>
   <nav class="nav" id="nav"></nav>
 </div>
@@ -77,7 +79,11 @@ function go(s){ SEC=s; renderNav(); document.getElementById('secTitle').textCont
 
 async function load(){
   var r=await api({action:'list'});
-  if(!r.success){ document.getElementById('content').innerHTML='<div class="empty" style="color:var(--red);">'+esc(r.message||'Failed to load')+'</div>'; return; }
+  if(!r.success){
+    var denied=/access denied/i.test(r.message||'');
+    document.getElementById('content').innerHTML='<div class="empty" style="color:'+(denied?'#9a3412':'var(--red)')+';padding:60px 20px;">'+(denied?'🔒 You don\'t have access to POS Express.<br><span style="font-size:12px;">Ask an admin to enable it for your account (User Management → POS Express).</span>':esc(r.message||'Failed to load'))+'</div>';
+    return;
+  }
   LEADS=r.leads||[]; render();
 }
 function render(){

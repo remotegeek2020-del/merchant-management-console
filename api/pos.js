@@ -112,10 +112,11 @@ export default async function handler(req, res) {
         // ── STAFF (session) ──
         const session = await validateSession(req);
         if (!session) return bad(res, 'Unauthorized', 401);
-        const { data: actor } = await supabase.from('app_users').select('role, first_name, last_name, access_marketing').eq('userid', session.userid).maybeSingle();
+        const { data: actor } = await supabase.from('app_users').select('role, first_name, last_name, access_pos_express').eq('userid', session.userid).maybeSingle();
         const role = String(actor?.role || '').toLowerCase();
-        const isStaff = role.includes('super') || role.includes('admin') || actor?.access_marketing === true;
-        if (!isStaff) return bad(res, 'Access denied', 403);
+        // Super admins always; everyone else needs the granular POS Express flag.
+        const canPos = role.includes('super') || actor?.access_pos_express === true;
+        if (!canPos) return bad(res, 'Access denied. Ask an admin to enable POS Express for your account.', 403);
 
         if (action === 'list') {
             let q = supabase.from('pos_leads').select('*').order('created_at', { ascending: false }).limit(1000);
