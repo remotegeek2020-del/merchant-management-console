@@ -3,116 +3,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Submit a POS Express Lead</title>
+<title>POSLead — Submit a Merchant</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#0b1220;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px;color:#0f172a;}
-  .card{width:100%;max-width:620px;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.3);overflow:hidden;}
-  .head{background:linear-gradient(135deg,#004990,#0369a1);color:#fff;padding:24px 26px;}
-  .head h1{font-size:22px;font-weight:800;}.head p{font-size:13px;opacity:.9;margin-top:4px;}
-  .body{padding:22px 26px;}
-  .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#0369a1;margin:22px 0 6px;border-bottom:2px solid #e0f2fe;padding-bottom:5px;}
-  .sec:first-child{margin-top:0;}
-  label{display:block;font-size:12px;font-weight:700;color:#334155;margin:12px 0 5px;}
-  .f{width:100%;padding:11px 13px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;background:#fff;}
-  .f:focus{outline:none;border-color:#004990;}
-  .row{display:flex;gap:12px;flex-wrap:wrap;}.row>div{flex:1;min-width:130px;}
-  .hint{font-size:11px;color:#94a3b8;margin-top:3px;}
-  .radio{display:flex;gap:16px;margin-top:6px;}
-  .radio label{display:flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:14px;cursor:pointer;}
-  .btn{width:100%;margin-top:20px;padding:15px;border:none;border-radius:12px;background:#004990;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;}
-  .btn:hover{filter:brightness(1.08);}.btn:disabled{opacity:.6;}
-  .agent-status{font-size:12px;font-weight:700;margin-top:5px;min-height:16px;}
+  body{font-family:'Inter',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#fff;color:#1e293b;}
+  .hero{background:#f1f2f4;padding:34px 20px 40px;text-align:center;}
+  .logos{display:flex;align-items:center;justify-content:center;gap:26px;flex-wrap:wrap;margin-bottom:22px;}
+  .logo-pros{font-weight:900;font-size:34px;letter-spacing:-1px;color:#1e293b;line-height:.9;}
+  .logo-pros small{display:block;font-size:9px;font-weight:600;letter-spacing:1px;color:#64748b;margin-top:3px;}
+  .logo-express{font-weight:900;font-size:30px;letter-spacing:-1px;}
+  .logo-express .ex{color:#1e293b;}.logo-express .pos{color:#ea580c;font-size:18px;vertical-align:top;}
+  .hero-copy{max-width:760px;margin:0 auto;text-align:left;}
+  .hero-copy>p{font-size:15px;color:#475569;line-height:1.5;margin-bottom:10px;}
+  .hero-red{color:#dc2626;font-size:12.5px;line-height:1.5;margin-bottom:4px;}
+  .hero-red.b{font-weight:700;}
+  .hero-copy ol{margin:14px 0 0 20px;color:#475569;font-size:15px;line-height:1.7;}
+  .form-wrap{max-width:960px;margin:0 auto;padding:36px 24px 60px;}
+  h2{font-size:26px;font-weight:800;margin:26px 0 22px;}h2:first-child{margin-top:0;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px 26px;}
+  .full{grid-column:1 / -1;}
+  label{display:block;font-size:14px;font-weight:600;color:#334155;margin-bottom:8px;}
+  .req{color:#0f172a;}
+  .f{width:100%;padding:14px 20px;border:1px solid #d1d5db;border-radius:28px;font-size:15px;font-family:inherit;color:#1e293b;background:#fff;}
+  .f:focus{outline:none;border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.1);}
+  textarea.f{border-radius:18px;resize:vertical;min-height:90px;}
+  select.f{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 20px center;padding-right:44px;}
+  .help{font-size:12.5px;color:#94a3b8;margin-top:6px;}
+  .err{font-size:12.5px;color:#dc2626;margin-top:6px;}
+  .upload{border:1px solid #d1d5db;border-radius:18px;padding:26px;text-align:center;color:#94a3b8;cursor:pointer;}
+  .upload:hover{border-color:#ea580c;}
+  .disclaimer{grid-column:1 / -1;text-align:center;margin:6px 0;}
+  .disclaimer p{color:#dc2626;font-size:12.5px;line-height:1.5;}.disclaimer p.b{font-weight:700;}
+  .chk{grid-column:1 / -1;display:flex;gap:9px;align-items:center;font-size:14px;color:#334155;cursor:pointer;margin-top:6px;}
+  .send{grid-column:1 / -1;margin-top:14px;padding:16px;border:none;border-radius:30px;background:#ea580c;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .send:hover{filter:brightness(1.06);}.send:disabled{opacity:.6;}
+  .agent-status{font-size:12.5px;font-weight:600;margin-top:6px;min-height:15px;}
   .ok{color:#16a34a;}.no{color:#dc2626;}
-  .msg{font-size:13px;color:#dc2626;margin-top:8px;min-height:16px;}
-  .foot{text-align:center;font-size:11px;color:#94a3b8;padding:14px;}
-  .lookres{border:1px solid #e2e8f0;border-radius:10px;margin-top:6px;max-height:180px;overflow:auto;}
-  .lookres div{padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;}
-  .lookres div:hover{background:#f0f9ff;}
-  .chk{display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13px;cursor:pointer;}
-  .thanks{text-align:center;padding:50px 24px;}.thanks .ic{font-size:54px;}
+  .lookres{border:1px solid #d1d5db;border-radius:14px;margin-top:6px;max-height:180px;overflow:auto;}
+  .lookres div{padding:9px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:14px;}.lookres div:hover{background:#fff7ed;}
+  .thanks{text-align:center;padding:70px 24px;}.thanks .ic{font-size:60px;}
+  @media(max-width:720px){.grid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
-<div class="card" id="root">
-  <div class="head"><h1>POS Express — Submit a Lead</h1><p>PayProTec partners: enter your Partner ID and the merchant's details.</p></div>
-  <div class="body" id="form">
-
-    <div class="sec">About You</div>
-    <label>Partner ID *</label>
-    <input class="f" id="agent" placeholder="Type your Partner ID — we'll pull up your info" autocomplete="off">
-    <div class="agent-status" id="agentStatus"></div>
-    <div class="row">
-      <div><label>Your phone</label><input class="f" id="pphone"></div>
-      <div><label>Your email</label><input class="f" id="pemail" type="email"></div>
-    </div>
-
-    <div class="sec">About the Merchant</div>
-    <label>Is this a current merchant?</label>
-    <div class="radio">
-      <label><input type="radio" name="curmerch" value="yes" onchange="onCurMerch()"> Yes</label>
-      <label><input type="radio" name="curmerch" value="no" checked onchange="onCurMerch()"> No</label>
-    </div>
-    <div class="hint">If yes, the merchant must be under the Partner ID you entered above. Pulled details are editable, but edits are not written back to the merchant record.</div>
-
-    <div id="lookupWrap" style="display:none;">
-      <label>Find merchant by MID or DBA</label>
-      <input class="f" id="msearch" placeholder="Type MID or business name…" autocomplete="off" oninput="mSearch()">
-      <div class="lookres" id="mresults" style="display:none;"></div>
-    </div>
-
-    <label>Business (DBA) name *</label>
-    <input class="f" id="dba">
-    <label>Merchant legal name</label>
-    <input class="f" id="legal">
-    <label>Business type</label>
-    <select class="f" id="btype">
-      <option value="">— select —</option>
-      <option>Restaurant - Table Service</option>
-      <option>Restaurant - Quick Service</option>
-      <option>Retail</option>
-      <option>Other</option>
-    </select>
-    <label>Street address</label>
-    <input class="f" id="street">
-    <div class="row">
-      <div><label>City</label><input class="f" id="city"></div>
-      <div><label>State</label><input class="f" id="state"></div>
-      <div><label>Zip</label><input class="f" id="zip"></div>
-    </div>
-    <div class="row">
-      <div><label>Merchant first name</label><input class="f" id="mfirst"></div>
-      <div><label>Merchant last name</label><input class="f" id="mlast"></div>
-    </div>
-    <div class="row">
-      <div><label>Merchant phone</label><input class="f" id="mphone"></div>
-      <div><label>Merchant email</label><input class="f" id="memail" type="email"></div>
-    </div>
-    <label>Projected monthly volume ($)</label>
-    <input class="f" id="volume" type="number" inputmode="numeric">
-    <label>Proposal type</label>
-    <select class="f" id="proposal">
-      <option value="">— select —</option>
-      <option>Purchase Only</option>
-      <option>Purchase and Placement</option>
-      <option>Placement Only</option>
-    </select>
-    <label>Merchant's recent processing statement</label>
-    <input type="file" id="statement" accept=".pdf,.png,.jpg,.jpeg,.webp" onchange="uploadStatement(this)">
-    <div class="hint" id="stmtState"></div>
-    <label>Notes</label>
-    <textarea class="f" id="notes" rows="3"></textarea>
-
-    <label class="chk"><input type="checkbox" id="sms" style="margin-top:2px;"> I would like to receive SMS texts to track the progress of this merchant.</label>
-
-    <button class="btn" id="submitBtn" onclick="submitLead()">Submit lead</button>
-    <div class="msg" id="msg"></div>
+<div class="hero">
+  <div class="logos">
+    <div class="logo-pros">POS PROS<small>LEADING THE WAY IN POS SINCE 2018</small></div>
+    <div class="logo-express"><span class="pos">POS</span> <span class="ex">EXPRESS</span></div>
   </div>
-  <div class="foot">PayProTec · POS Express</div>
+  <div class="hero-copy">
+    <p>Welcome to POSLead! Below, you can submit a merchant and our POS Pros team will conduct a demo on your behalf at no cost!</p>
+    <p class="hero-red">We don't contact your merchant until we've contacted you. We stress publicly that we don't compete with our partners and don't have "house accounts."</p>
+    <p class="hero-red b">Please use your lead's phone number and email, not yours. Using your information will cause considerable delays in this process.</p>
+    <ol><li>Fill out the form below.</li><li>Our POS Pros will contact you to evaluate your lead to see which point of sale system they would fit best with.</li><li>Arrangements are made with your potential merchant.</li></ol>
+  </div>
+</div>
+
+<div class="form-wrap" id="form">
+  <h2>About You</h2>
+  <div class="grid">
+    <div><label>Your Name <span class="req">*</span></label><input class="f" id="yname"><div class="help">Please provide your complete name.</div></div>
+    <div><label>Your ID <span class="req">*</span></label><input class="f" id="agent" autocomplete="off" placeholder=""><div class="agent-status" id="agentStatus"></div><div class="help">Please enter your PayProtec Partner ID.</div></div>
+    <div><label>Your Phone Number <span class="req">*</span></label><input class="f" id="pphone" placeholder="(201) 555-0123"><div class="help">Please provide your phone number.</div></div>
+    <div><label>Your Email <span class="req">*</span></label><input class="f" id="pemail" type="email"><div class="help">Please enter your personal or business email in this field. Do not use the merchant's email address.</div></div>
+  </div>
+
+  <h2>About the Merchant</h2>
+  <div class="grid">
+    <div><label>Current Merchant? <span class="req">*</span></label>
+      <select class="f" id="curmerch" onchange="onCurMerch()"><option value="">— select —</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+    <div><label>Business Type <span class="req">*</span></label>
+      <select class="f" id="btype"><option>Restaurant - Table Service</option><option>Restaurant - Quick Service</option><option>Retail</option><option>Other</option></select></div>
+
+    <div><label>Merchant DBA <span class="req">*</span></label><input class="f" id="dba"></div>
+    <div><label>Merchant Legal Name <span class="req">*</span></label><input class="f" id="legal"></div>
+
+    <div class="full" style="max-width:calc(50% - 13px);"><label>MID</label><input class="f" id="mid" oninput="onMid()"><div class="lookres" id="mresults" style="display:none;"></div></div>
+
+    <div><label>Street Address <span class="req">*</span></label><input class="f" id="street" placeholder="123 MAIN ST"></div>
+    <div><label>State <span class="req">*</span></label><input class="f" id="state" placeholder="FL"></div>
+    <div><label>City <span class="req">*</span></label><input class="f" id="city" placeholder="TAMPA"></div>
+    <div><label>Zip <span class="req">*</span></label><input class="f" id="zip" placeholder="451224"><div class="help">Please provide the full address of your merchant.</div></div>
+
+    <div><label>Contact's First Name <span class="req">*</span></label><input class="f" id="mfirst"><div class="help">Your merchant's first name</div></div>
+    <div><label>Contact's Last Name <span class="req">*</span></label><input class="f" id="mlast"><div class="help">Your merchant's last name</div></div>
+    <div><label>Contact's Phone Number <span class="req">*</span></label><input class="f" id="mphone" placeholder="(406) 555-4474"><div class="help">Your merchant's phone number</div></div>
+    <div><label>Contact's Email <span class="req">*</span></label><input class="f" id="memail" type="email"><div class="help">Your merchant's email</div></div>
+
+    <div class="disclaimer">
+      <p>We don't contact your merchant until we've contacted you. We stress publicly that we don't compete with our partners and don't have "house accounts."</p>
+      <p class="b">Please use your lead's phone number and email, not yours. Using your information will cause considerable delays in this process.</p>
+    </div>
+
+    <div><label>Projected Monthly Volume <span class="req">*</span></label><input class="f" id="volume" type="number" inputmode="numeric"></div>
+    <div><label>Proposal Type <span class="req">*</span></label>
+      <select class="f" id="proposal"><option value="">— select —</option><option>Purchase Only</option><option>Purchase and Placement</option><option>Placement Only</option></select></div>
+
+    <div class="full"><label>Merchant's Recent Processing Statement</label>
+      <div class="upload" onclick="document.getElementById('statement').click()"><div style="font-size:22px;">☁️</div><div style="font-size:12px;margin-top:4px;" id="stmtState">PDF</div></div>
+      <input type="file" id="statement" accept=".pdf,.png,.jpg,.jpeg,.webp" style="display:none;" onchange="uploadStatement(this)"></div>
+
+    <div class="full"><label>Notes</label><textarea class="f" id="notes" maxlength="150" placeholder="Any other notes you'd like to include about this merchant?"></textarea><div class="help">*Please do not exceed 150 letters</div></div>
+
+    <label class="chk"><input type="checkbox" id="sms"> I would like to receive SMS texts to track the progress of this merchant</label>
+
+    <button class="send" id="submitBtn" onclick="submitLead()">Send Lead</button>
+    <div class="err full" id="msg"></div>
+  </div>
 </div>
 <script>
 (function(){
-  var agentTimer=null, msTimer=null, statementUrl='';
+  var agentTimer=null, midTimer=null, statementUrl='';
   var agent=document.getElementById('agent'), st=document.getElementById('agentStatus');
   function qp(n){ try{ return new URLSearchParams(location.search).get(n)||''; }catch(e){ return ''; } }
   function pos(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
@@ -127,61 +128,49 @@
     st.textContent='Checking…'; st.className='agent-status';
     pos({action:'lookup_agent',agent_id:v}).then(function(d){
       if(d.valid){ st.textContent='✓ '+d.partner_name; st.className='agent-status ok';
+        if(!val('yname')) set('yname',d.partner_name);
         if(!val('pphone')&&d.partner_phone) set('pphone',d.partner_phone);
         if(!val('pemail')&&d.partner_email) set('pemail',d.partner_email);
-      } else { st.textContent='✕ Partner ID not found — check it, or submit anyway (we\'ll verify).'; st.className='agent-status no'; }
+      } else { st.textContent='Partner ID not found — check it, or submit anyway (we\'ll verify).'; st.className='agent-status no'; }
     }).catch(function(){ st.textContent=''; });
   }
 
-  window.onCurMerch=function(){
-    var yes=document.querySelector('input[name=curmerch]:checked').value==='yes';
-    document.getElementById('lookupWrap').style.display=yes?'block':'none';
-  };
-  window.mSearch=function(){
-    if(msTimer) clearTimeout(msTimer); msTimer=setTimeout(function(){
-      var q=val('msearch'), box=document.getElementById('mresults');
-      if(q.length<2 || !val('agent')){ box.style.display='none'; return; }
+  window.onCurMerch=function(){};
+  window.onMid=function(){
+    if(document.getElementById('curmerch').value!=='yes' || !val('agent')) return;
+    if(midTimer)clearTimeout(midTimer);
+    midTimer=setTimeout(function(){
+      var q=val('mid'), box=document.getElementById('mresults'); if(q.length<2){ box.style.display='none'; return; }
       pos({action:'merchant_lookup',agent_id:val('agent'),q:q}).then(function(d){
-        var ms=(d.success&&d.merchants)||[];
-        if(!ms.length){ box.innerHTML='<div style="color:#94a3b8;cursor:default;">No matching merchants under this Partner ID.</div>'; box.style.display='block'; return; }
-        window._ms=ms;
-        box.innerHTML=ms.map(function(m,i){return '<div onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+'</div>';}).join('');
-        box.style.display='block';
+        var ms=(d.success&&d.merchants)||[]; if(!ms.length){ box.style.display='none'; return; }
+        window._ms=ms; box.innerHTML=ms.map(function(m,i){return '<div onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+'</div>';}).join(''); box.style.display='block';
       });
     },350);
   };
   window.pickMerchant=function(i){
     var m=window._ms[i]; if(!m) return;
-    set('dba',m.dba_name); set('street',m.street_address); set('city',m.city); set('state',m.state); set('zip',m.zip);
+    set('mid',m.merchant_id); set('dba',m.dba_name); set('street',m.street_address); set('city',m.city); set('state',m.state); set('zip',m.zip);
     set('mphone',m.phone); set('memail',m.email);
     if(m.contact){ var p=String(m.contact).split(' '); set('mfirst',p.shift()||''); set('mlast',p.join(' ')); }
-    document.getElementById('msearch').value=(m.dba_name||'')+' ('+(m.merchant_id||'')+')';
-    document.getElementById('mresults').style.display='none';
-    window._mid=m.merchant_id; window._muuid=m.id;
+    document.getElementById('mresults').style.display='none'; window._muuid=m.id;
   };
-
   window.uploadStatement=function(input){
-    var f=input.files&&input.files[0]; if(!f) return;
-    var stmt=document.getElementById('stmtState'); stmt.textContent='Uploading…';
-    var ext=(f.name.split('.').pop()||'pdf').toLowerCase();
-    pos({action:'statement_upload_url',ext:ext}).then(function(d){
-      if(!d.success){ stmt.textContent='Upload failed.'; return; }
-      return fetch(d.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type||'application/octet-stream'}}).then(function(r){
-        if(r.ok){ statementUrl=d.public_url; stmt.textContent='✓ '+f.name; } else stmt.textContent='Upload failed ('+r.status+').';
-      });
-    }).catch(function(){ stmt.textContent='Upload failed.'; });
+    var f=input.files&&input.files[0]; if(!f) return; var el=document.getElementById('stmtState'); el.textContent='Uploading…';
+    pos({action:'statement_upload_url',ext:(f.name.split('.').pop()||'pdf').toLowerCase()}).then(function(d){
+      if(!d.success){ el.textContent='Upload failed'; return; }
+      return fetch(d.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type||'application/octet-stream'}}).then(function(r){ if(r.ok){ statementUrl=d.public_url; el.textContent='✓ '+f.name; } else el.textContent='Upload failed'; });
+    }).catch(function(){ el.textContent='Upload failed'; });
   };
-
   window.submitLead=function(){
     var msg=document.getElementById('msg');
-    if(!val('agent')){ msg.textContent='Enter your Partner ID.'; return; }
-    if(!val('dba')){ msg.textContent='Enter the business (DBA) name.'; return; }
-    if(!val('memail')&&!val('mphone')){ msg.textContent='Enter a merchant email or phone.'; return; }
-    var yes=document.querySelector('input[name=curmerch]:checked').value==='yes';
-    var btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
+    if(!val('agent')){ msg.textContent='Enter your ID.'; return; }
+    if(!val('dba')){ msg.textContent='Enter the Merchant DBA.'; return; }
+    if(!val('memail')&&!val('mphone')){ msg.textContent='Enter the contact phone or email.'; return; }
+    var yes=document.getElementById('curmerch').value==='yes';
+    var btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Sending…';
     pos({action:'submit_public',
-      agent_id:val('agent'), partner_phone:val('pphone'), partner_email:val('pemail'),
-      is_current_merchant:yes, mid:(yes?(window._mid||val('msearch')):null), merchant_uuid:(yes?window._muuid:null),
+      submitter_name:val('yname'), agent_id:val('agent'), partner_phone:val('pphone'), partner_email:val('pemail'),
+      is_current_merchant:yes, mid:val('mid'), merchant_uuid:(yes?window._muuid:null),
       business_name:val('dba'), merchant_legal_name:val('legal'), business_type:val('btype'),
       street_address:val('street'), city:val('city'), state:val('state'), zip:val('zip'),
       merchant_first_name:val('mfirst'), merchant_last_name:val('mlast'), phone:val('mphone'), email:val('memail'),
@@ -189,9 +178,9 @@
       notes:val('notes'), sms_opt_in:document.getElementById('sms').checked,
       meta:{ ref:document.referrer.slice(0,300), url:location.href.slice(0,300) }
     }).then(function(d){
-      if(d.success){ document.getElementById('form').innerHTML='<div class="thanks"><div class="ic">✅</div><div style="font-weight:800;font-size:20px;margin-top:10px;">Thank you!</div><div style="color:#64748b;margin-top:6px;">Your lead was submitted and is being reviewed.</div></div>'; }
-      else { msg.textContent=d.message||'Something went wrong.'; btn.disabled=false; btn.textContent='Submit lead'; }
-    }).catch(function(){ msg.textContent='Network error — please try again.'; btn.disabled=false; btn.textContent='Submit lead'; });
+      if(d.success){ document.getElementById('form').innerHTML='<div class="thanks"><div class="ic">✅</div><div style="font-weight:800;font-size:22px;margin-top:12px;">Thank you!</div><div style="color:#64748b;margin-top:6px;">Your lead was submitted — our POS Pros team will be in touch.</div></div>'; window.scrollTo(0,0); }
+      else { msg.textContent=d.message||'Something went wrong.'; btn.disabled=false; btn.textContent='Send Lead'; }
+    }).catch(function(){ msg.textContent='Network error — please try again.'; btn.disabled=false; btn.textContent='Send Lead'; });
   };
 })();
 </script>

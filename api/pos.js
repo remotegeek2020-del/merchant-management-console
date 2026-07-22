@@ -57,6 +57,7 @@ function cleanLead(b) {
     const s = (v, n) => (v == null || v === '' ? null : String(v).slice(0, n));
     const first = s(b.merchant_first_name, 120), last = s(b.merchant_last_name, 120);
     return {
+        submitter_name: s(b.submitter_name, 160),
         partner_phone: s(b.partner_phone, 60), partner_email: s(b.partner_email, 200),
         is_current_merchant: !!b.is_current_merchant,
         mid: s(b.mid, 60), merchant_uuid: /^[0-9a-f-]{36}$/i.test(String(b.merchant_uuid || '')) ? b.merchant_uuid : null,
