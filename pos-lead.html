@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submit a POS Express Lead</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#0b1220;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px;color:#0f172a;}
+  .card{width:100%;max-width:560px;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.3);overflow:hidden;}
+  .head{background:linear-gradient(135deg,#004990,#0369a1);color:#fff;padding:24px 26px;}
+  .head h1{font-size:22px;font-weight:800;}.head p{font-size:13px;opacity:.9;margin-top:4px;}
+  .body{padding:24px 26px;}
+  label{display:block;font-size:12px;font-weight:700;color:#334155;margin:12px 0 5px;}
+  .f{width:100%;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;}
+  .f:focus{outline:none;border-color:#004990;}
+  .row{display:flex;gap:12px;}.row>div{flex:1;}
+  .btn{width:100%;margin-top:18px;padding:15px;border:none;border-radius:12px;background:#004990;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .btn:hover{filter:brightness(1.08);}.btn:disabled{opacity:.6;cursor:default;}
+  .agent-status{font-size:12px;font-weight:700;margin-top:5px;min-height:16px;}
+  .msg{font-size:13px;color:#dc2626;margin-top:8px;min-height:16px;}
+  .foot{text-align:center;font-size:11px;color:#94a3b8;padding:14px;}
+  .ok{color:#16a34a;}.no{color:#dc2626;}
+  .thanks{text-align:center;padding:50px 24px;}.thanks .ic{font-size:54px;}
+</style>
+</head>
+<body>
+<div class="card" id="root">
+  <div class="head"><h1>POS Express — Submit a Lead</h1><p>PayProTec partners: enter your Agent ID and the merchant's details.</p></div>
+  <div class="body" id="form">
+    <label>PayProTec Agent ID *</label>
+    <input class="f" id="agent" placeholder="Your Agent ID" autocomplete="off">
+    <div class="agent-status" id="agentStatus"></div>
+
+    <label>Business (DBA) name *</label>
+    <input class="f" id="business" placeholder="Merchant business name">
+    <div class="row">
+      <div><label>Contact name</label><input class="f" id="contact"></div>
+      <div><label>Business type</label><input class="f" id="btype" placeholder="Restaurant, retail…"></div>
+    </div>
+    <div class="row">
+      <div><label>Email</label><input class="f" id="email" type="email"></div>
+      <div><label>Phone</label><input class="f" id="phone"></div>
+    </div>
+    <div class="row">
+      <div><label>City</label><input class="f" id="city"></div>
+      <div><label>State</label><input class="f" id="state"></div>
+    </div>
+    <label>Estimated monthly volume ($)</label>
+    <input class="f" id="volume" type="number" inputmode="numeric">
+    <label>Notes</label>
+    <textarea class="f" id="notes" rows="3" placeholder="Anything the POS Express team should know"></textarea>
+
+    <button class="btn" id="submitBtn" onclick="submitLead()">Submit lead</button>
+    <div class="msg" id="msg"></div>
+  </div>
+  <div class="foot">PayProTec · POS Express</div>
+</div>
+<script>
+(function(){
+  var agentOk=false, agentTimer=null;
+  var agent=document.getElementById('agent'), st=document.getElementById('agentStatus');
+  function qp(n){ try{ return new URLSearchParams(location.search).get(n)||''; }catch(e){ return ''; } }
+  // Prefill agent id from ?agent= / ?ref=
+  agent.value = qp('agent') || qp('ref') || '';
+  agent.addEventListener('input', function(){ agentOk=false; st.textContent=''; if(agentTimer) clearTimeout(agentTimer); agentTimer=setTimeout(lookup, 400); });
+  if(agent.value) lookup();
+  function lookup(){
+    var v=agent.value.trim(); if(!v){ st.textContent=''; return; }
+    st.textContent='Checking…'; st.className='agent-status';
+    fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'lookup_agent',agent_id:v})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d.valid){ agentOk=true; st.textContent='✓ '+d.partner_name; st.className='agent-status ok'; }
+        else { agentOk=false; st.textContent='✕ Agent ID not found — check it, or submit anyway (we\'ll verify).'; st.className='agent-status no'; }
+      }).catch(function(){ st.textContent=''; });
+  }
+  window.submitLead=function(){
+    var g=function(id){ return document.getElementById(id).value.trim(); };
+    var msg=document.getElementById('msg');
+    if(!g('agent')){ msg.textContent='Enter your Agent ID.'; return; }
+    if(!g('business')){ msg.textContent='Enter the business name.'; return; }
+    if(!g('email') && !g('phone')){ msg.textContent='Enter an email or phone for the merchant.'; return; }
+    var btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
+    fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      action:'submit_public', agent_id:g('agent'), business_name:g('business'), contact_name:g('contact'),
+      business_type:g('btype'), email:g('email'), phone:g('phone'), city:g('city'), state:g('state'),
+      monthly_volume:g('volume'), notes:g('notes'),
+      meta:{ ref:document.referrer.slice(0,300), url:location.href.slice(0,300) }
+    })}).then(function(r){return r.json();}).then(function(d){
+      if(d.success){ document.getElementById('form').innerHTML='<div class="thanks"><div class="ic">✅</div><div style="font-weight:800;font-size:20px;margin-top:10px;">Thank you!</div><div style="color:#64748b;margin-top:6px;">Your lead was submitted and is being reviewed.</div></div>'; }
+      else { msg.textContent=d.message||'Something went wrong.'; btn.disabled=false; btn.textContent='Submit lead'; }
+    }).catch(function(){ msg.textContent='Network error — please try again.'; btn.disabled=false; btn.textContent='Submit lead'; });
+  };
+})();
+</script>
+</body>
+</html>
