@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS Express</title>
+<script src="js/access-guard.js"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  :root{--orange:#ea580c;--orange-d:#9a3412;--muted:#94a3b8;--border:#e2e8f0;--green:#16a34a;--red:#dc2626;}
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#fff7ed;color:#0f172a;}
+  .sidebar{position:fixed;top:0;left:0;width:230px;height:100vh;background:linear-gradient(180deg,#7c2d12,#9a3412);display:flex;flex-direction:column;z-index:100;}
+  .sb-head{padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.12);}
+  .sb-brand{color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;gap:8px;}
+  .sb-sub{color:#fed7aa;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+  .switcher{margin:12px 14px 4px;background:rgba(255,255,255,.1);border-radius:9px;overflow:hidden;}
+  .switcher a{display:flex;align-items:center;gap:8px;padding:9px 12px;color:#fff;text-decoration:none;font-size:12px;font-weight:700;}
+  .switcher a.cur{background:var(--orange);}
+  .switcher a:not(.cur):hover{background:rgba(255,255,255,.08);}
+  .nav{flex:1;padding:10px 12px;display:flex;flex-direction:column;gap:2px;}
+  .nav button{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;color:rgba(255,255,255,.7);background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;}
+  .nav button:hover{background:rgba(255,255,255,.08);color:#fff;}
+  .nav button.on{background:var(--orange);color:#fff;}
+  .nav .material-icons{font-size:18px;}
+  .main{margin-left:230px;min-height:100vh;}
+  .topbar{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;}
+  .topbar h1{font-size:18px;font-weight:800;margin:0;flex:1;}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .btn-o{background:var(--orange);color:#fff;}.btn-n{background:#fff;color:#475569;border:1px solid var(--border);}
+  .content{padding:22px 24px;max-width:1160px;}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;}
+  .stat{background:#fff;border:1px solid var(--border);border-radius:12px;padding:15px;}
+  .stat .n{font-size:26px;font-weight:800;}.stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px;}
+  .card h3{font-size:14px;font-weight:800;margin:0;padding:14px 18px;border-bottom:1px solid var(--border);}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--muted);padding:9px 14px;background:#fff7ed;font-weight:800;}
+  td{padding:10px 14px;border-top:1px solid #f8fafc;font-size:13px;}
+  tr.click{cursor:pointer;}tr.click:hover td{background:#fff7ed;}
+  .pill{font-size:10px;font-weight:800;border-radius:5px;padding:2px 7px;}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .tab{padding:6px 13px;border:1px solid var(--border);background:#fff;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:#64748b;}
+  .tab.on{background:var(--orange);color:#fff;border-color:var(--orange);}
+  .empty{text-align:center;padding:26px;color:var(--muted);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="sb-head"><div class="sb-brand"><span class="material-icons">point_of_sale</span> POS Express</div><div class="sb-sub">Sub-Account</div></div>
+  <div class="switcher">
+    <a href="/"><span class="material-icons" style="font-size:16px;">apartment</span> PayProTec Portal</a>
+    <a href="/pos-express" class="cur"><span class="material-icons" style="font-size:16px;">point_of_sale</span> POS Express</a>
+  </div>
+  <nav class="nav" id="nav"></nav>
+</div>
+<div class="main">
+  <div class="topbar"><h1 id="secTitle">Dashboard</h1>
+    <button class="btn btn-n" onclick="load()">Refresh</button>
+  </div>
+  <div class="content" id="content"><div class="empty">Loading…</div></div>
+</div>
+<script>
+var TOKEN=localStorage.getItem('pp_session_token')||'';
+var LEADS=[], SEC='dashboard', PFILTER='';
+var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['pipeline','Lead Pipeline','filter_alt'],['settings','Settings','settings']];
+function api(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function money(n){ return n?('$'+Number(n).toLocaleString()):'—'; }
+function dt(s){ try{ return new Date(s).toLocaleDateString(); }catch(e){ return ''; } }
+var STP={new:'#0369a1',reviewing:'#b45309',qualified:'#16a34a',rejected:'#94a3b8',sent:'#7c3aed'};
+function stPill(s){ return '<span class="pill" style="background:'+(STP[s]||'#64748b')+';color:#fff;">'+esc(s)+'</span>'; }
+
+function renderNav(){ document.getElementById('nav').innerHTML=NAV.map(function(n){return '<button class="'+(SEC===n[0]?'on':'')+'" onclick="go(\''+n[0]+'\')"><span class="material-icons">'+n[2]+'</span> '+n[1]+'</button>';}).join(''); }
+function go(s){ SEC=s; renderNav(); document.getElementById('secTitle').textContent=(NAV.find(function(n){return n[0]===s;})||[])[1]||''; render(); }
+
+async function load(){
+  var r=await api({action:'list'});
+  if(!r.success){ document.getElementById('content').innerHTML='<div class="empty" style="color:var(--red);">'+esc(r.message||'Failed to load')+'</div>'; return; }
+  LEADS=r.leads||[]; render();
+}
+function render(){
+  var c=document.getElementById('content');
+  if(SEC==='dashboard') c.innerHTML=dashboard();
+  else if(SEC==='opps') c.innerHTML=oppsView();
+  else if(SEC==='merchants') c.innerHTML=merchantsView();
+  else if(SEC==='partners') c.innerHTML=partnersView();
+  else if(SEC==='pipeline') c.innerHTML=pipelineView();
+  else if(SEC==='settings') c.innerHTML=settingsView();
+}
+function counts(){
+  var c={total:LEADS.length,new:0,reviewing:0,qualified:0,rejected:0,sent:0,public:0,portal:0,week:0};
+  var wk=Date.now()-7*864e5;
+  LEADS.forEach(function(l){ if(c[l.status]!=null)c[l.status]++; if(l.source==='public')c.public++;else c.portal++; if(new Date(l.created_at).getTime()>=wk)c.week++; });
+  return c;
+}
+function dashboard(){
+  var c=counts();
+  var recent=LEADS.slice(0,8).map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b></td><td>'+esc(l.partner_name||'—')+'</td><td>'+esc(l.source)+'</td><td>'+stPill(l.status)+'</td><td class="muted">'+dt(l.created_at)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No submissions yet.</td></tr>';
+  return '<div class="stats">'+
+    '<div class="stat"><div class="n">'+c.total+'</div><div class="l">Submissions</div></div>'+
+    '<div class="stat"><div class="n" style="color:#0369a1;">'+c.new+'</div><div class="l">New</div></div>'+
+    '<div class="stat"><div class="n" style="color:#b45309;">'+c.reviewing+'</div><div class="l">Reviewing</div></div>'+
+    '<div class="stat"><div class="n" style="color:#16a34a;">'+c.qualified+'</div><div class="l">Qualified</div></div>'+
+    '<div class="stat"><div class="n" style="color:#7c3aed;">'+c.sent+'</div><div class="l">Sent (Opps)</div></div>'+
+    '<div class="stat"><div class="n" style="color:#ea580c;">'+c.week+'</div><div class="l">This week</div></div>'+
+    '</div>'+
+    '<div class="card"><h3>By source</h3><div style="padding:14px 18px;font-size:13px;">Public form: <b>'+c.public+'</b> &nbsp;·&nbsp; Partner portal: <b>'+c.portal+'</b></div></div>'+
+    '<div class="card"><h3>Recent submissions</h3><table><thead><tr><th>Business</th><th>Partner</th><th>Source</th><th>Status</th><th>Date</th></tr></thead><tbody>'+recent+'</tbody></table></div>';
+}
+function oppsView(){
+  var opps=LEADS.filter(function(l){return l.status==='qualified'||l.status==='sent';});
+  var rows=opps.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b><div class="muted" style="font-size:11px;">'+esc(l.contact_name||'')+'</div></td><td>'+esc(l.partner_name||'—')+'</td><td>'+money(l.monthly_volume)+'</td><td>'+stPill(l.status)+'</td><td class="muted">'+(l.ghl_sent_at?dt(l.ghl_sent_at):'—')+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No opportunities yet — qualify leads in the Pipeline.</td></tr>';
+  return '<div class="card"><h3>Opportunities ('+opps.length+')</h3><table><thead><tr><th>Merchant</th><th>Partner</th><th>Volume</th><th>Stage</th><th>Sent</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function merchantsView(){
+  var rows=LEADS.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b></td><td>'+esc(l.contact_name||'—')+'<div class="muted" style="font-size:11px;">'+esc(l.email||l.phone||'')+'</div></td><td>'+esc((l.city||'')+(l.state?', '+l.state:''))+'</td><td>'+esc(l.partner_name||'—')+'</td><td>'+stPill(l.status)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No merchants submitted yet.</td></tr>';
+  return '<div class="card"><h3>Merchants submitted ('+LEADS.length+')</h3><table><thead><tr><th>Business</th><th>Contact</th><th>Location</th><th>Partner</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function partnersView(){
+  var by={};
+  LEADS.forEach(function(l){ var k=l.partner_id||('name:'+(l.partner_name||l.agent_id||'Unknown')); if(!by[k])by[k]={name:l.partner_name||'Unknown',agent:l.agent_id||'',total:0,qualified:0,sent:0}; by[k].total++; if(l.status==='qualified')by[k].qualified++; if(l.status==='sent')by[k].sent++; });
+  var arr=Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return b.total-a.total;});
+  var rows=arr.map(function(p,i){return '<tr><td>'+(i<3?['🥇','🥈','🥉'][i]+' ':'')+'<b>'+esc(p.name)+'</b><div class="muted" style="font-size:11px;">'+esc(p.agent)+'</div></td><td style="font-weight:800;">'+p.total+'</td><td style="color:#16a34a;font-weight:700;">'+p.qualified+'</td><td style="color:#7c3aed;font-weight:700;">'+p.sent+'</td></tr>';}).join('')||'<tr><td colspan="4" class="empty">No partner submissions yet.</td></tr>';
+  return '<div class="card"><h3>Partners who submitted ('+arr.length+')</h3><table><thead><tr><th>Partner</th><th>Submitted</th><th>Qualified</th><th>Sent</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function pipelineView(){
+  var tabs=[['','All'],['new','New'],['reviewing','Reviewing'],['qualified','Qualified'],['rejected','Rejected'],['sent','Sent']];
+  var list=PFILTER?LEADS.filter(function(l){return l.status===PFILTER;}):LEADS;
+  var rows=list.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b></td><td>'+esc(l.partner_name||'—')+'<div class="muted" style="font-size:11px;">'+esc(l.agent_id||'')+' '+(l.agent_valid?'<span class="pill" style="background:#dcfce7;color:#166534;">valid</span>':'<span class="pill" style="background:#fee2e2;color:#991b1b;">unmatched</span>')+'</div></td><td>'+money(l.monthly_volume)+'</td><td>'+esc(l.source)+'</td><td>'+stPill(l.status)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No leads.</td></tr>';
+  return '<div class="tabs">'+tabs.map(function(t){return '<button class="tab '+(PFILTER===t[0]?'on':'')+'" onclick="setPF(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div>'+
+    '<div class="card"><table><thead><tr><th>Business</th><th>Partner</th><th>Volume</th><th>Source</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function setPF(f){ PFILTER=f; render(); }
+function settingsView(){
+  return '<div class="card"><h3>POS Express HighLevel webhook</h3><div style="padding:18px;"><div class="muted" style="font-size:12px;margin-bottom:10px;">Good leads are POSTed to this HighLevel inbound webhook, which creates the contact/opportunity in the POS Express sub-account.</div><div style="display:flex;gap:8px;"><input id="wh" style="flex:1;padding:11px 13px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;" placeholder="https://services.leadconnectorhq.com/hooks/…"><button class="btn btn-o" onclick="saveWebhook()">Save</button></div><div id="whmsg" style="font-size:12px;margin-top:8px;color:var(--muted);"></div></div></div>';
+}
+async function saveWebhook(){
+  var v=document.getElementById('wh').value.trim(); var m=document.getElementById('whmsg');
+  var s=await api({action:'set_config',webhook_url:v}); m.textContent=s.success?'Saved ✓':(s.message||'Failed'); m.style.color=s.success?'#16a34a':'#dc2626';
+}
+async function loadWebhook(){ if(SEC!=='settings')return; var r=await api({action:'get_config'}); var el=document.getElementById('wh'); if(el&&r.success) el.value=r.webhook_url||''; }
+
+async function openLead(id){
+  var l=LEADS.find(function(x){return x.id===id;}); if(!l) return;
+  var info=[['Business',l.business_name],['Contact',l.contact_name],['Email',l.email],['Phone',l.phone],['Location',(l.city||'')+(l.state?', '+l.state:'')],['Type',l.business_type],['Monthly volume',money(l.monthly_volume)],['Partner',(l.partner_name||'—')+' ('+(l.agent_id||'no agent id')+')'],['Notes',l.notes]]
+    .filter(function(x){return x[1];}).map(function(x){return '<div style="display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid #f1f5f9;"><span style="width:130px;color:#94a3b8;font-weight:700;">'+x[0]+'</span><span>'+esc(x[1])+'</span></div>';}).join('');
+  var canSend=l.status!=='sent';
+  var res=await Swal.fire({title:esc(l.business_name||'Lead'),width:640,
+    html:'<div style="text-align:left;">'+(l.agent_valid?'':'<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px;">⚠️ Agent ID “'+esc(l.agent_id||'')+'” did not match a partner. Verify before sending.</div>')+info+
+      '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Classification</label><select id="pl-class" class="swal2-input" style="margin:0;width:100%;"><option value="">— unclassified —</option><option value="good"'+(l.classification==='good'?' selected':'')+'>Good lead</option><option value="bad"'+(l.classification==='bad'?' selected':'')+'>Bad lead</option></select>'+
+      '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Status</label><select id="pl-status" class="swal2-input" style="margin:0;width:100%;">'+['new','reviewing','qualified','rejected','sent'].map(function(s){return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'+
+      '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Review notes</label><textarea id="pl-notes" class="swal2-textarea" style="margin:0;width:100%;">'+esc(l.review_notes||'')+'</textarea></div>',
+    showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#ea580c',
+    footer:canSend?'<button id="pl-send" class="btn btn-o" style="background:#7c3aed;">✅ Mark good &amp; send to POS Express</button>':'<span style="color:#7c3aed;font-weight:700;">Already sent to POS Express</span>',
+    didOpen:function(){ var sb=document.getElementById('pl-send'); if(sb) sb.addEventListener('click',async function(){ sb.disabled=true; sb.textContent='Sending…'; var s=await api({action:'send_to_ghl',id:l.id}); if(s.success){ Swal.close(); Swal.fire({icon:'success',title:'Sent to POS Express',timer:1300,showConfirmButton:false}); load(); } else { Swal.showValidationMessage(s.message||'Send failed'); sb.disabled=false; sb.textContent='✅ Mark good & send to POS Express'; } }); },
+    preConfirm:function(){ return {classification:document.getElementById('pl-class').value,status:document.getElementById('pl-status').value,review_notes:document.getElementById('pl-notes').value}; }
+  });
+  if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes}); load(); }
+}
+var _render=render;
+render=function(){ _render(); loadWebhook(); };
+renderNav(); load();
+</script>
+</body>
+</html>

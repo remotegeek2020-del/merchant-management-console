@@ -741,8 +741,13 @@
     <div id="page-curtain" style="display: none;">
         <div class="brand-header">
             <div class="header-top-bar">
-               
-                <div id="user-greeting">System Authorizing...</div>
+                <div style="display:flex;align-items:center;gap:14px;">
+                    <div id="ws-switch" style="display:inline-flex;background:rgba(255,255,255,0.12);border-radius:999px;padding:3px;">
+                        <a href="/" style="text-decoration:none;font-size:11px;font-weight:800;color:#0a1628;background:#fff;border-radius:999px;padding:5px 13px;">PayProTec</a>
+                        <a href="/pos-express" style="text-decoration:none;font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);border-radius:999px;padding:5px 13px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">point_of_sale</span>POS Express</a>
+                    </div>
+                    <div id="user-greeting">System Authorizing...</div>
+                </div>
                 <div class="header-right-group">
                     <span id="home-view-label" style="display:none;font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:0.5px;text-transform:uppercase;"></span>
                     <button id="home-arrange-btn" onclick="toggleHomeArrangeMode()">
@@ -834,7 +839,7 @@
                     <p class="card-desc">View and manage partner support tickets — deployments, returns, and general support requests.</p>
                 </a>
 
-                <a href="pos-leads.html" class="console-card" id="card-pos" style="border-bottom: 4px solid #ea580c; background: linear-gradient(135deg,#fff7ed,#ffffff);">
+                <a href="/pos-express" class="console-card" id="card-pos" style="border-bottom: 4px solid #ea580c; background: linear-gradient(135deg,#fff7ed,#ffffff);">
                     <div class="card-icon-header" style="background: #ffedd5; color: #c2410c;"><span class="material-icons">point_of_sale</span></div>
                     <div class="card-title">POS Express <span style="font-size:9px;background:#ea580c;color:#fff;border-radius:5px;padding:2px 6px;vertical-align:middle;">SUB-ACCOUNT</span></div>
                     <p class="card-desc">Switch into the POS Express workspace — review partner-submitted leads, qualify them, and hand good ones to the POS Express HighLevel account.</p>
