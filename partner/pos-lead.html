@@ -59,24 +59,49 @@
             <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Submit a merchant lead for POS Express. Our team reviews it, and qualified leads are handed to the POS Express team.</div>
             <label>Use Agent ID *</label>
             <select id="agent"><option value="">Loading your Agent IDs…</option></select>
+
+            <label style="margin-top:18px;">Is this a current merchant?</label>
+            <div style="display:flex;gap:16px;margin-top:6px;">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="radio" name="curmerch" value="yes" onchange="onCurMerch()" style="width:auto;"> Yes</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="radio" name="curmerch" value="no" checked onchange="onCurMerch()" style="width:auto;"> No</label>
+            </div>
+            <div id="lookupWrap" style="display:none;margin-top:10px;">
+              <label style="margin-top:0;">Find merchant by MID or DBA</label>
+              <input id="msearch" placeholder="Type MID or business name…" oninput="mSearch()" autocomplete="off">
+              <div id="mresults" style="display:none;border:1px solid var(--border);border-radius:10px;margin-top:6px;max-height:180px;overflow:auto;"></div>
+            </div>
+
             <label>Business (DBA) name *</label>
-            <input id="business" placeholder="Merchant business name">
-            <div class="row">
-              <div><label>Contact name</label><input id="contact"></div>
-              <div><label>Business type</label><input id="btype" placeholder="Restaurant, retail…"></div>
-            </div>
-            <div class="row">
-              <div><label>Email</label><input id="email" type="email"></div>
-              <div><label>Phone</label><input id="phone"></div>
-            </div>
+            <input id="business">
+            <label>Merchant legal name</label>
+            <input id="legal">
+            <label>Business type</label>
+            <select id="btype"><option value="">— select —</option><option>Restaurant - Table Service</option><option>Restaurant - Quick Service</option><option>Retail</option><option>Other</option></select>
+            <label>Street address</label>
+            <input id="street">
             <div class="row">
               <div><label>City</label><input id="city"></div>
               <div><label>State</label><input id="state"></div>
+              <div><label>Zip</label><input id="zip"></div>
             </div>
-            <label>Estimated monthly volume ($)</label>
+            <div class="row">
+              <div><label>Merchant first name</label><input id="mfirst"></div>
+              <div><label>Merchant last name</label><input id="mlast"></div>
+            </div>
+            <div class="row">
+              <div><label>Merchant phone</label><input id="phone"></div>
+              <div><label>Merchant email</label><input id="email" type="email"></div>
+            </div>
+            <label>Projected monthly volume ($)</label>
             <input id="volume" type="number" inputmode="numeric">
+            <label>Proposal type</label>
+            <select id="proposal"><option value="">— select —</option><option>Purchase Only</option><option>Purchase and Placement</option><option>Placement Only</option></select>
+            <label>Merchant's recent processing statement</label>
+            <input type="file" id="statement" accept=".pdf,.png,.jpg,.jpeg,.webp" onchange="uploadStatement(this)">
+            <div id="stmtState" style="font-size:11px;color:var(--muted);"></div>
             <label>Notes</label>
             <textarea id="notes" rows="3"></textarea>
+            <label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer;"><input type="checkbox" id="sms" style="width:auto;margin-top:2px;"> I would like to receive SMS texts to track the progress of this merchant.</label>
             <div style="margin-top:18px;"><button class="btn" id="submitBtn" onclick="submitLead()">Submit lead</button></div>
             <div id="msg" style="font-size:13px;color:#dc2626;margin-top:10px;min-height:16px;"></div>
         </div>
@@ -93,14 +118,43 @@ function handleLogout(){ try{ localStorage.removeItem('pp_partner_token'); }catc
   var ids=(r.success&&r.agent_ids)||[];
   sel.innerHTML=ids.length?ids.map(function(id){return '<option value="'+id+'">'+id+'</option>';}).join(''):'<option value="">No Agent IDs on your account</option>';
 })();
+var _mid=null,_muuid=null,_stmt='',_msTimer=null;
+function g(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+function s(id,v){var el=document.getElementById(id);if(el)el.value=v==null?'':v;}
+window.onCurMerch=function(){ document.getElementById('lookupWrap').style.display=(document.querySelector('input[name=curmerch]:checked').value==='yes')?'block':'none'; };
+window.mSearch=function(){
+  if(_msTimer)clearTimeout(_msTimer); _msTimer=setTimeout(function(){
+    var q=g('msearch'),box=document.getElementById('mresults'); if(q.length<2||!g('agent')){box.style.display='none';return;}
+    papi({action:'merchant_lookup',agent_id:g('agent'),q:q}).then(function(d){
+      var ms=(d.success&&d.merchants)||[]; if(!ms.length){box.innerHTML='<div style="padding:9px 12px;color:var(--muted);">No matching merchants.</div>';box.style.display='block';return;}
+      window._ms=ms; box.innerHTML=ms.map(function(m,i){return '<div style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;" onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+'</div>';}).join(''); box.style.display='block';
+    });
+  },350);
+};
+window.pickMerchant=function(i){
+  var m=window._ms[i]; if(!m)return;
+  s('business',m.dba_name);s('street',m.street_address);s('city',m.city);s('state',m.state);s('zip',m.zip);s('phone',m.phone);s('email',m.email);
+  if(m.contact){var p=String(m.contact).split(' ');s('mfirst',p.shift()||'');s('mlast',p.join(' '));}
+  document.getElementById('msearch').value=(m.dba_name||'')+' ('+(m.merchant_id||'')+')'; document.getElementById('mresults').style.display='none';
+  _mid=m.merchant_id; _muuid=m.id;
+};
+window.uploadStatement=function(input){
+  var f=input.files&&input.files[0]; if(!f)return; var el=document.getElementById('stmtState'); el.textContent='Uploading…';
+  papi({action:'statement_upload_url',ext:(f.name.split('.').pop()||'pdf').toLowerCase()}).then(function(d){
+    if(!d.success){el.textContent='Upload failed.';return;}
+    return fetch(d.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type||'application/octet-stream'}}).then(function(r){ if(r.ok){_stmt=d.public_url;el.textContent='✓ '+f.name;}else el.textContent='Upload failed.'; });
+  }).catch(function(){el.textContent='Upload failed.';});
+};
 window.submitLead=function(){
-  var g=function(id){return document.getElementById(id).value.trim();};
   var msg=document.getElementById('msg');
   if(!g('agent')){ msg.textContent='Choose an Agent ID.'; return; }
   if(!g('business')){ msg.textContent='Enter the business name.'; return; }
   if(!g('email') && !g('phone')){ msg.textContent='Enter an email or phone.'; return; }
+  var yes=document.querySelector('input[name=curmerch]:checked').value==='yes';
   var btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
-  papi({action:'submit_portal',agent_id:g('agent'),business_name:g('business'),contact_name:g('contact'),business_type:g('btype'),email:g('email'),phone:g('phone'),city:g('city'),state:g('state'),monthly_volume:g('volume'),notes:g('notes')})
+  papi({action:'submit_portal',agent_id:g('agent'),is_current_merchant:yes,mid:(yes?(_mid||g('msearch')):null),merchant_uuid:(yes?_muuid:null),
+    business_name:g('business'),merchant_legal_name:g('legal'),business_type:g('btype'),street_address:g('street'),city:g('city'),state:g('state'),zip:g('zip'),
+    merchant_first_name:g('mfirst'),merchant_last_name:g('mlast'),phone:g('phone'),email:g('email'),monthly_volume:g('volume'),proposal_type:g('proposal'),statement_url:_stmt,notes:g('notes'),sms_opt_in:document.getElementById('sms').checked})
     .then(function(d){
       if(d.success){ document.getElementById('formCard').innerHTML='<div style="text-align:center;padding:40px;"><div style="font-size:52px;">✅</div><div style="font-weight:800;font-size:20px;margin-top:10px;">Lead submitted!</div><div style="color:var(--muted);margin-top:6px;">Our team will review it shortly.</div><button class="btn" style="margin-top:18px;" onclick="location.reload()">Submit another</button></div>'; }
       else { msg.textContent=d.message||'Something went wrong.'; btn.disabled=false; btn.textContent='Submit lead'; }

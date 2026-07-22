@@ -19,15 +19,22 @@ function cors(res) {
 const ok = (res, data) => res.status(200).json({ success: true, ...data });
 const bad = (res, message, status = 400) => res.status(status).json({ success: false, message });
 
-// Resolve an Agent ID (id_string) → its partner (person).
+// Resolve an Agent ID (id_string) → its partner (person + contact).
 async function resolvePartner(idString) {
     if (!idString) return null;
     const { data: ai } = await supabase.from('agent_identifiers').select('agent_id').eq('id_string', String(idString).trim()).maybeSingle();
     if (!ai?.agent_id) return null;
     const { data: agent } = await supabase.from('agents').select('parent_agent_id').eq('id', ai.agent_id).maybeSingle();
     if (!agent?.parent_agent_id) return null;
-    const { data: person } = await supabase.from('persons').select('id, full_name').eq('id', agent.parent_agent_id).maybeSingle();
+    const { data: person } = await supabase.from('persons').select('id, full_name, email, phone_number').eq('id', agent.parent_agent_id).maybeSingle();
     return person || null;
+}
+
+// All Agent ID strings that belong to the partner who owns `idString`.
+async function partnerIdStringsForAgentId(idString) {
+    const p = await resolvePartner(idString);
+    if (!p) return [];
+    return partnerAgentIds(p.id);
 }
 
 // The Agent IDs belonging to a partner (person).
@@ -47,13 +54,24 @@ async function validatePartner(token) {
 }
 
 function cleanLead(b) {
-    const s = (v, n) => (v == null ? null : String(v).slice(0, n));
+    const s = (v, n) => (v == null || v === '' ? null : String(v).slice(0, n));
+    const first = s(b.merchant_first_name, 120), last = s(b.merchant_last_name, 120);
     return {
-        business_name: s(b.business_name, 200), contact_name: s(b.contact_name, 160),
-        email: s(b.email, 200), phone: s(b.phone, 60), city: s(b.city, 120), state: s(b.state, 60),
+        partner_phone: s(b.partner_phone, 60), partner_email: s(b.partner_email, 200),
+        is_current_merchant: !!b.is_current_merchant,
+        mid: s(b.mid, 60), merchant_uuid: /^[0-9a-f-]{36}$/i.test(String(b.merchant_uuid || '')) ? b.merchant_uuid : null,
+        business_name: s(b.business_name, 200),          // DBA
+        merchant_legal_name: s(b.merchant_legal_name, 200),
         business_type: s(b.business_type, 120),
+        street_address: s(b.street_address, 250), city: s(b.city, 120), state: s(b.state, 60), zip: s(b.zip, 20),
+        merchant_first_name: first, merchant_last_name: last,
+        contact_name: [first, last].filter(Boolean).join(' ') || s(b.contact_name, 160),
+        phone: s(b.phone, 60), email: s(b.email, 200),
         monthly_volume: Number.isFinite(+b.monthly_volume) ? +b.monthly_volume : null,
-        notes: s(b.notes, 2000)
+        proposal_type: s(b.proposal_type, 60),
+        statement_url: s(b.statement_url, 500),
+        notes: s(b.notes, 2000),
+        sms_opt_in: !!b.sms_opt_in
     };
 }
 
@@ -64,10 +82,38 @@ export default async function handler(req, res) {
     const action = body.action;
 
     try {
-        // ── PUBLIC: validate an agent id → confirm partner name ──
+        // ── PUBLIC: validate an agent id → confirm partner + contact ──
         if (action === 'lookup_agent') {
             const p = await resolvePartner(body.agent_id);
-            return ok(res, { valid: !!p, partner_name: p?.full_name || null });
+            return ok(res, { valid: !!p, partner_name: p?.full_name || null, partner_phone: p?.phone_number || null, partner_email: p?.email || null });
+        }
+
+        // ── PUBLIC: find the partner's own merchants by MID or DBA (scoped) ──
+        if (action === 'merchant_lookup') {
+            const ids = await partnerIdStringsForAgentId(body.agent_id);
+            if (!ids.length) return ok(res, { merchants: [] });
+            const q = String(body.q || '').trim();
+            let query = supabase.from('merchants')
+                .select('id, merchant_id, dba_name, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_primary_contact, merchant_phone, email')
+                .in('agent_id', ids).limit(10);
+            if (q) query = query.or(`merchant_id.ilike.%${q}%,dba_name.ilike.%${q}%`);
+            const { data } = await query;
+            return ok(res, { merchants: (data || []).map(m => ({
+                id: m.id, merchant_id: m.merchant_id, dba_name: m.dba_name,
+                street_address: m.merchant_address, city: m.merchant_city, state: m.merchant_state, zip: m.merchant_zip,
+                contact: m.merchant_primary_contact, phone: m.merchant_phone, email: m.email
+            })) });
+        }
+
+        // ── PUBLIC: signed upload URL for a processing statement ──
+        if (action === 'statement_upload_url') {
+            const ext = String(body.ext || 'pdf').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'pdf';
+            const rand = Array.from({ length: 20 }, () => '0123456789abcdef'[Math.floor((Date.now() + Math.random() * 1e6) % 16)]).join('');
+            const path = `statements/${rand}.${ext}`;
+            const { data, error } = await supabase.storage.from('pos-statements').createSignedUploadUrl(path);
+            if (error) return bad(res, error.message);
+            const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/pos-statements/${path}`;
+            return ok(res, { upload_url: data.signedUrl, token: data.token, path, public_url: publicUrl });
         }
 
         // ── PUBLIC: submit a lead from the external form ──

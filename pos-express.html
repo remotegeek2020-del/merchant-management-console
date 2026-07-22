@@ -150,8 +150,14 @@ async function loadWebhook(){ if(SEC!=='settings')return; var r=await api({actio
 
 async function openLead(id){
   var l=LEADS.find(function(x){return x.id===id;}); if(!l) return;
-  var info=[['Business',l.business_name],['Contact',l.contact_name],['Email',l.email],['Phone',l.phone],['Location',(l.city||'')+(l.state?', '+l.state:'')],['Type',l.business_type],['Monthly volume',money(l.monthly_volume)],['Partner',(l.partner_name||'—')+' ('+(l.agent_id||'no agent id')+')'],['Notes',l.notes]]
-    .filter(function(x){return x[1];}).map(function(x){return '<div style="display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid #f1f5f9;"><span style="width:130px;color:#94a3b8;font-weight:700;">'+x[0]+'</span><span>'+esc(x[1])+'</span></div>';}).join('');
+  var addr=[l.street_address,(l.city||'')+(l.state?', '+l.state:''),l.zip].filter(Boolean).join(', ');
+  var info=[['Partner',(l.partner_name||'—')+' ('+(l.agent_id||'no agent id')+')'],['Partner phone',l.partner_phone],['Partner email',l.partner_email],
+    ['Current merchant?',l.is_current_merchant?('Yes'+(l.mid?' · MID '+l.mid:'')):'No'],
+    ['Business (DBA)',l.business_name],['Legal name',l.merchant_legal_name],['Business type',l.business_type],
+    ['Address',addr],['Merchant contact',[l.merchant_first_name,l.merchant_last_name].filter(Boolean).join(' ')||l.contact_name],['Merchant phone',l.phone],['Merchant email',l.email],
+    ['Monthly volume',money(l.monthly_volume)],['Proposal type',l.proposal_type],['SMS updates',l.sms_opt_in?'Yes':'No'],['Notes',l.notes]]
+    .filter(function(x){return x[1];}).map(function(x){return '<div style="display:flex;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid #f1f5f9;"><span style="width:140px;color:#94a3b8;font-weight:700;flex:none;">'+x[0]+'</span><span>'+esc(x[1])+'</span></div>';}).join('');
+  if(l.statement_url) info+='<div style="padding:8px 0;"><a href="'+esc(l.statement_url)+'" target="_blank" style="color:#ea580c;font-weight:700;font-size:13px;">📄 View processing statement</a></div>';
   var canSend=l.status!=='sent';
   var res=await Swal.fire({title:esc(l.business_name||'Lead'),width:640,
     html:'<div style="text-align:left;">'+(l.agent_valid?'':'<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px;">⚠️ Agent ID “'+esc(l.agent_id||'')+'” did not match a partner. Verify before sending.</div>')+info+
