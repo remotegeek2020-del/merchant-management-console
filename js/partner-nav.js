@@ -192,9 +192,23 @@
         merchants.parentNode.insertBefore(a, merchants.nextSibling);
     }
 
+    // Inject "Submit POS Lead" into the sidebar on every partner page.
+    function injectPosLeadNav() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (!nav || nav.querySelector('a[href="/partner/pos-lead"]')) return;
+        var merchants = nav.querySelector('a[href="/partner/merchants"]');
+        if (!merchants) return;
+        var a = document.createElement('a');
+        a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/pos-lead') !== -1 ? ' active' : '');
+        a.href = '/partner/pos-lead';
+        a.innerHTML = '<span class="material-icons">point_of_sale</span> Submit POS Lead';
+        merchants.parentNode.insertBefore(a, merchants.nextSibling);
+    }
+
     function init() {
         injectBadges();
         injectResidualsNav();
+        injectPosLeadNav();
         injectNotificationBell();
         injectBrandedBadge();
         pollNav();

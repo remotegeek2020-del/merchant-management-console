@@ -51,6 +51,7 @@
     { "src": "/bug-report\\.js", "dest": "/bug-report.js" },
     { "src": "/partner/dashboard", "dest": "/partner/dashboard.html" },
     { "src": "/partner/merchants", "dest": "/partner/merchants.html" },
+    { "src": "/partner/pos-lead", "dest": "/partner/pos-lead.html" },
     { "src": "/partner/messages", "dest": "/partner/messages.html" },
     { "src": "/partner/community", "dest": "/partner/community.html" },
     { "src": "/partner/settings", "dest": "/partner/settings.html" },
