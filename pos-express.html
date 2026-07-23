@@ -93,7 +93,7 @@ function render(){
   else if(SEC==='merchants') c.innerHTML=merchantsView();
   else if(SEC==='partners') c.innerHTML=partnersView();
   else if(SEC==='pipeline') c.innerHTML=pipelineView();
-  else if(SEC==='settings') c.innerHTML=settingsView();
+  else if(SEC==='settings'){ c.innerHTML=settingsView(); loadSettings(); }
 }
 function counts(){
   var c={total:LEADS.length,new:0,reviewing:0,qualified:0,rejected:0,sent:0,public:0,portal:0,week:0};
@@ -139,14 +139,59 @@ function pipelineView(){
     '<div class="card"><table><thead><tr><th>Business</th><th>Partner</th><th>Volume</th><th>Source</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 function setPF(f){ PFILTER=f; render(); }
-function settingsView(){
-  return '<div class="card"><h3>POS Express HighLevel webhook</h3><div style="padding:18px;"><div class="muted" style="font-size:12px;margin-bottom:10px;">Good leads are POSTed to this HighLevel inbound webhook, which creates the contact/opportunity in the POS Express sub-account.</div><div style="display:flex;gap:8px;"><input id="wh" style="flex:1;padding:11px 13px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;" placeholder="https://services.leadconnectorhq.com/hooks/…"><button class="btn btn-o" onclick="saveWebhook()">Save</button></div><div id="whmsg" style="font-size:12px;margin-top:8px;color:var(--muted);"></div></div></div>';
+function settingsView(){ return '<div id="posSettings"><div class="empty">Loading…</div></div>'; }
+var IN='padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;';
+async function loadSettings(){
+  if(SEC!=='settings') return;
+  var box=document.getElementById('posSettings'); if(!box) return;
+  var r=await api({action:'settings_get'});
+  if(!r.success){ box.innerHTML='<div class="empty" style="color:#9a3412;padding:50px;">🔒 '+esc(r.message||'No access to Settings.')+'</div>'; return; }
+  window._pos=r;
+  var conn='<div class="card"><h3>POS Express HighLevel connection</h3><div style="padding:16px 18px;">'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Private Integration key '+(r.key_set?'<span style="color:#16a34a;">('+esc(r.key_masked)+')</span>':'<span style="color:#dc2626;">(not set)</span>')+'</div>'
+    +'<input id="pit" type="password" placeholder="Paste POS Express Private Integration token (leave blank to keep current)" style="width:100%;'+IN+'margin-bottom:10px;">'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Location ID</div>'
+    +'<input id="loc" value="'+esc(r.location_id||'')+'" placeholder="POS Express sub-account location id" style="width:100%;'+IN+'margin-bottom:10px;">'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Inbound webhook (good leads)</div>'
+    +'<input id="wh" value="'+esc(r.webhook_url||'')+'" placeholder="https://services.leadconnectorhq.com/hooks/…" style="width:100%;'+IN+'margin-bottom:12px;">'
+    +'<button class="btn btn-o" onclick="saveConn(this)">Save connection</button> <span id="connmsg" style="font-size:12px;color:var(--muted);margin-left:8px;"></span></div></div>';
+  var pipes=(r.pipelines||[]).map(pipelineEditor).join('')||'<div class="muted" style="padding:6px 0;">No pipelines yet — add one.</div>';
+  var pipeCard='<div class="card"><h3>Pipelines &amp; Stages <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="addPipeline()">+ Pipeline</button></h3><div style="padding:16px 18px;">'
+    +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Define your pipelines and their stages (like HighLevel). Each stage can carry a workflow trigger URL that fires when a lead enters it.</div>'+pipes+'</div></div>';
+  box.innerHTML=conn+pipeCard;
 }
-async function saveWebhook(){
-  var v=document.getElementById('wh').value.trim(); var m=document.getElementById('whmsg');
-  var s=await api({action:'set_config',webhook_url:v}); m.textContent=s.success?'Saved ✓':(s.message||'Failed'); m.style.color=s.success?'#16a34a':'#dc2626';
+function pipelineEditor(p){
+  return '<div class="pipe" data-pid="'+p.id+'" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;background:#fffdf9;">'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">'
+    +'<input class="pipe-name" value="'+esc(p.name)+'" style="font-weight:700;flex:1;'+IN+'">'
+    +'<button class="btn btn-o" onclick="savePipeline(this)">Save</button>'
+    +'<span class="material-icons" style="color:var(--red);cursor:pointer;" title="Delete pipeline" onclick="delPipeline(this)">delete</span></div>'
+    +'<div class="stages">'+((p.stages||[]).map(stageRow).join(''))+'</div>'
+    +'<button class="btn btn-n" style="margin-top:6px;padding:5px 11px;" onclick="addStage(this)">+ Stage</button></div>';
 }
-async function loadWebhook(){ if(SEC!=='settings')return; var r=await api({action:'get_config'}); var el=document.getElementById('wh'); if(el&&r.success) el.value=r.webhook_url||''; }
+function stageRow(s){
+  return '<div class="stage" data-sid="'+(s&&s.id?s.id:'')+'" style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">'
+    +'<span class="material-icons" style="color:#cbd5e1;font-size:18px;cursor:grab;">drag_indicator</span>'
+    +'<input class="st-name" placeholder="Stage name" value="'+esc(s?s.name:'')+'" style="flex:0 0 32%;'+IN+'">'
+    +'<input class="st-wf" placeholder="Workflow trigger URL (optional)" value="'+esc(s&&s.workflow_url?s.workflow_url:'')+'" style="flex:1;'+IN+'font-size:12px;">'
+    +'<span class="material-icons" style="color:#94a3b8;cursor:pointer;" title="Remove stage" onclick="this.closest(\'.stage\').remove()">close</span></div>';
+}
+window.addStage=function(btn){ btn.closest('.pipe').querySelector('.stages').insertAdjacentHTML('beforeend', stageRow(null)); };
+window.addPipeline=async function(){ var n=await Swal.fire({title:'New pipeline',input:'text',inputPlaceholder:'Pipeline name',showCancelButton:true,confirmButtonColor:'#ea580c'}); if(!n.isConfirmed||!n.value) return; var r=await api({action:'save_pipeline',name:n.value}); if(r.success) loadSettings(); };
+window.delPipeline=async function(btn){ var pid=btn.closest('.pipe').getAttribute('data-pid'); var c=await Swal.fire({icon:'warning',title:'Delete pipeline?',text:'Its stages will be removed.',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_pipeline',id:pid}); loadSettings(); };
+window.savePipeline=async function(btn){
+  var pipe=btn.closest('.pipe'); var pid=pipe.getAttribute('data-pid'); var name=pipe.querySelector('.pipe-name').value.trim();
+  if(name) await api({action:'save_pipeline',id:pid,name:name});
+  var stages=Array.prototype.map.call(pipe.querySelectorAll('.stage'),function(row){ return { id:row.getAttribute('data-sid')||undefined, name:row.querySelector('.st-name').value.trim(), workflow_url:row.querySelector('.st-wf').value.trim() }; }).filter(function(s){return s.name;});
+  var r=await api({action:'save_stages',pipeline_id:pid,stages:stages});
+  if(r.success){ Swal.fire({icon:'success',title:'Saved',timer:900,showConfirmButton:false}); loadSettings(); } else Swal.fire('Error',r.message||'','error');
+};
+window.saveConn=async function(btn){
+  var m=document.getElementById('connmsg'); btn.disabled=true;
+  var r=await api({action:'set_pos_key',key:document.getElementById('pit').value.trim(),location_id:document.getElementById('loc').value.trim(),webhook_url:document.getElementById('wh').value.trim()});
+  btn.disabled=false; m.textContent=r.success?'Saved ✓':(r.message||'Failed'); m.style.color=r.success?'#16a34a':'#dc2626';
+  if(r.success) loadSettings();
+};
 
 async function openLead(id){
   var l=LEADS.find(function(x){return x.id===id;}); if(!l) return;
@@ -171,8 +216,8 @@ async function openLead(id){
   });
   if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes}); load(); }
 }
-var _render=render;
-render=function(){ _render(); loadWebhook(); };
+var CAN_SETTINGS=(localStorage.getItem('pp_role')||'').toLowerCase().indexOf('super')!==-1 || localStorage.getItem('pp_access_pos_settings')==='true';
+if(!CAN_SETTINGS){ NAV=NAV.filter(function(n){return n[0]!=='settings';}); if(SEC==='settings') SEC='dashboard'; }
 renderNav(); load();
 </script>
 </body>

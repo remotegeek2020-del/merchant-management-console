@@ -6,6 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { validateSession } from './_validate.js';
+import { setConfigValue, getConfigValue } from './api-config.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -159,11 +160,67 @@ export default async function handler(req, res) {
         // ── STAFF (session) ──
         const session = await validateSession(req);
         if (!session) return bad(res, 'Unauthorized', 401);
-        const { data: actor } = await supabase.from('app_users').select('role, first_name, last_name, access_pos_express').eq('userid', session.userid).maybeSingle();
+        const { data: actor } = await supabase.from('app_users').select('role, first_name, last_name, access_pos_express, access_pos_settings').eq('userid', session.userid).maybeSingle();
         const role = String(actor?.role || '').toLowerCase();
         // Super admins always; everyone else needs the granular POS Express flag.
         const canPos = role.includes('super') || actor?.access_pos_express === true;
         if (!canPos) return bad(res, 'Access denied. Ask an admin to enable POS Express for your account.', 403);
+        const canSettings = role.includes('super') || actor?.access_pos_settings === true;
+
+        // ── SETTINGS (sub-granular access) ──
+        if (action === 'settings_get') {
+            if (!canSettings) return bad(res, 'No access to POS Express Settings.', 403);
+            const pit = await getConfigValue('POS_GHL_PIT');
+            const [{ data: loc }, { data: wh }, { data: pls }, { data: sts }] = await Promise.all([
+                supabase.from('app_settings').select('value').eq('key', 'pos_ghl_location_id').maybeSingle(),
+                supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle(),
+                supabase.from('pos_pipelines').select('*').order('sort_order'),
+                supabase.from('pos_stages').select('*').order('sort_order')
+            ]);
+            const stagesByPipe = {};
+            (sts || []).forEach(s => { (stagesByPipe[s.pipeline_id] = stagesByPipe[s.pipeline_id] || []).push(s); });
+            const pipelines = (pls || []).map(p => ({ id: p.id, name: p.name, is_default: p.is_default, stages: stagesByPipe[p.id] || [] }));
+            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines });
+        }
+        if (action === 'set_pos_key') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            // Only overwrite the key when a new one is actually provided (blank = keep existing).
+            if (body.key && String(body.key).trim()) await setConfigValue('POS_GHL_PIT', String(body.key).trim(), session.userid);
+            if ('location_id' in body) await supabase.from('app_settings').upsert({ key: 'pos_ghl_location_id', value: String(body.location_id || '').trim(), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
+            if ('webhook_url' in body) await supabase.from('app_settings').upsert({ key: 'pos_ghl_webhook_url', value: String(body.webhook_url || '').trim(), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
+            return ok(res, {});
+        }
+        if (action === 'save_pipeline') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const name = String(body.name || '').trim(); if (!name) return bad(res, 'Pipeline name required.');
+            if (body.id) { await supabase.from('pos_pipelines').update({ name }).eq('id', body.id); return ok(res, { id: body.id }); }
+            const { data, error } = await supabase.from('pos_pipelines').insert({ name, sort_order: Number.isFinite(+body.sort_order) ? +body.sort_order : 0 }).select('id').single();
+            if (error) return bad(res, error.message);
+            return ok(res, { id: data.id });
+        }
+        if (action === 'delete_pipeline') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            await supabase.from('pos_pipelines').delete().eq('id', body.id);
+            return ok(res, { deleted: true });
+        }
+        if (action === 'save_stages') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const pid = body.pipeline_id; if (!pid) return bad(res, 'pipeline_id required.');
+            const stages = Array.isArray(body.stages) ? body.stages : [];
+            const keepIds = stages.filter(s => s.id).map(s => s.id);
+            // Delete removed stages.
+            let delQ = supabase.from('pos_stages').delete().eq('pipeline_id', pid);
+            if (keepIds.length) delQ = delQ.not('id', 'in', '(' + keepIds.map(id => `"${id}"`).join(',') + ')');
+            await delQ;
+            // Upsert provided stages with order.
+            for (let i = 0; i < stages.length; i++) {
+                const s = stages[i];
+                const row = { pipeline_id: pid, name: String(s.name || '').slice(0, 120), sort_order: i, workflow_url: s.workflow_url ? String(s.workflow_url).slice(0, 500) : null };
+                if (s.id) await supabase.from('pos_stages').update(row).eq('id', s.id);
+                else await supabase.from('pos_stages').insert(row);
+            }
+            return ok(res, {});
+        }
 
         if (action === 'list') {
             let q = supabase.from('pos_leads').select('*').order('created_at', { ascending: false }).limit(1000);
