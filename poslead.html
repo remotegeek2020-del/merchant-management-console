@@ -121,6 +121,11 @@
   if(qp('embed')==='1' || qp('form')==='1'){
     var hero=document.querySelector('.hero'); if(hero) hero.style.display='none';
     var fw=document.querySelector('.form-wrap'); if(fw){ fw.style.maxWidth='100%'; fw.style.paddingTop='14px'; }
+    // Auto-height: tell the parent page how tall we are so the iframe fits.
+    var postH=function(){ try{ parent.postMessage({type:'ppos-height',height:document.body.scrollHeight}, '*'); }catch(e){} };
+    window.addEventListener('load', postH); window.addEventListener('resize', postH);
+    if(window.ResizeObserver){ try{ new ResizeObserver(postH).observe(document.body); }catch(e){} }
+    setInterval(postH, 800);
   }
   function pos(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
   function val(id){ return document.getElementById(id).value.trim(); }
