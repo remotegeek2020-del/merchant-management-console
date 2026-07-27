@@ -111,7 +111,6 @@
             <span class="material-icons" style="font-size:18px;">auto_awesome</span>
             Email me a sign-in link
         </button>
-        <div id="magicMsg" style="display:none;margin-top:10px;font-size:13px;line-height:1.5;padding:10px 12px;border-radius:10px;"></div>
         <span class="forgot" onclick="handleForgot()">Forgot your password?</span>
     </div>
 
@@ -157,33 +156,41 @@
         }
     }
 
-    function showMagicMsg(html, kind) {
-        const el = document.getElementById('magicMsg'); if (!el) return;
-        const styles = { ok: 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;', warn: 'background:#fffbeb;color:#b45309;border:1px solid #fde68a;', err: 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;' };
-        el.setAttribute('style', 'margin-top:10px;font-size:13px;line-height:1.5;padding:10px 12px;border-radius:10px;display:block;' + (styles[kind] || styles.ok));
-        el.innerHTML = html;
-    }
     async function handleMagicLink() {
         const input = document.getElementById('loginEmail');
-        const email = (input ? input.value : '').trim();
-        if (!email) { if (input) input.focus(); showMagicMsg('Type your email in the field above, then tap this button.', 'warn'); return; }
-        const btn = document.getElementById('magicBtn'); const old = btn.innerHTML;
-        btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:18px;">sync</span> Sending link…';
-        try {
-            const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email }) });
-            const result = await res.json();
-            const safe = email.replace(/[<>&]/g, '');
-            if (result.status === 'inactive') {
-                showMagicMsg('⚠ Your portal access isn\'t activated yet. Please contact your PayProTec representative to get set up.', 'warn');
-            } else if (result.status === 'sent') {
-                showMagicMsg('✓ Sign-in link sent to <b>' + safe + '</b>. It expires in 15 minutes and works once. <span style="color:#94a3b8;">Check spam if you don\'t see it.</span>', 'ok');
-            } else {
-                showMagicMsg('✓ If an account exists for <b>' + safe + '</b>, a sign-in link is on its way. <span style="color:#94a3b8;">Check spam if you don\'t see it.</span>', 'ok');
+        const prefill = (input ? input.value : '').trim();
+        const result = await Swal.fire({
+            title: 'Email me a sign-in link',
+            html: '<p style="color:#64748b;font-size:14px;margin:-4px 0 2px;line-height:1.5;">We\'ll email you a one-time secure link — no password needed. It expires in 15 minutes.</p>',
+            input: 'email',
+            inputValue: prefill,
+            inputPlaceholder: 'your@email.com',
+            inputAttributes: { autocapitalize: 'off', autocorrect: 'off', autocomplete: 'email' },
+            showCancelButton: true,
+            confirmButtonText: '<span class="material-icons" style="font-size:17px;vertical-align:-3px;">send</span> Send my link',
+            confirmButtonColor: '#0d9488',
+            cancelButtonColor: '#94a3b8',
+            focusConfirm: false,
+            allowOutsideClick: () => !Swal.isLoading(),
+            preConfirm: async (val) => {
+                const em = (val || '').trim();
+                if (!em || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { Swal.showValidationMessage('Please enter a valid email address'); return false; }
+                try {
+                    const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email: em }) });
+                    const r = await res.json();
+                    return { email: em, status: r.status };
+                } catch (e) { Swal.showValidationMessage('Could not reach the server. Please try again.'); return false; }
             }
-        } catch (err) {
-            showMagicMsg('Could not reach the server. Please try again.', 'err');
+        });
+        if (!result.isConfirmed || !result.value) return;
+        const safe = String(result.value.email).replace(/[<>&]/g, '');
+        if (result.value.status === 'inactive') {
+            Swal.fire({ icon: 'warning', title: 'Not activated yet', html: 'Your portal access isn\'t activated. Please contact your PayProTec representative to get set up.', confirmButtonColor: '#0d9488' });
+        } else if (result.value.status === 'sent') {
+            Swal.fire({ icon: 'success', title: 'Check your email', html: 'A sign-in link was sent to <b>' + safe + '</b>.<br><span style="color:#94a3b8;font-size:13px;">Expires in 15 minutes · works once · check spam if you don\'t see it.</span>', confirmButtonColor: '#0d9488' });
+        } else {
+            Swal.fire({ icon: 'success', title: 'Check your email', html: 'If an account exists for <b>' + safe + '</b>, a sign-in link is on its way.<br><span style="color:#94a3b8;font-size:13px;">Check spam if you don\'t see it.</span>', confirmButtonColor: '#0d9488' });
         }
-        btn.disabled = false; btn.innerHTML = old;
     }
 
     function togglePass(inputId, icon) {
