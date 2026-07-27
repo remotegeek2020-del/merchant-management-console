@@ -265,17 +265,14 @@ async function loadSettings(){
     +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Customize the public POS lead form — colors, fonts, headings, disclaimers, button text, column layout, and every field\'s label, placeholder, required flag, visibility and order. Live preview, just like HighLevel. Pipeline wiring stays intact.</div>'
     +'<button class="btn btn-o" onclick="openFormDesigner()"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">design_services</span> Open Form Designer</button></div></div>';
   var portalAutoCard='<div class="card"><h3>Portal Automations <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="autoAddWf(\'portal\')">+ Automation</button></h3><div style="padding:16px 18px;">'
-    +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Runs actions <b>inside the portal</b> when a lead is submitted or moved to a stage — set status/classification, move stage, assign to staff, add a note.</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Runs actions when a lead is submitted or moved to a stage — set status/classification, move stage, assign to staff, add a note, or <b>Send to a HighLevel workflow</b> (map exactly which portal fields go to which HighLevel fields / custom fields).</div>'
     +'<div id="autoPortal"></div><div style="margin-top:10px;"><button class="btn btn-o" onclick="saveAutomations(this)">Save automations</button></div></div></div>';
-  var hlAutoCard='<div class="card"><h3>HighLevel Automations <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="autoAddWf(\'highlevel\')">+ Automation</button></h3><div style="padding:16px 18px;">'
-    +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Sends a lead <b>to HighLevel</b> when it is submitted or enters a stage. Map exactly which portal fields go to which HighLevel keys, add tags, and choose the webhook.</div>'
-    +'<div id="autoHL"></div><div style="margin-top:10px;"><button class="btn btn-o" onclick="saveAutomations(this)">Save automations</button></div></div></div>';
   var pipes=(r.pipelines||[]).map(pipelineEditor).join('')||'<div class="muted" style="padding:6px 0;">No pipelines yet — add one.</div>';
   var pipeCard='<div class="card"><h3>Pipelines &amp; Stages <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="addPipeline()">+ Pipeline</button></h3><div style="padding:16px 18px;">'
     +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Define your pipelines and their stages (like HighLevel). Each stage can carry a workflow trigger URL that fires when a lead enters it.</div>'+pipes+'</div></div>';
-  box.innerHTML=conn+formCard+designerCard+pipeCard+portalAutoCard+hlAutoCard;
+  box.innerHTML=conn+formCard+designerCard+pipeCard+portalAutoCard;
   var a=(window._pos&&window._pos.automations)||{};
-  AUTO={ portal:(a.portal||[]).slice(), highlevel:(a.highlevel||[]).slice() };
+  AUTO={ portal:(a.portal||[]).slice(), highlevel:[] };
   renderAutomations();
 }
 window.posCopy=function(id,btn){
@@ -395,7 +392,7 @@ window.saveFormDesigner=async function(btn){
 /* ── Automations (HighLevel-style workflows) ── */
 var AUTO={portal:[],highlevel:[]};
 var AUTO_TRIGGERS=[['lead_submitted','When a lead is submitted'],['stage_entered','When a lead enters a stage']];
-var AUTO_PORTAL_ACTIONS=[['set_status','Set status'],['set_classification','Set classification'],['move_stage','Move to stage'],['assign_to','Assign to staff'],['add_note','Add note']];
+var AUTO_PORTAL_ACTIONS=[['set_status','Set status'],['set_classification','Set classification'],['move_stage','Move to stage'],['assign_to','Assign to staff'],['add_note','Add note'],['send_to_highlevel','Send to HighLevel workflow']];
 var AUTO_STATUSES=['new','reviewing','qualified','rejected','sent'];
 var AUTO_SOURCES=[['business_name','Merchant DBA'],['merchant_legal_name','Legal name'],['full_contact_name','Contact full name'],['merchant_first_name','Contact first name'],['merchant_last_name','Contact last name'],['email','Merchant email'],['phone','Merchant phone'],['street_address','Street address'],['city','City'],['state','State'],['zip','Zip'],['business_type','Business type'],['monthly_volume','Monthly volume'],['proposal_type','Proposal type'],['mid','MID'],['notes','Notes'],['agent_id','Agent ID'],['partner_name','Partner name'],['partner_phone','Partner phone'],['partner_email','Partner email'],['source','Source'],['status','Status']];
 function autoUid(){ return 'wf'+(AUTO.portal.length+AUTO.highlevel.length)+'_'+(Math.floor((window.performance&&performance.now?performance.now():1)*1000)); }
@@ -405,8 +402,7 @@ function stageOptions(sel){ var ps=(window._pos&&window._pos.pipelines)||[]; var
 function staffOptions(sel){ var st=(window._pos&&window._pos.staff)||[]; return '<option value="">— pick staff —</option>'+st.map(function(u){return '<option value="'+esc(u.userid)+'"'+(sel===u.userid?' selected':'')+'>'+esc(u.name)+'</option>';}).join(''); }
 var ASEL='padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;font-family:inherit;';
 function renderAutomations(){
-  var pe=document.getElementById('autoPortal'); if(pe) pe.innerHTML=AUTO.portal.map(function(w,i){return wfCard('portal',w,i);}).join('')||'<div class="muted" style="font-size:12px;">No portal automations yet.</div>';
-  var he=document.getElementById('autoHL'); if(he) he.innerHTML=AUTO.highlevel.map(function(w,i){return wfCard('highlevel',w,i);}).join('')||'<div class="muted" style="font-size:12px;">No HighLevel automations yet.</div>';
+  var pe=document.getElementById('autoPortal'); if(pe) pe.innerHTML=AUTO.portal.map(function(w,i){return wfCard('portal',w,i);}).join('')||'<div class="muted" style="font-size:12px;">No automations yet.</div>';
 }
 function wfHeader(fam,w,i){
   var trig=(w.trigger&&w.trigger.type)||'lead_submitted';
@@ -421,8 +417,23 @@ function wfHeader(fam,w,i){
     +'</div>'+stageSel;
 }
 function wfCard(fam,w,i){
-  var body=(fam==='portal')?portalBody(w,i):hlBody(w,i);
-  return '<div class="pipe" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#fffdf9;">'+wfHeader(fam,w,i)+'<div style="border-top:1px dashed var(--border);margin:12px 0 10px;"></div>'+body+'</div>';
+  return '<div class="pipe" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#fffdf9;">'+wfHeader(fam,w,i)+'<div style="border-top:1px dashed var(--border);margin:12px 0 10px;"></div>'+portalBody(w,i)+'</div>';
+}
+function hlActionBlock(a,i,j){
+  var maps=(a.mapping||[]).map(function(m,k){
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
+      +'<select style="'+ASEL+'flex:1;" onchange="autoActMap('+i+','+j+','+k+',\'source\',this.value)"><option value="">— portal field —</option>'+optList(AUTO_SOURCES,m.source)+'</select>'
+      +'<span class="material-icons" style="color:#cbd5e1;font-size:16px;">arrow_forward</span>'
+      +'<input type="text" placeholder="HighLevel field or custom field key" value="'+esc(m.target||'')+'" style="'+ASEL+'flex:1;" oninput="autoActMap('+i+','+j+','+k+',\'target\',this.value)">'
+      +'<span class="material-icons" style="color:#94a3b8;cursor:pointer;font-size:18px;" onclick="autoActDelMap('+i+','+j+','+k+')">close</span></div>';
+  }).join('')||'<div class="muted" style="font-size:12px;margin-bottom:6px;">No fields mapped — add a mapping.</div>';
+  return '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:10px;margin-top:6px;">'
+    +'<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">HighLevel workflow webhook <span class="muted" style="font-weight:600;">(blank = use the connection webhook)</span></label>'
+    +'<input type="text" value="'+esc(a.webhook_url||'')+'" placeholder="https://services.leadconnectorhq.com/hooks/…" style="'+ASEL+'width:100%;" oninput="autoActField('+i+','+j+',\'webhook_url\',this.value)"></div>'
+    +'<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">Tags <span class="muted" style="font-weight:600;">(comma-separated)</span></label>'
+    +'<input type="text" value="'+esc((a.tags||[]).join(', '))+'" placeholder="pos pros merchant, new lead" style="'+ASEL+'width:100%;" oninput="autoActTags('+i+','+j+',this.value)"></div>'
+    +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin:10px 0 6px;">Map what to send — portal field → HighLevel field / custom field</div>'+maps
+    +'<button class="btn btn-n" style="padding:5px 11px;margin-top:4px;" onclick="autoActAddMap('+i+','+j+')">+ Map field</button></div>';
 }
 function portalBody(w,i){
   var acts=(w.actions||[]).map(function(a,j){
@@ -432,44 +443,32 @@ function portalBody(w,i){
     else if(t==='move_stage') param='<select style="'+ASEL+'min-width:200px;" onchange="autoActField('+i+','+j+',\'stage_id\',this.value)">'+stageOptions(a.stage_id)+'</select>';
     else if(t==='assign_to') param='<select style="'+ASEL+'min-width:170px;" onchange="autoActField('+i+','+j+',\'value\',this.value)">'+staffOptions(a.value)+'</select>';
     else if(t==='add_note') param='<input type="text" placeholder="Note text" value="'+esc(a.value||'')+'" style="'+ASEL+'flex:1;min-width:180px;" oninput="autoActField('+i+','+j+',\'value\',this.value)">';
-    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
-      +'<select style="'+ASEL+'min-width:150px;" onchange="autoActField('+i+','+j+',\'type\',this.value)">'+optList(AUTO_PORTAL_ACTIONS,t)+'</select>'
+    var row='<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
+      +'<select style="'+ASEL+'min-width:200px;" onchange="autoActField('+i+','+j+',\'type\',this.value)">'+optList(AUTO_PORTAL_ACTIONS,t)+'</select>'
       +param+'<span class="material-icons" style="color:#94a3b8;cursor:pointer;font-size:18px;" onclick="autoDelAction('+i+','+j+')">close</span></div>';
+    if(t==='send_to_highlevel') row+=hlActionBlock(a,i,j);
+    return '<div style="margin-bottom:10px;">'+row+'</div>';
   }).join('')||'<div class="muted" style="font-size:12px;margin-bottom:6px;">No actions — add one.</div>';
   return '<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Actions</div>'+acts
     +'<button class="btn btn-n" style="padding:5px 11px;margin-top:4px;" onclick="autoAddAction('+i+')">+ Action</button>';
 }
-function hlBody(w,i){
-  var maps=(w.mapping||[]).map(function(m,j){
-    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
-      +'<select style="'+ASEL+'flex:1;" onchange="autoMapField('+i+','+j+',\'source\',this.value)"><option value="">— portal field —</option>'+optList(AUTO_SOURCES,m.source)+'</select>'
-      +'<span class="material-icons" style="color:#cbd5e1;font-size:16px;">arrow_forward</span>'
-      +'<input type="text" placeholder="HighLevel key (e.g. firstName)" value="'+esc(m.target||'')+'" style="'+ASEL+'flex:1;" oninput="autoMapField('+i+','+j+',\'target\',this.value)">'
-      +'<span class="material-icons" style="color:#94a3b8;cursor:pointer;font-size:18px;" onclick="autoDelMap('+i+','+j+')">close</span></div>';
-  }).join('')||'<div class="muted" style="font-size:12px;margin-bottom:6px;">No fields mapped — add a mapping.</div>';
-  return '<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">Webhook URL <span class="muted" style="font-weight:600;">(blank = use the connection webhook)</span></label>'
-    +'<input type="text" value="'+esc(w.webhook_url||'')+'" placeholder="https://services.leadconnectorhq.com/hooks/…" style="'+ASEL+'width:100%;" oninput="autoField(\'highlevel\','+i+',\'webhook_url\',this.value)"></div>'
-    +'<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">Tags <span class="muted" style="font-weight:600;">(comma-separated)</span></label>'
-    +'<input type="text" value="'+esc((w.tags||[]).join(', '))+'" placeholder="pos pros merchant, new lead" style="'+ASEL+'width:100%;" oninput="autoTags('+i+',this.value)"></div>'
-    +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin:10px 0 6px;">Field mapping — portal → HighLevel</div>'+maps
-    +'<button class="btn btn-n" style="padding:5px 11px;margin-top:4px;" onclick="autoAddMap('+i+')">+ Map field</button>';
-}
 window.autoField=function(fam,i,k,v){ if(AUTO[fam][i]) AUTO[fam][i][k]=v; };
 window.autoTrigger=function(fam,i,k,v){ var w=AUTO[fam][i]; if(!w) return; w.trigger=w.trigger||{}; w.trigger[k]=v; if(k==='type') renderAutomations(); };
-window.autoAddWf=function(fam){ AUTO[fam].push({id:autoUid(),name:'',enabled:true,pipeline_id:'all',trigger:{type:'lead_submitted'},actions:(fam==='portal'?[]:undefined),mapping:(fam==='highlevel'?[]:undefined),tags:(fam==='highlevel'?[]:undefined)}); renderAutomations(); };
+window.autoAddWf=function(fam){ AUTO[fam].push({id:autoUid(),name:'',enabled:true,pipeline_id:'all',trigger:{type:'lead_submitted'},actions:[]}); renderAutomations(); };
 window.autoDelWf=function(fam,i){ AUTO[fam].splice(i,1); renderAutomations(); };
 window.autoAddAction=function(i){ var w=AUTO.portal[i]; w.actions=w.actions||[]; w.actions.push({type:'set_status',value:''}); renderAutomations(); };
 window.autoDelAction=function(i,j){ AUTO.portal[i].actions.splice(j,1); renderAutomations(); };
-window.autoActField=function(i,j,k,v){ var a=AUTO.portal[i].actions[j]; if(!a) return; a[k]=v; if(k==='type') renderAutomations(); };
-window.autoAddMap=function(i){ var w=AUTO.highlevel[i]; w.mapping=w.mapping||[]; w.mapping.push({source:'',target:''}); renderAutomations(); };
-window.autoDelMap=function(i,j){ AUTO.highlevel[i].mapping.splice(j,1); renderAutomations(); };
-window.autoMapField=function(i,j,k,v){ var m=AUTO.highlevel[i].mapping[j]; if(m) m[k]=v; };
-window.autoTags=function(i,v){ AUTO.highlevel[i].tags=v.split(',').map(function(s){return s.trim();}).filter(Boolean); };
+window.autoActField=function(i,j,k,v){ var a=AUTO.portal[i].actions[j]; if(!a) return; a[k]=v; if(k==='type'){ if(v==='send_to_highlevel'){ a.mapping=a.mapping||[]; a.tags=a.tags||[]; } renderAutomations(); } };
+window.autoActAddMap=function(i,j){ var a=AUTO.portal[i].actions[j]; a.mapping=a.mapping||[]; a.mapping.push({source:'',target:''}); renderAutomations(); };
+window.autoActDelMap=function(i,j,k){ AUTO.portal[i].actions[j].mapping.splice(k,1); renderAutomations(); };
+window.autoActMap=function(i,j,k,key,v){ var m=AUTO.portal[i].actions[j].mapping[k]; if(m) m[key]=v; };
+window.autoActTags=function(i,j,v){ AUTO.portal[i].actions[j].tags=v.split(',').map(function(s){return s.trim();}).filter(Boolean); };
 window.saveAutomations=async function(btn){
   btn.disabled=true; var t=btn.textContent; btn.textContent='Saving…';
-  var r=await api({action:'automations_set',automations:AUTO});
+  var payload={portal:AUTO.portal,highlevel:[]};
+  var r=await api({action:'automations_set',automations:payload});
   btn.disabled=false; btn.textContent=t;
-  if(r&&r.success){ if(window._pos) window._pos.automations={portal:AUTO.portal.slice(),highlevel:AUTO.highlevel.slice()}; Swal.fire({icon:'success',title:'Automations saved',timer:1100,showConfirmButton:false}); }
+  if(r&&r.success){ if(window._pos) window._pos.automations={portal:AUTO.portal.slice(),highlevel:[]}; Swal.fire({icon:'success',title:'Automations saved',timer:1100,showConfirmButton:false}); }
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');
 };
 function pipelineEditor(p){

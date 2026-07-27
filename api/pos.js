@@ -101,6 +101,24 @@ function leadFieldValue(lead, key) {
     }
 }
 
+// Send a lead to a HighLevel workflow webhook, mapping portal fields → HL keys
+// (standard fields or custom fields — the target key is whatever HighLevel
+// expects on the inbound webhook / workflow). `act` carries webhook_url,
+// mapping[] and tags[].
+async function sendToHighlevel(act, lead) {
+    let url = (act.webhook_url && String(act.webhook_url).trim()) || '';
+    if (!url) {
+        const { data: cfg } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle();
+        url = cfg?.value || '';
+    }
+    if (!url) return;
+    const payload = { pos_lead_id: lead.id };
+    (act.mapping || []).forEach(m => { if (m && m.source && m.target) payload[m.target] = leadFieldValue(lead, m.source); });
+    if (Array.isArray(act.tags) && act.tags.length) payload.tags = act.tags;
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (r.ok) await supabase.from('pos_leads').update({ ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
+}
+
 async function runPortalActions(wf, lead) {
     const patch = {};
     for (const act of (wf.actions || [])) {
@@ -113,6 +131,10 @@ async function runPortalActions(wf, lead) {
             if (stage) { patch.stage_id = stage.id; patch.pipeline_id = stage.pipeline_id; }
         } else if (act.type === 'add_note' && act.value) {
             patch.review_notes = (lead.review_notes ? lead.review_notes + '\n' : '') + act.value;
+        } else if (act.type === 'send_to_highlevel') {
+            // Apply any pending patch first so the send reflects prior actions.
+            if (Object.keys(patch).length) { patch.updated_at = new Date().toISOString(); await supabase.from('pos_leads').update(patch).eq('id', lead.id); Object.assign(lead, patch); for (const k of Object.keys(patch)) delete patch[k]; }
+            try { await sendToHighlevel(act, lead); } catch (e) { /* best-effort */ }
         }
     }
     if (Object.keys(patch).length) {
@@ -120,20 +142,6 @@ async function runPortalActions(wf, lead) {
         await supabase.from('pos_leads').update(patch).eq('id', lead.id);
         Object.assign(lead, patch); // keep in-memory lead current for later workflows
     }
-}
-
-async function runHighlevelSend(wf, lead) {
-    let url = (wf.webhook_url && String(wf.webhook_url).trim()) || '';
-    if (!url) {
-        const { data: cfg } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle();
-        url = cfg?.value || '';
-    }
-    if (!url) return;
-    const payload = { pos_lead_id: lead.id };
-    (wf.mapping || []).forEach(m => { if (m && m.source && m.target) payload[m.target] = leadFieldValue(lead, m.source); });
-    if (Array.isArray(wf.tags) && wf.tags.length) payload.tags = wf.tags;
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (r.ok) await supabase.from('pos_leads').update({ ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
 }
 
 async function runAutomations(triggerType, lead, opts = {}) {
@@ -145,7 +153,6 @@ async function runAutomations(triggerType, lead, opts = {}) {
             && (!wf.pipeline_id || wf.pipeline_id === 'all' || wf.pipeline_id === pid)
             && (triggerType !== 'stage_entered' || !wf.trigger.stage_id || wf.trigger.stage_id === opts.stage_id);
         for (const wf of (auto.portal || []).filter(matches)) { try { await runPortalActions(wf, lead); } catch (e) { /* best-effort */ } }
-        for (const wf of (auto.highlevel || []).filter(matches)) { try { await runHighlevelSend(wf, lead); } catch (e) { /* best-effort */ } }
     } catch (e) { /* never block the caller */ }
 }
 
@@ -290,17 +297,6 @@ export default async function handler(req, res) {
             const clean = { portal: Array.isArray(a.portal) ? a.portal : [], highlevel: Array.isArray(a.highlevel) ? a.highlevel : [] };
             await supabase.from('app_settings').upsert({ key: 'pos_automations', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
-        }
-        // Manually run a HighLevel automation against a lead (test send / re-send).
-        if (action === 'run_hl_automation') {
-            if (!canSettings) return bad(res, 'No access.', 403);
-            const { data: lead } = await supabase.from('pos_leads').select('*').eq('id', body.id).maybeSingle();
-            if (!lead) return bad(res, 'Lead not found', 404);
-            const auto = await getAutomations();
-            const wf = (auto.highlevel || []).find(w => w.id === body.wf_id);
-            if (!wf) return bad(res, 'Automation not found', 404);
-            try { await runHighlevelSend(wf, lead); } catch (e) { return bad(res, 'Send failed: ' + e.message); }
-            return ok(res, { sent: true });
         }
         if (action === 'save_pipeline') {
             if (!canSettings) return bad(res, 'No access.', 403);
