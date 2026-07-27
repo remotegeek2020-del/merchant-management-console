@@ -48,6 +48,37 @@ async function validateSession(token) {
     return data.person_id;
 }
 
+function sha256(v) {
+    return crypto.createHash('sha256').update(String(v)).digest('hex');
+}
+
+// Shared magic-link email body.
+async function sendMagicEmail(person, magicUrl) {
+    if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[MAGIC LINK] ${person.email} -> ${magicUrl}`); return; }
+    try {
+        const { ServerClient } = await import('postmark');
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        await client.sendEmail({
+            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+            To: person.email,
+            Subject: 'Your PayProTec Partner Portal sign-in link',
+            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
+                <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;">
+                <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">Sign in to your Partner Portal</h2>
+                <p style="color:#475569;line-height:1.6;margin-bottom:24px;">Hi <strong>${person.full_name || 'there'}</strong>, click the button below to sign in instantly — no password needed.</p>
+                <div style="text-align:center;margin:28px 0;">
+                    <a href="${magicUrl}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Sign In →</a>
+                </div>
+                <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This link expires in 15 minutes and can be used once. If you didn't request it, you can safely ignore this email.</p>
+                <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
+                <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Portal · Secure Access</p>
+            </div>`,
+            TextBody: `Hi ${person.full_name || 'there'}, sign in to your PayProTec Partner Portal (expires in 15 minutes, single use): ${magicUrl}`,
+            MessageStream: 'outbound'
+        });
+    } catch (emailErr) { console.error('[MAGIC LINK] Email failed:', emailErr.message); }
+}
+
 async function getPartnerAgentIds(personId) {
     const { data: agents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
     if (!agents || agents.length === 0) return [];
@@ -84,6 +115,71 @@ export default async function handler(req, res) {
             if (!person || !person.is_portal_active) return res.status(401).json({ success: false });
             const identifiers = await getPartnerAgentIds(personId);
             return res.status(200).json({ success: true, partner: { id: person.id, name: person.full_name, email: person.email, is_branded: !!person.is_branded }, identifiers });
+        }
+
+        // ── MAGIC LINK: request a one-time sign-in link ──
+        // Always returns success (no email enumeration). Only activated partners
+        // get an email. Token is 256-bit, stored hashed, single-use, 15-min TTL.
+        if (action === 'request_magic_link') {
+            const email = (req.body.email || '').toLowerCase().trim();
+            if (email) {
+                const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active').eq('email', email).single();
+                if (person && person.is_portal_active) {
+                    // Light rate limit: skip if a link was issued in the last 45s.
+                    const { data: recent } = await supabase.from('partner_magic_links')
+                        .select('created_at').eq('person_id', person.id).order('created_at', { ascending: false }).limit(1);
+                    const tooSoon = recent && recent[0] && (Date.now() - new Date(recent[0].created_at).getTime() < 45000);
+                    if (!tooSoon) {
+                        const token = generateToken(32); // 256-bit
+                        const expires = new Date(Date.now() + 15 * 60 * 1000);
+                        await supabase.from('partner_magic_links').insert({
+                            person_id: person.id, token_hash: sha256(token), expires_at: expires.toISOString(),
+                            ip_address: req.headers['x-forwarded-for'] || ''
+                        });
+                        const magicUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?magic=${token}`;
+                        await sendMagicEmail(person, magicUrl);
+                    }
+                }
+            }
+            return res.status(200).json({ success: true });
+        }
+
+        // ── MAGIC LINK: consume a link and start a session ──
+        if (action === 'consume_magic_link') {
+            const token = req.body.token;
+            if (!token) return res.status(400).json({ success: false, message: 'No link provided.' });
+            const tokenHash = sha256(token);
+            const { data: link } = await supabase.from('partner_magic_links')
+                .select('id, person_id, expires_at, used_at').eq('token_hash', tokenHash).single();
+            if (!link || link.used_at) return res.status(400).json({ success: false, message: 'This sign-in link is invalid or has already been used. Request a new one.' });
+            if (new Date(link.expires_at) < new Date()) return res.status(400).json({ success: false, message: 'This sign-in link has expired. Request a new one.' });
+            // Mark used FIRST (single-use guard against double-submit / replay).
+            const { data: claimed } = await supabase.from('partner_magic_links')
+                .update({ used_at: new Date().toISOString() }).eq('id', link.id).is('used_at', null).select('id');
+            if (!claimed || !claimed.length) return res.status(400).json({ success: false, message: 'This sign-in link has already been used. Request a new one.' });
+            const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active').eq('id', link.person_id).single();
+            if (!person || !person.is_portal_active) return res.status(403).json({ success: false, message: 'Your portal access is not active. Contact your PayProTec representative.' });
+            const sessionToken = await createSession(person.id, req);
+            await supabase.from('persons').update({ last_portal_login: new Date().toISOString() }).eq('id', person.id);
+            return res.status(200).json({ success: true, token: sessionToken, partner: { id: person.id, name: person.full_name, email: person.email } });
+        }
+
+        // ── ADMIN: send a magic sign-in link to one or many partners ──
+        if (action === 'send_magic_link') {
+            const ids = Array.isArray(req.body.person_ids) ? req.body.person_ids : (req.body.person_id ? [req.body.person_id] : []);
+            if (!ids.length) return res.status(400).json({ success: false, message: 'person_id(s) required' });
+            const { data: persons } = await supabase.from('persons').select('id, full_name, email, is_portal_active').in('id', ids);
+            const results = { sent: [], skipped: [] };
+            for (const person of (persons || [])) {
+                if (!person.email || !person.is_portal_active) { results.skipped.push(person.full_name || person.id); continue; }
+                const token = generateToken(32);
+                const expires = new Date(Date.now() + 15 * 60 * 1000);
+                await supabase.from('partner_magic_links').insert({ person_id: person.id, token_hash: sha256(token), expires_at: expires.toISOString() });
+                const magicUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?magic=${token}`;
+                await sendMagicEmail(person, magicUrl);
+                results.sent.push(person.full_name || person.id);
+            }
+            return res.status(200).json({ success: true, results });
         }
 
         if (action === 'logout') {

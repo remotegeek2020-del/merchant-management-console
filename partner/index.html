@@ -106,6 +106,11 @@
             <span class="material-icons" style="font-size:18px;">login</span>
             Sign In
         </button>
+        <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:#94a3b8;font-size:12px;"><div style="flex:1;height:1px;background:#e2e8f0;"></div>or<div style="flex:1;height:1px;background:#e2e8f0;"></div></div>
+        <button class="btn" onclick="handleMagicLink()" id="magicBtn" style="background:#fff;color:#0d9488;border:1.5px solid #0d9488;">
+            <span class="material-icons" style="font-size:18px;">auto_awesome</span>
+            Email me a sign-in link
+        </button>
         <span class="forgot" onclick="handleForgot()">Forgot your password?</span>
     </div>
 
@@ -116,9 +121,9 @@
 </div>
 
 <script>
-    // Check if already logged in
+    // Check if already logged in (skip when a magic link is being consumed)
     const existingToken = localStorage.getItem('pp_partner_token');
-    if (existingToken) {
+    if (existingToken && !new URLSearchParams(window.location.search).get('magic')) {
         fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'validate', token: existingToken }) })
             .then(r => r.json()).then(result => { if (result.success) window.location.href = '/partner/dashboard'; });
     }
@@ -127,7 +132,46 @@
     const params = new URLSearchParams(window.location.search);
     const inviteToken = params.get('token');
     const mode = params.get('mode');
-    if (inviteToken) showSetupForm(inviteToken, mode);
+    const magicToken = params.get('magic');
+    if (magicToken) { consumeMagicLink(magicToken); }
+    else if (inviteToken) showSetupForm(inviteToken, mode);
+
+    async function consumeMagicLink(token) {
+        Swal.fire({ title: 'Signing you in…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        try {
+            const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'consume_magic_link', token }) });
+            const result = await res.json();
+            if (result.success) {
+                localStorage.setItem('pp_partner_token', result.token);
+                localStorage.setItem('pp_partner_name', result.partner.name);
+                localStorage.setItem('pp_partner_id', result.partner.id);
+                // Clean the token out of the URL/history before leaving.
+                window.history.replaceState({}, '', '/partner');
+                window.location.href = '/partner/dashboard';
+            } else {
+                Swal.fire({ icon: 'error', title: 'Link not valid', text: result.message || 'Please request a new sign-in link.', confirmButtonColor: '#0d9488' });
+            }
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Could not reach the server. Please try again.', confirmButtonColor: '#0d9488' });
+        }
+    }
+
+    async function handleMagicLink() {
+        let email = (document.getElementById('loginEmail') || {}).value || '';
+        email = email.trim();
+        if (!email) {
+            const r = await Swal.fire({ title: 'Sign-in link', input: 'email', inputLabel: 'Enter your partner email address', inputPlaceholder: 'your@email.com', showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'Send my link' });
+            if (!r.isConfirmed || !r.value) return;
+            email = r.value.trim();
+        }
+        Swal.fire({ title: 'Sending…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        try {
+            await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email }) });
+            Swal.fire({ icon: 'success', title: 'Check your email', html: 'If an account exists for <b>' + email.replace(/[<>&]/g,'') + '</b>, a sign-in link is on its way.<br><span style="color:#94a3b8;font-size:13px;">It expires in 15 minutes and works once.</span>', confirmButtonColor: '#0d9488' });
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Could not reach the server. Please try again.', confirmButtonColor: '#0d9488' });
+        }
+    }
 
     function togglePass(inputId, icon) {
         const input = document.getElementById(inputId);
