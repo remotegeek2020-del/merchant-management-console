@@ -68,6 +68,7 @@
             <div id="lookupWrap" style="display:none;margin-top:10px;">
               <label style="margin-top:0;">Find merchant by MID or DBA</label>
               <input id="msearch" placeholder="Type MID or business name…" oninput="mSearch()" autocomplete="off">
+              <div id="mfindScope" style="font-size:12px;color:var(--muted);margin-top:5px;"></div>
               <div id="mresults" style="display:none;border:1px solid var(--border);border-radius:10px;margin-top:6px;max-height:180px;overflow:auto;"></div>
             </div>
 
@@ -121,23 +122,34 @@ function handleLogout(){ try{ localStorage.removeItem('pp_partner_token'); }catc
 var _mid=null,_muuid=null,_stmt='',_msTimer=null;
 function g(id){var el=document.getElementById(id);return el?el.value.trim():'';}
 function s(id,v){var el=document.getElementById(id);if(el)el.value=v==null?'':v;}
-window.onCurMerch=function(){ document.getElementById('lookupWrap').style.display=(document.querySelector('input[name=curmerch]:checked').value==='yes')?'block':'none'; };
+function updateScope(){ var el=document.getElementById('mfindScope'); if(!el)return; var a=g('agent'); el.textContent=a?('🔎 Searching your merchants under Agent ID: '+a):''; }
+window.onCurMerch=function(){ var yes=document.querySelector('input[name=curmerch]:checked').value==='yes'; document.getElementById('lookupWrap').style.display=yes?'block':'none'; if(yes) updateScope(); };
 window.mSearch=function(){
   if(_msTimer)clearTimeout(_msTimer); _msTimer=setTimeout(function(){
     var q=g('msearch'),box=document.getElementById('mresults'); if(q.length<2||!g('agent')){box.style.display='none';return;}
     papi({action:'merchant_lookup',agent_id:g('agent'),q:q}).then(function(d){
       var ms=(d.success&&d.merchants)||[]; if(!ms.length){box.innerHTML='<div style="padding:9px 12px;color:var(--muted);">No matching merchants.</div>';box.style.display='block';return;}
-      window._ms=ms; box.innerHTML=ms.map(function(m,i){return '<div style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;" onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+'</div>';}).join(''); box.style.display='block';
+      window._ms=ms; box.innerHTML=ms.map(function(m,i){
+        var diff=(m.agent_id && g('agent') && String(m.agent_id)!==g('agent'));
+        var tag=m.agent_id?'<span style="font-size:11px;color:'+(diff?'#b45309':'var(--muted)')+';">'+(diff?'↪ ':'')+'ID '+m.agent_id+'</span>':'';
+        return '<div style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;" onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+(m.city?' · '+m.city:'')+' &nbsp;'+tag+'</div>';
+      }).join(''); box.style.display='block';
     });
   },350);
 };
 window.pickMerchant=function(i){
   var m=window._ms[i]; if(!m)return;
+  // Align the selected Agent ID to the merchant's own Agent ID so the submission stays consistent.
+  if(m.agent_id && String(m.agent_id)!==g('agent')){
+    var sel=document.getElementById('agent');
+    if(sel){ if(![].some.call(sel.options,function(o){return o.value===m.agent_id;})){ var o=document.createElement('option'); o.value=m.agent_id; o.textContent=m.agent_id; sel.appendChild(o); } sel.value=m.agent_id; updateScope(); }
+  }
   s('business',m.dba_name);s('street',m.street_address);s('city',m.city);s('state',m.state);s('zip',m.zip);s('phone',m.phone);s('email',m.email);
   if(m.contact){var p=String(m.contact).split(' ');s('mfirst',p.shift()||'');s('mlast',p.join(' '));}
   document.getElementById('msearch').value=(m.dba_name||'')+' ('+(m.merchant_id||'')+')'; document.getElementById('mresults').style.display='none';
   _mid=m.merchant_id; _muuid=m.id;
 };
+(function(){ var sel=document.getElementById('agent'); if(sel) sel.addEventListener('change',updateScope); })();
 window.uploadStatement=function(input){
   var f=input.files&&input.files[0]; if(!f)return; var el=document.getElementById('stmtState'); el.textContent='Uploading…';
   papi({action:'statement_upload_url',ext:(f.name.split('.').pop()||'pdf').toLowerCase()}).then(function(d){
