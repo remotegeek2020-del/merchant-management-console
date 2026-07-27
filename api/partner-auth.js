@@ -122,26 +122,27 @@ export default async function handler(req, res) {
         // get an email. Token is 256-bit, stored hashed, single-use, 15-min TTL.
         if (action === 'request_magic_link') {
             const email = (req.body.email || '').toLowerCase().trim();
-            if (email) {
-                const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active').eq('email', email).single();
-                if (person && person.is_portal_active) {
-                    // Light rate limit: skip if a link was issued in the last 45s.
-                    const { data: recent } = await supabase.from('partner_magic_links')
-                        .select('created_at').eq('person_id', person.id).order('created_at', { ascending: false }).limit(1);
-                    const tooSoon = recent && recent[0] && (Date.now() - new Date(recent[0].created_at).getTime() < 45000);
-                    if (!tooSoon) {
-                        const token = generateToken(32); // 256-bit
-                        const expires = new Date(Date.now() + 15 * 60 * 1000);
-                        await supabase.from('partner_magic_links').insert({
-                            person_id: person.id, token_hash: sha256(token), expires_at: expires.toISOString(),
-                            ip_address: req.headers['x-forwarded-for'] || ''
-                        });
-                        const magicUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?magic=${token}`;
-                        await sendMagicEmail(person, magicUrl);
-                    }
-                }
+            // Hybrid feedback: unknown emails stay vague (no enumeration), but a
+            // known-but-inactive partner is told to contact their rep.
+            if (!email) return res.status(200).json({ success: true, status: 'generic' });
+            const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active').eq('email', email).single();
+            if (!person) return res.status(200).json({ success: true, status: 'generic' });
+            if (!person.is_portal_active) return res.status(200).json({ success: true, status: 'inactive' });
+            // Light rate limit: skip if a link was issued in the last 45s.
+            const { data: recent } = await supabase.from('partner_magic_links')
+                .select('created_at').eq('person_id', person.id).order('created_at', { ascending: false }).limit(1);
+            const tooSoon = recent && recent[0] && (Date.now() - new Date(recent[0].created_at).getTime() < 45000);
+            if (!tooSoon) {
+                const token = generateToken(32); // 256-bit
+                const expires = new Date(Date.now() + 15 * 60 * 1000);
+                await supabase.from('partner_magic_links').insert({
+                    person_id: person.id, token_hash: sha256(token), expires_at: expires.toISOString(),
+                    ip_address: req.headers['x-forwarded-for'] || ''
+                });
+                const magicUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?magic=${token}`;
+                await sendMagicEmail(person, magicUrl);
             }
-            return res.status(200).json({ success: true });
+            return res.status(200).json({ success: true, status: 'sent' });
         }
 
         // ── MAGIC LINK: consume a link and start a session ──

@@ -170,8 +170,16 @@
         const btn = document.getElementById('magicBtn'); const old = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:18px;">sync</span> Sending link…';
         try {
-            await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email }) });
-            showMagicMsg('✓ If an account exists for <b>' + email.replace(/[<>&]/g, '') + '</b>, your sign-in link is on its way. It expires in 15 minutes and works once. <span style="color:#94a3b8;">Check spam if you don\'t see it.</span>', 'ok');
+            const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email }) });
+            const result = await res.json();
+            const safe = email.replace(/[<>&]/g, '');
+            if (result.status === 'inactive') {
+                showMagicMsg('⚠ Your portal access isn\'t activated yet. Please contact your PayProTec representative to get set up.', 'warn');
+            } else if (result.status === 'sent') {
+                showMagicMsg('✓ Sign-in link sent to <b>' + safe + '</b>. It expires in 15 minutes and works once. <span style="color:#94a3b8;">Check spam if you don\'t see it.</span>', 'ok');
+            } else {
+                showMagicMsg('✓ If an account exists for <b>' + safe + '</b>, a sign-in link is on its way. <span style="color:#94a3b8;">Check spam if you don\'t see it.</span>', 'ok');
+            }
         } catch (err) {
             showMagicMsg('Could not reach the server. Please try again.', 'err');
         }
