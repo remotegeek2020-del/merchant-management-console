@@ -329,19 +329,23 @@ export default async function handler(req, res) {
         if (action === 'ghl_meta') {
             if (!canSettings) return bad(res, 'No access.', 403);
             const { token, locationId } = await posGhlCreds();
-            if (!token || !locationId) return ok(res, { configured: false, workflows: [], custom_fields: [] });
-            let workflows = [], custom_fields = [];
+            if (!token || !locationId) return ok(res, { configured: false, workflows: [], custom_fields: [], wf_error: !token ? 'No Private Integration key set.' : 'No Location ID set.' });
+            let workflows = [], custom_fields = [], wf_error = null, cf_error = null;
             try {
                 const r = await fetch('https://services.leadconnectorhq.com/workflows/?locationId=' + encodeURIComponent(locationId), { headers: ghlHeaders(token) });
-                const j = await r.json().catch(() => ({}));
-                workflows = (j.workflows || []).map(w => ({ id: w.id, name: w.name, status: w.status }));
-            } catch (e) { /* best-effort */ }
+                const txt = await r.text();
+                let j = {}; try { j = JSON.parse(txt); } catch (e) { j = {}; }
+                if (!r.ok) wf_error = 'HTTP ' + r.status + (j.message ? ': ' + (Array.isArray(j.message) ? j.message.join('; ') : j.message) : (txt ? ': ' + txt.slice(0, 200) : ''));
+                else workflows = (j.workflows || []).map(w => ({ id: w.id, name: w.name, status: w.status }));
+            } catch (e) { wf_error = 'Request failed: ' + (e.message || 'unknown'); }
             try {
                 const r = await fetch('https://services.leadconnectorhq.com/locations/' + encodeURIComponent(locationId) + '/customFields?model=contact', { headers: ghlHeaders(token) });
-                const j = await r.json().catch(() => ({}));
-                custom_fields = (j.customFields || []).map(f => ({ id: f.id, name: f.name }));
-            } catch (e) { /* best-effort */ }
-            return ok(res, { configured: true, workflows, custom_fields });
+                const txt = await r.text();
+                let j = {}; try { j = JSON.parse(txt); } catch (e) { j = {}; }
+                if (!r.ok) cf_error = 'HTTP ' + r.status + (j.message ? ': ' + (Array.isArray(j.message) ? j.message.join('; ') : j.message) : '');
+                else custom_fields = (j.customFields || []).map(f => ({ id: f.id, name: f.name }));
+            } catch (e) { cf_error = 'Request failed: ' + (e.message || 'unknown'); }
+            return ok(res, { configured: true, workflows, custom_fields, wf_error, cf_error, location_id: locationId });
         }
         if (action === 'automations_set') {
             if (!canSettings) return bad(res, 'No access.', 403);
