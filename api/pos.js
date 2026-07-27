@@ -215,12 +215,12 @@ export default async function handler(req, res) {
             if (!ids.length) return ok(res, { merchants: [] });
             const q = String(body.q || '').trim();
             let query = supabase.from('merchants')
-                .select('id, merchant_id, dba_name, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_primary_contact, merchant_phone, email')
+                .select('id, merchant_id, agent_id, dba_name, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_primary_contact, merchant_phone, email')
                 .in('agent_id', ids).limit(10);
             if (q) query = query.or(`merchant_id.ilike.%${q}%,dba_name.ilike.%${q}%`);
             const { data } = await query;
             return ok(res, { merchants: (data || []).map(m => ({
-                id: m.id, merchant_id: m.merchant_id, dba_name: m.dba_name,
+                id: m.id, merchant_id: m.merchant_id, agent_id: m.agent_id, dba_name: m.dba_name,
                 street_address: m.merchant_address, city: m.merchant_city, state: m.merchant_state, zip: m.merchant_zip,
                 contact: m.merchant_primary_contact, phone: m.merchant_phone, email: m.email
             })) });

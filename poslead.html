@@ -76,7 +76,7 @@
       <select class="f" id="btype"><option>Restaurant - Table Service</option><option>Restaurant - Quick Service</option><option>Retail</option><option>Other</option></select></div>
 
     <div class="full" id="mfindRow" style="display:none;"><label>Find your merchant <span class="help" style="display:inline;font-weight:400;">— search by business name or MID under your Partner ID</span></label>
-      <input class="f" id="msearch" autocomplete="off" oninput="onFind()" placeholder="Type merchant name or MID…"><div class="help" id="mfindHelp"></div><div class="lookres" id="mresults" style="display:none;"></div></div>
+      <input class="f" id="msearch" autocomplete="off" oninput="onFind()" placeholder="Type merchant name or MID…"><div class="help" id="mfindScope"></div><div class="help" id="mfindHelp"></div><div class="lookres" id="mresults" style="display:none;"></div></div>
 
     <div data-fk="dba"><label>Merchant DBA <span class="req">*</span></label><input class="f" id="dba"></div>
     <div data-fk="legal"><label>Merchant Legal Name <span class="req">*</span></label><input class="f" id="legal"></div>
@@ -216,12 +216,17 @@
 
   // Current Merchant = Yes → show the merchant finder (name/MID lookup under the
   // partner's Agent ID). No → manual entry.
+  function updateScope(){
+    var el=document.getElementById('mfindScope'); if(!el) return;
+    var a=val('agent'); el.textContent=a?('🔎 Searching your merchants under Agent ID: '+a):''; el.style.color='#94a3b8';
+  }
   window.onCurMerch=function(){
     var yes=document.getElementById('curmerch').value==='yes';
     var row=document.getElementById('mfindRow'); if(row) row.style.display=yes?'':'none';
     var box=document.getElementById('mresults'); if(box && !yes) box.style.display='none';
     var help=document.getElementById('mfindHelp');
     if(yes && help){ help.textContent=val('agent')?'':'Enter your Partner ID (Your ID) above first, then search your merchants.'; help.style.color=val('agent')?'#94a3b8':'#dc2626'; }
+    if(yes) updateScope();
   };
   window.onFind=function(){
     if(document.getElementById('curmerch').value!=='yes') return;
@@ -235,20 +240,27 @@
       pos({action:'merchant_lookup',agent_id:val('agent'),q:q}).then(function(d){
         var ms=(d.success&&d.merchants)||[];
         if(!ms.length){ box.innerHTML='<div style="color:#94a3b8;padding:9px 16px;">No matching merchants under your Partner ID.</div>'; box.style.display='block'; return; }
-        window._ms=ms; box.innerHTML=ms.map(function(m,i){return '<div onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+(m.merchant_city?' · '+m.merchant_city:'')+'</div>';}).join(''); box.style.display='block';
+        window._ms=ms; box.innerHTML=ms.map(function(m,i){
+          var diff=(m.agent_id && val('agent') && String(m.agent_id)!==val('agent'));
+          var tag=m.agent_id?'<span style="font-size:11px;color:'+(diff?'#b45309':'#94a3b8')+';">'+(diff?'↪ ':'')+'ID '+m.agent_id+'</span>':'';
+          return '<div onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+(m.city?' · '+m.city:'')+' &nbsp;'+tag+'</div>';
+        }).join(''); box.style.display='block';
       }).catch(function(){ box.style.display='none'; });
     },350);
   };
   window.pickMerchant=function(i){
     var m=window._ms[i]; if(!m) return;
+    // Align the Partner/Agent ID to the merchant's own Agent ID so the whole
+    // submission stays consistent, and revalidate the partner name.
+    if(m.agent_id && String(m.agent_id)!==val('agent')){ set('agent',m.agent_id); lookup(); updateScope(); }
     set('msearch',(m.dba_name||'')+(m.merchant_id?' · '+m.merchant_id:''));
     set('mid',m.merchant_id); set('dba',m.dba_name); set('street',m.street_address); set('city',m.city); set('state',m.state); set('zip',m.zip);
     set('mphone',m.phone); set('memail',m.email);
     if(m.contact){ var p=String(m.contact).split(' '); set('mfirst',p.shift()||''); set('mlast',p.join(' ')); }
     document.getElementById('mresults').style.display='none'; window._muuid=m.id;
   };
-  // Re-check the finder hint when the Partner ID changes.
-  agent.addEventListener('input', function(){ if(document.getElementById('curmerch').value==='yes') onCurMerch(); });
+  // Re-check the finder hint + scope label when the Partner ID changes.
+  agent.addEventListener('input', function(){ if(document.getElementById('curmerch').value==='yes'){ onCurMerch(); updateScope(); } });
   window.uploadStatement=function(input){
     var f=input.files&&input.files[0]; if(!f) return; var el=document.getElementById('stmtState'); el.textContent='Uploading…';
     pos({action:'statement_upload_url',ext:(f.name.split('.').pop()||'pdf').toLowerCase()}).then(function(d){
