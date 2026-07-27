@@ -78,6 +78,16 @@
         .req-item { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
         .req-item .material-icons { font-size:14px; }
         .req-item.met { color: var(--teal); }
+        /* Magic-link modal (matches the login card) */
+        .mm-overlay { position:fixed; inset:0; background:rgba(0,10,25,0.55); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; z-index:9999; padding:20px; animation:mmFade 0.2s ease both; }
+        @keyframes mmFade { from{opacity:0} to{opacity:1} }
+        .mm-card { background:#fff; border-radius:22px; width:100%; max-width:400px; padding:34px 32px 26px; box-shadow:0 40px 80px rgba(0,0,0,0.35); text-align:center; animation:slideUp 0.35s ease both; }
+        .mm-icon { width:54px; height:54px; border-radius:50%; background:var(--teal-light); color:var(--teal-dark); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+        .mm-icon .material-icons { font-size:26px; }
+        .mm-title { font-size:1.3rem; font-weight:800; color:var(--text); margin:0 0 6px; letter-spacing:-0.3px; }
+        .mm-sub { font-size:13px; color:var(--muted); line-height:1.5; margin:0 0 22px; }
+        .mm-card .input-wrap { text-align:left; margin-bottom:8px; }
+        .mm-err { color:#dc2626; font-size:12.5px; text-align:left; margin:2px 2px 12px; display:none; }
     </style>
 </head>
 <body>
@@ -107,7 +117,7 @@
             Sign In
         </button>
         <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:#94a3b8;font-size:12px;"><div style="flex:1;height:1px;background:#e2e8f0;"></div>or<div style="flex:1;height:1px;background:#e2e8f0;"></div></div>
-        <button class="btn" onclick="handleMagicLink()" id="magicBtn" style="background:#fff;color:#0d9488;border:1.5px solid #0d9488;">
+        <button class="btn" onclick="openMagic()" id="magicBtn" style="background:#fff;color:#0d9488;border:1.5px solid #0d9488;">
             <span class="material-icons" style="font-size:18px;">auto_awesome</span>
             Email me a sign-in link
         </button>
@@ -117,6 +127,26 @@
     <div class="footer-note">
         PayProTec Partner Portal · Secure Access<br>
         <span style="color:#cbd5e1;">Need access? Contact your PayProTec representative.</span>
+    </div>
+</div>
+
+<!-- Magic-link modal -->
+<div class="mm-overlay" id="magicOverlay" onclick="if(event.target===this)closeMagic()">
+    <div class="mm-card">
+        <div id="mmForm">
+            <div class="mm-icon"><span class="material-icons">auto_awesome</span></div>
+            <h2 class="mm-title">Email me a sign-in link</h2>
+            <p class="mm-sub">We'll email you a one-time secure link — no password needed. It expires in 15 minutes.</p>
+            <label style="text-align:left;">Email Address</label>
+            <div class="input-wrap">
+                <span class="material-icons">email</span>
+                <input type="email" id="magicEmail" placeholder="your@email.com" autocomplete="email">
+            </div>
+            <div class="mm-err" id="mmErr"></div>
+            <button class="btn" id="mmSend" onclick="submitMagic()"><span class="material-icons" style="font-size:17px;">send</span> Send my link</button>
+            <span class="forgot" onclick="closeMagic()">Cancel</span>
+        </div>
+        <div id="mmResult" style="display:none;"></div>
     </div>
 </div>
 
@@ -156,41 +186,51 @@
         }
     }
 
-    async function handleMagicLink() {
-        const input = document.getElementById('loginEmail');
-        const prefill = (input ? input.value : '').trim();
-        const result = await Swal.fire({
-            title: 'Email me a sign-in link',
-            html: '<p style="color:#64748b;font-size:14px;margin:-4px 0 2px;line-height:1.5;">We\'ll email you a one-time secure link — no password needed. It expires in 15 minutes.</p>',
-            input: 'email',
-            inputValue: prefill,
-            inputPlaceholder: 'your@email.com',
-            inputAttributes: { autocapitalize: 'off', autocorrect: 'off', autocomplete: 'email' },
-            showCancelButton: true,
-            confirmButtonText: '<span class="material-icons" style="font-size:17px;vertical-align:-3px;">send</span> Send my link',
-            confirmButtonColor: '#0d9488',
-            cancelButtonColor: '#94a3b8',
-            focusConfirm: false,
-            allowOutsideClick: () => !Swal.isLoading(),
-            preConfirm: async (val) => {
-                const em = (val || '').trim();
-                if (!em || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { Swal.showValidationMessage('Please enter a valid email address'); return false; }
-                try {
-                    const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email: em }) });
-                    const r = await res.json();
-                    return { email: em, status: r.status };
-                } catch (e) { Swal.showValidationMessage('Could not reach the server. Please try again.'); return false; }
-            }
-        });
-        if (!result.isConfirmed || !result.value) return;
-        const safe = String(result.value.email).replace(/[<>&]/g, '');
-        if (result.value.status === 'inactive') {
-            Swal.fire({ icon: 'warning', title: 'Not activated yet', html: 'Your portal access isn\'t activated. Please contact your PayProTec representative to get set up.', confirmButtonColor: '#0d9488' });
-        } else if (result.value.status === 'sent') {
-            Swal.fire({ icon: 'success', title: 'Check your email', html: 'A sign-in link was sent to <b>' + safe + '</b>.<br><span style="color:#94a3b8;font-size:13px;">Expires in 15 minutes · works once · check spam if you don\'t see it.</span>', confirmButtonColor: '#0d9488' });
-        } else {
-            Swal.fire({ icon: 'success', title: 'Check your email', html: 'If an account exists for <b>' + safe + '</b>, a sign-in link is on its way.<br><span style="color:#94a3b8;font-size:13px;">Check spam if you don\'t see it.</span>', confirmButtonColor: '#0d9488' });
+    function openMagic() {
+        const pref = ((document.getElementById('loginEmail') || {}).value || '').trim();
+        document.getElementById('mmResult').style.display = 'none';
+        document.getElementById('mmForm').style.display = 'block';
+        const err = document.getElementById('mmErr'); err.style.display = 'none';
+        const sb = document.getElementById('mmSend'); sb.disabled = false; sb.innerHTML = '<span class="material-icons" style="font-size:17px;">send</span> Send my link';
+        const em = document.getElementById('magicEmail'); em.value = pref;
+        document.getElementById('magicOverlay').style.display = 'flex';
+        setTimeout(() => em.focus(), 60);
+    }
+    function closeMagic() { document.getElementById('magicOverlay').style.display = 'none'; }
+    async function submitMagic() {
+        const em = document.getElementById('magicEmail').value.trim();
+        const err = document.getElementById('mmErr');
+        if (!em || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.textContent = 'Please enter a valid email address.'; err.style.display = 'block'; return; }
+        err.style.display = 'none';
+        const sb = document.getElementById('mmSend'); sb.disabled = true; sb.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:17px;">sync</span> Sending…';
+        let status = 'generic';
+        try {
+            const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email: em }) });
+            const r = await res.json(); status = r.status || 'generic';
+        } catch (e) {
+            sb.disabled = false; sb.innerHTML = '<span class="material-icons" style="font-size:17px;">send</span> Send my link';
+            err.textContent = 'Could not reach the server. Please try again.'; err.style.display = 'block'; return;
         }
+        showMagicResult(status, em);
+    }
+    function showMagicResult(status, email) {
+        const safe = String(email).replace(/[<>&]/g, '');
+        let icon, bg, color, title, msg;
+        if (status === 'inactive') {
+            icon = 'warning_amber'; bg = '#fef3c7'; color = '#b45309'; title = 'Not activated yet';
+            msg = 'Your portal access isn\'t activated. Please contact your PayProTec representative to get set up.';
+        } else if (status === 'sent') {
+            icon = 'mark_email_read'; bg = 'var(--teal-light)'; color = 'var(--teal-dark)'; title = 'Check your email';
+            msg = 'A sign-in link was sent to <b>' + safe + '</b>.<br><span style="color:var(--muted);font-size:12.5px;">Expires in 15 minutes · works once · check spam.</span>';
+        } else {
+            icon = 'mark_email_read'; bg = 'var(--teal-light)'; color = 'var(--teal-dark)'; title = 'Check your email';
+            msg = 'If an account exists for <b>' + safe + '</b>, a sign-in link is on its way.<br><span style="color:var(--muted);font-size:12.5px;">Check spam if you don\'t see it.</span>';
+        }
+        document.getElementById('mmForm').style.display = 'none';
+        const rz = document.getElementById('mmResult'); rz.style.display = 'block';
+        rz.innerHTML = '<div class="mm-icon" style="background:' + bg + ';color:' + color + ';"><span class="material-icons">' + icon + '</span></div>'
+            + '<h2 class="mm-title">' + title + '</h2><p class="mm-sub" style="margin-bottom:20px;">' + msg + '</p>'
+            + '<button class="btn" onclick="closeMagic()">Done</button>';
     }
 
     function togglePass(inputId, icon) {
@@ -326,7 +366,13 @@
         }
     }
 
-    document.addEventListener('keypress', e => { if (e.key === 'Enter') { if (document.getElementById('loginEmail')) handleLogin(); } });
+    document.addEventListener('keypress', e => {
+        if (e.key !== 'Enter') return;
+        const ov = document.getElementById('magicOverlay');
+        if (ov && ov.style.display === 'flex') { e.preventDefault(); submitMagic(); return; }
+        if (document.getElementById('loginEmail')) handleLogin();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { const ov = document.getElementById('magicOverlay'); if (ov && ov.style.display === 'flex') closeMagic(); } });
 </script>
 <style>
 @keyframes spin { to { transform: rotate(360deg); } }
