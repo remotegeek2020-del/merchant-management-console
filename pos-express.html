@@ -274,6 +274,8 @@ async function loadSettings(){
   var a=(window._pos&&window._pos.automations)||{};
   AUTO={ portal:(a.portal||[]).slice(), highlevel:[] };
   renderAutomations();
+  // Load live HighLevel workflows + custom fields for the Send-to-workflow action.
+  api({action:'ghl_meta'}).then(function(m){ window._ghlMeta=(m&&m.success)?m:{configured:false,workflows:[],custom_fields:[]}; if(SEC==='settings') renderAutomations(); }).catch(function(){ window._ghlMeta={configured:false,workflows:[],custom_fields:[]}; });
 }
 window.posCopy=function(id,btn){
   var el=document.getElementById(id); if(!el) return;
@@ -419,19 +421,30 @@ function wfHeader(fam,w,i){
 function wfCard(fam,w,i){
   return '<div class="pipe" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#fffdf9;">'+wfHeader(fam,w,i)+'<div style="border-top:1px dashed var(--border);margin:12px 0 10px;"></div>'+portalBody(w,i)+'</div>';
 }
+var GHL_STD=[['firstName','First Name'],['lastName','Last Name'],['name','Full Name'],['email','Email'],['phone','Phone'],['companyName','Company Name'],['address1','Address'],['city','City'],['state','State'],['postalCode','Postal Code'],['country','Country'],['website','Website'],['source','Source']];
+function workflowOptions(sel){
+  var meta=window._ghlMeta||{}; var ws=meta.workflows||[];
+  if(!ws.length) return '<option value="'+esc(sel||'')+'">'+(meta.configured===false?'⚠ Add PIT + Location in Connection first':'Loading workflows…')+'</option>';
+  return '<option value="">— pick a workflow —</option>'+ws.map(function(w){return '<option value="'+esc(w.id)+'"'+(sel===w.id?' selected':'')+'>'+esc(w.name)+(w.status&&w.status!=='published'?' ('+esc(w.status)+')':'')+'</option>';}).join('');
+}
+function targetOptions(sel){
+  var meta=window._ghlMeta||{}; var cf=meta.custom_fields||[];
+  var h='<option value="">— HighLevel field —</option>';
+  h+='<optgroup label="Standard fields">'+GHL_STD.map(function(o){return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</optgroup>';
+  if(cf.length) h+='<optgroup label="Custom fields">'+cf.map(function(f){var v='cf:'+f.id;return '<option value="'+esc(v)+'"'+(sel===v?' selected':'')+'>'+esc(f.name)+'</option>';}).join('')+'</optgroup>';
+  return h;
+}
 function hlActionBlock(a,i,j){
   var maps=(a.mapping||[]).map(function(m,k){
     return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
       +'<select style="'+ASEL+'flex:1;" onchange="autoActMap('+i+','+j+','+k+',\'source\',this.value)"><option value="">— portal field —</option>'+optList(AUTO_SOURCES,m.source)+'</select>'
       +'<span class="material-icons" style="color:#cbd5e1;font-size:16px;">arrow_forward</span>'
-      +'<input type="text" placeholder="HighLevel field or custom field key" value="'+esc(m.target||'')+'" style="'+ASEL+'flex:1;" oninput="autoActMap('+i+','+j+','+k+',\'target\',this.value)">'
+      +'<select style="'+ASEL+'flex:1;" onchange="autoActMap('+i+','+j+','+k+',\'target\',this.value)">'+targetOptions(m.target)+'</select>'
       +'<span class="material-icons" style="color:#94a3b8;cursor:pointer;font-size:18px;" onclick="autoActDelMap('+i+','+j+','+k+')">close</span></div>';
   }).join('')||'<div class="muted" style="font-size:12px;margin-bottom:6px;">No fields mapped — add a mapping.</div>';
   return '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:10px;margin-top:6px;">'
-    +'<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">HighLevel workflow webhook <span class="muted" style="font-weight:600;">(blank = use the connection webhook)</span></label>'
-    +'<input type="text" value="'+esc(a.webhook_url||'')+'" placeholder="https://services.leadconnectorhq.com/hooks/…" style="'+ASEL+'width:100%;" oninput="autoActField('+i+','+j+',\'webhook_url\',this.value)"></div>'
-    +'<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">Tags <span class="muted" style="font-weight:600;">(comma-separated)</span></label>'
-    +'<input type="text" value="'+esc((a.tags||[]).join(', '))+'" placeholder="pos pros merchant, new lead" style="'+ASEL+'width:100%;" oninput="autoActTags('+i+','+j+',this.value)"></div>'
+    +'<div class="fd-row"><label style="font-size:11px;font-weight:700;color:#475569;">HighLevel workflow</label>'
+    +'<select style="'+ASEL+'width:100%;" onchange="autoActWf('+i+','+j+',this)">'+workflowOptions(a.workflow_id)+'</select></div>'
     +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin:10px 0 6px;">Map what to send — portal field → HighLevel field / custom field</div>'+maps
     +'<button class="btn btn-n" style="padding:5px 11px;margin-top:4px;" onclick="autoActAddMap('+i+','+j+')">+ Map field</button></div>';
 }
@@ -458,11 +471,11 @@ window.autoAddWf=function(fam){ AUTO[fam].push({id:autoUid(),name:'',enabled:tru
 window.autoDelWf=function(fam,i){ AUTO[fam].splice(i,1); renderAutomations(); };
 window.autoAddAction=function(i){ var w=AUTO.portal[i]; w.actions=w.actions||[]; w.actions.push({type:'set_status',value:''}); renderAutomations(); };
 window.autoDelAction=function(i,j){ AUTO.portal[i].actions.splice(j,1); renderAutomations(); };
-window.autoActField=function(i,j,k,v){ var a=AUTO.portal[i].actions[j]; if(!a) return; a[k]=v; if(k==='type'){ if(v==='send_to_highlevel'){ a.mapping=a.mapping||[]; a.tags=a.tags||[]; } renderAutomations(); } };
+window.autoActField=function(i,j,k,v){ var a=AUTO.portal[i].actions[j]; if(!a) return; a[k]=v; if(k==='type'){ if(v==='send_to_highlevel'){ a.mapping=a.mapping||[]; } renderAutomations(); } };
+window.autoActWf=function(i,j,selEl){ var a=AUTO.portal[i].actions[j]; if(!a) return; a.workflow_id=selEl.value; a.workflow_name=(selEl.options[selEl.selectedIndex]||{}).text||''; };
 window.autoActAddMap=function(i,j){ var a=AUTO.portal[i].actions[j]; a.mapping=a.mapping||[]; a.mapping.push({source:'',target:''}); renderAutomations(); };
 window.autoActDelMap=function(i,j,k){ AUTO.portal[i].actions[j].mapping.splice(k,1); renderAutomations(); };
 window.autoActMap=function(i,j,k,key,v){ var m=AUTO.portal[i].actions[j].mapping[k]; if(m) m[key]=v; };
-window.autoActTags=function(i,j,v){ AUTO.portal[i].actions[j].tags=v.split(',').map(function(s){return s.trim();}).filter(Boolean); };
 window.saveAutomations=async function(btn){
   btn.disabled=true; var t=btn.textContent; btn.textContent='Saving…';
   var payload={portal:AUTO.portal,highlevel:[]};

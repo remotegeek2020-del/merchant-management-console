@@ -101,11 +101,45 @@ function leadFieldValue(lead, key) {
     }
 }
 
-// Send a lead to a HighLevel workflow webhook, mapping portal fields → HL keys
-// (standard fields or custom fields — the target key is whatever HighLevel
-// expects on the inbound webhook / workflow). `act` carries webhook_url,
-// mapping[] and tags[].
+// POS Express HighLevel sub-account credentials (Private Integration token + location).
+async function posGhlCreds() {
+    const token = await getConfigValue('POS_GHL_PIT');
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_location_id').maybeSingle();
+    return { token: token || '', locationId: (data?.value || '').trim() };
+}
+function ghlHeaders(token) {
+    return { 'Authorization': 'Bearer ' + token, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' };
+}
+const GHL_STD_FIELDS = new Set(['firstName', 'lastName', 'name', 'email', 'phone', 'companyName', 'address1', 'city', 'state', 'postalCode', 'country', 'website', 'source']);
+
+// Send a lead to HighLevel: upsert the contact from the field mapping, then
+// enroll it into the chosen workflow. `act` carries mapping[] and workflow_id.
+// Falls back to a webhook POST only when no Private Integration token is set.
 async function sendToHighlevel(act, lead) {
+    const { token, locationId } = await posGhlCreds();
+    if (token && locationId) {
+        const contact = { locationId };
+        const customFields = [];
+        (act.mapping || []).forEach(m => {
+            if (!m || !m.source || !m.target) return;
+            const v = leadFieldValue(lead, m.source);
+            if (String(m.target).startsWith('cf:')) customFields.push({ id: String(m.target).slice(3), value: v });
+            else contact[m.target] = v;
+        });
+        if (customFields.length) contact.customFields = customFields;
+        let contactId = null;
+        try {
+            const r = await fetch('https://services.leadconnectorhq.com/contacts/upsert', { method: 'POST', headers: ghlHeaders(token), body: JSON.stringify(contact) });
+            const j = await r.json().catch(() => ({}));
+            contactId = j?.contact?.id || j?.id || null;
+        } catch (e) { /* best-effort */ }
+        if (contactId && act.workflow_id) {
+            try { await fetch('https://services.leadconnectorhq.com/contacts/' + contactId + '/workflow/' + act.workflow_id, { method: 'POST', headers: ghlHeaders(token), body: JSON.stringify({}) }); } catch (e) { /* best-effort */ }
+        }
+        if (contactId) await supabase.from('pos_leads').update({ ghl_contact_id: contactId, ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
+        return;
+    }
+    // Fallback: no PIT — POST the mapped payload to the connection webhook.
     let url = (act.webhook_url && String(act.webhook_url).trim()) || '';
     if (!url) {
         const { data: cfg } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle();
@@ -114,7 +148,6 @@ async function sendToHighlevel(act, lead) {
     if (!url) return;
     const payload = { pos_lead_id: lead.id };
     (act.mapping || []).forEach(m => { if (m && m.source && m.target) payload[m.target] = leadFieldValue(lead, m.source); });
-    if (Array.isArray(act.tags) && act.tags.length) payload.tags = act.tags;
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (r.ok) await supabase.from('pos_leads').update({ ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
 }
@@ -290,6 +323,25 @@ export default async function handler(req, res) {
             const cfg = body.config && typeof body.config === 'object' ? body.config : {};
             await supabase.from('app_settings').upsert({ key: 'pos_form_config', value: JSON.stringify(cfg), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
+        }
+        // Live HighLevel metadata for the automation builder: workflows to enroll
+        // into + custom fields to map onto. Uses the POS Express PIT + location.
+        if (action === 'ghl_meta') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const { token, locationId } = await posGhlCreds();
+            if (!token || !locationId) return ok(res, { configured: false, workflows: [], custom_fields: [] });
+            let workflows = [], custom_fields = [];
+            try {
+                const r = await fetch('https://services.leadconnectorhq.com/workflows/?locationId=' + encodeURIComponent(locationId), { headers: ghlHeaders(token) });
+                const j = await r.json().catch(() => ({}));
+                workflows = (j.workflows || []).map(w => ({ id: w.id, name: w.name, status: w.status }));
+            } catch (e) { /* best-effort */ }
+            try {
+                const r = await fetch('https://services.leadconnectorhq.com/locations/' + encodeURIComponent(locationId) + '/customFields?model=contact', { headers: ghlHeaders(token) });
+                const j = await r.json().catch(() => ({}));
+                custom_fields = (j.customFields || []).map(f => ({ id: f.id, name: f.name }));
+            } catch (e) { /* best-effort */ }
+            return ok(res, { configured: true, workflows, custom_fields });
         }
         if (action === 'automations_set') {
             if (!canSettings) return bad(res, 'No access.', 403);
