@@ -256,6 +256,43 @@ export default async function handler(req, res) {
             await supabase.from('pos_leads').update({ status: 'sent', classification: 'good', ghl_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', lead.id);
             return ok(res, { sent: true });
         }
+        // Read-only pipelines+stages for any POS user (drives the kanban board).
+        if (action === 'pipelines_get') {
+            const [{ data: pls }, { data: sts }] = await Promise.all([
+                supabase.from('pos_pipelines').select('*').order('sort_order'),
+                supabase.from('pos_stages').select('*').order('sort_order')
+            ]);
+            const byPipe = {};
+            (sts || []).forEach(s => { (byPipe[s.pipeline_id] = byPipe[s.pipeline_id] || []).push(s); });
+            const pipelines = (pls || []).map(p => ({ id: p.id, name: p.name, is_default: p.is_default, stages: byPipe[p.id] || [] }));
+            return ok(res, { pipelines });
+        }
+        // Move a lead to a stage (kanban drag). Fires the stage's workflow trigger if set.
+        if (action === 'move_lead') {
+            const { data: stage } = await supabase.from('pos_stages').select('*').eq('id', body.stage_id).maybeSingle();
+            if (!stage) return bad(res, 'Stage not found', 404);
+            const { error } = await supabase.from('pos_leads')
+                .update({ pipeline_id: stage.pipeline_id, stage_id: stage.id, updated_at: new Date().toISOString() })
+                .eq('id', body.id);
+            if (error) return bad(res, error.message);
+            let workflow_fired = false;
+            if (stage.workflow_url) {
+                try {
+                    const { data: lead } = await supabase.from('pos_leads').select('*').eq('id', body.id).maybeSingle();
+                    const r = await fetch(stage.workflow_url, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            event: 'pos_stage_entered', pipeline_id: stage.pipeline_id, stage_id: stage.id, stage_name: stage.name,
+                            pos_lead_id: body.id, business_name: lead?.business_name, contact_name: lead?.contact_name,
+                            email: lead?.email, phone: lead?.phone, agent_id: lead?.agent_id, partner_name: lead?.partner_name,
+                            monthly_volume: lead?.monthly_volume, status: lead?.status
+                        })
+                    });
+                    workflow_fired = r.ok;
+                } catch (e) { /* best-effort — the move still succeeds */ }
+            }
+            return ok(res, { moved: true, workflow_fired });
+        }
         if (action === 'get_config') {
             const { data } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle();
             return ok(res, { webhook_url: data?.value || '' });

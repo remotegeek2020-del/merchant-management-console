@@ -300,6 +300,19 @@ async function authorizeUser(user, sessionToken) {
     const hasMarketingAccess = isAdmin || parseBool(user.access_marketing);
     if (document.getElementById('card-marketing')) document.getElementById('card-marketing').style.display = hasMarketingAccess ? 'flex' : 'none';
 
+    // Workspace switcher: reveal + add POS Express option for staff with access.
+    const wsSwitch = document.getElementById('ws-switch');
+    if (wsSwitch) {
+        const canPos = isSuperAdmin || parseBool(user.access_pos_express);
+        if (canPos && !wsSwitch.querySelector('option[value="/pos-express"]')) {
+            const o = document.createElement('option');
+            o.value = '/pos-express'; o.textContent = '🧾 POS Express';
+            o.style.color = '#1e293b'; o.style.background = '#fff';
+            wsSwitch.appendChild(o);
+        }
+        wsSwitch.style.display = canPos ? '' : 'none';
+    }
+
     // --- 3. THE DUNGEON LOCKDOWN ---
     if (elements.secretDungeon) {
         if (isSuperAdmin) {

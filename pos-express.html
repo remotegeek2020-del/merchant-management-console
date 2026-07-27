@@ -44,6 +44,24 @@
   .tab{padding:6px 13px;border:1px solid var(--border);background:#fff;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:#64748b;}
   .tab.on{background:var(--orange);color:#fff;border-color:var(--orange);}
   .empty{text-align:center;padding:26px;color:var(--muted);font-size:13px;}
+  /* Kanban board */
+  .kb-wrap{overflow-x:auto;padding-bottom:8px;}
+  .kb{display:flex;gap:14px;align-items:flex-start;min-height:60vh;}
+  .kb-col{flex:0 0 268px;width:268px;background:#fff;border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 190px);}
+  .kb-col.drop{outline:2px dashed var(--orange);outline-offset:-3px;background:#fff7ed;}
+  .kb-colhead{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;}
+  .kb-colhead .nm{font-weight:800;font-size:13px;flex:1;}
+  .kb-colhead .ct{font-size:11px;font-weight:800;color:var(--muted);background:#f1f5f9;border-radius:20px;padding:2px 9px;}
+  .kb-colhead .wf{color:#7c3aed;font-size:16px;}
+  .kb-body{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:9px;}
+  .kb-card{background:#fff;border:1px solid var(--border);border-radius:11px;padding:11px 12px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+  .kb-card:hover{border-color:var(--orange);}
+  .kb-card.drag{opacity:.4;}
+  .kb-card .biz{font-weight:800;font-size:13px;margin-bottom:5px;}
+  .kb-card .row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#64748b;margin-top:3px;}
+  .kb-card .row .material-icons{font-size:13px;color:#cbd5e1;}
+  .kb-card .vol{font-weight:800;color:#16a34a;}
+  .kb-empty{color:var(--muted);font-size:12px;text-align:center;padding:16px 6px;border:1px dashed var(--border);border-radius:9px;}
 </style>
 </head>
 <body>
@@ -51,8 +69,8 @@
   <div class="sb-head"><div class="sb-brand"><span class="material-icons">point_of_sale</span> POS Express</div><div class="sb-sub">Sub-Account</div></div>
   <div style="margin:12px 14px 4px;">
     <select onchange="if(this.value)location.href=this.value" style="width:100%;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:9px;padding:9px 10px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;">
-      <option value="/pos-express" selected>🧾 POS Express</option>
-      <option value="/">🏢 PayProTec Portal</option>
+      <option value="/pos-express" selected style="color:#1e293b;background:#fff;">🧾 POS Express</option>
+      <option value="/" style="color:#1e293b;background:#fff;">🏢 PayProTec Portal</option>
     </select>
   </div>
   <nav class="nav" id="nav"></nav>
@@ -65,7 +83,7 @@
 </div>
 <script>
 var TOKEN=localStorage.getItem('pp_session_token')||'';
-var LEADS=[], SEC='dashboard', PFILTER='';
+var LEADS=[], SEC='dashboard', PFILTER='', PIPES=[], CURPIPE='';
 var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['pipeline','Lead Pipeline','filter_alt'],['settings','Settings','settings']];
 function api(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
@@ -84,10 +102,15 @@ async function load(){
     document.getElementById('content').innerHTML='<div class="empty" style="color:'+(denied?'#9a3412':'var(--red)')+';padding:60px 20px;">'+(denied?'🔒 You don\'t have access to POS Express.<br><span style="font-size:12px;">Ask an admin to enable it for your account (User Management → POS Express).</span>':esc(r.message||'Failed to load'))+'</div>';
     return;
   }
-  LEADS=r.leads||[]; render();
+  LEADS=r.leads||[];
+  var pr=await api({action:'pipelines_get'});
+  PIPES=(pr&&pr.success&&pr.pipelines)||[];
+  if(!CURPIPE || !PIPES.some(function(p){return p.id===CURPIPE;})) CURPIPE=(PIPES[0]&&PIPES[0].id)||'';
+  render();
 }
 function render(){
   var c=document.getElementById('content');
+  c.style.maxWidth=(SEC==='pipeline')?'none':'1160px';
   if(SEC==='dashboard') c.innerHTML=dashboard();
   else if(SEC==='opps') c.innerHTML=oppsView();
   else if(SEC==='merchants') c.innerHTML=merchantsView();
@@ -132,13 +155,57 @@ function partnersView(){
   return '<div class="card"><h3>Partners who submitted ('+arr.length+')</h3><table><thead><tr><th>Partner</th><th>Submitted</th><th>Qualified</th><th>Sent</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 function pipelineView(){
-  var tabs=[['','All'],['new','New'],['reviewing','Reviewing'],['qualified','Qualified'],['rejected','Rejected'],['sent','Sent']];
-  var list=PFILTER?LEADS.filter(function(l){return l.status===PFILTER;}):LEADS;
-  var rows=list.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b></td><td>'+esc(l.partner_name||'—')+'<div class="muted" style="font-size:11px;">'+esc(l.agent_id||'')+' '+(l.agent_valid?'<span class="pill" style="background:#dcfce7;color:#166534;">valid</span>':'<span class="pill" style="background:#fee2e2;color:#991b1b;">unmatched</span>')+'</div></td><td>'+money(l.monthly_volume)+'</td><td>'+esc(l.source)+'</td><td>'+stPill(l.status)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No leads.</td></tr>';
-  return '<div class="tabs">'+tabs.map(function(t){return '<button class="tab '+(PFILTER===t[0]?'on':'')+'" onclick="setPF(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div>'+
-    '<div class="card"><table><thead><tr><th>Business</th><th>Partner</th><th>Volume</th><th>Source</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  if(!PIPES.length){
+    return '<div class="card"><div class="empty" style="padding:48px 24px;">'
+      +'<div style="font-size:40px;">🗂️</div>'
+      +'<div style="font-size:15px;font-weight:800;color:#334155;margin:8px 0 4px;">No pipeline yet</div>'
+      +'<div style="margin-bottom:14px;">Create your own pipeline and stages, then drag leads across them — just like HighLevel, HubSpot or Pipedrive.</div>'
+      +(CAN_SETTINGS?'<button class="btn btn-o" onclick="go(\'settings\')">Create a pipeline in Settings</button>':'<div class="muted">Ask an admin with Settings access to create one.</div>')
+      +'</div></div>';
+  }
+  var pipe=PIPES.find(function(p){return p.id===CURPIPE;})||PIPES[0];
+  var stages=(pipe.stages||[]).slice().sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
+  var stageIds={}; stages.forEach(function(s){stageIds[s.id]=true;});
+  // Leads not yet placed in any stage of THIS pipeline land in an "Unassigned" column.
+  function leadsIn(sid){ return LEADS.filter(function(l){ if(sid==='__none__') return !l.stage_id || !stageIds[l.stage_id]; return l.stage_id===sid; }); }
+  var selector = PIPES.length>1 ? '<select onchange="setPipe(this.value)" style="'+IN+'font-weight:700;margin-bottom:14px;">'+PIPES.map(function(p){return '<option value="'+p.id+'"'+(p.id===pipe.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('')+'</select>' : '<div style="font-weight:800;font-size:14px;margin-bottom:14px;">'+esc(pipe.name)+'</div>';
+  var cols=[{id:'__none__',name:'Unassigned',workflow_url:''}].concat(stages);
+  var board=cols.map(function(s){
+    var ls=leadsIn(s.id);
+    var cards=ls.map(kbCard).join('')||'<div class="kb-empty">Drop leads here</div>';
+    var wf=(s.workflow_url)?'<span class="material-icons wf" title="Workflow trigger set">bolt</span>':'';
+    return '<div class="kb-col" data-sid="'+s.id+'" ondragover="kbOver(event,this)" ondragleave="this.classList.remove(\'drop\')" ondrop="kbDrop(event,this)">'
+      +'<div class="kb-colhead">'+wf+'<span class="nm">'+esc(s.name)+'</span><span class="ct">'+ls.length+'</span></div>'
+      +'<div class="kb-body">'+cards+'</div></div>';
+  }).join('');
+  return selector+'<div class="kb-wrap"><div class="kb">'+board+'</div></div>';
 }
+function kbCard(l){
+  var valid=l.agent_valid?'':'<span class="pill" style="background:#fee2e2;color:#991b1b;margin-left:5px;">unmatched</span>';
+  return '<div class="kb-card" draggable="true" data-id="'+l.id+'" ondragstart="kbStart(event,this)" ondragend="this.classList.remove(\'drag\')" onclick="openLead(\''+l.id+'\')">'
+    +'<div class="biz">'+esc(l.business_name||'—')+'</div>'
+    +'<div class="row"><span class="material-icons">handshake</span>'+esc(l.partner_name||'—')+valid+'</div>'
+    +'<div class="row"><span class="material-icons">payments</span><span class="vol">'+money(l.monthly_volume)+'</span></div>'
+    +'<div class="row"><span class="material-icons">'+(l.source==='public'?'public':'badge')+'</span>'+esc(l.source||'—')+'&nbsp;·&nbsp;'+stPill(l.status)+'</div></div>';
+}
+function setPipe(id){ CURPIPE=id; render(); }
 function setPF(f){ PFILTER=f; render(); }
+var _drag=null;
+function kbStart(e,el){ _drag=el.getAttribute('data-id'); el.classList.add('drag'); try{e.dataTransfer.setData('text/plain',_drag);e.dataTransfer.effectAllowed='move';}catch(x){} }
+function kbOver(e,col){ e.preventDefault(); col.classList.add('drop'); }
+async function kbDrop(e,col){
+  e.preventDefault(); col.classList.remove('drop');
+  var id=_drag||(e.dataTransfer&&e.dataTransfer.getData('text/plain')); _drag=null;
+  if(!id) return;
+  var sid=col.getAttribute('data-sid');
+  var lead=LEADS.find(function(l){return l.id===id;}); if(!lead) return;
+  if(sid==='__none__') return; // can't drop back into the virtual Unassigned column
+  if(lead.stage_id===sid) return;
+  var prev=lead.stage_id; lead.stage_id=sid; render(); // optimistic
+  var r=await api({action:'move_lead',id:id,stage_id:sid});
+  if(!r||!r.success){ lead.stage_id=prev; render(); Swal.fire('Error',(r&&r.message)||'Could not move lead','error'); return; }
+  if(r.workflow_fired) Swal.fire({icon:'success',title:'Moved · workflow fired',timer:1100,showConfirmButton:false});
+}
 function settingsView(){ return '<div id="posSettings"><div class="empty">Loading…</div></div>'; }
 var IN='padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;';
 async function loadSettings(){

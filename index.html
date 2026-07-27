@@ -743,24 +743,10 @@
             <div class="header-top-bar">
                 <div style="display:flex;align-items:center;gap:14px;">
                     <select id="ws-switch" onchange="if(this.value)location.href=this.value" style="display:none;background:rgba(255,255,255,0.14);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;">
-                        <option value="/" selected>🏢 PayProTec Portal</option>
+                        <option value="/" selected style="color:#1e293b;background:#fff;">🏢 PayProTec Portal</option>
                     </select>
                     <div id="user-greeting">System Authorizing...</div>
                 </div>
-                <script>
-                (function(){
-                    // Show the workspace dropdown + the POS Express option only for staff with access.
-                    try{
-                        var role=(localStorage.getItem('pp_role')||'').toLowerCase();
-                        var canPos = role.indexOf('super')!==-1 || localStorage.getItem('pp_access_pos_express')==='true';
-                        var sel=document.getElementById('ws-switch');
-                        if(sel && canPos){
-                            var o=document.createElement('option'); o.value='/pos-express'; o.textContent='🧾 POS Express';
-                            sel.appendChild(o); sel.style.display='';
-                        }
-                    }catch(e){}
-                })();
-                </script>
                 <div class="header-right-group">
                     <span id="home-view-label" style="display:none;font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:0.5px;text-transform:uppercase;"></span>
                     <button id="home-arrange-btn" onclick="toggleHomeArrangeMode()">
