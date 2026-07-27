@@ -107,7 +107,8 @@
 <script>
 var TOKEN=localStorage.getItem('pp_session_token')||'';
 var LEADS=[], SEC='dashboard', PFILTER='', PIPES=[], CURPIPE='';
-var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['pipeline','Lead Pipeline','filter_alt'],['settings','Settings','settings']];
+var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['settings','Settings','settings']];
+var OPPVIEW='board';
 function api(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function money(n){ return n?('$'+Number(n).toLocaleString()):'—'; }
@@ -133,12 +134,11 @@ async function load(){
 }
 function render(){
   var c=document.getElementById('content');
-  c.style.maxWidth=(SEC==='pipeline')?'none':'1160px';
+  c.style.maxWidth=(SEC==='opps'&&OPPVIEW==='board')?'none':'1160px';
   if(SEC==='dashboard') c.innerHTML=dashboard();
   else if(SEC==='opps') c.innerHTML=oppsView();
   else if(SEC==='merchants') c.innerHTML=merchantsView();
   else if(SEC==='partners') c.innerHTML=partnersView();
-  else if(SEC==='pipeline') c.innerHTML=pipelineView();
   else if(SEC==='settings'){ c.innerHTML=settingsView(); loadSettings(); }
 }
 function counts(){
@@ -162,9 +162,18 @@ function dashboard(){
     '<div class="card"><h3>Recent submissions</h3><table><thead><tr><th>Business</th><th>Partner</th><th>Source</th><th>Status</th><th>Date</th></tr></thead><tbody>'+recent+'</tbody></table></div>';
 }
 function oppsView(){
-  var opps=LEADS.filter(function(l){return l.status==='qualified'||l.status==='sent';});
-  var rows=opps.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b><div class="muted" style="font-size:11px;">'+esc(l.contact_name||'')+'</div></td><td>'+esc(l.partner_name||'—')+'</td><td>'+money(l.monthly_volume)+'</td><td>'+stPill(l.status)+'</td><td class="muted">'+(l.ghl_sent_at?dt(l.ghl_sent_at):'—')+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No opportunities yet — qualify leads in the Pipeline.</td></tr>';
-  return '<div class="card"><h3>Opportunities ('+opps.length+')</h3><table><thead><tr><th>Merchant</th><th>Partner</th><th>Volume</th><th>Stage</th><th>Sent</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  var toggle='<div class="tabs" style="margin-bottom:14px;">'
+    +'<button class="tab '+(OPPVIEW==='board'?'on':'')+'" onclick="setOppView(\'board\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_kanban</span> Board</button>'
+    +'<button class="tab '+(OPPVIEW==='list'?'on':'')+'" onclick="setOppView(\'list\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_list</span> List</button></div>';
+  return toggle+(OPPVIEW==='board'?kanbanHtml():oppsListHtml());
+}
+function setOppView(v){ OPPVIEW=v; render(); }
+function oppsListHtml(){
+  var tabs=[['','All'],['new','New'],['reviewing','Reviewing'],['qualified','Qualified'],['rejected','Rejected'],['sent','Sent']];
+  var list=PFILTER?LEADS.filter(function(l){return l.status===PFILTER;}):LEADS;
+  var rows=list.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b><div class="muted" style="font-size:11px;">'+esc(l.contact_name||'')+'</div></td><td>'+esc(l.partner_name||'—')+' <span class="muted" style="font-size:11px;">'+esc(l.agent_id||'')+'</span></td><td>'+money(l.monthly_volume)+'</td><td>'+esc(l.source)+'</td><td>'+stPill(l.status)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No leads.</td></tr>';
+  return '<div class="tabs">'+tabs.map(function(t){return '<button class="tab '+(PFILTER===t[0]?'on':'')+'" onclick="setPF(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div>'
+    +'<div class="card"><table><thead><tr><th>Business</th><th>Partner</th><th>Volume</th><th>Source</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 function merchantsView(){
   var rows=LEADS.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b></td><td>'+esc(l.contact_name||'—')+'<div class="muted" style="font-size:11px;">'+esc(l.email||l.phone||'')+'</div></td><td>'+esc((l.city||'')+(l.state?', '+l.state:''))+'</td><td>'+esc(l.partner_name||'—')+'</td><td>'+stPill(l.status)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No merchants submitted yet.</td></tr>';
@@ -177,7 +186,7 @@ function partnersView(){
   var rows=arr.map(function(p,i){return '<tr><td>'+(i<3?['🥇','🥈','🥉'][i]+' ':'')+'<b>'+esc(p.name)+'</b><div class="muted" style="font-size:11px;">'+esc(p.agent)+'</div></td><td style="font-weight:800;">'+p.total+'</td><td style="color:#16a34a;font-weight:700;">'+p.qualified+'</td><td style="color:#7c3aed;font-weight:700;">'+p.sent+'</td></tr>';}).join('')||'<tr><td colspan="4" class="empty">No partner submissions yet.</td></tr>';
   return '<div class="card"><h3>Partners who submitted ('+arr.length+')</h3><table><thead><tr><th>Partner</th><th>Submitted</th><th>Qualified</th><th>Sent</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-function pipelineView(){
+function kanbanHtml(){
   if(!PIPES.length){
     return '<div class="card"><div class="empty" style="padding:48px 24px;">'
       +'<div style="font-size:40px;">🗂️</div>'
