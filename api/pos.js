@@ -77,6 +77,78 @@ function cleanLead(b) {
     };
 }
 
+// ── Automation engine ──────────────────────────────────────────────────────
+// Two workflow families, both edited in Settings and stored (JSON) under
+// app_settings.pos_automations = { portal:[...], highlevel:[...] }.
+//  - portal automations run in-portal actions (set status/classification/stage,
+//    assign, add note).
+//  - highlevel automations POST a field-mapped payload to a HighLevel webhook.
+// Each workflow has a trigger (lead_submitted | stage_entered [+stage_id]) and a
+// pipeline scope ('all' or a pipeline id). Everything is best-effort: a failing
+// automation never blocks the underlying submit/move.
+async function getAutomations() {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'pos_automations').maybeSingle();
+    try { const c = data?.value ? JSON.parse(data.value) : {}; return { portal: c.portal || [], highlevel: c.highlevel || [] }; }
+    catch (e) { return { portal: [], highlevel: [] }; }
+}
+
+// Value of a mappable lead field (direct columns + a few computed helpers).
+function leadFieldValue(lead, key) {
+    if (!lead) return '';
+    switch (key) {
+        case 'full_contact_name': return lead.contact_name || [lead.merchant_first_name, lead.merchant_last_name].filter(Boolean).join(' ');
+        default: return lead[key] == null ? '' : lead[key];
+    }
+}
+
+async function runPortalActions(wf, lead) {
+    const patch = {};
+    for (const act of (wf.actions || [])) {
+        if (!act || !act.type) continue;
+        if (act.type === 'set_status' && act.value) patch.status = act.value;
+        else if (act.type === 'set_classification' && act.value) patch.classification = act.value;
+        else if (act.type === 'assign_to' && act.value) patch.assigned_to = act.value;
+        else if (act.type === 'move_stage' && act.stage_id) {
+            const { data: stage } = await supabase.from('pos_stages').select('id, pipeline_id').eq('id', act.stage_id).maybeSingle();
+            if (stage) { patch.stage_id = stage.id; patch.pipeline_id = stage.pipeline_id; }
+        } else if (act.type === 'add_note' && act.value) {
+            patch.review_notes = (lead.review_notes ? lead.review_notes + '\n' : '') + act.value;
+        }
+    }
+    if (Object.keys(patch).length) {
+        patch.updated_at = new Date().toISOString();
+        await supabase.from('pos_leads').update(patch).eq('id', lead.id);
+        Object.assign(lead, patch); // keep in-memory lead current for later workflows
+    }
+}
+
+async function runHighlevelSend(wf, lead) {
+    let url = (wf.webhook_url && String(wf.webhook_url).trim()) || '';
+    if (!url) {
+        const { data: cfg } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle();
+        url = cfg?.value || '';
+    }
+    if (!url) return;
+    const payload = { pos_lead_id: lead.id };
+    (wf.mapping || []).forEach(m => { if (m && m.source && m.target) payload[m.target] = leadFieldValue(lead, m.source); });
+    if (Array.isArray(wf.tags) && wf.tags.length) payload.tags = wf.tags;
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (r.ok) await supabase.from('pos_leads').update({ ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
+}
+
+async function runAutomations(triggerType, lead, opts = {}) {
+    try {
+        const auto = await getAutomations();
+        const pid = lead.pipeline_id || null;
+        const matches = (wf) => wf && wf.enabled !== false
+            && wf.trigger && wf.trigger.type === triggerType
+            && (!wf.pipeline_id || wf.pipeline_id === 'all' || wf.pipeline_id === pid)
+            && (triggerType !== 'stage_entered' || !wf.trigger.stage_id || wf.trigger.stage_id === opts.stage_id);
+        for (const wf of (auto.portal || []).filter(matches)) { try { await runPortalActions(wf, lead); } catch (e) { /* best-effort */ } }
+        for (const wf of (auto.highlevel || []).filter(matches)) { try { await runHighlevelSend(wf, lead); } catch (e) { /* best-effort */ } }
+    } catch (e) { /* never block the caller */ }
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -131,12 +203,13 @@ export default async function handler(req, res) {
             if (!lead.business_name && !lead.contact_name && !lead.email && !lead.phone) return bad(res, 'Please fill in the lead details.');
             const agentId = body.agent_id ? String(body.agent_id).trim() : null;
             const partner = agentId ? await resolvePartner(agentId) : null;
-            const { error } = await supabase.from('pos_leads').insert({
+            const { data: row, error } = await supabase.from('pos_leads').insert({
                 source: 'public', agent_id: agentId, partner_id: partner?.id || null,
                 partner_name: partner?.full_name || null, agent_valid: !!partner,
                 ...lead, meta: (body.meta && typeof body.meta === 'object') ? body.meta : null, created_by: 'public'
-            });
+            }).select('*').single();
             if (error) return bad(res, error.message);
+            await runAutomations('lead_submitted', row);
             return ok(res, { received: true });
         }
 
@@ -155,12 +228,13 @@ export default async function handler(req, res) {
             const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).maybeSingle();
             const lead = cleanLead(body);
             if (!lead.business_name && !lead.contact_name && !lead.email && !lead.phone) return bad(res, 'Please fill in the lead details.');
-            const { error } = await supabase.from('pos_leads').insert({
+            const { data: row, error } = await supabase.from('pos_leads').insert({
                 source: 'portal', agent_id: agentId, partner_id: personId,
                 partner_name: person?.full_name || null, agent_valid: true,
                 ...lead, created_by: 'partner:' + personId
-            });
+            }).select('*').single();
             if (error) return bad(res, error.message);
+            await runAutomations('lead_submitted', row);
             return ok(res, { received: true });
         }
 
@@ -178,19 +252,23 @@ export default async function handler(req, res) {
         if (action === 'settings_get') {
             if (!canSettings) return bad(res, 'No access to POS Express Settings.', 403);
             const pit = await getConfigValue('POS_GHL_PIT');
-            const [{ data: loc }, { data: wh }, { data: fc }, { data: pls }, { data: sts }] = await Promise.all([
+            const [{ data: loc }, { data: wh }, { data: fc }, { data: au }, { data: pls }, { data: sts }, { data: staff }] = await Promise.all([
                 supabase.from('app_settings').select('value').eq('key', 'pos_ghl_location_id').maybeSingle(),
                 supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle(),
                 supabase.from('app_settings').select('value').eq('key', 'pos_form_config').maybeSingle(),
+                supabase.from('app_settings').select('value').eq('key', 'pos_automations').maybeSingle(),
                 supabase.from('pos_pipelines').select('*').order('sort_order'),
-                supabase.from('pos_stages').select('*').order('sort_order')
+                supabase.from('pos_stages').select('*').order('sort_order'),
+                supabase.from('app_users').select('userid, first_name, last_name').order('first_name')
             ]);
             const stagesByPipe = {};
             (sts || []).forEach(s => { (stagesByPipe[s.pipeline_id] = stagesByPipe[s.pipeline_id] || []).push(s); });
             const pipelines = (pls || []).map(p => ({ id: p.id, name: p.name, is_default: p.is_default, stages: stagesByPipe[p.id] || [] }));
-            let formConfig = {};
+            let formConfig = {}, automations = { portal: [], highlevel: [] };
             try { formConfig = fc?.value ? JSON.parse(fc.value) : {}; } catch (e) { formConfig = {}; }
-            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig });
+            try { const a = au?.value ? JSON.parse(au.value) : {}; automations = { portal: a.portal || [], highlevel: a.highlevel || [] }; } catch (e) { automations = { portal: [], highlevel: [] }; }
+            const staffList = (staff || []).map(u => ({ userid: u.userid, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.userid }));
+            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig, automations, staff: staffList });
         }
         if (action === 'set_pos_key') {
             if (!canSettings) return bad(res, 'No access.', 403);
@@ -205,6 +283,24 @@ export default async function handler(req, res) {
             const cfg = body.config && typeof body.config === 'object' ? body.config : {};
             await supabase.from('app_settings').upsert({ key: 'pos_form_config', value: JSON.stringify(cfg), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
+        }
+        if (action === 'automations_set') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const a = body.automations && typeof body.automations === 'object' ? body.automations : {};
+            const clean = { portal: Array.isArray(a.portal) ? a.portal : [], highlevel: Array.isArray(a.highlevel) ? a.highlevel : [] };
+            await supabase.from('app_settings').upsert({ key: 'pos_automations', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
+            return ok(res, {});
+        }
+        // Manually run a HighLevel automation against a lead (test send / re-send).
+        if (action === 'run_hl_automation') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const { data: lead } = await supabase.from('pos_leads').select('*').eq('id', body.id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            const auto = await getAutomations();
+            const wf = (auto.highlevel || []).find(w => w.id === body.wf_id);
+            if (!wf) return bad(res, 'Automation not found', 404);
+            try { await runHighlevelSend(wf, lead); } catch (e) { return bad(res, 'Send failed: ' + e.message); }
+            return ok(res, { sent: true });
         }
         if (action === 'save_pipeline') {
             if (!canSettings) return bad(res, 'No access.', 403);
@@ -307,6 +403,9 @@ export default async function handler(req, res) {
                     workflow_fired = r.ok;
                 } catch (e) { /* best-effort — the move still succeeds */ }
             }
+            // Run configured stage_entered automations (portal + HighLevel).
+            const { data: movedLead } = await supabase.from('pos_leads').select('*').eq('id', body.id).maybeSingle();
+            if (movedLead) await runAutomations('stage_entered', movedLead, { stage_id: stage.id });
             return ok(res, { moved: true, workflow_fired });
         }
         if (action === 'get_config') {
