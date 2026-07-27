@@ -222,11 +222,34 @@ async function loadSettings(){
     +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Inbound webhook (good leads)</div>'
     +'<input id="wh" value="'+esc(r.webhook_url||'')+'" placeholder="https://services.leadconnectorhq.com/hooks/…" style="width:100%;'+IN+'margin-bottom:12px;">'
     +'<button class="btn btn-o" onclick="saveConn(this)">Save connection</button> <span id="connmsg" style="font-size:12px;color:var(--muted);margin-left:8px;"></span></div></div>';
+  // Public lead form — shareable link + Webflow/embed code.
+  var origin=location.origin;
+  var formUrl=origin+'/poslead';
+  var embedUrl=origin+'/poslead?embed=1';
+  var embedCode='<iframe id="posExpressForm" src="'+embedUrl+'" style="width:100%;border:none;overflow:hidden;" scrolling="no"></iframe>\n'
+    +'<script>window.addEventListener("message",function(e){if(e.data&&e.data.type==="ppos-height"){var f=document.getElementById("posExpressForm");if(f)f.style.height=e.data.height+"px";}});<\/script>';
+  var formCard='<div class="card"><h3>Public lead form</h3><div style="padding:16px 18px;">'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Shareable link</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px;">'
+    +'<input id="posFormUrl" readonly value="'+esc(formUrl)+'" style="flex:1;'+IN+'background:#f8fafc;">'
+    +'<button class="btn btn-n" onclick="posCopy(\'posFormUrl\',this)">Copy</button>'
+    +'<a class="btn btn-n" href="'+esc(formUrl)+'" target="_blank" style="text-decoration:none;">Open</a></div>'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Embed code <span class="muted" style="font-weight:600;">(paste into Webflow — auto-resizes, form only)</span></div>'
+    +'<textarea id="posEmbedCode" readonly rows="4" style="width:100%;'+IN+'background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;">'+esc(embedCode)+'</textarea>'
+    +'<div style="margin-top:8px;"><button class="btn btn-o" onclick="posCopy(\'posEmbedCode\',this)">Copy embed code</button> <a class="btn btn-n" href="'+esc(embedUrl)+'" target="_blank" style="text-decoration:none;">Preview embed</a></div>'
+    +'</div></div>';
   var pipes=(r.pipelines||[]).map(pipelineEditor).join('')||'<div class="muted" style="padding:6px 0;">No pipelines yet — add one.</div>';
   var pipeCard='<div class="card"><h3>Pipelines &amp; Stages <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="addPipeline()">+ Pipeline</button></h3><div style="padding:16px 18px;">'
     +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Define your pipelines and their stages (like HighLevel). Each stage can carry a workflow trigger URL that fires when a lead enters it.</div>'+pipes+'</div></div>';
-  box.innerHTML=conn+pipeCard;
+  box.innerHTML=conn+formCard+pipeCard;
 }
+window.posCopy=function(id,btn){
+  var el=document.getElementById(id); if(!el) return;
+  el.select(); el.setSelectionRange(0,99999);
+  var done=function(){ var t=btn.textContent; btn.textContent='Copied ✓'; setTimeout(function(){btn.textContent=t;},1400); };
+  try{ navigator.clipboard.writeText(el.value).then(done,function(){ document.execCommand('copy'); done(); }); }
+  catch(e){ try{document.execCommand('copy');}catch(x){} done(); }
+};
 function pipelineEditor(p){
   return '<div class="pipe" data-pid="'+p.id+'" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;background:#fffdf9;">'
     +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">'
