@@ -52,60 +52,60 @@
     <div class="logo-express"><span class="pos">POS</span> <span class="ex">EXPRESS</span></div>
   </div>
   <div class="hero-copy">
-    <p>Welcome to POSLead! Below, you can submit a merchant and our POS Pros team will conduct a demo on your behalf at no cost!</p>
-    <p class="hero-red">We don't contact your merchant until we've contacted you. We stress publicly that we don't compete with our partners and don't have "house accounts."</p>
-    <p class="hero-red b">Please use your lead's phone number and email, not yours. Using your information will cause considerable delays in this process.</p>
+    <p id="hWelcome">Welcome to POSLead! Below, you can submit a merchant and our POS Pros team will conduct a demo on your behalf at no cost!</p>
+    <p class="hero-red" id="hRed1">We don't contact your merchant until we've contacted you. We stress publicly that we don't compete with our partners and don't have "house accounts."</p>
+    <p class="hero-red b" id="hRed2">Please use your lead's phone number and email, not yours. Using your information will cause considerable delays in this process.</p>
     <ol><li>Fill out the form below.</li><li>Our POS Pros will contact you to evaluate your lead to see which point of sale system they would fit best with.</li><li>Arrangements are made with your potential merchant.</li></ol>
   </div>
 </div>
 
 <div class="form-wrap" id="form">
-  <h2>About You</h2>
-  <div class="grid">
-    <div><label>Your Name <span class="req">*</span></label><input class="f" id="yname"><div class="help">Please provide your complete name.</div></div>
-    <div><label>Your ID <span class="req">*</span></label><input class="f" id="agent" autocomplete="off" placeholder=""><div class="agent-status" id="agentStatus"></div><div class="help">Please enter your PayProtec Partner ID.</div></div>
-    <div><label>Your Phone Number <span class="req">*</span></label><input class="f" id="pphone" placeholder="(201) 555-0123"><div class="help">Please provide your phone number.</div></div>
-    <div><label>Your Email <span class="req">*</span></label><input class="f" id="pemail" type="email"><div class="help">Please enter your personal or business email in this field. Do not use the merchant's email address.</div></div>
+  <h2 id="secYou">About You</h2>
+  <div class="grid" id="gridYou">
+    <div data-fk="yname"><label>Your Name <span class="req">*</span></label><input class="f" id="yname"><div class="help">Please provide your complete name.</div></div>
+    <div data-fk="agent"><label>Your ID <span class="req">*</span></label><input class="f" id="agent" autocomplete="off" placeholder=""><div class="agent-status" id="agentStatus"></div><div class="help">Please enter your PayProtec Partner ID.</div></div>
+    <div data-fk="pphone"><label>Your Phone Number <span class="req">*</span></label><input class="f" id="pphone" placeholder="(201) 555-0123"><div class="help">Please provide your phone number.</div></div>
+    <div data-fk="pemail"><label>Your Email <span class="req">*</span></label><input class="f" id="pemail" type="email"><div class="help">Please enter your personal or business email in this field. Do not use the merchant's email address.</div></div>
   </div>
 
-  <h2>About the Merchant</h2>
-  <div class="grid">
-    <div><label>Current Merchant? <span class="req">*</span></label>
+  <h2 id="secMerch">About the Merchant</h2>
+  <div class="grid" id="gridMerch">
+    <div data-fk="curmerch"><label>Current Merchant? <span class="req">*</span></label>
       <select class="f" id="curmerch" onchange="onCurMerch()"><option value="">— select —</option><option value="yes">Yes</option><option value="no">No</option></select></div>
-    <div><label>Business Type <span class="req">*</span></label>
+    <div data-fk="btype"><label>Business Type <span class="req">*</span></label>
       <select class="f" id="btype"><option>Restaurant - Table Service</option><option>Restaurant - Quick Service</option><option>Retail</option><option>Other</option></select></div>
 
-    <div><label>Merchant DBA <span class="req">*</span></label><input class="f" id="dba"></div>
-    <div><label>Merchant Legal Name <span class="req">*</span></label><input class="f" id="legal"></div>
+    <div data-fk="dba"><label>Merchant DBA <span class="req">*</span></label><input class="f" id="dba"></div>
+    <div data-fk="legal"><label>Merchant Legal Name <span class="req">*</span></label><input class="f" id="legal"></div>
 
-    <div class="full" style="max-width:calc(50% - 13px);"><label>MID</label><input class="f" id="mid" oninput="onMid()"><div class="lookres" id="mresults" style="display:none;"></div></div>
+    <div class="full" data-fk="mid" style="max-width:calc(50% - 13px);"><label>MID</label><input class="f" id="mid" oninput="onMid()"><div class="lookres" id="mresults" style="display:none;"></div></div>
 
-    <div><label>Street Address <span class="req">*</span></label><input class="f" id="street" placeholder="123 MAIN ST"></div>
-    <div><label>State <span class="req">*</span></label><input class="f" id="state" placeholder="FL"></div>
-    <div><label>City <span class="req">*</span></label><input class="f" id="city" placeholder="TAMPA"></div>
-    <div><label>Zip <span class="req">*</span></label><input class="f" id="zip" placeholder="451224"><div class="help">Please provide the full address of your merchant.</div></div>
+    <div data-fk="street"><label>Street Address <span class="req">*</span></label><input class="f" id="street" placeholder="123 MAIN ST"></div>
+    <div data-fk="state"><label>State <span class="req">*</span></label><input class="f" id="state" placeholder="FL"></div>
+    <div data-fk="city"><label>City <span class="req">*</span></label><input class="f" id="city" placeholder="TAMPA"></div>
+    <div data-fk="zip"><label>Zip <span class="req">*</span></label><input class="f" id="zip" placeholder="451224"><div class="help">Please provide the full address of your merchant.</div></div>
 
-    <div><label>Contact's First Name <span class="req">*</span></label><input class="f" id="mfirst"><div class="help">Your merchant's first name</div></div>
-    <div><label>Contact's Last Name <span class="req">*</span></label><input class="f" id="mlast"><div class="help">Your merchant's last name</div></div>
-    <div><label>Contact's Phone Number <span class="req">*</span></label><input class="f" id="mphone" placeholder="(406) 555-4474"><div class="help">Your merchant's phone number</div></div>
-    <div><label>Contact's Email <span class="req">*</span></label><input class="f" id="memail" type="email"><div class="help">Your merchant's email</div></div>
+    <div data-fk="mfirst"><label>Contact's First Name <span class="req">*</span></label><input class="f" id="mfirst"><div class="help">Your merchant's first name</div></div>
+    <div data-fk="mlast"><label>Contact's Last Name <span class="req">*</span></label><input class="f" id="mlast"><div class="help">Your merchant's last name</div></div>
+    <div data-fk="mphone"><label>Contact's Phone Number <span class="req">*</span></label><input class="f" id="mphone" placeholder="(406) 555-4474"><div class="help">Your merchant's phone number</div></div>
+    <div data-fk="memail"><label>Contact's Email <span class="req">*</span></label><input class="f" id="memail" type="email"><div class="help">Your merchant's email</div></div>
 
     <div class="disclaimer">
       <p>We don't contact your merchant until we've contacted you. We stress publicly that we don't compete with our partners and don't have "house accounts."</p>
       <p class="b">Please use your lead's phone number and email, not yours. Using your information will cause considerable delays in this process.</p>
     </div>
 
-    <div><label>Projected Monthly Volume <span class="req">*</span></label><input class="f" id="volume" type="number" inputmode="numeric"></div>
-    <div><label>Proposal Type <span class="req">*</span></label>
+    <div data-fk="volume"><label>Projected Monthly Volume <span class="req">*</span></label><input class="f" id="volume" type="number" inputmode="numeric"></div>
+    <div data-fk="proposal"><label>Proposal Type <span class="req">*</span></label>
       <select class="f" id="proposal"><option value="">— select —</option><option>Purchase Only</option><option>Purchase and Placement</option><option>Placement Only</option></select></div>
 
-    <div class="full"><label>Merchant's Recent Processing Statement</label>
+    <div class="full" data-fk="statement"><label>Merchant's Recent Processing Statement</label>
       <div class="upload" onclick="document.getElementById('statement').click()"><div style="font-size:22px;">☁️</div><div style="font-size:12px;margin-top:4px;" id="stmtState">PDF</div></div>
       <input type="file" id="statement" accept=".pdf,.png,.jpg,.jpeg,.webp" style="display:none;" onchange="uploadStatement(this)"></div>
 
-    <div class="full"><label>Notes</label><textarea class="f" id="notes" maxlength="150" placeholder="Any other notes you'd like to include about this merchant?"></textarea><div class="help">*Please do not exceed 150 letters</div></div>
+    <div class="full" data-fk="notes"><label>Notes</label><textarea class="f" id="notes" maxlength="150" placeholder="Any other notes you'd like to include about this merchant?"></textarea><div class="help">*Please do not exceed 150 letters</div></div>
 
-    <label class="chk"><input type="checkbox" id="sms"> I would like to receive SMS texts to track the progress of this merchant</label>
+    <label class="chk" data-fk="sms"><input type="checkbox" id="sms"> <span class="chk-text">I would like to receive SMS texts to track the progress of this merchant</span></label>
 
     <button class="send" id="submitBtn" onclick="submitLead()">Send Lead</button>
     <div class="err full" id="msg"></div>
@@ -119,7 +119,8 @@
   // Form-only embed mode (?embed=1): hide the hero + fill 100% width, to drop
   // into the existing Webflow layout exactly where the HighLevel iframe sits.
   if(qp('embed')==='1' || qp('form')==='1'){
-    var hero=document.querySelector('.hero'); if(hero) hero.style.display='none';
+    // In designer preview mode keep the hero visible so copy edits are visible.
+    if(qp('preview')!=='1'){ var hero=document.querySelector('.hero'); if(hero) hero.style.display='none'; }
     var fw=document.querySelector('.form-wrap'); if(fw){ fw.style.maxWidth='100%'; fw.style.paddingTop='14px'; }
     // Auto-height: tell the parent page how tall we are so the iframe fits.
     var postH=function(){ try{ parent.postMessage({type:'ppos-height',height:document.body.scrollHeight}, '*'); }catch(e){} };
@@ -130,6 +131,70 @@
   function pos(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
   function val(id){ return document.getElementById(id).value.trim(); }
   function set(id,v){ document.getElementById(id).value=v==null?'':v; }
+
+  // ── Form Designer config (Phase 1) ──────────────────────────────────
+  // The POS Express → Settings → Form Designer saves a config that restyles
+  // and rearranges THIS form (field labels/placeholders/required/visible/order,
+  // plus colors, copy, button text and column layout). Backend ids are fixed,
+  // so the pipeline wiring (agent lookup, MID pull-through, upload) is untouched.
+  var FIELD_KEYS=['yname','agent','pphone','pemail','curmerch','btype','dba','legal','mid','street','state','city','zip','mfirst','mlast','mphone','memail','volume','proposal','statement','notes','sms'];
+  function setText(id,v){ var el=document.getElementById(id); if(el&&v!=null&&v!=='') el.textContent=v; }
+  function reorderGrid(grid,orderMap){
+    if(!grid) return;
+    var kids=Array.prototype.slice.call(grid.children);
+    var pos=[], els=[];
+    kids.forEach(function(el,i){ if(el.getAttribute&&el.getAttribute('data-fk')){ pos.push(i); els.push(el); } });
+    els.sort(function(a,b){ var oa=orderMap[a.getAttribute('data-fk')], ob=orderMap[b.getAttribute('data-fk')]; oa=(oa==null?999:oa); ob=(ob==null?999:ob); return oa-ob; });
+    // Keep non-field elements (e.g. disclaimer) in place; only shuffle field slots.
+    var out=kids.slice(); pos.forEach(function(p,i){ out[p]=els[i]; });
+    out.forEach(function(el){ grid.appendChild(el); });
+  }
+  function applyConfig(cfg){
+    if(!cfg||typeof cfg!=='object') return;
+    var s=cfg.style||{};
+    if(s.accent){ document.documentElement.style.setProperty('--accent',s.accent);
+      var st=document.getElementById('cfgStyle')||document.createElement('style'); st.id='cfgStyle';
+      st.textContent='.send{background:'+s.accent+' !important;}.f:focus{border-color:'+s.accent+' !important;box-shadow:0 0 0 3px '+s.accent+'22 !important;}.logo-express .pos{color:'+s.accent+' !important;}.upload:hover{border-color:'+s.accent+' !important;}';
+      document.head.appendChild(st);
+    }
+    if(s.font){ document.body.style.fontFamily='"'+s.font+'",system-ui,sans-serif'; }
+    if(s.columns){ var tc=(String(s.columns)==='1')?'1fr':'1fr 1fr';
+      var gy=document.getElementById('gridYou'), gm=document.getElementById('gridMerch');
+      if(gy) gy.style.gridTemplateColumns=tc; if(gm) gm.style.gridTemplateColumns=tc; }
+    if(s.buttonText){ var b=document.getElementById('submitBtn'); if(b) b.textContent=s.buttonText; }
+    setText('secYou',s.secYou); setText('secMerch',s.secMerch);
+    setText('hWelcome',s.welcome); setText('hRed1',s.red1); setText('hRed2',s.red2);
+    var fields=cfg.fields||{};
+    var orderY={}, orderM={};
+    FIELD_KEYS.forEach(function(k){
+      var f=fields[k]; var w=document.querySelector('[data-fk="'+k+'"]'); if(!w) return;
+      if(f){
+        if(f.visible===false){ w.style.display='none'; } else { w.style.display=''; }
+        if('order' in f){ if(k==='yname'||k==='agent'||k==='pphone'||k==='pemail') orderY[k]=f.order; else orderM[k]=f.order; }
+        // Label + required star
+        if(k==='sms'){ var ct=w.querySelector('.chk-text'); if(ct&&f.label) ct.textContent=f.label; }
+        else {
+          var lab=w.querySelector('label');
+          if(lab){
+            var hadStar=!!lab.querySelector('.req');
+            var reqd=('required' in f)?!!f.required:hadStar;
+            var text=(f.label!=null&&f.label!=='')?f.label:(lab.querySelector('.lbl-text')?lab.querySelector('.lbl-text').textContent:(lab.textContent||'').replace(/\s*\*\s*$/,'').trim());
+            lab.innerHTML='<span class="lbl-text">'+escHtml(text)+'</span>'+(reqd?' <span class="req">*</span>':'');
+          }
+        }
+        // Placeholder
+        var inp=w.querySelector('input,select,textarea'); if(inp&&'placeholder' in f) inp.placeholder=f.placeholder||'';
+      }
+    });
+    if(Object.keys(orderY).length) reorderGrid(document.getElementById('gridYou'),orderY);
+    if(Object.keys(orderM).length) reorderGrid(document.getElementById('gridMerch'),orderM);
+    window._cfg=cfg;
+  }
+  function escHtml(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+  // Live preview: the designer posts draft configs while editing.
+  window.addEventListener('message',function(e){ if(e.data&&e.data.type==='ppos-config'){ applyConfig(e.data.config); } });
+  // Load the saved config (public, no auth needed).
+  pos({action:'form_config'}).then(function(d){ if(d&&d.success&&d.config) applyConfig(d.config); }).catch(function(){});
 
   agent.value=qp('agent')||qp('ref')||'';
   agent.addEventListener('input', function(){ st.textContent=''; if(agentTimer)clearTimeout(agentTimer); agentTimer=setTimeout(lookup,400); });

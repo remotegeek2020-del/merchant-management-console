@@ -62,6 +62,29 @@
   .kb-card .row .material-icons{font-size:13px;color:#cbd5e1;}
   .kb-card .vol{font-weight:800;color:#16a34a;}
   .kb-empty{color:var(--muted);font-size:12px;text-align:center;padding:16px 6px;border:1px dashed var(--border);border-radius:9px;}
+  /* Form Designer */
+  .fd-overlay{position:fixed;inset:0;background:#0f172a;z-index:1000;display:flex;flex-direction:column;}
+  .fd-top{background:#1e293b;color:#fff;padding:12px 18px;display:flex;align-items:center;gap:12px;}
+  .fd-top .t{font-weight:800;font-size:15px;flex:1;}
+  .fd-body{flex:1;display:flex;overflow:hidden;}
+  .fd-left{width:420px;background:#f8fafc;border-right:1px solid var(--border);overflow-y:auto;padding:16px;}
+  .fd-right{flex:1;background:#e2e8f0;overflow:auto;display:flex;justify-content:center;}
+  .fd-right iframe{width:100%;max-width:1000px;height:100%;border:none;background:#fff;}
+  .fd-sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin:16px 0 8px;}
+  .fd-row{display:block;margin-bottom:10px;}
+  .fd-row label{display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;}
+  .fd-row input[type=text],.fd-row input[type=color],.fd-row select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;}
+  .fd-row input[type=color]{height:38px;padding:3px;cursor:pointer;}
+  .fd-2{display:flex;gap:8px;}.fd-2>div{flex:1;}
+  .fd-fld{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;}
+  .fd-fld.dragging{opacity:.4;}
+  .fd-fld-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .fd-fld-head .grip{cursor:grab;color:#cbd5e1;}
+  .fd-fld-head .nm{font-weight:800;font-size:13px;flex:1;}
+  .fd-fld-head .k{font-size:10px;color:#94a3b8;font-family:ui-monospace,monospace;}
+  .fd-toggle{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;}
+  .fd-fld .fd-inputs{display:none;}
+  .fd-fld.open .fd-inputs{display:block;}
 </style>
 </head>
 <body>
@@ -238,10 +261,13 @@ async function loadSettings(){
     +'<textarea id="posEmbedCode" readonly rows="4" style="width:100%;'+IN+'background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.5;">'+esc(embedCode)+'</textarea>'
     +'<div style="margin-top:8px;"><button class="btn btn-o" onclick="posCopy(\'posEmbedCode\',this)">Copy embed code</button> <a class="btn btn-n" href="'+esc(embedUrl)+'" target="_blank" style="text-decoration:none;">Preview embed</a></div>'
     +'</div></div>';
+  var designerCard='<div class="card"><h3>Form Designer</h3><div style="padding:16px 18px;">'
+    +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Customize the public POS lead form — colors, fonts, headings, disclaimers, button text, column layout, and every field\'s label, placeholder, required flag, visibility and order. Live preview, just like HighLevel. Pipeline wiring stays intact.</div>'
+    +'<button class="btn btn-o" onclick="openFormDesigner()"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">design_services</span> Open Form Designer</button></div></div>';
   var pipes=(r.pipelines||[]).map(pipelineEditor).join('')||'<div class="muted" style="padding:6px 0;">No pipelines yet — add one.</div>';
   var pipeCard='<div class="card"><h3>Pipelines &amp; Stages <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="addPipeline()">+ Pipeline</button></h3><div style="padding:16px 18px;">'
     +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Define your pipelines and their stages (like HighLevel). Each stage can carry a workflow trigger URL that fires when a lead enters it.</div>'+pipes+'</div></div>';
-  box.innerHTML=conn+formCard+pipeCard;
+  box.innerHTML=conn+formCard+designerCard+pipeCard;
 }
 window.posCopy=function(id,btn){
   var el=document.getElementById(id); if(!el) return;
@@ -249,6 +275,112 @@ window.posCopy=function(id,btn){
   var done=function(){ var t=btn.textContent; btn.textContent='Copied ✓'; setTimeout(function(){btn.textContent=t;},1400); };
   try{ navigator.clipboard.writeText(el.value).then(done,function(){ document.execCommand('copy'); done(); }); }
   catch(e){ try{document.execCommand('copy');}catch(x){} done(); }
+};
+
+/* ── Form Designer (Phase 1: customize the existing POS lead form) ── */
+var FD_FIELDS={
+  you:[['yname','Your Name'],['agent','Your ID'],['pphone','Your Phone Number'],['pemail','Your Email']],
+  merch:[['curmerch','Current Merchant?'],['btype','Business Type'],['dba','Merchant DBA'],['legal','Merchant Legal Name'],['mid','MID'],['street','Street Address'],['state','State'],['city','City'],['zip','Zip'],['mfirst',"Contact's First Name"],['mlast',"Contact's Last Name"],['mphone',"Contact's Phone Number"],['memail',"Contact's Email"],['volume','Projected Monthly Volume'],['proposal','Proposal Type'],['statement',"Merchant's Recent Processing Statement"],['notes','Notes'],['sms','SMS opt-in text']]
+};
+var FD_DEFAULT_STYLE={accent:'#ea580c',font:'Inter',columns:'2',buttonText:'Send Lead',secYou:'About You',secMerch:'About the Merchant',welcome:'Welcome to POSLead! Below, you can submit a merchant and our POS Pros team will conduct a demo on your behalf at no cost!',red1:"We don't contact your merchant until we've contacted you. We stress publicly that we don't compete with our partners and don't have \"house accounts.\"",red2:'Please use your lead\'s phone number and email, not yours. Using your information will cause considerable delays in this process.'};
+var FD=null;
+function fdDefaultLabel(k){ var all=FD_FIELDS.you.concat(FD_FIELDS.merch); for(var i=0;i<all.length;i++) if(all[i][0]===k) return all[i][1]; return k; }
+window.openFormDesigner=function(){
+  var saved=(window._pos&&window._pos.form_config)||{};
+  FD={ style:Object.assign({},FD_DEFAULT_STYLE,saved.style||{}), fields:{} };
+  // Seed field config, honoring saved order or default order.
+  var order=0;
+  ['you','merch'].forEach(function(sec){
+    FD_FIELDS[sec].forEach(function(pair,idx){
+      var k=pair[0]; var sv=(saved.fields&&saved.fields[k])||{};
+      FD.fields[k]={ label:(sv.label!=null?sv.label:pair[1]), placeholder:(sv.placeholder!=null?sv.placeholder:''), required:(sv.required!=null?sv.required:(k!=='mid'&&k!=='statement'&&k!=='notes'&&k!=='sms')), visible:(sv.visible!==false), order:(sv.order!=null?sv.order:idx), _sec:sec };
+    });
+  });
+  var ov=document.createElement('div'); ov.className='fd-overlay'; ov.id='fdOverlay';
+  ov.innerHTML=''
+    +'<div class="fd-top"><span class="material-icons">design_services</span><span class="t">Form Designer — POS Lead Form</span>'
+    +'<button class="btn btn-n" onclick="closeFormDesigner()">Close</button>'
+    +'<button class="btn btn-o" onclick="saveFormDesigner(this)">Save changes</button></div>'
+    +'<div class="fd-body"><div class="fd-left" id="fdLeft"></div>'
+    +'<div class="fd-right"><iframe id="fdPreview" src="/poslead?embed=1&preview=1"></iframe></div></div>';
+  document.body.appendChild(ov);
+  fdRenderControls();
+  var f=document.getElementById('fdPreview');
+  f.addEventListener('load',function(){ fdPush(); });
+};
+window.closeFormDesigner=function(){ var o=document.getElementById('fdOverlay'); if(o) o.remove(); FD=null; };
+function fdCtl(label,html){ return '<div class="fd-row"><label>'+label+'</label>'+html+'</div>'; }
+function fdRenderControls(){
+  var s=FD.style;
+  var h='<div class="fd-sec">Style</div>';
+  h+='<div class="fd-2">'+fdCtl('Accent color','<input type="color" value="'+esc(s.accent)+'" oninput="fdStyle(\'accent\',this.value)">')
+    +fdCtl('Columns','<select onchange="fdStyle(\'columns\',this.value)"><option value="2"'+(s.columns==='2'?' selected':'')+'>Two columns</option><option value="1"'+(s.columns==='1'?' selected':'')+'>One column</option></select>')+'</div>';
+  h+='<div class="fd-2">'+fdCtl('Font','<select onchange="fdStyle(\'font\',this.value)">'+['Inter','DM Sans','Roboto','Poppins','Georgia','Arial'].map(function(f){return '<option'+(s.font===f?' selected':'')+'>'+f+'</option>';}).join('')+'</select>')
+    +fdCtl('Button text','<input type="text" value="'+esc(s.buttonText)+'" oninput="fdStyle(\'buttonText\',this.value)">')+'</div>';
+  h+='<div class="fd-sec">Headings &amp; copy</div>';
+  h+='<div class="fd-2">'+fdCtl('Section 1 title','<input type="text" value="'+esc(s.secYou)+'" oninput="fdStyle(\'secYou\',this.value)">')
+    +fdCtl('Section 2 title','<input type="text" value="'+esc(s.secMerch)+'" oninput="fdStyle(\'secMerch\',this.value)">')+'</div>';
+  h+=fdCtl('Welcome line','<input type="text" value="'+esc(s.welcome)+'" oninput="fdStyle(\'welcome\',this.value)">');
+  h+=fdCtl('Disclaimer 1','<input type="text" value="'+esc(s.red1)+'" oninput="fdStyle(\'red1\',this.value)">');
+  h+=fdCtl('Disclaimer 2 (bold)','<input type="text" value="'+esc(s.red2)+'" oninput="fdStyle(\'red2\',this.value)">');
+  h+='<div class="fd-sec">Fields — drag to reorder, click to edit</div>';
+  h+='<div id="fdFieldsYou" data-sec="you"><div style="font-size:11px;font-weight:800;color:#94a3b8;margin:4px 0;">'+esc(s.secYou)+'</div></div>';
+  h+='<div id="fdFieldsMerch" data-sec="merch"><div style="font-size:11px;font-weight:800;color:#94a3b8;margin:10px 0 4px;">'+esc(s.secMerch)+'</div></div>';
+  document.getElementById('fdLeft').innerHTML=h;
+  fdRenderFields('you'); fdRenderFields('merch');
+}
+function fdRenderFields(sec){
+  var host=document.getElementById(sec==='you'?'fdFieldsYou':'fdFieldsMerch');
+  var keys=Object.keys(FD.fields).filter(function(k){return FD.fields[k]._sec===sec;});
+  keys.sort(function(a,b){return FD.fields[a].order-FD.fields[b].order;});
+  keys.forEach(function(k){
+    var f=FD.fields[k];
+    var el=document.createElement('div'); el.className='fd-fld'; el.setAttribute('data-k',k); el.setAttribute('draggable','true');
+    el.innerHTML='<div class="fd-fld-head"><span class="material-icons grip">drag_indicator</span>'
+      +'<span class="nm">'+esc(f.label||fdDefaultLabel(k))+'</span><span class="k">'+esc(k)+'</span>'
+      +'<label class="fd-toggle" title="Visible"><input type="checkbox" '+(f.visible?'checked':'')+' onchange="fdField(\''+k+'\',\'visible\',this.checked)"> shown</label></div>'
+      +'<div class="fd-inputs">'
+      +(k!=='sms'?'<div class="fd-2"><div class="fd-row"><label>Label</label><input type="text" value="'+esc(f.label)+'" oninput="fdField(\''+k+'\',\'label\',this.value,true)"></div>'
+        +'<div class="fd-row"><label>Required</label><select onchange="fdField(\''+k+'\',\'required\',this.value===\'1\')"><option value="1"'+(f.required?' selected':'')+'>Required</option><option value="0"'+(!f.required?' selected':'')+'>Optional</option></select></div></div>'
+        +fdCtl('Placeholder','<input type="text" value="'+esc(f.placeholder||'')+'" oninput="fdField(\''+k+'\',\'placeholder\',this.value)">')
+        :fdCtl('Checkbox text','<input type="text" value="'+esc(f.label)+'" oninput="fdField(\''+k+'\',\'label\',this.value,true)">'))
+      +'</div>';
+    el.querySelector('.fd-fld-head').addEventListener('click',function(ev){ if(ev.target.closest('.fd-toggle')||ev.target.classList.contains('grip')) return; el.classList.toggle('open'); });
+    fdDragBind(el,host);
+    host.appendChild(el);
+  });
+}
+var _fdDrag=null;
+function fdDragBind(el,host){
+  el.addEventListener('dragstart',function(){ _fdDrag=el; el.classList.add('dragging'); });
+  el.addEventListener('dragend',function(){ el.classList.remove('dragging'); _fdDrag=null; fdCommitOrder(host); });
+  el.addEventListener('dragover',function(e){ e.preventDefault(); if(!_fdDrag||_fdDrag===el||_fdDrag.parentNode!==host) return;
+    var r=el.getBoundingClientRect(); var after=(e.clientY-r.top)>r.height/2;
+    host.insertBefore(_fdDrag, after?el.nextSibling:el);
+  });
+}
+function fdCommitOrder(host){
+  var base=host.getAttribute('data-sec')==='you'?0:100;
+  Array.prototype.slice.call(host.querySelectorAll('.fd-fld')).forEach(function(el,i){ var k=el.getAttribute('data-k'); if(FD.fields[k]) FD.fields[k].order=base+i; });
+  fdPush();
+}
+window.fdStyle=function(k,v){ FD.style[k]=v; fdPush(); };
+window.fdField=function(k,prop,v,updName){ if(!FD.fields[k]) return; FD.fields[k][prop]=v;
+  if(updName){ var el=document.querySelector('.fd-fld[data-k="'+k+'"] .nm'); if(el) el.textContent=v||fdDefaultLabel(k); }
+  fdPush();
+};
+function fdConfig(){
+  var out={style:FD.style,fields:{}};
+  Object.keys(FD.fields).forEach(function(k){ var f=FD.fields[k]; out.fields[k]={label:f.label,placeholder:f.placeholder,required:f.required,visible:f.visible,order:f.order}; });
+  return out;
+}
+function fdPush(){ var f=document.getElementById('fdPreview'); if(f&&f.contentWindow){ try{ f.contentWindow.postMessage({type:'ppos-config',config:fdConfig()}, '*'); }catch(e){} } }
+window.saveFormDesigner=async function(btn){
+  btn.disabled=true; var t=btn.textContent; btn.textContent='Saving…';
+  var r=await api({action:'form_config_set',config:fdConfig()});
+  btn.disabled=false; btn.textContent=t;
+  if(r&&r.success){ if(window._pos) window._pos.form_config=fdConfig(); Swal.fire({icon:'success',title:'Form saved',timer:1100,showConfirmButton:false}); closeFormDesigner(); }
+  else Swal.fire('Error',(r&&r.message)||'Could not save','error');
 };
 function pipelineEditor(p){
   return '<div class="pipe" data-pid="'+p.id+'" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;background:#fffdf9;">'

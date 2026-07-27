@@ -84,6 +84,13 @@ export default async function handler(req, res) {
     const action = body.action;
 
     try {
+        // ── PUBLIC: form designer config (drives poslead.html styling/fields) ──
+        if (action === 'form_config') {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'pos_form_config').maybeSingle();
+            let cfg = {};
+            try { cfg = data?.value ? JSON.parse(data.value) : {}; } catch (e) { cfg = {}; }
+            return ok(res, { config: cfg });
+        }
         // ── PUBLIC: validate an agent id → confirm partner + contact ──
         if (action === 'lookup_agent') {
             const p = await resolvePartner(body.agent_id);
@@ -171,16 +178,19 @@ export default async function handler(req, res) {
         if (action === 'settings_get') {
             if (!canSettings) return bad(res, 'No access to POS Express Settings.', 403);
             const pit = await getConfigValue('POS_GHL_PIT');
-            const [{ data: loc }, { data: wh }, { data: pls }, { data: sts }] = await Promise.all([
+            const [{ data: loc }, { data: wh }, { data: fc }, { data: pls }, { data: sts }] = await Promise.all([
                 supabase.from('app_settings').select('value').eq('key', 'pos_ghl_location_id').maybeSingle(),
                 supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle(),
+                supabase.from('app_settings').select('value').eq('key', 'pos_form_config').maybeSingle(),
                 supabase.from('pos_pipelines').select('*').order('sort_order'),
                 supabase.from('pos_stages').select('*').order('sort_order')
             ]);
             const stagesByPipe = {};
             (sts || []).forEach(s => { (stagesByPipe[s.pipeline_id] = stagesByPipe[s.pipeline_id] || []).push(s); });
             const pipelines = (pls || []).map(p => ({ id: p.id, name: p.name, is_default: p.is_default, stages: stagesByPipe[p.id] || [] }));
-            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines });
+            let formConfig = {};
+            try { formConfig = fc?.value ? JSON.parse(fc.value) : {}; } catch (e) { formConfig = {}; }
+            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig });
         }
         if (action === 'set_pos_key') {
             if (!canSettings) return bad(res, 'No access.', 403);
@@ -188,6 +198,12 @@ export default async function handler(req, res) {
             if (body.key && String(body.key).trim()) await setConfigValue('POS_GHL_PIT', String(body.key).trim(), session.userid);
             if ('location_id' in body) await supabase.from('app_settings').upsert({ key: 'pos_ghl_location_id', value: String(body.location_id || '').trim(), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             if ('webhook_url' in body) await supabase.from('app_settings').upsert({ key: 'pos_ghl_webhook_url', value: String(body.webhook_url || '').trim(), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
+            return ok(res, {});
+        }
+        if (action === 'form_config_set') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const cfg = body.config && typeof body.config === 'object' ? body.config : {};
+            await supabase.from('app_settings').upsert({ key: 'pos_form_config', value: JSON.stringify(cfg), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
         }
         if (action === 'save_pipeline') {
