@@ -115,6 +115,8 @@ const GHL_STD_FIELDS = new Set(['firstName', 'lastName', 'name', 'email', 'phone
 // Send a lead to HighLevel: upsert the contact from the field mapping, then
 // enroll it into the chosen workflow. `act` carries mapping[] and workflow_id.
 // Falls back to a webhook POST only when no Private Integration token is set.
+// Returns a diagnostics object (used by the "Test send" button; the automation
+// runner ignores it).
 async function sendToHighlevel(act, lead) {
     const { token, locationId } = await posGhlCreds();
     if (token && locationId) {
@@ -127,17 +129,27 @@ async function sendToHighlevel(act, lead) {
             else contact[m.target] = v;
         });
         if (customFields.length) contact.customFields = customFields;
+        const out = { mode: 'api', fields_sent: Object.keys(contact).filter(k => k !== 'locationId').length + customFields.length };
         let contactId = null;
         try {
             const r = await fetch('https://services.leadconnectorhq.com/contacts/upsert', { method: 'POST', headers: ghlHeaders(token), body: JSON.stringify(contact) });
-            const j = await r.json().catch(() => ({}));
+            const txt = await r.text(); let j = {}; try { j = JSON.parse(txt); } catch (e) {}
             contactId = j?.contact?.id || j?.id || null;
-        } catch (e) { /* best-effort */ }
+            out.upsert_status = r.status;
+            if (!r.ok) out.upsert_error = (j.message ? (Array.isArray(j.message) ? j.message.join('; ') : j.message) : txt.slice(0, 200));
+        } catch (e) { out.upsert_error = 'Request failed: ' + (e.message || 'unknown'); }
+        out.contact_id = contactId;
         if (contactId && act.workflow_id) {
-            try { await fetch('https://services.leadconnectorhq.com/contacts/' + contactId + '/workflow/' + act.workflow_id, { method: 'POST', headers: ghlHeaders(token), body: JSON.stringify({}) }); } catch (e) { /* best-effort */ }
-        }
+            try {
+                const r = await fetch('https://services.leadconnectorhq.com/contacts/' + contactId + '/workflow/' + act.workflow_id, { method: 'POST', headers: ghlHeaders(token), body: JSON.stringify({}) });
+                const txt = await r.text(); let j = {}; try { j = JSON.parse(txt); } catch (e) {}
+                out.enroll_status = r.status; out.enrolled = r.ok;
+                if (!r.ok) out.enroll_error = (j.message ? (Array.isArray(j.message) ? j.message.join('; ') : j.message) : txt.slice(0, 200));
+            } catch (e) { out.enroll_error = 'Request failed: ' + (e.message || 'unknown'); }
+        } else if (!act.workflow_id) out.enroll_error = 'No workflow selected on this action.';
         if (contactId) await supabase.from('pos_leads').update({ ghl_contact_id: contactId, ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
-        return;
+        out.ok = !!contactId && (!act.workflow_id || out.enrolled === true);
+        return out;
     }
     // Fallback: no PIT — POST the mapped payload to the connection webhook.
     let url = (act.webhook_url && String(act.webhook_url).trim()) || '';
@@ -145,11 +157,12 @@ async function sendToHighlevel(act, lead) {
         const { data: cfg } = await supabase.from('app_settings').select('value').eq('key', 'pos_ghl_webhook_url').maybeSingle();
         url = cfg?.value || '';
     }
-    if (!url) return;
+    if (!url) return { mode: 'none', ok: false, upsert_error: 'No Private Integration key and no webhook configured.' };
     const payload = { pos_lead_id: lead.id };
     (act.mapping || []).forEach(m => { if (m && m.source && m.target) payload[m.target] = leadFieldValue(lead, m.source); });
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (r.ok) await supabase.from('pos_leads').update({ ghl_sent_at: new Date().toISOString() }).eq('id', lead.id);
+    return { mode: 'webhook', ok: r.ok, upsert_status: r.status };
 }
 
 async function runPortalActions(wf, lead) {
@@ -406,6 +419,30 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('pos_leads').update(patch).eq('id', body.id);
             if (error) return bad(res, error.message);
             return ok(res, {});
+        }
+        // List the Send-to-HighLevel actions configured across portal automations
+        // (for the "Test send" picker on a lead).
+        if (action === 'hl_actions_list') {
+            const auto = await getAutomations();
+            const list = [];
+            (auto.portal || []).forEach(wf => {
+                (wf.actions || []).forEach((a, idx) => {
+                    if (a && a.type === 'send_to_highlevel') list.push({ wf_id: wf.id, wf_name: wf.name || '(unnamed)', act_index: idx, workflow_name: a.workflow_name || '', map_count: (a.mapping || []).length });
+                });
+            });
+            return ok(res, { actions: list });
+        }
+        // Run one Send-to-HighLevel action against a lead and return diagnostics.
+        if (action === 'test_hl_send') {
+            const { data: lead } = await supabase.from('pos_leads').select('*').eq('id', body.id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            const auto = await getAutomations();
+            const wf = (auto.portal || []).find(w => w.id === body.wf_id);
+            const act = wf && (wf.actions || [])[body.act_index];
+            if (!act || act.type !== 'send_to_highlevel') return bad(res, 'Send-to-HighLevel action not found', 404);
+            let result;
+            try { result = await sendToHighlevel(act, lead); } catch (e) { return bad(res, 'Send failed: ' + e.message); }
+            return ok(res, { result: result || {} });
         }
         if (action === 'send_to_ghl') {
             const { data: lead } = await supabase.from('pos_leads').select('*').eq('id', body.id).maybeSingle();

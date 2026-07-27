@@ -555,11 +555,42 @@ async function openLead(id){
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Status</label><select id="pl-status" class="swal2-input" style="margin:0;width:100%;">'+['new','reviewing','qualified','rejected','sent'].map(function(s){return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'+
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Review notes</label><textarea id="pl-notes" class="swal2-textarea" style="margin:0;width:100%;">'+esc(l.review_notes||'')+'</textarea></div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#ea580c',
-    footer:canSend?'<button id="pl-send" class="btn btn-o" style="background:#7c3aed;">✅ Mark good &amp; send to POS Express</button>':'<span style="color:#7c3aed;font-weight:700;">Already sent to POS Express</span>',
-    didOpen:function(){ var sb=document.getElementById('pl-send'); if(sb) sb.addEventListener('click',async function(){ sb.disabled=true; sb.textContent='Sending…'; var s=await api({action:'send_to_ghl',id:l.id}); if(s.success){ Swal.close(); Swal.fire({icon:'success',title:'Sent to POS Express',timer:1300,showConfirmButton:false}); load(); } else { Swal.showValidationMessage(s.message||'Send failed'); sb.disabled=false; sb.textContent='✅ Mark good & send to POS Express'; } }); },
+    footer:'<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">'
+      +(canSend?'<button id="pl-send" class="btn btn-o" style="background:#7c3aed;">✅ Mark good &amp; send to POS Express</button>':'<span style="color:#7c3aed;font-weight:700;">Already sent to POS Express</span>')
+      +(CAN_SETTINGS?'<button id="pl-test" class="btn btn-n">🧪 Test send to HighLevel</button>':'')+'</div>',
+    didOpen:function(){
+      var sb=document.getElementById('pl-send'); if(sb) sb.addEventListener('click',async function(){ sb.disabled=true; sb.textContent='Sending…'; var s=await api({action:'send_to_ghl',id:l.id}); if(s.success){ Swal.close(); Swal.fire({icon:'success',title:'Sent to POS Express',timer:1300,showConfirmButton:false}); load(); } else { Swal.showValidationMessage(s.message||'Send failed'); sb.disabled=false; sb.textContent='✅ Mark good & send to POS Express'; } });
+      var tb=document.getElementById('pl-test'); if(tb) tb.addEventListener('click',function(){ testHlSend(l.id); });
+    },
     preConfirm:function(){ return {classification:document.getElementById('pl-class').value,status:document.getElementById('pl-status').value,review_notes:document.getElementById('pl-notes').value}; }
   });
   if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes}); load(); }
+}
+async function testHlSend(leadId){
+  var la=await api({action:'hl_actions_list'});
+  var acts=(la&&la.success&&la.actions)||[];
+  if(!acts.length){ Swal.fire({icon:'info',title:'No Send-to-HighLevel action',text:'Add a "Send to HighLevel workflow" action in Settings → Portal Automations first.'}); return; }
+  var chosen=acts[0];
+  if(acts.length>1){
+    var opts={}; acts.forEach(function(a,i){ opts[i]=a.wf_name+' → '+(a.workflow_name||'(no workflow)')+' ('+a.map_count+' fields)'; });
+    var pick=await Swal.fire({title:'Which Send-to-HighLevel action?',input:'select',inputOptions:opts,inputPlaceholder:'Choose…',showCancelButton:true,confirmButtonColor:'#ea580c'});
+    if(!pick.isConfirmed) return; chosen=acts[+pick.value];
+  }
+  Swal.fire({title:'Sending test to HighLevel…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await api({action:'test_hl_send',id:leadId,wf_id:chosen.wf_id,act_index:chosen.act_index});
+  if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Test failed','error'); return; }
+  var x=r.result||{};
+  var rows=[];
+  rows.push(['Mode',x.mode||'—']);
+  if(x.mode==='api'){
+    rows.push(['Fields sent',String(x.fields_sent||0)]);
+    rows.push(['Contact upsert',x.contact_id?('✓ '+x.contact_id):('✗ HTTP '+(x.upsert_status||'?')+(x.upsert_error?' — '+x.upsert_error:''))]);
+    rows.push(['Workflow enroll',x.enrolled?'✓ enrolled':(x.enroll_error||('HTTP '+(x.enroll_status||'?')))]);
+  } else if(x.mode==='webhook'){ rows.push(['Webhook',x.ok?'✓ HTTP '+x.upsert_status:'✗ HTTP '+x.upsert_status]); }
+  else { rows.push(['Result',x.upsert_error||'Not sent']); }
+  var html='<div style="text-align:left;font-size:13px;">'+rows.map(function(rw){return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #f1f5f9;"><span style="width:120px;color:#94a3b8;font-weight:700;flex:none;">'+rw[0]+'</span><span>'+esc(rw[1])+'</span></div>';}).join('')+'</div>';
+  Swal.fire({icon:x.ok?'success':'warning',title:x.ok?'Test send succeeded':'Test send — check details',html:html});
+  load();
 }
 var CAN_SETTINGS=(localStorage.getItem('pp_role')||'').toLowerCase().indexOf('super')!==-1 || localStorage.getItem('pp_access_pos_settings')==='true';
 if(!CAN_SETTINGS){ NAV=NAV.filter(function(n){return n[0]!=='settings';}); if(SEC==='settings') SEC='dashboard'; }
