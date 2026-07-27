@@ -75,10 +75,13 @@
     <div data-fk="btype"><label>Business Type <span class="req">*</span></label>
       <select class="f" id="btype"><option>Restaurant - Table Service</option><option>Restaurant - Quick Service</option><option>Retail</option><option>Other</option></select></div>
 
+    <div class="full" id="mfindRow" style="display:none;"><label>Find your merchant <span class="help" style="display:inline;font-weight:400;">— search by business name or MID under your Partner ID</span></label>
+      <input class="f" id="msearch" autocomplete="off" oninput="onFind()" placeholder="Type merchant name or MID…"><div class="help" id="mfindHelp"></div><div class="lookres" id="mresults" style="display:none;"></div></div>
+
     <div data-fk="dba"><label>Merchant DBA <span class="req">*</span></label><input class="f" id="dba"></div>
     <div data-fk="legal"><label>Merchant Legal Name <span class="req">*</span></label><input class="f" id="legal"></div>
 
-    <div class="full" data-fk="mid" style="max-width:calc(50% - 13px);"><label>MID</label><input class="f" id="mid" oninput="onMid()"><div class="lookres" id="mresults" style="display:none;"></div></div>
+    <div class="full" data-fk="mid" style="max-width:calc(50% - 13px);"><label>MID</label><input class="f" id="mid"></div>
 
     <div data-fk="street"><label>Street Address <span class="req">*</span></label><input class="f" id="street" placeholder="123 MAIN ST"></div>
     <div data-fk="state"><label>State <span class="req">*</span></label><input class="f" id="state" placeholder="FL"></div>
@@ -211,25 +214,41 @@
     }).catch(function(){ st.textContent=''; });
   }
 
-  window.onCurMerch=function(){};
-  window.onMid=function(){
-    if(document.getElementById('curmerch').value!=='yes' || !val('agent')) return;
+  // Current Merchant = Yes → show the merchant finder (name/MID lookup under the
+  // partner's Agent ID). No → manual entry.
+  window.onCurMerch=function(){
+    var yes=document.getElementById('curmerch').value==='yes';
+    var row=document.getElementById('mfindRow'); if(row) row.style.display=yes?'':'none';
+    var box=document.getElementById('mresults'); if(box && !yes) box.style.display='none';
+    var help=document.getElementById('mfindHelp');
+    if(yes && help){ help.textContent=val('agent')?'':'Enter your Partner ID (Your ID) above first, then search your merchants.'; help.style.color=val('agent')?'#94a3b8':'#dc2626'; }
+  };
+  window.onFind=function(){
+    if(document.getElementById('curmerch').value!=='yes') return;
+    var help=document.getElementById('mfindHelp'), box=document.getElementById('mresults');
+    if(!val('agent')){ if(help){ help.textContent='Enter your Partner ID (Your ID) above first, then search your merchants.'; help.style.color='#dc2626'; } return; }
+    if(help){ help.textContent=''; }
     if(midTimer)clearTimeout(midTimer);
     midTimer=setTimeout(function(){
-      var q=val('mid'), box=document.getElementById('mresults'); if(q.length<2){ box.style.display='none'; return; }
+      var q=val('msearch'); if(q.length<2){ box.style.display='none'; return; }
+      box.innerHTML='<div style="color:#94a3b8;padding:9px 16px;">Searching…</div>'; box.style.display='block';
       pos({action:'merchant_lookup',agent_id:val('agent'),q:q}).then(function(d){
-        var ms=(d.success&&d.merchants)||[]; if(!ms.length){ box.style.display='none'; return; }
-        window._ms=ms; box.innerHTML=ms.map(function(m,i){return '<div onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+'</div>';}).join(''); box.style.display='block';
-      });
+        var ms=(d.success&&d.merchants)||[];
+        if(!ms.length){ box.innerHTML='<div style="color:#94a3b8;padding:9px 16px;">No matching merchants under your Partner ID.</div>'; box.style.display='block'; return; }
+        window._ms=ms; box.innerHTML=ms.map(function(m,i){return '<div onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+(m.merchant_city?' · '+m.merchant_city:'')+'</div>';}).join(''); box.style.display='block';
+      }).catch(function(){ box.style.display='none'; });
     },350);
   };
   window.pickMerchant=function(i){
     var m=window._ms[i]; if(!m) return;
+    set('msearch',(m.dba_name||'')+(m.merchant_id?' · '+m.merchant_id:''));
     set('mid',m.merchant_id); set('dba',m.dba_name); set('street',m.street_address); set('city',m.city); set('state',m.state); set('zip',m.zip);
     set('mphone',m.phone); set('memail',m.email);
     if(m.contact){ var p=String(m.contact).split(' '); set('mfirst',p.shift()||''); set('mlast',p.join(' ')); }
     document.getElementById('mresults').style.display='none'; window._muuid=m.id;
   };
+  // Re-check the finder hint when the Partner ID changes.
+  agent.addEventListener('input', function(){ if(document.getElementById('curmerch').value==='yes') onCurMerch(); });
   window.uploadStatement=function(input){
     var f=input.files&&input.files[0]; if(!f) return; var el=document.getElementById('stmtState'); el.textContent='Uploading…';
     pos({action:'statement_upload_url',ext:(f.name.split('.').pop()||'pdf').toLowerCase()}).then(function(d){
