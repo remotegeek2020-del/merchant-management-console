@@ -308,15 +308,22 @@ export default async function handler(req, res) {
             try { formConfig = fc?.value ? JSON.parse(fc.value) : {}; } catch (e) { formConfig = {}; }
             try { const a = au?.value ? JSON.parse(au.value) : {}; automations = { portal: a.portal || [], highlevel: a.highlevel || [] }; } catch (e) { automations = { portal: [], highlevel: [] }; }
             const staffList = (staff || []).map(u => ({ userid: u.userid, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.userid }));
-            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig, automations, staff: staffList });
+            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', key_len: pit ? pit.length : 0, location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig, automations, staff: staffList });
         }
         if (action === 'set_pos_key') {
             if (!canSettings) return bad(res, 'No access.', 403);
             // Only overwrite the key when a new one is actually provided (blank = keep existing).
-            if (body.key && String(body.key).trim()) await setConfigValue('POS_GHL_PIT', String(body.key).trim(), session.userid);
+            let key_saved = false;
+            if (body.key && String(body.key).trim()) {
+                const okSave = await setConfigValue('POS_GHL_PIT', String(body.key).trim(), session.userid);
+                if (!okSave) return bad(res, 'Failed to store the token.');
+                key_saved = true;
+            }
             if ('location_id' in body) await supabase.from('app_settings').upsert({ key: 'pos_ghl_location_id', value: String(body.location_id || '').trim(), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             if ('webhook_url' in body) await supabase.from('app_settings').upsert({ key: 'pos_ghl_webhook_url', value: String(body.webhook_url || '').trim(), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
-            return ok(res, {});
+            // Read back what is now stored so the UI can confirm.
+            const pit = await getConfigValue('POS_GHL_PIT');
+            return ok(res, { key_saved, key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', key_len: pit ? pit.length : 0 });
         }
         if (action === 'form_config_set') {
             if (!canSettings) return bad(res, 'No access.', 403);

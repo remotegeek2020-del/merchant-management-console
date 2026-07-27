@@ -238,13 +238,13 @@ async function loadSettings(){
   if(!r.success){ box.innerHTML='<div class="empty" style="color:#9a3412;padding:50px;">🔒 '+esc(r.message||'No access to Settings.')+'</div>'; return; }
   window._pos=r;
   var conn='<div class="card"><h3>POS Express HighLevel connection</h3><div style="padding:16px 18px;">'
-    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Private Integration key '+(r.key_set?'<span style="color:#16a34a;">('+esc(r.key_masked)+')</span>':'<span style="color:#dc2626;">(not set)</span>')+'</div>'
-    +'<input id="pit" type="password" placeholder="Paste POS Express Private Integration token (leave blank to keep current)" style="width:100%;'+IN+'margin-bottom:10px;">'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Private Integration key '+(r.key_set?'<span style="color:#16a34a;">('+esc(r.key_masked)+' · '+(r.key_len||0)+' chars)</span>':'<span style="color:#dc2626;">(not set)</span>')+'</div>'
+    +'<input id="pit" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="pos_pit_'+Date.now()+'" data-lpignore="true" data-1p-ignore="true" placeholder="Paste POS Express Private Integration token (leave blank to keep current)" style="width:100%;'+IN+'margin-bottom:10px;">'
     +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Location ID</div>'
     +'<input id="loc" value="'+esc(r.location_id||'')+'" placeholder="POS Express sub-account location id" style="width:100%;'+IN+'margin-bottom:10px;">'
     +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Inbound webhook (good leads)</div>'
     +'<input id="wh" value="'+esc(r.webhook_url||'')+'" placeholder="https://services.leadconnectorhq.com/hooks/…" style="width:100%;'+IN+'margin-bottom:12px;">'
-    +'<button class="btn btn-o" onclick="saveConn(this)">Save connection</button> <span id="connmsg" style="font-size:12px;color:var(--muted);margin-left:8px;"></span></div></div>';
+    +'<button class="btn btn-o" onclick="saveConn(this)">Save connection</button> <button class="btn btn-n" onclick="testConn(this)">Test connection</button> <span id="connmsg" style="font-size:12px;color:var(--muted);margin-left:8px;"></span></div></div>';
   // Public lead form — shareable link + Webflow/embed code.
   var origin=location.origin;
   var formUrl=origin+'/poslead';
@@ -518,10 +518,24 @@ window.savePipeline=async function(btn){
   if(r.success){ Swal.fire({icon:'success',title:'Saved',timer:900,showConfirmButton:false}); loadSettings(); } else Swal.fire('Error',r.message||'','error');
 };
 window.saveConn=async function(btn){
-  var m=document.getElementById('connmsg'); btn.disabled=true;
-  var r=await api({action:'set_pos_key',key:document.getElementById('pit').value.trim(),location_id:document.getElementById('loc').value.trim(),webhook_url:document.getElementById('wh').value.trim()});
-  btn.disabled=false; m.textContent=r.success?'Saved ✓':(r.message||'Failed'); m.style.color=r.success?'#16a34a':'#dc2626';
-  if(r.success) loadSettings();
+  var m=document.getElementById('connmsg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
+  var typed=document.getElementById('pit').value.trim();
+  var r=await api({action:'set_pos_key',key:typed,location_id:document.getElementById('loc').value.trim(),webhook_url:document.getElementById('wh').value.trim()});
+  btn.disabled=false;
+  if(r&&r.success){
+    m.style.color='#16a34a';
+    m.textContent='Saved ✓ — key '+(r.key_set?(r.key_masked+' · '+r.key_len+' chars'):'not set')+(typed?(r.key_saved?' (new token stored)':' (⚠ token NOT stored)'):' (kept existing)');
+    // refresh stored view + reload workflows with the new token
+    if(window._pos){ window._pos.key_set=r.key_set; window._pos.key_masked=r.key_masked; window._pos.key_len=r.key_len; }
+    window._ghlMeta=null; loadSettings();
+  } else { m.style.color='#dc2626'; m.textContent=(r&&r.message)||'Failed'; }
+};
+window.testConn=async function(btn){
+  var m=document.getElementById('connmsg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Testing HighLevel…';
+  var r=await api({action:'ghl_meta'});
+  btn.disabled=false;
+  if(r&&r.success&&!r.wf_error){ m.style.color='#16a34a'; m.textContent='✓ Connected — '+((r.workflows||[]).length)+' workflows, '+((r.custom_fields||[]).length)+' custom fields'; window._ghlMeta=r; window._ghlMeta._loaded=true; }
+  else { m.style.color='#dc2626'; m.textContent='✗ '+((r&&(r.wf_error||r.message))||'Failed')+(r&&r.configured===false?' (set key + location first)':''); }
 };
 
 async function openLead(id){
