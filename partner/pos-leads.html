@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Express | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--teal:#0d9488;--teal-dark:#0f766e;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;}
+        .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;}
+        .sidebar-header{padding:20px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo{height:26px;filter:brightness(0) invert(1);display:block;margin-bottom:14px;}
+        .sidebar-partner{display:flex;align-items:center;gap:10px;}
+        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;}
+        .sidebar-name{font-size:12px;font-weight:700;color:#fff;}.sidebar-tag{font-size:10px;color:rgba(255,255,255,0.4);}
+        .sidebar-nav{flex:1;padding:12px;display:flex;flex-direction:column;gap:2px;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;}
+        .nav-item:hover{background:rgba(255,255,255,0.08);color:#fff;}.nav-item.active{background:var(--teal);color:#fff;}
+        .nav-item .material-icons{font-size:20px;flex-shrink:0;}.nav-divider{height:1px;background:rgba(255,255,255,0.08);margin:8px 0;}
+        .main{margin-left:240px;}
+        .topbar{background:#fff;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;}
+        .topbar-title{font-size:1.1rem;font-weight:800;margin:0;flex:1;}
+        .content{padding:24px;max-width:1000px;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:var(--teal);color:#fff;font-family:'DM Sans',sans-serif;text-decoration:none;}
+        .btn:hover{background:var(--teal-dark);}
+        .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+        .stat{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;}
+        .stat .n{font-size:26px;font-weight:800;}.stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.5px;}
+        .card{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+        .card h3{font-size:14px;font-weight:800;margin:0;padding:16px 18px;border-bottom:1px solid var(--border);}
+        table{width:100%;border-collapse:collapse;}
+        th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--muted);padding:10px 16px;background:var(--surface);font-weight:800;letter-spacing:.5px;}
+        td{padding:12px 16px;border-top:1px solid #f1f5f9;font-size:13px;}
+        .pill{font-size:10px;font-weight:800;border-radius:6px;padding:3px 9px;white-space:nowrap;}
+        .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;}
+        @media(max-width:820px){.sidebar{display:none;}.main{margin-left:0;}}
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner"><div class="sidebar-avatar" id="sidebarAvatar">?</div><div><div class="sidebar-name" id="sidebarName">Partner</div><div class="sidebar-tag">Partner Portal</div></div></div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item active" href="/partner/pos-leads"><span class="material-icons">point_of_sale</span> POS Express</a>
+        <a class="nav-item" href="/partner/sub-partners"><span class="material-icons">account_tree</span> Sub-Partners</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+</div>
+<div class="main">
+    <div class="topbar">
+        <h1 class="topbar-title">POS Express — My Leads</h1>
+        <a class="btn" href="/partner/pos-lead"><span class="material-icons" style="font-size:17px;">add</span> Submit a new lead</a>
+    </div>
+    <div class="content">
+        <div class="stats" id="stats"></div>
+        <div class="card">
+            <h3>Leads you've submitted</h3>
+            <div id="tableWrap"><div class="empty">Loading…</div></div>
+        </div>
+    </div>
+</div>
+<script>
+var TOKEN=localStorage.getItem('pp_partner_token')||'';
+if(!TOKEN){ location.href='/partner'; }
+(function(){ var n=localStorage.getItem('pp_partner_name')||'Partner'; document.getElementById('sidebarName').textContent=n; document.getElementById('sidebarAvatar').textContent=(n.trim()[0]||'?').toUpperCase(); })();
+function papi(b){ b.partner_token=TOKEN; return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function handleLogout(){ try{ localStorage.removeItem('pp_partner_token'); }catch(e){} location.href='/partner'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function money(n){ return n?('$'+Number(n).toLocaleString()):'—'; }
+function dt(s){ try{ return new Date(s).toLocaleDateString(); }catch(e){ return ''; } }
+// Partner-friendly status labels (aligned with POS Express stages, softened).
+function statusPill(st){
+  var map={ new:['In Review','#b45309','#fef3c7'], reviewing:['In Review','#b45309','#fef3c7'],
+    qualified:['Qualified','#166534','#dcfce7'], sent:['Sent to POS Express','#6d28d9','#ede9fe'],
+    rejected:['Not a fit','#64748b','#f1f5f9'] };
+  var m=map[st]||['Submitted','#475569','#f1f5f9'];
+  return '<span class="pill" style="color:'+m[1]+';background:'+m[2]+';">'+m[0]+'</span>';
+}
+(async function(){
+  var r=await papi({action:'my_pos_leads'});
+  var leads=(r&&r.success&&r.leads)||[];
+  // Stats
+  var c={total:leads.length,review:0,qualified:0,sent:0};
+  leads.forEach(function(l){ if(l.status==='new'||l.status==='reviewing')c.review++; else if(l.status==='qualified')c.qualified++; else if(l.status==='sent')c.sent++; });
+  document.getElementById('stats').innerHTML=
+    '<div class="stat"><div class="n">'+c.total+'</div><div class="l">Submitted</div></div>'+
+    '<div class="stat"><div class="n" style="color:#b45309;">'+c.review+'</div><div class="l">In Review</div></div>'+
+    '<div class="stat"><div class="n" style="color:#166534;">'+c.qualified+'</div><div class="l">Qualified</div></div>'+
+    '<div class="stat"><div class="n" style="color:#6d28d9;">'+c.sent+'</div><div class="l">Sent to POS Express</div></div>';
+  // Table
+  var wrap=document.getElementById('tableWrap');
+  if(!leads.length){ wrap.innerHTML='<div class="empty">You haven\'t submitted any POS Express leads yet.<br><a class="btn" style="margin-top:14px;" href="/partner/pos-lead"><span class="material-icons" style="font-size:17px;">add</span> Submit your first lead</a></div>'; return; }
+  var rows=leads.map(function(l){
+    var loc=[l.city,l.state].filter(Boolean).join(', ')||'—';
+    return '<tr><td><b>'+esc(l.business_name||'—')+'</b><div style="color:var(--muted);font-size:11px;">'+esc(l.contact_name||'')+'</div></td>'+
+      '<td>'+esc(loc)+'</td>'+
+      '<td>'+money(l.monthly_volume)+'</td>'+
+      '<td>'+(l.stage_name?esc(l.stage_name):'<span style="color:var(--muted);">—</span>')+'</td>'+
+      '<td>'+statusPill(l.status)+'</td>'+
+      '<td style="color:var(--muted);">'+dt(l.created_at)+'</td></tr>';
+  }).join('');
+  wrap.innerHTML='<table><thead><tr><th>Business</th><th>Location</th><th>Volume</th><th>Stage</th><th>Status</th><th>Submitted</th></tr></thead><tbody>'+rows+'</tbody></table>';
+})();
+</script>
+</body>
+</html>

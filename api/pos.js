@@ -266,6 +266,32 @@ export default async function handler(req, res) {
             return ok(res, { received: true });
         }
 
+        // ── PARTNER (portal): the leads THIS partner submitted (read-only) ──
+        if (action === 'my_pos_leads') {
+            const personId = await validatePartner(body.partner_token);
+            if (!personId) return bad(res, 'Not signed in', 401);
+            const ids = await partnerAgentIds(personId);
+            let q = supabase.from('pos_leads').select('*').order('created_at', { ascending: false }).limit(500);
+            const ors = [`partner_id.eq.${personId}`];
+            if (ids.length) ors.push(`agent_id.in.(${ids.map(i => `"${i}"`).join(',')})`);
+            q = q.or(ors.join(','));
+            const { data } = await q;
+            const rows = data || [];
+            const stageIds = [...new Set(rows.map(l => l.stage_id).filter(Boolean))];
+            const stageMap = {};
+            if (stageIds.length) {
+                const { data: st } = await supabase.from('pos_stages').select('id, name').in('id', stageIds);
+                (st || []).forEach(s => { stageMap[s.id] = s.name; });
+            }
+            const leads = rows.map(l => ({
+                id: l.id, business_name: l.business_name, contact_name: l.contact_name,
+                city: l.city, state: l.state, monthly_volume: l.monthly_volume,
+                status: l.status, stage_name: stageMap[l.stage_id] || null,
+                agent_id: l.agent_id, source: l.source, created_at: l.created_at
+            }));
+            return ok(res, { leads });
+        }
+
         // ── PARTNER (portal): list my agent ids + submit ──
         if (action === 'my_agent_ids' || action === 'submit_portal') {
             const personId = await validatePartner(body.partner_token);
