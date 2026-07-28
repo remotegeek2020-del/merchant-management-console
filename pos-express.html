@@ -131,7 +131,7 @@
 var TOKEN=localStorage.getItem('pp_session_token')||'';
 var LEADS=[], SEC='dashboard', PFILTER='', PIPES=[], CURPIPE='';
 var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['settings','Settings','settings']];
-var OPPVIEW='board', OPPQ='', OPPSORT='recent', OPPMIN=null, OPPMAX=null;
+var OPPVIEW='board', OPPQ='', OPPSORT='recent', OPPMIN=null, OPPMAX=null, OPPMODE='info';
 function api(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function money(n){ return n?('$'+Number(n).toLocaleString()):'—'; }
@@ -185,17 +185,22 @@ function dashboard(){
     '<div class="card"><h3>Recent submissions</h3><table><thead><tr><th>Business</th><th>Partner</th><th>Source</th><th>Status</th><th>Date</th></tr></thead><tbody>'+recent+'</tbody></table></div>';
 }
 function oppsView(){
+  var searchField = (OPPMODE==='volume')
+    ? '<input id="oppMin" value="'+(OPPMIN==null?'':OPPMIN)+'" type="number" inputmode="numeric" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="Min volume $" style="width:150px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
+        +'<input id="oppMax" value="'+(OPPMAX==null?'':OPPMAX)+'" type="number" inputmode="numeric" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="Max volume $" style="width:150px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
+    : '<div style="position:relative;flex:1;min-width:220px;">'
+        +'<span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:18px;">search</span>'
+        +'<input id="oppSearch" value="'+esc(OPPQ)+'" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="MID, opportunity, business, partner ID or name…" style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"></div>';
   var controls='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
-    +'<div style="position:relative;flex:1;min-width:220px;">'
-    +'<span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:18px;">search</span>'
-    +'<input id="oppSearch" value="'+esc(OPPQ)+'" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="MID, opportunity, business, partner ID or name…" style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"></div>'
-    +'<input id="oppMin" value="'+(OPPMIN==null?'':OPPMIN)+'" type="number" inputmode="numeric" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="Min volume $" style="width:130px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
-    +'<input id="oppMax" value="'+(OPPMAX==null?'':OPPMAX)+'" type="number" inputmode="numeric" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="Max volume $" style="width:130px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
+    +'<select onchange="setOppMode(this.value)" style="padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;font-weight:700;">'
+    +'<option value="info"'+(OPPMODE==='info'?' selected':'')+'>Search by: Info</option>'
+    +'<option value="volume"'+(OPPMODE==='volume'?' selected':'')+'>Search by: Volume range</option></select>'
+    +searchField
+    +'<button class="btn btn-o" onclick="applyOppSearch()"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">search</span> Search</button>'
+    +'<button class="btn btn-n" onclick="clearOppSearch()">Clear</button>'
     +'<select onchange="setOppSort(this.value)" style="padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
     +'<option value="recent"'+(OPPSORT==='recent'?' selected':'')+'>Sort: Newest</option>'
-    +'<option value="vol"'+(OPPSORT==='vol'?' selected':'')+'>Sort: Monthly volume (high → low)</option></select>'
-    +'<button class="btn btn-o" onclick="applyOppSearch()"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">search</span> Search</button>'
-    +'<button class="btn btn-n" onclick="clearOppSearch()">Clear</button></div>';
+    +'<option value="vol"'+(OPPSORT==='vol'?' selected':'')+'>Sort: Monthly volume (high → low)</option></select></div>';
   var toggle='<div class="tabs" style="margin-bottom:14px;">'
     +'<button class="tab '+(OPPVIEW==='board'?'on':'')+'" onclick="setOppView(\'board\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_kanban</span> Board</button>'
     +'<button class="tab '+(OPPVIEW==='list'?'on':'')+'" onclick="setOppView(\'list\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_list</span> List</button></div>';
@@ -221,11 +226,17 @@ function getOppLeads(){
   return arr;
 }
 function setOppView(v){ OPPVIEW=v; render(); }
+window.setOppMode=function(v){ OPPMODE=v; render(); };
 window.applyOppSearch=function(){
-  OPPQ=(document.getElementById('oppSearch')||{}).value||'';
-  var mn=(document.getElementById('oppMin')||{}).value; var mx=(document.getElementById('oppMax')||{}).value;
-  OPPMIN=(mn===''||mn==null)?null:Number(mn); OPPMAX=(mx===''||mx==null)?null:Number(mx);
-  if(OPPMIN!=null&&isNaN(OPPMIN))OPPMIN=null; if(OPPMAX!=null&&isNaN(OPPMAX))OPPMAX=null;
+  if(OPPMODE==='volume'){
+    OPPQ='';
+    var mn=(document.getElementById('oppMin')||{}).value; var mx=(document.getElementById('oppMax')||{}).value;
+    OPPMIN=(mn===''||mn==null)?null:Number(mn); OPPMAX=(mx===''||mx==null)?null:Number(mx);
+    if(OPPMIN!=null&&isNaN(OPPMIN))OPPMIN=null; if(OPPMAX!=null&&isNaN(OPPMAX))OPPMAX=null;
+  } else {
+    OPPMIN=null; OPPMAX=null;
+    OPPQ=(document.getElementById('oppSearch')||{}).value||'';
+  }
   renderOppBody();
 };
 window.clearOppSearch=function(){ OPPQ=''; OPPMIN=null; OPPMAX=null; render(); };
