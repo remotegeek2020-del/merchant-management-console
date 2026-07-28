@@ -384,6 +384,7 @@ export default async function handler(req, res) {
             }
             const leads = rows.map(l => ({
                 id: l.id, business_name: l.business_name, contact_name: l.contact_name,
+                email: l.email, phone: l.phone,
                 city: l.city, state: l.state, monthly_volume: l.monthly_volume,
                 status: l.status, stage_id: l.stage_id || null, stage_name: stageMap[l.stage_id] || null,
                 agent_id: l.agent_id, source: l.source, created_at: l.created_at, note_count: noteCount[l.id] || 0

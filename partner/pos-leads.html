@@ -176,6 +176,8 @@ function kbCard(l){
   return '<div class="kb-card" onclick="openLead(\''+l.id+'\')">'
     +'<div class="biz">'+esc(l.business_name||'—')+'</div>'
     +'<div class="kb-row"><span class="material-icons">place</span>'+(loc?esc(loc):'—')+'</div>'
+    +(l.email?'<div class="kb-row"><span class="material-icons">mail</span>'+esc(l.email)+'</div>':'')
+    +(l.phone?'<div class="kb-row"><span class="material-icons">call</span>'+esc(l.phone)+'</div>':'')
     +'<div class="kb-row"><span class="material-icons">payments</span>'+money(l.monthly_volume)+'</div>'
     +'<div class="kb-row" style="margin-top:7px;justify-content:space-between;">'+statusPill(l.status)+notes+'</div></div>';
 }

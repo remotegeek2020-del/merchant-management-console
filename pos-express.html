@@ -195,9 +195,16 @@ function oppsView(){
   var toggle='<div class="tabs" style="margin-bottom:14px;">'
     +'<button class="tab '+(OPPVIEW==='board'?'on':'')+'" onclick="setOppView(\'board\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_kanban</span> Board</button>'
     +'<button class="tab '+(OPPVIEW==='list'?'on':'')+'" onclick="setOppView(\'list\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_list</span> List</button></div>';
-  return controls+toggle+'<div id="oppBody"></div>';
+  return controls+'<div id="oppSummary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:#475569;"></div>'+toggle+'<div id="oppBody"></div>';
 }
-function renderOppBody(){ var el=document.getElementById('oppBody'); if(el) el.innerHTML=(OPPVIEW==='board'?kanbanHtml():oppsListHtml()); }
+function renderOppBody(){
+  var fl=getOppLeads();
+  var totVol=fl.reduce(function(s,l){return s+(Number(l.monthly_volume)||0);},0);
+  var sum=document.getElementById('oppSummary');
+  if(sum) sum.innerHTML='<span><b style="color:#0f172a;">'+fl.length+'</b> opportunit'+(fl.length===1?'y':'ies')+(OPPQ?' matched':'')+'</span>'
+    +'<span>Total monthly volume: <b style="color:#16a34a;">'+money(totVol)+'</b></span>';
+  var el=document.getElementById('oppBody'); if(el) el.innerHTML=(OPPVIEW==='board'?kanbanHtml():oppsListHtml());
+}
 function getOppLeads(){
   var q=(OPPQ||'').trim().toLowerCase();
   var arr=LEADS.filter(function(l){
