@@ -250,28 +250,66 @@ async function notifyMentions(mentions, ctx) {
 // ── Lead assignment (manual vs round-robin) ─────────────────────────────────
 async function getAssignment() {
     const { data } = await supabase.from('app_settings').select('value').eq('key', 'pos_assignment').maybeSingle();
-    try { const c = data?.value ? JSON.parse(data.value) : {}; return { mode: c.mode === 'round_robin' ? 'round_robin' : 'manual', pool: Array.isArray(c.pool) ? c.pool.map(String) : [], stage_id: c.stage_id || null, last_index: Number.isFinite(c.last_index) ? c.last_index : -1 }; }
-    catch (e) { return { mode: 'manual', pool: [], stage_id: null, last_index: -1 }; }
+    try {
+        const c = data?.value ? JSON.parse(data.value) : {};
+        const mode = (c.mode === 'round_robin' || c.mode === 'rules') ? c.mode : 'manual';
+        return {
+            mode,
+            pool: Array.isArray(c.pool) ? c.pool.map(String) : [],
+            stage_id: c.stage_id || null,
+            last_index: Number.isFinite(c.last_index) ? c.last_index : -1,
+            rules: Array.isArray(c.rules) ? c.rules : [],
+            default: c.default && typeof c.default === 'object' ? c.default : null
+        };
+    } catch (e) { return { mode: 'manual', pool: [], stage_id: null, last_index: -1, rules: [], default: null }; }
+}
+// Does a lead satisfy a routing rule's conditions? (empty condition = ignored)
+function matchRule(c, lead) {
+    if (!c) return true;
+    if (c.business_type && String(lead.business_type || '') !== c.business_type) return false;
+    if (c.proposal_type && String(lead.proposal_type || '') !== c.proposal_type) return false;
+    if (c.source && String(lead.source || '') !== c.source) return false;
+    if (c.state && String(lead.state || '').trim().toLowerCase() !== String(c.state).trim().toLowerCase()) return false;
+    if (c.is_current_merchant === 'yes' && !lead.is_current_merchant) return false;
+    if (c.is_current_merchant === 'no' && lead.is_current_merchant) return false;
+    const vol = Number(lead.monthly_volume) || 0;
+    if (c.vol_min != null && c.vol_min !== '' && vol < Number(c.vol_min)) return false;
+    if (c.vol_max != null && c.vol_max !== '' && vol > Number(c.vol_max)) return false;
+    return true;
 }
 // On a new submission, round-robin assign to the next POS user + move to the
 // configured stage, and notify the assignee. Best-effort; manual mode = no-op.
 async function autoAssignLead(lead) {
     try {
         const a = await getAssignment();
-        if (a.mode !== 'round_robin') return;
-        let pool = a.pool;
-        if (!pool.length) pool = (await posAccessStaff()).map(s => s.id); // default: everyone with access
+        if (a.mode !== 'round_robin' && a.mode !== 'rules') return;
+
+        // Determine the target { stage_id, pool } and a setter to persist its rotation index.
+        let target = null, saveIndex = null;
+        if (a.mode === 'round_robin') {
+            target = { stage_id: a.stage_id, pool: a.pool, last_index: a.last_index };
+            saveIndex = (idx) => { a.last_index = idx; };
+        } else { // rules
+            const rules = a.rules || [];
+            let mi = -1;
+            for (let i = 0; i < rules.length; i++) { if (rules[i] && rules[i].enabled !== false && matchRule(rules[i], lead)) { mi = i; break; } }
+            if (mi >= 0) { target = rules[mi]; saveIndex = (idx) => { rules[mi].last_index = idx; }; }
+            else if (a.default && a.default.stage_id) { target = a.default; saveIndex = (idx) => { a.default.last_index = idx; }; }
+            else return; // no rule matched and no default → leave unassigned
+        }
+        if (!target || !target.stage_id) return;
+
+        let pool = (target.pool && target.pool.length) ? target.pool : (await posAccessStaff()).map(s => s.id);
         if (!pool.length) return;
-        const idx = (a.last_index + 1) % pool.length;
+        const idx = ((Number.isFinite(target.last_index) ? target.last_index : -1) + 1) % pool.length;
         const userid = pool[idx];
         const patch = { assigned_to: userid };
-        if (a.stage_id) {
-            const { data: stage } = await supabase.from('pos_stages').select('id, pipeline_id').eq('id', a.stage_id).maybeSingle();
-            if (stage) { patch.stage_id = stage.id; patch.pipeline_id = stage.pipeline_id; }
-        }
+        const { data: stage } = await supabase.from('pos_stages').select('id, pipeline_id').eq('id', target.stage_id).maybeSingle();
+        if (stage) { patch.stage_id = stage.id; patch.pipeline_id = stage.pipeline_id; }
         await supabase.from('pos_leads').update(patch).eq('id', lead.id);
         Object.assign(lead, patch);
-        await supabase.from('app_settings').upsert({ key: 'pos_assignment', value: JSON.stringify({ ...a, last_index: idx }), updated_at: new Date().toISOString(), updated_by: 'system' }, { onConflict: 'key' });
+        saveIndex(idx);
+        await supabase.from('app_settings').upsert({ key: 'pos_assignment', value: JSON.stringify(a), updated_at: new Date().toISOString(), updated_by: 'system' }, { onConflict: 'key' });
         await notifyMentions([{ type: 'staff', id: userid }], { title: 'New POS lead assigned to you', body: lead.business_name || 'New lead', actorId: '', actorName: 'Auto-assign', leadId: lead.id });
     } catch (e) { /* never block submit */ }
 }
@@ -571,8 +609,23 @@ export default async function handler(req, res) {
         if (action === 'assignment_set') {
             if (!canSettings) return bad(res, 'No access.', 403);
             const a = body.assignment && typeof body.assignment === 'object' ? body.assignment : {};
-            const clean = { mode: a.mode === 'round_robin' ? 'round_robin' : 'manual', pool: Array.isArray(a.pool) ? a.pool.map(String) : [], stage_id: a.stage_id || null, last_index: -1 };
-            if (clean.mode === 'round_robin' && !clean.stage_id) return bad(res, 'Pick a stage to move new leads to when using round-robin.');
+            const mode = (a.mode === 'round_robin' || a.mode === 'rules') ? a.mode : 'manual';
+            const clean = { mode, pool: Array.isArray(a.pool) ? a.pool.map(String) : [], stage_id: a.stage_id || null, last_index: -1, rules: [], default: null };
+            if (mode === 'round_robin' && !clean.stage_id) return bad(res, 'Pick a stage to move new leads to when using round-robin.');
+            if (mode === 'rules') {
+                const rules = Array.isArray(a.rules) ? a.rules : [];
+                if (!rules.length) return bad(res, 'Add at least one routing rule.');
+                clean.rules = rules.map(r => ({
+                    id: r.id || ('r' + Math.random().toString(36).slice(2, 8)), name: String(r.name || '').slice(0, 80), enabled: r.enabled !== false,
+                    business_type: r.business_type || '', proposal_type: r.proposal_type || '', source: r.source || '',
+                    state: String(r.state || '').slice(0, 40), is_current_merchant: r.is_current_merchant || '',
+                    vol_min: (r.vol_min === '' || r.vol_min == null) ? null : Number(r.vol_min), vol_max: (r.vol_max === '' || r.vol_max == null) ? null : Number(r.vol_max),
+                    stage_id: r.stage_id || null, pool: Array.isArray(r.pool) ? r.pool.map(String) : [], last_index: -1
+                }));
+                for (const r of clean.rules) { if (!r.stage_id) return bad(res, 'Every rule needs a target stage (rule: ' + (r.name || 'unnamed') + ').'); }
+                const d = a.default && typeof a.default === 'object' ? a.default : null;
+                clean.default = (d && d.stage_id) ? { stage_id: d.stage_id, pool: Array.isArray(d.pool) ? d.pool.map(String) : [], last_index: -1 } : null;
+            }
             await supabase.from('app_settings').upsert({ key: 'pos_assignment', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
         }

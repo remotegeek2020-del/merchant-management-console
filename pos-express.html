@@ -364,7 +364,8 @@ async function loadSettings(){
   var a=(window._pos&&window._pos.automations)||{};
   AUTO={ portal:(a.portal||[]).slice(), highlevel:[] };
   renderAutomations();
-  ASG=(window._pos&&window._pos.assignment)||{mode:'manual',pool:[],stage_id:null};
+  var _asg=(window._pos&&window._pos.assignment)||{};
+  ASG={mode:_asg.mode||'manual',pool:_asg.pool||[],stage_id:_asg.stage_id||null,rules:_asg.rules||[],default:_asg.default||null};
   renderAssignment();
   // Load live HighLevel workflows + custom fields for the Send-to-workflow action.
   api({action:'ghl_meta'}).then(function(m){ window._ghlMeta=(m&&m.success)?m:{configured:false,workflows:[],custom_fields:[],wf_error:(m&&m.message)||'Request failed'}; window._ghlMeta._loaded=true; if(SEC==='settings') renderAutomations(); }).catch(function(e){ window._ghlMeta={configured:false,workflows:[],custom_fields:[],_loaded:true,wf_error:String(e)}; if(SEC==='settings') renderAutomations(); });
@@ -585,39 +586,93 @@ window.saveAutomations=async function(btn){
 };
 
 /* ── Lead Assignment ── */
-var ASG={mode:'manual',pool:[],stage_id:null};
+var ASG={mode:'manual',pool:[],stage_id:null,rules:[],default:null};
+var ASG_BT=['Restaurant - Table Service','Restaurant - Quick Service','Retail','Other'];
+var ASG_PT=['Purchase Only','Purchase and Placement','Placement Only'];
+function asgPoolChecks(cls,pool){
+  var st=(window._pos&&window._pos.assign_staff)||[];
+  if(!st.length) return '<div class="muted" style="font-size:12px;">No POS Express users found.</div>';
+  return st.map(function(u){ var checked=(!pool||!pool.length)?true:pool.indexOf(u.id)!==-1; return '<label class="fd-toggle" style="display:inline-block;margin:0 12px 6px 0;font-size:13px;"><input type="checkbox" class="'+cls+'" value="'+esc(u.id)+'" '+(checked?'checked':'')+'> '+esc(u.name)+'</label>'; }).join('');
+}
+function selOpts(list,sel,anyLabel){ return '<option value="">'+(anyLabel||'Any')+'</option>'+list.map(function(o){var v=o[0]!==undefined?o[0]:o,l=o[1]!==undefined?o[1]:o;return '<option value="'+esc(v)+'"'+(sel===v?' selected':'')+'>'+esc(l)+'</option>';}).join(''); }
+function ruleEditor(r,i){
+  var COND='padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;font-family:inherit;';
+  return '<div class="rule" data-ri="'+i+'" data-id="'+esc(r.id||'')+'" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#fffdf9;">'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">'
+    +'<input class="r-name" value="'+esc(r.name||'')+'" placeholder="Rule name (e.g. Restaurants)" style="flex:1;font-weight:700;'+COND+'">'
+    +'<label class="fd-toggle" style="font-size:12px;"><input type="checkbox" class="r-en" '+(r.enabled!==false?'checked':'')+'> on</label>'
+    +'<span class="material-icons" style="color:var(--red);cursor:pointer;" title="Delete rule" onclick="asgDelRule('+i+')">delete</span></div>'
+    +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin-bottom:6px;">If lead matches ALL of these (blank = any)</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +'<select class="r-bt" style="'+COND+'">'+selOpts(ASG_BT,r.business_type,'Any business type')+'</select>'
+    +'<select class="r-pt" style="'+COND+'">'+selOpts(ASG_PT,r.proposal_type,'Any proposal type')+'</select>'
+    +'<select class="r-src" style="'+COND+'">'+selOpts([['public','Public form'],['portal','Partner portal']],r.source,'Any source')+'</select>'
+    +'<select class="r-cm" style="'+COND+'">'+selOpts([['yes','Current merchant: Yes'],['no','Current merchant: No']],r.is_current_merchant,'Any (current merchant)')+'</select>'
+    +'<input class="r-state" value="'+esc(r.state||'')+'" placeholder="State (e.g. FL)" style="width:110px;'+COND+'">'
+    +'<input class="r-vmin" type="number" value="'+(r.vol_min==null?'':r.vol_min)+'" placeholder="Min vol $" style="width:110px;'+COND+'">'
+    +'<input class="r-vmax" type="number" value="'+(r.vol_max==null?'':r.vol_max)+'" placeholder="Max vol $" style="width:110px;'+COND+'">'
+    +'</div>'
+    +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin:12px 0 6px;">→ Move to stage &amp; round-robin among</div>'
+    +'<select class="r-stage" style="'+COND+'width:100%;max-width:360px;margin-bottom:8px;">'+stageOptions(r.stage_id)+'</select>'
+    +'<div>'+asgPoolChecks('r-pool',r.pool)+'</div></div>';
+}
 function renderAssignment(){
   var el=document.getElementById('assignBody'); if(!el) return;
-  var st=(window._pos&&window._pos.assign_staff)||[];
   var mode=ASG.mode||'manual';
   var h='<div class="muted" style="font-size:12px;margin-bottom:12px;">Choose how brand-new (unassigned) leads are handled the moment they come in.</div>'
     +'<label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Assignment mode</label>'
-    +'<select onchange="asgMode(this.value)" style="'+IN+'width:100%;max-width:360px;font-weight:700;">'
+    +'<select onchange="asgMode(this.value)" style="'+IN+'width:100%;max-width:420px;font-weight:700;">'
     +'<option value="manual"'+(mode==='manual'?' selected':'')+'>Manual — staff assign leads themselves</option>'
-    +'<option value="round_robin"'+(mode==='round_robin'?' selected':'')+'>Automatic — round-robin to POS Express users</option></select>';
+    +'<option value="round_robin"'+(mode==='round_robin'?' selected':'')+'>Automatic — round-robin to one stage</option>'
+    +'<option value="rules"'+(mode==='rules'?' selected':'')+'>Smart routing rules — route by lead details</option></select>';
   if(mode==='round_robin'){
     h+='<div style="margin-top:16px;"><label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Move new leads to stage</label>'
       +'<select id="asgStage" style="'+IN+'width:100%;max-width:360px;">'+stageOptions(ASG.stage_id)+'</select></div>';
     h+='<div style="margin-top:16px;"><label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Round-robin pool</label>'
-      +'<div class="muted" style="font-size:11px;margin-bottom:8px;">Leads rotate evenly among the checked users. Leave all checked to include everyone with POS Express access.</div>';
-    h+=(st.length?st.map(function(u){ var checked=(!ASG.pool||!ASG.pool.length)?true:ASG.pool.indexOf(u.id)!==-1; return '<label class="fd-toggle" style="display:block;margin-bottom:6px;font-size:13px;"><input type="checkbox" class="asg-user" value="'+esc(u.id)+'" '+(checked?'checked':'')+'> '+esc(u.name)+'</label>'; }).join(''):'<div class="muted" style="font-size:12px;">No POS Express users found.</div>');
-    h+='</div>';
+      +'<div class="muted" style="font-size:11px;margin-bottom:8px;">Leads rotate evenly among the checked users.</div>'+asgPoolChecks('asg-user',ASG.pool)+'</div>';
+  } else if(mode==='rules'){
+    h+='<div class="muted" style="font-size:12px;margin:14px 0 10px;">Rules are checked top-to-bottom; the <b>first match</b> wins. Each rule picks the pipeline + stage (via the stage) and round-robins among its own users.</div>';
+    h+='<div id="asgRules">'+((ASG.rules||[]).map(ruleEditor).join(''))+'</div>';
+    h+='<button class="btn btn-n" style="padding:6px 12px;" onclick="asgAddRule()">+ Add rule</button>';
+    h+='<div style="margin-top:18px;border-top:1px dashed var(--border);padding-top:14px;"><label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Default — when no rule matches <span style="font-weight:600;text-transform:none;color:#94a3b8;">(optional; blank = leave unassigned)</span></label>'
+      +'<select id="asgDefStage" style="'+IN+'width:100%;max-width:360px;margin-bottom:8px;">'+stageOptions(ASG.default&&ASG.default.stage_id)+'</select>'
+      +'<div>'+asgPoolChecks('asg-defpool',ASG.default&&ASG.default.pool)+'</div></div>';
   }
   h+='<div style="margin-top:16px;"><button class="btn btn-o" onclick="saveAssignment(this)">Save assignment</button></div>';
   el.innerHTML=h;
 }
-window.asgMode=function(v){ ASG.mode=v; renderAssignment(); };
+function syncRulesFromDOM(){
+  ASG.rules=Array.prototype.map.call(document.querySelectorAll('#asgRules .rule'),function(el){
+    return { id:el.getAttribute('data-id')||undefined, name:el.querySelector('.r-name').value.trim(), enabled:el.querySelector('.r-en').checked,
+      business_type:el.querySelector('.r-bt').value, proposal_type:el.querySelector('.r-pt').value, source:el.querySelector('.r-src').value,
+      is_current_merchant:el.querySelector('.r-cm').value, state:el.querySelector('.r-state').value.trim(),
+      vol_min:el.querySelector('.r-vmin').value, vol_max:el.querySelector('.r-vmax').value,
+      stage_id:el.querySelector('.r-stage').value||null, pool:Array.prototype.map.call(el.querySelectorAll('.r-pool:checked'),function(c){return c.value;}) };
+  });
+  var ds=document.getElementById('asgDefStage');
+  if(ds) ASG.default = ds.value ? { stage_id:ds.value, pool:Array.prototype.map.call(document.querySelectorAll('.asg-defpool:checked'),function(c){return c.value;}) } : null;
+}
+window.asgMode=function(v){ if(ASG.mode==='rules') syncRulesFromDOM(); ASG.mode=v; renderAssignment(); };
+window.asgAddRule=function(){ syncRulesFromDOM(); ASG.rules=ASG.rules||[]; ASG.rules.push({name:'',enabled:true,pool:[]}); renderAssignment(); };
+window.asgDelRule=function(i){ syncRulesFromDOM(); ASG.rules.splice(i,1); renderAssignment(); };
 window.saveAssignment=async function(btn){
-  var stageEl=document.getElementById('asgStage');
-  var pool=Array.prototype.map.call(document.querySelectorAll('.asg-user:checked'),function(c){return c.value;});
-  var stageId=(ASG.mode==='round_robin'&&stageEl)?(stageEl.value||null):null;
-  if(ASG.mode==='round_robin'&&!stageId){ Swal.fire({icon:'warning',title:'Pick a stage',text:'Choose which stage new leads move to when using round-robin.',confirmButtonColor:'#ea580c'}); return; }
-  if(ASG.mode==='round_robin'&&!pool.length){ Swal.fire({icon:'warning',title:'Pick at least one user',text:'Select who should receive round-robin leads.',confirmButtonColor:'#ea580c'}); return; }
-  var payload={ mode:ASG.mode, stage_id:stageId, pool:(ASG.mode==='round_robin')?pool:[] };
+  var payload;
+  if(ASG.mode==='round_robin'){
+    var stageEl=document.getElementById('asgStage');
+    var pool=Array.prototype.map.call(document.querySelectorAll('.asg-user:checked'),function(c){return c.value;});
+    if(!stageEl||!stageEl.value){ Swal.fire({icon:'warning',title:'Pick a stage',confirmButtonColor:'#ea580c'}); return; }
+    if(!pool.length){ Swal.fire({icon:'warning',title:'Pick at least one user',confirmButtonColor:'#ea580c'}); return; }
+    payload={ mode:'round_robin', stage_id:stageEl.value, pool:pool };
+  } else if(ASG.mode==='rules'){
+    syncRulesFromDOM();
+    if(!ASG.rules.length){ Swal.fire({icon:'warning',title:'Add at least one rule',confirmButtonColor:'#ea580c'}); return; }
+    for(var i=0;i<ASG.rules.length;i++){ if(!ASG.rules[i].stage_id){ Swal.fire({icon:'warning',title:'Every rule needs a target stage',text:'Rule "'+(ASG.rules[i].name||('#'+(i+1)))+'" has no stage.',confirmButtonColor:'#ea580c'}); return; } }
+    payload={ mode:'rules', rules:ASG.rules, default:ASG.default };
+  } else { payload={ mode:'manual' }; }
   btn.disabled=true; var t=btn.textContent; btn.textContent='Saving…';
   var r=await api({action:'assignment_set',assignment:payload});
   btn.disabled=false; btn.textContent=t;
-  if(r&&r.success){ ASG={mode:payload.mode,pool:payload.pool,stage_id:payload.stage_id}; if(window._pos) window._pos.assignment=ASG; Swal.fire({icon:'success',title:'Assignment saved',timer:1100,showConfirmButton:false}); }
+  if(r&&r.success){ if(window._pos) window._pos.assignment=payload; Swal.fire({icon:'success',title:'Assignment saved',timer:1100,showConfirmButton:false}); }
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');
 };
 function pipelineEditor(p){
