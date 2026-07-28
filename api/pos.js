@@ -572,6 +572,7 @@ export default async function handler(req, res) {
             if (!canSettings) return bad(res, 'No access.', 403);
             const a = body.assignment && typeof body.assignment === 'object' ? body.assignment : {};
             const clean = { mode: a.mode === 'round_robin' ? 'round_robin' : 'manual', pool: Array.isArray(a.pool) ? a.pool.map(String) : [], stage_id: a.stage_id || null, last_index: -1 };
+            if (clean.mode === 'round_robin' && !clean.stage_id) return bad(res, 'Pick a stage to move new leads to when using round-robin.');
             await supabase.from('app_settings').upsert({ key: 'pos_assignment', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
         }

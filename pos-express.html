@@ -610,7 +610,10 @@ window.asgMode=function(v){ ASG.mode=v; renderAssignment(); };
 window.saveAssignment=async function(btn){
   var stageEl=document.getElementById('asgStage');
   var pool=Array.prototype.map.call(document.querySelectorAll('.asg-user:checked'),function(c){return c.value;});
-  var payload={ mode:ASG.mode, stage_id:(ASG.mode==='round_robin'&&stageEl)?(stageEl.value||null):null, pool:(ASG.mode==='round_robin')?pool:[] };
+  var stageId=(ASG.mode==='round_robin'&&stageEl)?(stageEl.value||null):null;
+  if(ASG.mode==='round_robin'&&!stageId){ Swal.fire({icon:'warning',title:'Pick a stage',text:'Choose which stage new leads move to when using round-robin.',confirmButtonColor:'#ea580c'}); return; }
+  if(ASG.mode==='round_robin'&&!pool.length){ Swal.fire({icon:'warning',title:'Pick at least one user',text:'Select who should receive round-robin leads.',confirmButtonColor:'#ea580c'}); return; }
+  var payload={ mode:ASG.mode, stage_id:stageId, pool:(ASG.mode==='round_robin')?pool:[] };
   btn.disabled=true; var t=btn.textContent; btn.textContent='Saving…';
   var r=await api({action:'assignment_set',assignment:payload});
   btn.disabled=false; btn.textContent=t;
