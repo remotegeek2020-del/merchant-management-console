@@ -80,6 +80,9 @@
   .pnote-h{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
   .pnote-badge{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:5px;}
   .pnote-body{font-size:13px;line-height:1.5;white-space:pre-wrap;}
+  .tag-sug{position:absolute;left:0;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.18);z-index:100000;max-height:200px;overflow:auto;display:none;text-align:left;}
+  .tag-sug-item{padding:8px 12px;font-size:13px;cursor:pointer;font-weight:600;color:#334155;}
+  .tag-sug-item:hover{background:#fff7ed;}
   /* Form Designer */
   .fd-overlay{position:fixed;inset:0;background:#0f172a;z-index:1000;display:flex;flex-direction:column;}
   .fd-top{background:#1e293b;color:#fff;padding:12px 18px;display:flex;align-items:center;gap:12px;}
@@ -128,7 +131,7 @@
 var TOKEN=localStorage.getItem('pp_session_token')||'';
 var LEADS=[], SEC='dashboard', PFILTER='', PIPES=[], CURPIPE='';
 var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['settings','Settings','settings']];
-var OPPVIEW='board';
+var OPPVIEW='board', OPPQ='', OPPSORT='recent';
 function api(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function money(n){ return n?('$'+Number(n).toLocaleString()):'—'; }
@@ -156,7 +159,7 @@ function render(){
   var c=document.getElementById('content');
   c.style.maxWidth=(SEC==='opps'&&OPPVIEW==='board')?'none':'1160px';
   if(SEC==='dashboard') c.innerHTML=dashboard();
-  else if(SEC==='opps') c.innerHTML=oppsView();
+  else if(SEC==='opps'){ c.innerHTML=oppsView(); renderOppBody(); }
   else if(SEC==='merchants') c.innerHTML=merchantsView();
   else if(SEC==='partners') c.innerHTML=partnersView();
   else if(SEC==='settings'){ c.innerHTML=settingsView(); loadSettings(); }
@@ -182,15 +185,35 @@ function dashboard(){
     '<div class="card"><h3>Recent submissions</h3><table><thead><tr><th>Business</th><th>Partner</th><th>Source</th><th>Status</th><th>Date</th></tr></thead><tbody>'+recent+'</tbody></table></div>';
 }
 function oppsView(){
+  var controls='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
+    +'<div style="position:relative;flex:1;min-width:240px;">'
+    +'<span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:18px;">search</span>'
+    +'<input id="oppSearch" value="'+esc(OPPQ)+'" oninput="setOppQ(this.value)" placeholder="Search MID, opportunity, business, partner ID or name…" style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"></div>'
+    +'<select onchange="setOppSort(this.value)" style="padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
+    +'<option value="recent"'+(OPPSORT==='recent'?' selected':'')+'>Sort: Newest</option>'
+    +'<option value="vol"'+(OPPSORT==='vol'?' selected':'')+'>Sort: Monthly volume (high → low)</option></select></div>';
   var toggle='<div class="tabs" style="margin-bottom:14px;">'
     +'<button class="tab '+(OPPVIEW==='board'?'on':'')+'" onclick="setOppView(\'board\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_kanban</span> Board</button>'
     +'<button class="tab '+(OPPVIEW==='list'?'on':'')+'" onclick="setOppView(\'list\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_list</span> List</button></div>';
-  return toggle+(OPPVIEW==='board'?kanbanHtml():oppsListHtml());
+  return controls+toggle+'<div id="oppBody"></div>';
+}
+function renderOppBody(){ var el=document.getElementById('oppBody'); if(el) el.innerHTML=(OPPVIEW==='board'?kanbanHtml():oppsListHtml()); }
+function getOppLeads(){
+  var q=(OPPQ||'').trim().toLowerCase();
+  var arr=LEADS.filter(function(l){
+    if(!q) return true;
+    return [l.business_name,l.merchant_legal_name,l.mid,l.agent_id,l.partner_name].some(function(v){ return v&&String(v).toLowerCase().indexOf(q)!==-1; });
+  });
+  if(OPPSORT==='vol') arr=arr.slice().sort(function(a,b){ return (Number(b.monthly_volume)||0)-(Number(a.monthly_volume)||0); });
+  return arr;
 }
 function setOppView(v){ OPPVIEW=v; render(); }
+function setOppQ(v){ OPPQ=v; renderOppBody(); }
+function setOppSort(v){ OPPSORT=v; renderOppBody(); }
 function oppsListHtml(){
   var tabs=[['','All'],['new','New'],['reviewing','Reviewing'],['qualified','Qualified'],['rejected','Rejected'],['sent','Sent']];
-  var list=PFILTER?LEADS.filter(function(l){return l.status===PFILTER;}):LEADS;
+  var base=getOppLeads();
+  var list=PFILTER?base.filter(function(l){return l.status===PFILTER;}):base;
   var rows=list.map(function(l){return '<tr class="click" onclick="openLead(\''+l.id+'\')"><td><b>'+esc(l.business_name||'—')+'</b><div class="muted" style="font-size:11px;">'+esc(l.contact_name||'')+'</div></td><td>'+esc(l.partner_name||'—')+' <span class="muted" style="font-size:11px;">'+esc(l.agent_id||'')+'</span></td><td>'+money(l.monthly_volume)+'</td><td>'+esc(l.source)+'</td><td>'+stPill(l.status)+'</td></tr>';}).join('')||'<tr><td colspan="5" class="empty">No leads.</td></tr>';
   return '<div class="tabs">'+tabs.map(function(t){return '<button class="tab '+(PFILTER===t[0]?'on':'')+'" onclick="setPF(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div>'
     +'<div class="card"><table><thead><tr><th>Business</th><th>Partner</th><th>Volume</th><th>Source</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
@@ -219,7 +242,8 @@ function kanbanHtml(){
   var stages=(pipe.stages||[]).slice().sort(function(a,b){return (a.sort_order||0)-(b.sort_order||0);});
   var stageIds={}; stages.forEach(function(s){stageIds[s.id]=true;});
   // Leads not yet placed in any stage of THIS pipeline land in an "Unassigned" column.
-  function leadsIn(sid){ return LEADS.filter(function(l){ if(sid==='__none__') return !l.stage_id || !stageIds[l.stage_id]; return l.stage_id===sid; }); }
+  var FL=getOppLeads();
+  function leadsIn(sid){ return FL.filter(function(l){ if(sid==='__none__') return !l.stage_id || !stageIds[l.stage_id]; return l.stage_id===sid; }); }
   var selector = PIPES.length>1 ? '<select onchange="setPipe(this.value)" style="'+IN+'font-weight:700;margin-bottom:14px;">'+PIPES.map(function(p){return '<option value="'+p.id+'"'+(p.id===pipe.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('')+'</select>' : '<div style="font-weight:800;font-size:14px;margin-bottom:14px;">'+esc(pipe.name)+'</div>';
   var cols=[{id:'__none__',name:'Unassigned',workflow_url:''}].concat(stages);
   var board=cols.map(function(s){
@@ -237,6 +261,8 @@ function kbCard(l){
   return '<div class="kb-card" draggable="true" data-id="'+l.id+'" ondragstart="kbStart(event,this)" ondragend="this.classList.remove(\'drag\')" onclick="openLead(\''+l.id+'\')">'
     +'<div class="biz">'+esc(l.business_name||'—')+'</div>'
     +'<div class="row"><span class="material-icons">handshake</span>'+esc(l.partner_name||'—')+valid+'</div>'
+    +(l.email?'<div class="row"><span class="material-icons">mail</span>'+esc(l.email)+'</div>':'')
+    +(l.phone?'<div class="row"><span class="material-icons">call</span>'+esc(l.phone)+'</div>':'')
     +'<div class="row"><span class="material-icons">payments</span><span class="vol">'+money(l.monthly_volume)+'</span></div>'
     +'<div class="row"><span class="material-icons">'+(l.source==='public'?'public':'badge')+'</span>'+esc(l.source||'—')+'&nbsp;·&nbsp;'+stPill(l.status)+'</div></div>';
 }
@@ -596,9 +622,8 @@ async function openLead(id){
         '<label style="display:block;font-size:12px;font-weight:700;margin:0 0 4px;">Conversation with partner</label>'+
         '<div style="font-size:12px;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:7px 10px;margin-bottom:10px;">💬 Shared with the partner — they can see and reply here.</div>'+
         '<div id="posNotesList" style="font-size:13px;color:#94a3b8;">Loading…</div>'+
-        '<textarea id="posNoteInput" class="swal2-textarea" style="margin:8px 0 0;width:100%;" placeholder="Message the partner…"></textarea>'+
-        '<div style="font-size:11px;font-weight:700;margin:8px 0 6px;">Tag people (they get notified)</div>'+
-        '<div id="posTagChips" style="margin-bottom:8px;"><span style="color:#94a3b8;font-size:12px;">Loading…</span></div>'+
+        '<div style="position:relative;"><textarea id="posNoteInput" class="swal2-textarea" style="margin:8px 0 0;width:100%;" placeholder="Message the partner… type @ to tag"></textarea><div class="tag-sug" id="posTagSug"></div></div>'+
+        '<div style="font-size:11px;color:#94a3b8;margin:6px 0 8px;">Type <b>@</b> to tag a teammate or the partner — they’ll be notified.</div>'+
         '<button id="posNoteAdd" class="btn btn-n" style="padding:8px 14px;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">send</span> Add note</button>'+
       '</div></div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#ea580c',
@@ -608,28 +633,42 @@ async function openLead(id){
     didOpen:function(){
       var sb=document.getElementById('pl-send'); if(sb) sb.addEventListener('click',async function(){ sb.disabled=true; sb.textContent='Sending…'; var s=await api({action:'send_to_ghl',id:l.id}); if(s.success){ Swal.close(); Swal.fire({icon:'success',title:'Sent to POS Express',timer:1300,showConfirmButton:false}); load(); } else { Swal.showValidationMessage(s.message||'Send failed'); sb.disabled=false; sb.textContent='✅ Mark good & send to POS Express'; } });
       var tb=document.getElementById('pl-test'); if(tb) tb.addEventListener('click',function(){ testHlSend(l.id); });
-      _staffMentions=[]; loadStaffNotes(l.id); loadStaffTaggable(l.id);
+      _staffMentions.length=0; loadStaffNotes(l.id); loadStaffTaggable(l.id);
+      setupMention('posNoteInput','posTagSug',function(){return _staffTaggable;},_staffMentions);
       var na=document.getElementById('posNoteAdd'); if(na) na.addEventListener('click',function(){ addStaffNote(l.id); });
     },
     preConfirm:function(){ return {classification:document.getElementById('pl-class').value,status:document.getElementById('pl-status').value,review_notes:document.getElementById('pl-notes').value}; }
   });
   if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes}); load(); }
 }
-/* ── Staff shared notes + tagging ── */
+/* ── Staff shared notes + @-mention tagging ── */
 var _staffTaggable=[], _staffMentions=[];
-async function loadStaffTaggable(id){ var r=await api({action:'pos_taggable',lead_id:id}); _staffTaggable=(r&&r.success&&r.people)||[]; renderStaffTags(); }
-function renderStaffTags(){
-  var el=document.getElementById('posTagChips'); if(!el) return;
-  if(!_staffTaggable.length){ el.innerHTML='<span style="color:#94a3b8;font-size:12px;">No one to tag.</span>'; return; }
-  el.innerHTML=_staffTaggable.map(function(p){
-    var on=_staffMentions.some(function(m){return m.id===p.id&&m.type===p.type;});
-    return '<span class="ptag'+(on?' on':'')+'" onclick="toggleStaffTag(\''+p.type+'\',\''+esc(p.id)+'\',this)" data-name="'+esc(p.name)+'">＠ '+esc(p.name)+'</span>';
-  }).join('');
+async function loadStaffTaggable(id){ var r=await api({action:'pos_taggable',lead_id:id}); _staffTaggable=(r&&r.success&&r.people)||[]; }
+// Reusable @-mention typeahead: type "@" then a name to pick who to tag.
+function setupMention(taId,sugId,getPeople,mentions){
+  var ta=document.getElementById(taId), sug=document.getElementById(sugId); if(!ta||!sug) return;
+  function hide(){ sug.style.display='none'; }
+  ta.addEventListener('input',function(){
+    var pos=ta.selectionStart, before=ta.value.slice(0,pos);
+    var m=before.match(/(^|\s)@([^@\n]*)$/);
+    if(!m){ hide(); return; }
+    var q=m[2].toLowerCase();
+    var people=(getPeople()||[]).filter(function(p){return p.name.toLowerCase().indexOf(q)!==-1;}).slice(0,8);
+    if(!people.length){ hide(); return; }
+    sug.innerHTML=people.map(function(p){return '<div class="tag-sug-item" data-type="'+p.type+'" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">＠ '+esc(p.name)+(p.type==='partner'?' · partner':'')+'</div>';}).join('');
+    sug.style.display='block';
+  });
+  sug.addEventListener('mousedown',function(e){
+    var it=e.target.closest('.tag-sug-item'); if(!it) return; e.preventDefault();
+    var name=it.getAttribute('data-name'), id=it.getAttribute('data-id'), type=it.getAttribute('data-type');
+    var pos=ta.selectionStart, before=ta.value.slice(0,pos), after=ta.value.slice(pos);
+    before=before.replace(/(^|\s)@([^@\n]*)$/,function(_m,pre){return pre+'@'+name+' ';});
+    ta.value=before+after;
+    if(!mentions.some(function(x){return x.id===id&&x.type===type;})) mentions.push({type:type,id:id,name:name});
+    hide(); ta.focus(); try{ ta.selectionStart=ta.selectionEnd=before.length; }catch(x){}
+  });
+  ta.addEventListener('blur',function(){ setTimeout(hide,150); });
 }
-window.toggleStaffTag=function(type,id,el){
-  var i=_staffMentions.findIndex(function(m){return m.id===id&&m.type===type;});
-  if(i>=0){ _staffMentions.splice(i,1); el.classList.remove('on'); } else { _staffMentions.push({type:type,id:id,name:el.getAttribute('data-name')}); el.classList.add('on'); }
-};
 async function loadStaffNotes(id){ var r=await api({action:'lead_notes_get',lead_id:id}); renderStaffNotes((r&&r.success&&r.notes)||[]); }
 function renderStaffNotes(notes){
   var el=document.getElementById('posNotesList'); if(!el) return;
@@ -646,7 +685,7 @@ async function addStaffNote(id){
   var btn=document.getElementById('posNoteAdd'); btn.disabled=true; btn.textContent='Saving…';
   var r=await api({action:'lead_note_add',lead_id:id,body:body,mentions:_staffMentions});
   btn.disabled=false; btn.innerHTML='<span class="material-icons" style="font-size:16px;vertical-align:-3px;">send</span> Add note';
-  if(r&&r.success){ ta.value=''; _staffMentions=[]; renderStaffTags(); renderStaffNotes(r.notes||[]); } else Swal.showValidationMessage((r&&r.message)||'Could not add note');
+  if(r&&r.success){ ta.value=''; _staffMentions.length=0; renderStaffNotes(r.notes||[]); } else Swal.showValidationMessage((r&&r.message)||'Could not add note');
 }
 /* ── Bell notifications (staff) ── */
 function toggleBell(e){ if(e) e.stopPropagation(); var p=document.getElementById('bellPanel'); p.style.display=(p.style.display==='block')?'none':'block'; if(p.style.display==='block') loadBell(); }

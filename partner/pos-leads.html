@@ -93,6 +93,9 @@
         .tag.on{background:var(--teal);border-color:var(--teal);color:#fff;}
         .note-mentions{margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;}
         .mchip{font-size:10.5px;font-weight:700;color:var(--teal-dark);background:#ccfbf1;border-radius:6px;padding:2px 7px;}
+        .tag-sug{position:absolute;left:0;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.18);z-index:10001;max-height:200px;overflow:auto;display:none;}
+        .tag-sug-item{padding:8px 12px;font-size:13px;cursor:pointer;font-weight:600;color:var(--text);}
+        .tag-sug-item:hover{background:var(--surface);}
         @media(max-width:820px){.sidebar{display:none;}.main{margin-left:0;}}
     </style>
 </head>
@@ -240,29 +243,41 @@ window.openLead=async function(id){
       +'<div style="font-size:11px;font-weight:800;color:var(--secondary);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 4px;">Notes</div>'
       +'<div style="font-size:12px;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:7px 10px;margin-bottom:10px;">💬 Shared thread — you and the PayProTec team can both see and reply here.</div>'
       +'<div id="notesList"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>'
-      +'<textarea id="noteInput" rows="3" placeholder="Add a note or reply…" style="margin-top:10px;"></textarea>'
-      +'<div style="font-size:11px;font-weight:700;color:var(--secondary);margin:10px 0 6px;">Tag people (they get notified)</div>'
-      +'<div id="tagChips" style="margin-bottom:8px;"><span style="color:var(--muted);font-size:12px;">Loading…</span></div>'
+      +'<div style="position:relative;margin-top:10px;"><textarea id="noteInput" rows="3" placeholder="Add a note or reply… type @ to tag"></textarea><div class="tag-sug" id="tagSug"></div></div>'
+      +'<div style="font-size:11px;color:var(--muted);margin:6px 0 8px;">Type <b>@</b> to tag a PayProTec teammate — they’ll be notified.</div>'
       +'<div style="text-align:right;"><button class="btn" id="noteBtn" onclick="addNote()"><span class="material-icons" style="font-size:16px;">send</span> Add note</button></div>'
     +'</div>';
   document.getElementById('leadModal').style.display='flex';
-  _mentions=[]; loadNotes(id); renderTagChips();
+  _mentions.length=0; loadNotes(id);
+  setupMention('noteInput','tagSug',function(){return TAGGABLE;},_mentions);
 };
 var TAGGABLE=[], _mentions=[];
 async function loadTaggable(){ var r=await papi({action:'pos_taggable'}); TAGGABLE=(r&&r.success&&r.people)||[]; }
-function renderTagChips(){
-  var el=document.getElementById('tagChips'); if(!el) return;
-  if(!TAGGABLE.length){ el.innerHTML='<span style="color:var(--muted);font-size:12px;">No one to tag.</span>'; return; }
-  el.innerHTML=TAGGABLE.map(function(p){
-    var on=_mentions.some(function(m){return m.id===p.id&&m.type===p.type;});
-    return '<span class="tag'+(on?' on':'')+'" onclick="toggleTag(\''+p.type+'\',\''+esc(p.id)+'\',this)" data-name="'+esc(p.name)+'">＠ '+esc(p.name)+'</span>';
-  }).join('');
+// Reusable @-mention typeahead.
+function setupMention(taId,sugId,getPeople,mentions){
+  var ta=document.getElementById(taId), sug=document.getElementById(sugId); if(!ta||!sug) return;
+  function hide(){ sug.style.display='none'; }
+  ta.addEventListener('input',function(){
+    var pos=ta.selectionStart, before=ta.value.slice(0,pos);
+    var m=before.match(/(^|\s)@([^@\n]*)$/);
+    if(!m){ hide(); return; }
+    var q=m[2].toLowerCase();
+    var people=(getPeople()||[]).filter(function(p){return p.name.toLowerCase().indexOf(q)!==-1;}).slice(0,8);
+    if(!people.length){ hide(); return; }
+    sug.innerHTML=people.map(function(p){return '<div class="tag-sug-item" data-type="'+p.type+'" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">＠ '+esc(p.name)+'</div>';}).join('');
+    sug.style.display='block';
+  });
+  sug.addEventListener('mousedown',function(e){
+    var it=e.target.closest('.tag-sug-item'); if(!it) return; e.preventDefault();
+    var name=it.getAttribute('data-name'), id=it.getAttribute('data-id'), type=it.getAttribute('data-type');
+    var pos=ta.selectionStart, before=ta.value.slice(0,pos), after=ta.value.slice(pos);
+    before=before.replace(/(^|\s)@([^@\n]*)$/,function(_m,pre){return pre+'@'+name+' ';});
+    ta.value=before+after;
+    if(!mentions.some(function(x){return x.id===id&&x.type===type;})) mentions.push({type:type,id:id,name:name});
+    hide(); ta.focus(); try{ ta.selectionStart=ta.selectionEnd=before.length; }catch(x){}
+  });
+  ta.addEventListener('blur',function(){ setTimeout(hide,150); });
 }
-window.toggleTag=function(type,id,el){
-  var i=_mentions.findIndex(function(m){return m.id===id&&m.type===type;});
-  if(i>=0){ _mentions.splice(i,1); el.classList.remove('on'); }
-  else { _mentions.push({type:type,id:id,name:el.getAttribute('data-name')}); el.classList.add('on'); }
-};
 window.closeLead=function(){ document.getElementById('leadModal').style.display='none'; _openLeadId=null; };
 async function loadNotes(id){
   var r=await papi({action:'lead_notes_get',lead_id:id});
@@ -284,7 +299,7 @@ window.addNote=async function(){
   var btn=document.getElementById('noteBtn'); btn.disabled=true; btn.innerHTML='<span class="material-icons" style="font-size:16px;animation:spin .8s linear infinite;">sync</span> Saving…';
   var r=await papi({action:'lead_note_add',lead_id:_openLeadId,body:body,mentions:_mentions});
   btn.disabled=false; btn.innerHTML='<span class="material-icons" style="font-size:16px;">send</span> Add note';
-  if(r&&r.success){ ta.value=''; _mentions=[]; renderTagChips(); renderNotes(r.notes||[]); }
+  if(r&&r.success){ ta.value=''; _mentions.length=0; renderNotes(r.notes||[]); }
 };
 
 /* ── Bell notifications ── */
