@@ -28,6 +28,11 @@
   .vid{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;}
   .vid .prov{font-size:10px;font-weight:800;color:#64748b;background:#f1f5f9;border-radius:5px;padding:2px 7px;text-transform:uppercase;}
   .vid .g{flex:1;}
+  .cthumb{width:52px;height:34px;border-radius:7px;overflow:hidden;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .cthumb img{width:100%;height:100%;object-fit:cover;}
+  .vthumb{width:64px;height:38px;border-radius:7px;overflow:hidden;background:#0f172a;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .vthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .vthumb .play{color:#fff;font-size:22px;position:relative;z-index:1;opacity:.9;text-shadow:0 1px 4px rgba(0,0,0,.5);}
   .icon{cursor:pointer;color:var(--muted);}.icon:hover{color:var(--pri);}
   label{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 5px;}
   input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;background:#f8fafc;outline:none;}
@@ -48,6 +53,11 @@ var TOKEN=localStorage.getItem('pp_session_token')||'';
 function api(b){ return fetch('/api/courses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 var COURSES=[];
+function vidThumb(v){
+  var img=v.thumbnail_url||'';
+  if(!img && v.provider==='youtube' && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/mqdefault.jpg'; }
+  return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':'';
+}
 async function load(){
   var r=await api({action:'courses_admin_list'});
   if(!r.success){ document.getElementById('wrap').innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed to load')+'</div>'; return; }
@@ -62,12 +72,14 @@ function render(){
       var drip='';
       if(v.available_on) drip='<span class="badge b-manual" title="Releases on this date">📅 '+esc(v.available_on)+'</span>';
       else if(v.drip_days>0) drip='<span class="badge b-manual" title="Days after a partner unlocks the course">⏳ +'+v.drip_days+'d</span>';
-      return '<div class="vid"><span class="prov">'+esc(v.provider)+'</span><span class="g"><b>'+esc(v.title)+'</b></span>'+drip
+      return '<div class="vid"><div class="vthumb">'+vidThumb(v)+'<span class="material-icons play">play_circle</span></div>'
+        +'<span class="g"><b>'+esc(v.title)+'</b><div class="prov" style="display:inline-block;margin-top:3px;">'+esc(v.provider)+'</div></span>'+drip
         +'<span class="material-icons icon" title="Edit" onclick="editVideo(\''+c.id+'\',\''+v.id+'\')">edit</span>'
         +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delVideo(\''+v.id+'\')">delete</span></div>';
     }).join('')||'<div class="muted" style="font-size:12.5px;padding:8px 0;">No videos yet.</div>';
     var accessBtn=(c.unlock_mode==='manual')?'<button class="btn btn-n" onclick="manageAccess(\''+c.id+'\')"><span class="material-icons" style="font-size:15px;">lock_open</span> Access ('+(c.access_count||0)+')</button>':'';
     return '<div class="course"><div class="course-head">'
+      +'<div class="cthumb">'+(c.thumbnail_url?'<img src="'+esc(c.thumbnail_url)+'" onerror="this.style.display=\'none\'">':'<span class="material-icons" style="color:#cbd5e1;">image</span>')+'</div>'
       +'<span class="t">'+esc(c.title)+'</span>'
       +'<span class="badge '+(c.is_published?'b-live':'b-draft')+'">'+(c.is_published?'Published':'Draft')+'</span>'
       +'<span class="badge '+(c.unlock_mode==='auto'?'b-auto':'b-manual')+'">'+(c.unlock_mode==='auto'?'Auto-unlock':'Manual unlock')+'</span>'
