@@ -304,16 +304,25 @@ export default async function handler(req, res) {
             ]);
             const stageMap = {};
             (allStages || []).forEach(s => { stageMap[s.id] = s.name; });
-            const chosen = (pls || []).find(p => p.is_default) || (pls || [])[0] || null;
+            // Only pipelines staff marked visible to partners; prefer default, else first.
+            const visible = (pls || []).filter(p => p.partner_visible !== false);
+            const chosen = visible.find(p => p.is_default) || visible[0] || null;
             const pipeline = chosen ? {
                 id: chosen.id, name: chosen.name,
                 stages: (allStages || []).filter(s => s.pipeline_id === chosen.id).map(s => ({ id: s.id, name: s.name }))
             } : null;
+            // Note counts per lead (for the card badge).
+            const noteCount = {};
+            const leadIds = rows.map(l => l.id);
+            if (leadIds.length) {
+                const { data: ns } = await supabase.from('pos_lead_notes').select('lead_id').in('lead_id', leadIds);
+                (ns || []).forEach(n => { noteCount[n.lead_id] = (noteCount[n.lead_id] || 0) + 1; });
+            }
             const leads = rows.map(l => ({
                 id: l.id, business_name: l.business_name, contact_name: l.contact_name,
                 city: l.city, state: l.state, monthly_volume: l.monthly_volume,
                 status: l.status, stage_id: l.stage_id || null, stage_name: stageMap[l.stage_id] || null,
-                agent_id: l.agent_id, source: l.source, created_at: l.created_at
+                agent_id: l.agent_id, source: l.source, created_at: l.created_at, note_count: noteCount[l.id] || 0
             }));
             return ok(res, { leads, pipeline });
         }
@@ -368,7 +377,7 @@ export default async function handler(req, res) {
             ]);
             const stagesByPipe = {};
             (sts || []).forEach(s => { (stagesByPipe[s.pipeline_id] = stagesByPipe[s.pipeline_id] || []).push(s); });
-            const pipelines = (pls || []).map(p => ({ id: p.id, name: p.name, is_default: p.is_default, stages: stagesByPipe[p.id] || [] }));
+            const pipelines = (pls || []).map(p => ({ id: p.id, name: p.name, is_default: p.is_default, partner_visible: p.partner_visible !== false, stages: stagesByPipe[p.id] || [] }));
             let formConfig = {}, automations = { portal: [], highlevel: [] };
             try { formConfig = fc?.value ? JSON.parse(fc.value) : {}; } catch (e) { formConfig = {}; }
             try { const a = au?.value ? JSON.parse(au.value) : {}; automations = { portal: a.portal || [], highlevel: a.highlevel || [] }; } catch (e) { automations = { portal: [], highlevel: [] }; }
@@ -429,8 +438,15 @@ export default async function handler(req, res) {
         if (action === 'save_pipeline') {
             if (!canSettings) return bad(res, 'No access.', 403);
             const name = String(body.name || '').trim(); if (!name) return bad(res, 'Pipeline name required.');
-            if (body.id) { await supabase.from('pos_pipelines').update({ name }).eq('id', body.id); return ok(res, { id: body.id }); }
-            const { data, error } = await supabase.from('pos_pipelines').insert({ name, sort_order: Number.isFinite(+body.sort_order) ? +body.sort_order : 0 }).select('id').single();
+            if (body.id) {
+                const patch = { name };
+                if ('partner_visible' in body) patch.partner_visible = !!body.partner_visible;
+                await supabase.from('pos_pipelines').update(patch).eq('id', body.id);
+                return ok(res, { id: body.id });
+            }
+            const insert = { name, sort_order: Number.isFinite(+body.sort_order) ? +body.sort_order : 0 };
+            if ('partner_visible' in body) insert.partner_visible = !!body.partner_visible;
+            const { data, error } = await supabase.from('pos_pipelines').insert(insert).select('id').single();
             if (error) return bad(res, error.message);
             return ok(res, { id: data.id });
         }

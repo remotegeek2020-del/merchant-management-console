@@ -23,7 +23,7 @@
         .main{margin-left:240px;}
         .topbar{background:#fff;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;}
         .topbar-title{font-size:1.1rem;font-weight:800;margin:0;flex:1;}
-        .content{padding:24px;max-width:1120px;}
+        .content{padding:24px;max-width:1500px;}
         .switch-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;background:var(--teal);color:#fff;}
         .switch-btn:hover{background:var(--teal-dark);}
         .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
@@ -42,6 +42,21 @@
         .prog-label{font-size:11.5px;font-weight:700;color:var(--teal-dark);}
         .lead-foot{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11.5px;color:var(--muted);}
         .empty{text-align:center;padding:50px 20px;color:var(--muted);font-size:13px;}
+        /* Read-only kanban (mirrors staff Opportunities) */
+        .kb-wrap{overflow-x:auto;padding-bottom:8px;}
+        .kb{display:flex;gap:14px;align-items:flex-start;min-height:50vh;}
+        .kb-col{flex:0 0 268px;width:268px;background:#fff;border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 250px);}
+        .kb-colhead{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;}
+        .kb-colhead .nm{font-weight:800;font-size:13px;flex:1;}
+        .kb-colhead .ct{font-size:11px;font-weight:800;color:var(--muted);background:#f1f5f9;border-radius:20px;padding:2px 9px;}
+        .kb-body{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:9px;}
+        .kb-card{background:#fff;border:1px solid var(--border);border-radius:11px;padding:11px 12px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:all .15s;}
+        .kb-card:hover{border-color:var(--teal);box-shadow:0 4px 12px rgba(13,148,136,.12);}
+        .kb-card .biz{font-weight:800;font-size:13px;margin-bottom:6px;}
+        .kb-card .kb-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin-top:3px;}
+        .kb-card .kb-row .material-icons{font-size:13px;color:#cbd5e1;}
+        .kb-empty{color:var(--muted);font-size:12px;text-align:center;padding:14px 6px;border:1px dashed var(--border);border-radius:9px;}
+        .kb-note-dot{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;color:var(--teal-dark);}
         /* stage chips (modal) */
         .chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px;}
         .chip{padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1.5px solid var(--border);background:#fff;color:var(--muted);}
@@ -133,16 +148,38 @@ function stageBar(lead){
   var label = idx<0 ? 'Awaiting review' : ((lead.status==='sent')?'✓ Converted':esc(stages[idx].name));
   return '<div class="prog-bar">'+segs+'</div><div class="prog-label">'+label+'</div>';
 }
-function leadCard(l){
+function kbCard(l){
   var loc=[l.city,l.state].filter(Boolean).join(', ');
-  return '<div class="lead" onclick="openLead(\''+l.id+'\')"><div class="lead-top"><div class="lead-biz">'+esc(l.business_name||'—')
-    +'<div class="lead-meta">'+(loc?esc(loc)+' · ':'')+money(l.monthly_volume)+'</div></div>'+statusPill(l.status)+'</div>'
-    +stageBar(l)
-    +'<div class="lead-foot"><span class="material-icons" style="font-size:15px;">chat_bubble_outline</span> Tap to view stages &amp; notes · '+dt(l.created_at)+'</div></div>';
+  var notes=(l.note_count>0)?'<span class="kb-note-dot"><span class="material-icons" style="font-size:13px;">chat_bubble</span>'+l.note_count+'</span>':'<span class="kb-note-dot" style="color:var(--muted);"><span class="material-icons" style="font-size:13px;">chat_bubble_outline</span> notes</span>';
+  return '<div class="kb-card" onclick="openLead(\''+l.id+'\')">'
+    +'<div class="biz">'+esc(l.business_name||'—')+'</div>'
+    +'<div class="kb-row"><span class="material-icons">place</span>'+(loc?esc(loc):'—')+'</div>'
+    +'<div class="kb-row"><span class="material-icons">payments</span>'+money(l.monthly_volume)+'</div>'
+    +'<div class="kb-row" style="margin-top:7px;justify-content:space-between;">'+statusPill(l.status)+notes+'</div></div>';
 }
-async function load(){
+function boardHtml(){
+  var stages=(PIPE&&PIPE.stages)||[];
+  if(!stages.length){
+    // No partner-visible pipeline published yet — single column fallback.
+    var cards=LEADS.map(kbCard).join('')||'<div class="kb-empty">No leads yet.</div>';
+    return '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Your submissions are being reviewed. Stage tracking appears once your team publishes a pipeline.</div>'
+      +'<div class="kb-wrap"><div class="kb"><div class="kb-col"><div class="kb-colhead"><span class="nm">My Leads</span><span class="ct">'+LEADS.length+'</span></div><div class="kb-body">'+cards+'</div></div></div></div>';
+  }
+  var stageIds={}; stages.forEach(function(s){stageIds[s.id]=true;});
+  function leadsIn(sid){ return LEADS.filter(function(l){ if(sid==='__none__') return !l.stage_id||!stageIds[l.stage_id]; return l.stage_id===sid; }); }
+  var pipeName='<div style="font-weight:800;font-size:14px;margin-bottom:12px;">'+esc(PIPE.name||'Pipeline')+'</div>';
+  var cols=[{id:'__none__',name:'Awaiting review'}].concat(stages);
+  var board=cols.map(function(s){
+    var ls=leadsIn(s.id);
+    var cards=ls.map(kbCard).join('')||'<div class="kb-empty">—</div>';
+    return '<div class="kb-col"><div class="kb-colhead"><span class="nm">'+esc(s.name)+'</span><span class="ct">'+ls.length+'</span></div><div class="kb-body">'+cards+'</div></div>';
+  }).join('');
+  return pipeName+'<div class="kb-wrap"><div class="kb">'+board+'</div></div>';
+}
+async function load(silent){
   var r=await papi({action:'my_pos_leads'});
-  LEADS=(r&&r.success&&r.leads)||[]; PIPE=(r&&r.pipeline)||null;
+  if(!r||!r.success) return;
+  LEADS=r.leads||[]; PIPE=r.pipeline||null;
   var c={total:LEADS.length,review:0,qualified:0,sent:0};
   LEADS.forEach(function(l){ if(l.status==='new'||l.status==='reviewing')c.review++; else if(l.status==='qualified')c.qualified++; else if(l.status==='sent')c.sent++; });
   document.getElementById('stats').innerHTML=
@@ -150,8 +187,10 @@ async function load(){
     '<div class="stat"><div class="n" style="color:#b45309;">'+c.review+'</div><div class="l">In Review</div></div>'+
     '<div class="stat"><div class="n" style="color:#166534;">'+c.qualified+'</div><div class="l">Qualified</div></div>'+
     '<div class="stat"><div class="n" style="color:#6d28d9;">'+c.sent+'</div><div class="l">Converted</div></div>';
+  // Don't disturb the board while a lead modal is open (silent refresh keeps data fresh).
+  if(silent && document.getElementById('leadModal').style.display==='flex') return;
   var wrap=document.getElementById('gridWrap');
-  wrap.innerHTML = LEADS.length ? '<div class="grid">'+LEADS.map(leadCard).join('')+'</div>'
+  wrap.innerHTML = LEADS.length ? boardHtml()
     : '<div class="empty">You haven\'t submitted any POS leads yet.<br><a class="switch-btn" style="margin-top:16px;" href="/partner/pos-lead"><span class="material-icons" style="font-size:19px;">add_circle</span> Submit your first lead</a></div>';
 }
 
@@ -212,6 +251,10 @@ window.addNote=async function(){
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeLead(); });
 var st=document.createElement('style'); st.textContent='@keyframes spin{to{transform:rotate(360deg);}}'; document.head.appendChild(st);
 load();
+// Real-time: keep the board in sync with staff changes (stages, moves, statuses).
+setInterval(function(){ load(true); }, 15000);
+window.addEventListener('focus', function(){ load(true); });
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) load(true); });
 </script>
 </body>
 </html>
