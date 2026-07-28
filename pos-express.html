@@ -277,7 +277,8 @@ function kanbanHtml(){
   var FL=getOppLeads();
   function leadsIn(sid){ return FL.filter(function(l){ if(sid==='__none__') return !l.stage_id || !stageIds[l.stage_id]; return l.stage_id===sid; }); }
   var selector = PIPES.length>1 ? '<select onchange="setPipe(this.value)" style="'+IN+'font-weight:700;margin-bottom:14px;">'+PIPES.map(function(p){return '<option value="'+p.id+'"'+(p.id===pipe.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('')+'</select>' : '<div style="font-weight:800;font-size:14px;margin-bottom:14px;">'+esc(pipe.name)+'</div>';
-  var cols=[{id:'__none__',name:'Unassigned',workflow_url:''}].concat(stages);
+  // Only show "Unassigned" when something is actually unstaged (auto-assign empties it).
+  var cols=(leadsIn('__none__').length?[{id:'__none__',name:'Unassigned',workflow_url:''}]:[]).concat(stages);
   var board=cols.map(function(s){
     var ls=leadsIn(s.id);
     var cards=ls.map(kbCard).join('')||'<div class="kb-empty">Drop leads here</div>';
