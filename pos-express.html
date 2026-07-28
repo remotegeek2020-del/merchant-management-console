@@ -131,7 +131,7 @@
 var TOKEN=localStorage.getItem('pp_session_token')||'';
 var LEADS=[], SEC='dashboard', PFILTER='', PIPES=[], CURPIPE='';
 var NAV=[['dashboard','Dashboard','space_dashboard'],['opps','Opportunities','trending_up'],['merchants','Merchants','storefront'],['partners','Partners','handshake'],['settings','Settings','settings']];
-var OPPVIEW='board', OPPQ='', OPPSORT='recent';
+var OPPVIEW='board', OPPQ='', OPPSORT='recent', OPPMIN=null, OPPMAX=null;
 function api(b){ return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function money(n){ return n?('$'+Number(n).toLocaleString()):'—'; }
@@ -186,28 +186,34 @@ function dashboard(){
 }
 function oppsView(){
   var controls='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
-    +'<div style="position:relative;flex:1;min-width:240px;">'
+    +'<div style="position:relative;flex:1;min-width:220px;">'
     +'<span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:18px;">search</span>'
-    +'<input id="oppSearch" value="'+esc(OPPQ)+'" oninput="setOppQ(this.value)" placeholder="Search MID, opportunity, business, partner ID or name…" style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"></div>'
+    +'<input id="oppSearch" value="'+esc(OPPQ)+'" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="MID, opportunity, business, partner ID or name…" style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"></div>'
+    +'<input id="oppMin" value="'+(OPPMIN==null?'':OPPMIN)+'" type="number" inputmode="numeric" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="Min volume $" style="width:130px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
+    +'<input id="oppMax" value="'+(OPPMAX==null?'':OPPMAX)+'" type="number" inputmode="numeric" onkeydown="if(event.key===\'Enter\')applyOppSearch()" placeholder="Max volume $" style="width:130px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
     +'<select onchange="setOppSort(this.value)" style="padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
     +'<option value="recent"'+(OPPSORT==='recent'?' selected':'')+'>Sort: Newest</option>'
-    +'<option value="vol"'+(OPPSORT==='vol'?' selected':'')+'>Sort: Monthly volume (high → low)</option></select></div>';
+    +'<option value="vol"'+(OPPSORT==='vol'?' selected':'')+'>Sort: Monthly volume (high → low)</option></select>'
+    +'<button class="btn btn-o" onclick="applyOppSearch()"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">search</span> Search</button>'
+    +'<button class="btn btn-n" onclick="clearOppSearch()">Clear</button></div>';
   var toggle='<div class="tabs" style="margin-bottom:14px;">'
     +'<button class="tab '+(OPPVIEW==='board'?'on':'')+'" onclick="setOppView(\'board\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_kanban</span> Board</button>'
     +'<button class="tab '+(OPPVIEW==='list'?'on':'')+'" onclick="setOppView(\'list\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_list</span> List</button></div>';
-  return controls+'<div id="oppSummary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:#475569;"></div>'+toggle+'<div id="oppBody"></div>';
+  return controls+'<div id="oppSummary" style="margin-bottom:12px;font-size:13px;color:#475569;"></div>'+toggle+'<div id="oppBody"></div>';
 }
 function renderOppBody(){
   var fl=getOppLeads();
-  var totVol=fl.reduce(function(s,l){return s+(Number(l.monthly_volume)||0);},0);
   var sum=document.getElementById('oppSummary');
-  if(sum) sum.innerHTML='<span><b style="color:#0f172a;">'+fl.length+'</b> opportunit'+(fl.length===1?'y':'ies')+(OPPQ?' matched':'')+'</span>'
-    +'<span>Total monthly volume: <b style="color:#16a34a;">'+money(totVol)+'</b></span>';
+  var active=(OPPQ||OPPMIN!=null||OPPMAX!=null);
+  if(sum) sum.innerHTML=active?('<b style="color:#0f172a;">'+fl.length+'</b> opportunit'+(fl.length===1?'y':'ies')+' matched'+((OPPMIN!=null||OPPMAX!=null)?' · volume '+(OPPMIN!=null?money(OPPMIN):'$0')+' – '+(OPPMAX!=null?money(OPPMAX):'∞'):'')):'';
   var el=document.getElementById('oppBody'); if(el) el.innerHTML=(OPPVIEW==='board'?kanbanHtml():oppsListHtml());
 }
 function getOppLeads(){
   var q=(OPPQ||'').trim().toLowerCase();
   var arr=LEADS.filter(function(l){
+    var vol=Number(l.monthly_volume)||0;
+    if(OPPMIN!=null && vol<OPPMIN) return false;
+    if(OPPMAX!=null && vol>OPPMAX) return false;
     if(!q) return true;
     return [l.business_name,l.merchant_legal_name,l.mid,l.agent_id,l.partner_name].some(function(v){ return v&&String(v).toLowerCase().indexOf(q)!==-1; });
   });
@@ -215,7 +221,14 @@ function getOppLeads(){
   return arr;
 }
 function setOppView(v){ OPPVIEW=v; render(); }
-function setOppQ(v){ OPPQ=v; renderOppBody(); }
+window.applyOppSearch=function(){
+  OPPQ=(document.getElementById('oppSearch')||{}).value||'';
+  var mn=(document.getElementById('oppMin')||{}).value; var mx=(document.getElementById('oppMax')||{}).value;
+  OPPMIN=(mn===''||mn==null)?null:Number(mn); OPPMAX=(mx===''||mx==null)?null:Number(mx);
+  if(OPPMIN!=null&&isNaN(OPPMIN))OPPMIN=null; if(OPPMAX!=null&&isNaN(OPPMAX))OPPMAX=null;
+  renderOppBody();
+};
+window.clearOppSearch=function(){ OPPQ=''; OPPMIN=null; OPPMAX=null; render(); };
 function setOppSort(v){ OPPSORT=v; renderOppBody(); }
 function oppsListHtml(){
   var tabs=[['','All'],['new','New'],['reviewing','Reviewing'],['qualified','Qualified'],['rejected','Rejected'],['sent','Sent']];
