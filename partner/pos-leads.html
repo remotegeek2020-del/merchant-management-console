@@ -11,13 +11,13 @@
         :root{--teal:#0d9488;--teal-dark:#0f766e;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;}
         body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;}
         .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;}
-        .sidebar-header{padding:20px;border-bottom:1px solid rgba(255,255,255,0.08);}
-        .sidebar-logo{height:26px;filter:brightness(0) invert(1);display:block;margin-bottom:14px;}
+        .sidebar-header{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo{height:28px;filter:brightness(0) invert(1);display:block;margin-bottom:16px;}
         .sidebar-partner{display:flex;align-items:center;gap:10px;}
-        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;}
+        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;}
         .sidebar-name{font-size:12px;font-weight:700;color:#fff;}.sidebar-tag{font-size:10px;color:rgba(255,255,255,0.4);}
-        .sidebar-nav{flex:1;padding:12px;display:flex;flex-direction:column;gap:2px;}
-        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;}
+        .sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;}
         .nav-item:hover{background:rgba(255,255,255,0.08);color:#fff;}.nav-item.active{background:var(--teal);color:#fff;}
         .nav-item .material-icons{font-size:20px;flex-shrink:0;}.nav-divider{height:1px;background:rgba(255,255,255,0.08);margin:8px 0;}
         .main{margin-left:240px;}
@@ -61,7 +61,7 @@
 </div>
 <div class="main">
     <div class="topbar">
-        <h1 class="topbar-title">POS Express — My Leads</h1>
+        <h1 class="topbar-title">POS Express · My Leads</h1>
         <a class="btn" href="/partner/pos-lead"><span class="material-icons" style="font-size:17px;">add</span> Submit a new lead</a>
     </div>
     <div class="content">
