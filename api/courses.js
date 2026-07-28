@@ -29,13 +29,27 @@ async function validatePartner(token) {
 
 const PROVIDERS = new Set(['youtube', 'wistia', 'vimeo', 'other']);
 function cleanVideo(b) {
+    const drip = parseInt(b.drip_days, 10);
     return {
         title: String(b.title || '').slice(0, 200),
         description: b.description == null ? null : String(b.description).slice(0, 2000),
         provider: PROVIDERS.has(b.provider) ? b.provider : 'other',
         url: String(b.url || '').slice(0, 1000),
+        thumbnail_url: b.thumbnail_url ? String(b.thumbnail_url).slice(0, 1000) : null,
+        available_on: (b.available_on && /^\d{4}-\d{2}-\d{2}$/.test(b.available_on)) ? b.available_on : null,
+        drip_days: Number.isFinite(drip) && drip > 0 ? drip : 0,
         sort_order: Number.isFinite(+b.sort_order) ? +b.sort_order : 0
     };
+}
+// When (if ever) a video unlocks for a partner enrolled on `enrollDate`.
+// Returns { available:boolean, unlock_at:ISO|null }.
+function videoAvailability(v, enrollDate) {
+    const now = Date.now();
+    let unlock = 0;
+    if (v.available_on) { const t = new Date(v.available_on + 'T00:00:00').getTime(); if (t > unlock) unlock = t; }
+    if (v.drip_days && v.drip_days > 0 && enrollDate) { const t = new Date(enrollDate).getTime() + v.drip_days * 86400000; if (t > unlock) unlock = t; }
+    if (unlock && unlock > now) return { available: false, unlock_at: new Date(unlock).toISOString() };
+    return { available: true, unlock_at: null };
 }
 
 async function coursesWithVideos(filterPublished) {
@@ -62,10 +76,20 @@ export default async function handler(req, res) {
             const personId = await validatePartner(body.partner_token);
             if (!personId) return bad(res, 'Not signed in', 401);
             const all = await coursesWithVideos(true);
-            const { data: acc } = await supabase.from('course_access').select('course_id').eq('person_id', personId);
-            const granted = new Set((acc || []).map(a => a.course_id));
+            const { data: acc } = await supabase.from('course_access').select('course_id, created_at').eq('person_id', personId);
+            const granted = new Map((acc || []).map(a => [a.course_id, a.created_at]));
             const visible = all.filter(c => c.unlock_mode === 'auto' || granted.has(c.id))
-                .map(c => ({ id: c.id, title: c.title, description: c.description, thumbnail_url: c.thumbnail_url, videos: c.videos.map(v => ({ id: v.id, title: v.title, description: v.description, provider: v.provider, url: v.url })) }));
+                .map(c => {
+                    // Enrollment baseline for drip: when the partner got access (manual) or the course date (auto).
+                    const enrollDate = granted.get(c.id) || c.created_at;
+                    return {
+                        id: c.id, title: c.title, description: c.description, thumbnail_url: c.thumbnail_url,
+                        videos: c.videos.map(v => {
+                            const av = videoAvailability(v, enrollDate);
+                            return { id: v.id, title: v.title, description: v.description, provider: v.provider, thumbnail_url: v.thumbnail_url, available: av.available, unlock_at: av.unlock_at, url: av.available ? v.url : null };
+                        })
+                    };
+                });
             // Also show locked (manual, not granted) courses as teasers so partners know they exist.
             const locked = all.filter(c => c.unlock_mode === 'manual' && !granted.has(c.id))
                 .map(c => ({ id: c.id, title: c.title, description: c.description, thumbnail_url: c.thumbnail_url, locked: true, video_count: c.videos.length }));

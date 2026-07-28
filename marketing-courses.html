@@ -59,7 +59,10 @@ function render(){
   if(!COURSES.length){ w.innerHTML='<div class="empty">No courses yet. Create one to organize your webinars.</div>'; return; }
   w.innerHTML=COURSES.map(function(c){
     var vids=(c.videos||[]).map(function(v){
-      return '<div class="vid"><span class="prov">'+esc(v.provider)+'</span><span class="g"><b>'+esc(v.title)+'</b></span>'
+      var drip='';
+      if(v.available_on) drip='<span class="badge b-manual" title="Releases on this date">📅 '+esc(v.available_on)+'</span>';
+      else if(v.drip_days>0) drip='<span class="badge b-manual" title="Days after a partner unlocks the course">⏳ +'+v.drip_days+'d</span>';
+      return '<div class="vid"><span class="prov">'+esc(v.provider)+'</span><span class="g"><b>'+esc(v.title)+'</b></span>'+drip
         +'<span class="material-icons icon" title="Edit" onclick="editVideo(\''+c.id+'\',\''+v.id+'\')">edit</span>'
         +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delVideo(\''+v.id+'\')">delete</span></div>';
     }).join('')||'<div class="muted" style="font-size:12.5px;padding:8px 0;">No videos yet.</div>';
@@ -82,11 +85,12 @@ window.editCourse=async function(id){
     html:'<div style="text-align:left;">'
       +'<label>Course title</label><input id="c-title" class="swal2-input" style="margin:0;width:100%;" value="'+esc(c.title||'')+'">'
       +'<label>Description</label><textarea id="c-desc" class="swal2-textarea" style="margin:0;width:100%;">'+esc(c.description||'')+'</textarea>'
+      +'<label>Thumbnail image URL (optional)</label><input id="c-thumb" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…/cover.jpg" value="'+esc(c.thumbnail_url||'')+'">'
       +'<label>Unlock mode</label><select id="c-mode" class="swal2-input" style="margin:0;width:100%;"><option value="manual"'+(c.unlock_mode!=='auto'?' selected':'')+'>Manual — only partners I grant access</option><option value="auto"'+(c.unlock_mode==='auto'?' selected':'')+'>Automatic — every partner sees it</option></select>'
       +'<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-top:14px;font-size:13px;cursor:pointer;"><input type="checkbox" id="c-pub" style="width:auto;" '+(c.is_published?'checked':'')+'> Published (visible to partners)</label>'
       +'</div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
-    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked}; }
+    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,thumbnail_url:document.getElementById('c-thumb').value.trim(),unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked}; }
   });
   if(!res.isConfirmed) return;
   var r=await api(Object.assign({action:'save_course',id:id||undefined},res.value));
@@ -101,10 +105,15 @@ window.editVideo=async function(courseId,vid){
       +'<label>Provider</label><select id="v-prov" class="swal2-input" style="margin:0;width:100%;">'+['youtube','wistia','vimeo','other'].map(function(p){return '<option value="'+p+'"'+(v.provider===p?' selected':'')+'>'+p+'</option>';}).join('')+'</select>'
       +'<label>Embed URL / link</label><input id="v-url" class="swal2-input" style="margin:0;width:100%;" placeholder="Paste the YouTube / Wistia / Vimeo link" value="'+esc(v.url||'')+'">'
       +'<div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Embed only — nothing is uploaded to our servers. Paste the video page link (e.g. youtube.com/watch?v=… , a wistia medias link, or vimeo.com/…). For “other”, paste an https embed URL.</div>'
+      +'<label>Thumbnail image URL (optional)</label><input id="v-thumb" class="swal2-input" style="margin:0;width:100%;" placeholder="Leave blank to auto-use YouTube thumbnail" value="'+esc(v.thumbnail_url||'')+'">'
       +'<label>Description (optional)</label><textarea id="v-desc" class="swal2-textarea" style="margin:0;width:100%;">'+esc(v.description||'')+'</textarea>'
+      +'<div style="border-top:1px solid #e2e8f0;margin:14px 0 0;padding-top:10px;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Drip / release schedule (optional)</div>'
+      +'<div class="row" style="margin-top:6px;"><div><label>Release on date</label><input id="v-avail" type="date" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.available_on||'')+'"></div>'
+      +'<div><label>…or days after partner unlocks the course</label><input id="v-drip" type="number" min="0" class="swal2-input" style="margin:0;width:100%;" placeholder="0 = right away" value="'+((v.drip_days!=null&&v.drip_days>0)?v.drip_days:'')+'"></div></div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Leave both blank for immediate access. If both are set, the later one wins.</div>'
       +'</div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
-    preConfirm:function(){ var t=document.getElementById('v-title').value.trim(),u=document.getElementById('v-url').value.trim(); if(!t){Swal.showValidationMessage('Title required');return false;} if(!u){Swal.showValidationMessage('Embed URL required');return false;} return {title:t,provider:document.getElementById('v-prov').value,url:u,description:document.getElementById('v-desc').value}; }
+    preConfirm:function(){ var t=document.getElementById('v-title').value.trim(),u=document.getElementById('v-url').value.trim(); if(!t){Swal.showValidationMessage('Title required');return false;} if(!u){Swal.showValidationMessage('Embed URL required');return false;} return {title:t,provider:document.getElementById('v-prov').value,url:u,thumbnail_url:document.getElementById('v-thumb').value.trim(),description:document.getElementById('v-desc').value,available_on:document.getElementById('v-avail').value||null,drip_days:document.getElementById('v-drip').value||0}; }
   });
   if(!res.isConfirmed) return;
   var r=await api(Object.assign({action:'save_video',id:vid||undefined,course_id:courseId},res.value));

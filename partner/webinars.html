@@ -31,8 +31,13 @@
         .vids{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
         .vidcard{border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;background:#fff;transition:all .15s;}
         .vidcard:hover{border-color:var(--teal);box-shadow:0 6px 18px rgba(13,148,136,.12);transform:translateY(-2px);}
-        .vidthumb{aspect-ratio:16/9;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;position:relative;}
-        .vidthumb .material-icons{font-size:44px;opacity:.9;}
+        .course-hero{margin:-20px -20px 14px;max-height:220px;overflow:hidden;border-radius:16px 16px 0 0;}
+        .course-hero img{width:100%;display:block;object-fit:cover;max-height:220px;}
+        .vidthumb{aspect-ratio:16/9;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#fff;position:relative;overflow:hidden;}
+        .vidthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+        .vidthumb .material-icons{font-size:44px;opacity:.95;position:relative;z-index:1;text-shadow:0 2px 8px rgba(0,0,0,.5);}
+        .vidcard.locked{opacity:.72;cursor:default;}
+        .vidcard.locked:hover{transform:none;box-shadow:none;border-color:var(--border);}
         .vidthumb .prov{position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:800;background:rgba(255,255,255,.9);color:#0f172a;border-radius:5px;padding:2px 6px;text-transform:uppercase;}
         .vidmeta{padding:10px 12px;}.vidmeta .t{font-weight:700;font-size:13px;}.vidmeta .d{font-size:11.5px;color:var(--muted);margin-top:2px;}
         .lockbadge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:#b45309;background:#fef3c7;border-radius:6px;padding:4px 9px;}
@@ -90,9 +95,19 @@ function embedSrc(provider,url){
   return '';
 }
 var VMAP={};
+function thumbBg(v){
+  var img=v.thumbnail_url||'';
+  if(!img && v.provider==='youtube' && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/hqdefault.jpg'; }
+  return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':'';
+}
 function vidCard(v){
+  if(v.available===false){
+    var d=v.unlock_at?new Date(v.unlock_at).toLocaleDateString():'soon';
+    return '<div class="vidcard locked"><div class="vidthumb">'+thumbBg(v)+'<span class="prov">'+esc(v.provider)+'</span><span class="material-icons">lock</span></div>'
+      +'<div class="vidmeta"><div class="t">'+esc(v.title)+'</div><div class="d">🔒 Unlocks '+esc(d)+'</div></div></div>';
+  }
   VMAP[v.id]={provider:v.provider,url:v.url,title:v.title};
-  return '<div class="vidcard" onclick="playVideo(\''+v.id+'\')"><div class="vidthumb"><span class="prov">'+esc(v.provider)+'</span><span class="material-icons">play_circle</span></div>'
+  return '<div class="vidcard" onclick="playVideo(\''+v.id+'\')"><div class="vidthumb">'+thumbBg(v)+'<span class="prov">'+esc(v.provider)+'</span><span class="material-icons">play_circle</span></div>'
     +'<div class="vidmeta"><div class="t">'+esc(v.title)+'</div>'+(v.description?'<div class="d">'+esc(v.description)+'</div>':'')+'</div></div>';
 }
 window.playVideo=function(id){
@@ -111,7 +126,8 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlaye
   if(!courses.length && !locked.length){ c.innerHTML='<div class="empty"><div style="font-size:44px;">🎥</div><div style="font-weight:800;font-size:16px;color:#334155;margin-top:8px;">No webinars yet</div><div style="margin-top:4px;">Check back soon — new courses will appear here.</div></div>'; return; }
   var html=courses.map(function(co){
     var vids=(co.videos||[]).map(vidCard).join('')||'<div class="empty" style="padding:20px;">No videos in this course yet.</div>';
-    return '<div class="course"><h3>'+esc(co.title)+'</h3>'+(co.description?'<div class="desc">'+esc(co.description)+'</div>':'')+'<div class="vids">'+vids+'</div></div>';
+    var hero=co.thumbnail_url?'<div class="course-hero"><img src="'+esc(co.thumbnail_url)+'" onerror="this.parentNode.style.display=\'none\'"></div>':'';
+    return '<div class="course">'+hero+'<h3>'+esc(co.title)+'</h3>'+(co.description?'<div class="desc">'+esc(co.description)+'</div>':'')+'<div class="vids">'+vids+'</div></div>';
   }).join('');
   html+=locked.map(function(co){
     return '<div class="course locked"><div style="display:flex;align-items:center;gap:10px;"><h3 style="flex:1;">'+esc(co.title)+'</h3><span class="lockbadge"><span class="material-icons" style="font-size:14px;">lock</span> Locked</span></div>'
