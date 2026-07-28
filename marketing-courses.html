@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Courses & Webinars | Marketing</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f8fafc;color:#0f172a;}
+  :root{--pri:#2563eb;--pri-d:#1d4ed8;--border:#e2e8f0;--muted:#94a3b8;--red:#dc2626;--green:#16a34a;}
+  .top{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;}
+  .top h1{font-size:18px;font-weight:800;margin:0;flex:1;}
+  .top a.back{color:var(--muted);text-decoration:none;font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px;}
+  .wrap{max-width:1000px;margin:0 auto;padding:24px;}
+  .btn{border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+  .btn-p{background:var(--pri);color:#fff;}.btn-p:hover{background:var(--pri-d);}
+  .btn-n{background:#fff;color:#475569;border:1px solid var(--border);}
+  .course{background:#fff;border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;}
+  .course-head{padding:16px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);}
+  .course-head .t{font-weight:800;font-size:15px;flex:1;}
+  .badge{font-size:10px;font-weight:800;border-radius:6px;padding:3px 8px;text-transform:uppercase;letter-spacing:.4px;}
+  .b-auto{background:#dcfce7;color:#166534;}.b-manual{background:#fef3c7;color:#b45309;}
+  .b-draft{background:#f1f5f9;color:#64748b;}.b-live{background:#dbeafe;color:#1d4ed8;}
+  .course-body{padding:14px 18px;}
+  .vid{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;}
+  .vid .prov{font-size:10px;font-weight:800;color:#64748b;background:#f1f5f9;border-radius:5px;padding:2px 7px;text-transform:uppercase;}
+  .vid .g{flex:1;}
+  .icon{cursor:pointer;color:var(--muted);}.icon:hover{color:var(--pri);}
+  label{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 5px;}
+  input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;background:#f8fafc;outline:none;}
+  input:focus,select:focus,textarea:focus{border-color:var(--pri);background:#fff;}
+  .muted{color:var(--muted);}.empty{text-align:center;padding:40px;color:var(--muted);}
+  .row{display:flex;gap:10px;}.row>div{flex:1;}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
+  <h1>🎓 Courses &amp; Webinars</h1>
+  <button class="btn btn-p" onclick="editCourse()"><span class="material-icons" style="font-size:17px;">add</span> New course</button>
+</div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+<script>
+var TOKEN=localStorage.getItem('pp_session_token')||'';
+function api(b){ return fetch('/api/courses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+var COURSES=[];
+async function load(){
+  var r=await api({action:'courses_admin_list'});
+  if(!r.success){ document.getElementById('wrap').innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed to load')+'</div>'; return; }
+  COURSES=r.courses||[];
+  render();
+}
+function render(){
+  var w=document.getElementById('wrap');
+  if(!COURSES.length){ w.innerHTML='<div class="empty">No courses yet. Create one to organize your webinars.</div>'; return; }
+  w.innerHTML=COURSES.map(function(c){
+    var vids=(c.videos||[]).map(function(v){
+      return '<div class="vid"><span class="prov">'+esc(v.provider)+'</span><span class="g"><b>'+esc(v.title)+'</b></span>'
+        +'<span class="material-icons icon" title="Edit" onclick="editVideo(\''+c.id+'\',\''+v.id+'\')">edit</span>'
+        +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delVideo(\''+v.id+'\')">delete</span></div>';
+    }).join('')||'<div class="muted" style="font-size:12.5px;padding:8px 0;">No videos yet.</div>';
+    var accessBtn=(c.unlock_mode==='manual')?'<button class="btn btn-n" onclick="manageAccess(\''+c.id+'\')"><span class="material-icons" style="font-size:15px;">lock_open</span> Access ('+(c.access_count||0)+')</button>':'';
+    return '<div class="course"><div class="course-head">'
+      +'<span class="t">'+esc(c.title)+'</span>'
+      +'<span class="badge '+(c.is_published?'b-live':'b-draft')+'">'+(c.is_published?'Published':'Draft')+'</span>'
+      +'<span class="badge '+(c.unlock_mode==='auto'?'b-auto':'b-manual')+'">'+(c.unlock_mode==='auto'?'Auto-unlock':'Manual unlock')+'</span>'
+      +'<span class="material-icons icon" title="Edit course" onclick="editCourse(\''+c.id+'\')">edit</span>'
+      +'<span class="material-icons icon" style="color:#dc2626;" title="Delete course" onclick="delCourse(\''+c.id+'\')">delete</span></div>'
+      +'<div class="course-body">'+(c.description?'<div class="muted" style="font-size:13px;margin-bottom:10px;">'+esc(c.description)+'</div>':'')
+      +vids
+      +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-n" onclick="editVideo(\''+c.id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add video</button>'+accessBtn+'</div>'
+      +'</div></div>';
+  }).join('');
+}
+window.editCourse=async function(id){
+  var c=id?COURSES.find(function(x){return x.id===id;}):{title:'',description:'',unlock_mode:'manual',is_published:false};
+  var res=await Swal.fire({title:id?'Edit course':'New course',width:560,
+    html:'<div style="text-align:left;">'
+      +'<label>Course title</label><input id="c-title" class="swal2-input" style="margin:0;width:100%;" value="'+esc(c.title||'')+'">'
+      +'<label>Description</label><textarea id="c-desc" class="swal2-textarea" style="margin:0;width:100%;">'+esc(c.description||'')+'</textarea>'
+      +'<label>Unlock mode</label><select id="c-mode" class="swal2-input" style="margin:0;width:100%;"><option value="manual"'+(c.unlock_mode!=='auto'?' selected':'')+'>Manual — only partners I grant access</option><option value="auto"'+(c.unlock_mode==='auto'?' selected':'')+'>Automatic — every partner sees it</option></select>'
+      +'<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-top:14px;font-size:13px;cursor:pointer;"><input type="checkbox" id="c-pub" style="width:auto;" '+(c.is_published?'checked':'')+'> Published (visible to partners)</label>'
+      +'</div>',
+    showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
+    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked}; }
+  });
+  if(!res.isConfirmed) return;
+  var r=await api(Object.assign({action:'save_course',id:id||undefined},res.value));
+  if(r.success) load(); else Swal.fire('Error',r.message||'','error');
+};
+window.delCourse=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete course?',text:'All its videos and access grants are removed.',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_course',id:id}); load(); };
+window.editVideo=async function(courseId,vid){
+  var v=vid?(COURSES.find(function(c){return c.id===courseId;}).videos||[]).find(function(x){return x.id===vid;}):{title:'',description:'',provider:'youtube',url:''};
+  var res=await Swal.fire({title:vid?'Edit video':'Add video',width:560,
+    html:'<div style="text-align:left;">'
+      +'<label>Video title</label><input id="v-title" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.title||'')+'">'
+      +'<label>Provider</label><select id="v-prov" class="swal2-input" style="margin:0;width:100%;">'+['youtube','wistia','vimeo','other'].map(function(p){return '<option value="'+p+'"'+(v.provider===p?' selected':'')+'>'+p+'</option>';}).join('')+'</select>'
+      +'<label>Embed URL / link</label><input id="v-url" class="swal2-input" style="margin:0;width:100%;" placeholder="Paste the YouTube / Wistia / Vimeo link" value="'+esc(v.url||'')+'">'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Embed only — nothing is uploaded to our servers. Paste the video page link (e.g. youtube.com/watch?v=… , a wistia medias link, or vimeo.com/…). For “other”, paste an https embed URL.</div>'
+      +'<label>Description (optional)</label><textarea id="v-desc" class="swal2-textarea" style="margin:0;width:100%;">'+esc(v.description||'')+'</textarea>'
+      +'</div>',
+    showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
+    preConfirm:function(){ var t=document.getElementById('v-title').value.trim(),u=document.getElementById('v-url').value.trim(); if(!t){Swal.showValidationMessage('Title required');return false;} if(!u){Swal.showValidationMessage('Embed URL required');return false;} return {title:t,provider:document.getElementById('v-prov').value,url:u,description:document.getElementById('v-desc').value}; }
+  });
+  if(!res.isConfirmed) return;
+  var r=await api(Object.assign({action:'save_video',id:vid||undefined,course_id:courseId},res.value));
+  if(r.success) load(); else Swal.fire('Error',r.message||'','error');
+};
+window.delVideo=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete video?',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_video',id:id}); load(); };
+window.manageAccess=async function(courseId){
+  var course=COURSES.find(function(c){return c.id===courseId;});
+  function panel(list){
+    return '<div style="text-align:left;">'
+      +'<div style="font-size:12px;color:#64748b;margin-bottom:8px;">Search a partner by name or email to grant access.</div>'
+      +'<input id="ac-search" class="swal2-input" style="margin:0;width:100%;" placeholder="Search partner…" oninput="acSearch(\''+courseId+'\')">'
+      +'<div id="ac-results" style="margin:6px 0;"></div>'
+      +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin:10px 0 6px;">Has access ('+list.length+')</div>'
+      +'<div id="ac-list">'+(list.length?list.map(function(a){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span style="flex:1;"><b>'+esc(a.name)+'</b> <span class="muted">'+esc(a.email)+'</span></span><span class="material-icons icon" style="color:#dc2626;" onclick="acRevoke(\''+courseId+'\',\''+a.person_id+'\')">remove_circle</span></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No partners yet.</div>')+'</div></div>';
+  }
+  var r=await api({action:'course_access_list',course_id:courseId});
+  await Swal.fire({title:'Access — '+esc(course.title),width:560,html:panel((r&&r.access)||[]),showConfirmButton:true,confirmButtonText:'Done',confirmButtonColor:'#2563eb'});
+};
+window.acSearch=function(courseId){
+  var q=document.getElementById('ac-search').value.trim();
+  var box=document.getElementById('ac-results'); if(q.length<2){box.innerHTML='';return;}
+  api({action:'partner_search',q:q}).then(function(r){
+    var ps=(r&&r.partners)||[];
+    box.innerHTML=ps.length?ps.map(function(p){return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #f1f5f9;border-radius:8px;margin-bottom:4px;font-size:13px;cursor:pointer;" onclick="acGrant(\''+courseId+'\',\''+p.id+'\')"><span style="flex:1;"><b>'+esc(p.name)+'</b> <span class="muted">'+esc(p.email)+'</span></span><span class="material-icons" style="color:#16a34a;">add_circle</span></div>';}).join(''):'<div class="muted" style="font-size:12px;padding:4px;">No matches.</div>';
+  });
+};
+window.acGrant=async function(courseId,pid){ await api({action:'grant_access',course_id:courseId,person_id:pid}); load(); manageAccess(courseId); };
+window.acRevoke=async function(courseId,pid){ await api({action:'revoke_access',course_id:courseId,person_id:pid}); load(); manageAccess(courseId); };
+load();
+</script>
+</body>
+</html>
