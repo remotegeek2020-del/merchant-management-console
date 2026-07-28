@@ -277,19 +277,26 @@ export default async function handler(req, res) {
             q = q.or(ors.join(','));
             const { data } = await q;
             const rows = data || [];
-            const stageIds = [...new Set(rows.map(l => l.stage_id).filter(Boolean))];
+            // Staff-defined pipeline (default, else first) + its ordered stages,
+            // so partners can see stage progress. Also a name map for any stage.
+            const [{ data: pls }, { data: allStages }] = await Promise.all([
+                supabase.from('pos_pipelines').select('*').order('sort_order'),
+                supabase.from('pos_stages').select('id, name, pipeline_id, sort_order').order('sort_order')
+            ]);
             const stageMap = {};
-            if (stageIds.length) {
-                const { data: st } = await supabase.from('pos_stages').select('id, name').in('id', stageIds);
-                (st || []).forEach(s => { stageMap[s.id] = s.name; });
-            }
+            (allStages || []).forEach(s => { stageMap[s.id] = s.name; });
+            const chosen = (pls || []).find(p => p.is_default) || (pls || [])[0] || null;
+            const pipeline = chosen ? {
+                id: chosen.id, name: chosen.name,
+                stages: (allStages || []).filter(s => s.pipeline_id === chosen.id).map(s => ({ id: s.id, name: s.name }))
+            } : null;
             const leads = rows.map(l => ({
                 id: l.id, business_name: l.business_name, contact_name: l.contact_name,
                 city: l.city, state: l.state, monthly_volume: l.monthly_volume,
-                status: l.status, stage_name: stageMap[l.stage_id] || null,
+                status: l.status, stage_id: l.stage_id || null, stage_name: stageMap[l.stage_id] || null,
                 agent_id: l.agent_id, source: l.source, created_at: l.created_at
             }));
-            return ok(res, { leads });
+            return ok(res, { leads, pipeline });
         }
 
         // ── PARTNER (portal): list my agent ids + submit ──
