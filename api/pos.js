@@ -202,6 +202,51 @@ async function runAutomations(triggerType, lead, opts = {}) {
     } catch (e) { /* never block the caller */ }
 }
 
+// ── Notes / mentions / notifications helpers ────────────────────────────────
+// Staff who can be @tagged on a POS lead = super admins or anyone with the
+// POS Express flag.
+async function posAccessStaff() {
+    const { data } = await supabase.from('app_users').select('userid, first_name, last_name, role, access_pos_express').limit(2000);
+    return (data || [])
+        .filter(u => String(u.role || '').toLowerCase().includes('super') || u.access_pos_express === true)
+        .map(u => ({ type: 'staff', id: u.userid, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.userid }));
+}
+// Keep only mentions the author is allowed to make.
+async function sanitizeMentions(rawMentions, authorType, lead) {
+    const raw = Array.isArray(rawMentions) ? rawMentions : [];
+    const staff = await posAccessStaff();
+    const staffIds = new Set(staff.map(s => String(s.id)));
+    const staffName = {}; staff.forEach(s => { staffName[String(s.id)] = s.name; });
+    const out = [];
+    for (const m of raw) {
+        if (!m || !m.id || !m.type) continue;
+        if (m.type === 'staff') {
+            if (staffIds.has(String(m.id))) out.push({ type: 'staff', id: String(m.id), name: staffName[String(m.id)] });
+        } else if (m.type === 'partner') {
+            // Only staff may tag a partner, and only THIS lead's partner.
+            if (authorType === 'staff' && lead && lead.partner_id && String(lead.partner_id) === String(m.id)) {
+                out.push({ type: 'partner', id: String(m.id), name: m.name || 'Partner' });
+            }
+        }
+    }
+    // de-dupe
+    const seen = new Set();
+    return out.filter(m => { const k = m.type + ':' + m.id; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+async function notifyMentions(mentions, ctx) {
+    for (const m of (mentions || [])) {
+        const link = m.type === 'partner' ? '/partner/pos-leads' : '/pos-express';
+        try {
+            await supabase.from('notifications').insert({
+                recipient_id: String(m.id), recipient_type: m.type, type: 'pos_note',
+                title: ctx.title, body: ctx.body, actor_id: ctx.actorId || '', actor_name: ctx.actorName || '',
+                reference_id: ctx.leadId, link, is_read: false
+            });
+        } catch (e) { /* best-effort */ }
+    }
+    try { await supabase.from('notification_pulse').update({ updated_at: new Date().toISOString() }).gt('id', 0); } catch (e) {}
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -266,11 +311,27 @@ export default async function handler(req, res) {
             return ok(res, { received: true });
         }
 
-        // ── PARTNER: notes on one of THEIR leads (read + add) ──
-        if (action === 'lead_notes_get' || action === 'lead_note_add') {
+        // ── PARTNER: notes on one of THEIR leads (read + add), taggable staff, bell ──
+        if ((action === 'lead_notes_get' || action === 'lead_note_add' || action === 'pos_taggable' || action === 'pos_notifications' || action === 'pos_notifications_read') && body.partner_token) {
             const personId = await validatePartner(body.partner_token);
             if (!personId) return bad(res, 'Not signed in', 401);
-            const { data: lead } = await supabase.from('pos_leads').select('id, partner_id, agent_id').eq('id', body.lead_id).maybeSingle();
+
+            if (action === 'pos_taggable') {
+                // Partners may tag POS-Express staff only.
+                return ok(res, { people: await posAccessStaff() });
+            }
+            if (action === 'pos_notifications') {
+                const { data } = await supabase.from('notifications').select('id, title, body, reference_id, actor_name, is_read, created_at')
+                    .eq('recipient_id', String(personId)).eq('recipient_type', 'partner').eq('type', 'pos_note').order('created_at', { ascending: false }).limit(30);
+                return ok(res, { notifications: data || [], unread: (data || []).filter(n => !n.is_read).length });
+            }
+            if (action === 'pos_notifications_read') {
+                let q = supabase.from('notifications').update({ is_read: true }).eq('recipient_id', String(personId)).eq('recipient_type', 'partner').eq('type', 'pos_note');
+                if (body.id) q = q.eq('id', body.id);
+                await q; return ok(res, {});
+            }
+
+            const { data: lead } = await supabase.from('pos_leads').select('id, partner_id, agent_id, business_name').eq('id', body.lead_id).maybeSingle();
             if (!lead) return bad(res, 'Lead not found', 404);
             let owns = lead.partner_id === personId;
             if (!owns) { const ids = await partnerAgentIds(personId); owns = !!lead.agent_id && ids.includes(lead.agent_id); }
@@ -279,9 +340,12 @@ export default async function handler(req, res) {
                 const bodyText = String(body.body || '').trim().slice(0, 2000);
                 if (!bodyText) return bad(res, 'Note is empty.');
                 const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).maybeSingle();
-                await supabase.from('pos_lead_notes').insert({ lead_id: body.lead_id, author_type: 'partner', author_id: personId, author_name: person?.full_name || 'Partner', body: bodyText });
+                const authorName = person?.full_name || 'Partner';
+                const mentions = await sanitizeMentions(body.mentions, 'partner', lead);
+                await supabase.from('pos_lead_notes').insert({ lead_id: body.lead_id, author_type: 'partner', author_id: personId, author_name: authorName, body: bodyText, mentions });
+                await notifyMentions(mentions, { title: authorName + ' mentioned you', body: (lead.business_name ? lead.business_name + ': ' : '') + bodyText.slice(0, 90), actorId: personId, actorName: authorName, leadId: body.lead_id });
             }
-            const { data: notes } = await supabase.from('pos_lead_notes').select('id, author_type, author_name, body, created_at').eq('lead_id', body.lead_id).order('created_at', { ascending: true });
+            const { data: notes } = await supabase.from('pos_lead_notes').select('id, author_type, author_name, body, mentions, created_at').eq('lead_id', body.lead_id).order('created_at', { ascending: true });
             return ok(res, { notes: notes || [] });
         }
 
@@ -361,6 +425,41 @@ export default async function handler(req, res) {
         const canPos = role.includes('super') || actor?.access_pos_express === true;
         if (!canPos) return bad(res, 'Access denied. Ask an admin to enable POS Express for your account.', 403);
         const canSettings = role.includes('super') || actor?.access_pos_settings === true;
+        const actorName = [actor?.first_name, actor?.last_name].filter(Boolean).join(' ') || session.userid;
+
+        // ── STAFF: notes (shared with partner), taggable people, bell ──
+        if (action === 'pos_taggable') {
+            // Staff may tag other POS-Express staff and (if a lead is given) its partner.
+            const people = await posAccessStaff();
+            if (body.lead_id) {
+                const { data: lead } = await supabase.from('pos_leads').select('partner_id, partner_name').eq('id', body.lead_id).maybeSingle();
+                if (lead?.partner_id) people.push({ type: 'partner', id: String(lead.partner_id), name: (lead.partner_name || 'Partner') + ' (partner)' });
+            }
+            return ok(res, { people });
+        }
+        if (action === 'pos_notifications') {
+            const { data } = await supabase.from('notifications').select('id, title, body, reference_id, actor_name, is_read, created_at')
+                .eq('recipient_id', String(session.userid)).eq('recipient_type', 'staff').eq('type', 'pos_note').order('created_at', { ascending: false }).limit(30);
+            return ok(res, { notifications: data || [], unread: (data || []).filter(n => !n.is_read).length });
+        }
+        if (action === 'pos_notifications_read') {
+            let q = supabase.from('notifications').update({ is_read: true }).eq('recipient_id', String(session.userid)).eq('recipient_type', 'staff').eq('type', 'pos_note');
+            if (body.id) q = q.eq('id', body.id);
+            await q; return ok(res, {});
+        }
+        if (action === 'lead_notes_get' || action === 'lead_note_add') {
+            const { data: lead } = await supabase.from('pos_leads').select('id, partner_id, business_name').eq('id', body.lead_id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            if (action === 'lead_note_add') {
+                const bodyText = String(body.body || '').trim().slice(0, 2000);
+                if (!bodyText) return bad(res, 'Note is empty.');
+                const mentions = await sanitizeMentions(body.mentions, 'staff', lead);
+                await supabase.from('pos_lead_notes').insert({ lead_id: body.lead_id, author_type: 'staff', author_id: session.userid, author_name: actorName, body: bodyText, mentions });
+                await notifyMentions(mentions, { title: actorName + ' mentioned you', body: (lead.business_name ? lead.business_name + ': ' : '') + bodyText.slice(0, 90), actorId: session.userid, actorName, leadId: body.lead_id });
+            }
+            const { data: notes } = await supabase.from('pos_lead_notes').select('id, author_type, author_name, body, mentions, created_at').eq('lead_id', body.lead_id).order('created_at', { ascending: true });
+            return ok(res, { notes: notes || [] });
+        }
 
         // ── SETTINGS (sub-granular access) ──
         if (action === 'settings_get') {

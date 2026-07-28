@@ -62,6 +62,24 @@
   .kb-card .row .material-icons{font-size:13px;color:#cbd5e1;}
   .kb-card .vol{font-weight:800;color:#16a34a;}
   .kb-empty{color:var(--muted);font-size:12px;text-align:center;padding:16px 6px;border:1px dashed var(--border);border-radius:9px;}
+  /* Bell */
+  .bell{position:relative;cursor:pointer;color:#64748b;display:flex;align-items:center;}
+  .bell .material-icons{font-size:24px;}
+  .bell-badge{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0 4px;}
+  .bell-panel{position:absolute;top:56px;right:24px;width:340px;max-height:60vh;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.18);z-index:200;display:none;}
+  .bell-panel h4{margin:0;padding:12px 16px;font-size:13px;font-weight:800;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+  .bell-item{padding:11px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;}
+  .bell-item:hover{background:#fff7ed;}.bell-item.unread{background:#fff7ed;}
+  .bell-item .t{font-size:12.5px;font-weight:700;}.bell-item .b{font-size:12px;color:var(--muted);margin-top:2px;}.bell-item .d{font-size:10.5px;color:#cbd5e1;margin-top:3px;}
+  /* Tag chips + mentions */
+  .ptag{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:99px;font-size:11.5px;font-weight:700;border:1.5px solid var(--border);background:#fff;color:#475569;cursor:pointer;margin:0 6px 6px 0;}
+  .ptag.on{background:var(--orange);border-color:var(--orange);color:#fff;}
+  .note-mentions{margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;}
+  .mchip{font-size:10.5px;font-weight:700;color:#9a3412;background:#ffedd5;border-radius:6px;padding:2px 7px;}
+  .pnote{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;text-align:left;}
+  .pnote-h{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+  .pnote-badge{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:5px;}
+  .pnote-body{font-size:13px;line-height:1.5;white-space:pre-wrap;}
   /* Form Designer */
   .fd-overlay{position:fixed;inset:0;background:#0f172a;z-index:1000;display:flex;flex-direction:column;}
   .fd-top{background:#1e293b;color:#fff;padding:12px 18px;display:flex;align-items:center;gap:12px;}
@@ -100,8 +118,10 @@
 </div>
 <div class="main">
   <div class="topbar"><h1 id="secTitle">Dashboard</h1>
+    <div class="bell" onclick="toggleBell(event)"><span class="material-icons">notifications</span><span class="bell-badge" id="bellBadge" style="display:none;">0</span></div>
     <button class="btn btn-n" onclick="load()">Refresh</button>
   </div>
+  <div class="bell-panel" id="bellPanel"><h4><span class="material-icons" style="font-size:18px;color:var(--orange);">notifications</span> Notifications</h4><div id="bellList"></div></div>
   <div class="content" id="content"><div class="empty">Loading…</div></div>
 </div>
 <script>
@@ -571,7 +591,16 @@ async function openLead(id){
     html:'<div style="text-align:left;">'+(l.agent_valid?'':'<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px;">⚠️ Agent ID “'+esc(l.agent_id||'')+'” did not match a partner. Verify before sending.</div>')+info+
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Classification</label><select id="pl-class" class="swal2-input" style="margin:0;width:100%;"><option value="">— unclassified —</option><option value="good"'+(l.classification==='good'?' selected':'')+'>Good lead</option><option value="bad"'+(l.classification==='bad'?' selected':'')+'>Bad lead</option></select>'+
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Status</label><select id="pl-status" class="swal2-input" style="margin:0;width:100%;">'+['new','reviewing','qualified','rejected','sent'].map(function(s){return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'+
-      '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Review notes</label><textarea id="pl-notes" class="swal2-textarea" style="margin:0;width:100%;">'+esc(l.review_notes||'')+'</textarea></div>',
+      '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Review notes <span style="color:#94a3b8;font-weight:600;">(internal — not shown to partner)</span></label><textarea id="pl-notes" class="swal2-textarea" style="margin:0;width:100%;">'+esc(l.review_notes||'')+'</textarea>'+
+      '<div style="margin-top:16px;border-top:1px solid #e2e8f0;padding-top:12px;">'+
+        '<label style="display:block;font-size:12px;font-weight:700;margin:0 0 4px;">Conversation with partner</label>'+
+        '<div style="font-size:12px;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:7px 10px;margin-bottom:10px;">💬 Shared with the partner — they can see and reply here.</div>'+
+        '<div id="posNotesList" style="font-size:13px;color:#94a3b8;">Loading…</div>'+
+        '<textarea id="posNoteInput" class="swal2-textarea" style="margin:8px 0 0;width:100%;" placeholder="Message the partner…"></textarea>'+
+        '<div style="font-size:11px;font-weight:700;margin:8px 0 6px;">Tag people (they get notified)</div>'+
+        '<div id="posTagChips" style="margin-bottom:8px;"><span style="color:#94a3b8;font-size:12px;">Loading…</span></div>'+
+        '<button id="posNoteAdd" class="btn btn-n" style="padding:8px 14px;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">send</span> Add note</button>'+
+      '</div></div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#ea580c',
     footer:'<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">'
       +(canSend?'<button id="pl-send" class="btn btn-o" style="background:#7c3aed;">✅ Mark good &amp; send to POS Express</button>':'<span style="color:#7c3aed;font-weight:700;">Already sent to POS Express</span>')
@@ -579,11 +608,63 @@ async function openLead(id){
     didOpen:function(){
       var sb=document.getElementById('pl-send'); if(sb) sb.addEventListener('click',async function(){ sb.disabled=true; sb.textContent='Sending…'; var s=await api({action:'send_to_ghl',id:l.id}); if(s.success){ Swal.close(); Swal.fire({icon:'success',title:'Sent to POS Express',timer:1300,showConfirmButton:false}); load(); } else { Swal.showValidationMessage(s.message||'Send failed'); sb.disabled=false; sb.textContent='✅ Mark good & send to POS Express'; } });
       var tb=document.getElementById('pl-test'); if(tb) tb.addEventListener('click',function(){ testHlSend(l.id); });
+      _staffMentions=[]; loadStaffNotes(l.id); loadStaffTaggable(l.id);
+      var na=document.getElementById('posNoteAdd'); if(na) na.addEventListener('click',function(){ addStaffNote(l.id); });
     },
     preConfirm:function(){ return {classification:document.getElementById('pl-class').value,status:document.getElementById('pl-status').value,review_notes:document.getElementById('pl-notes').value}; }
   });
   if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes}); load(); }
 }
+/* ── Staff shared notes + tagging ── */
+var _staffTaggable=[], _staffMentions=[];
+async function loadStaffTaggable(id){ var r=await api({action:'pos_taggable',lead_id:id}); _staffTaggable=(r&&r.success&&r.people)||[]; renderStaffTags(); }
+function renderStaffTags(){
+  var el=document.getElementById('posTagChips'); if(!el) return;
+  if(!_staffTaggable.length){ el.innerHTML='<span style="color:#94a3b8;font-size:12px;">No one to tag.</span>'; return; }
+  el.innerHTML=_staffTaggable.map(function(p){
+    var on=_staffMentions.some(function(m){return m.id===p.id&&m.type===p.type;});
+    return '<span class="ptag'+(on?' on':'')+'" onclick="toggleStaffTag(\''+p.type+'\',\''+esc(p.id)+'\',this)" data-name="'+esc(p.name)+'">＠ '+esc(p.name)+'</span>';
+  }).join('');
+}
+window.toggleStaffTag=function(type,id,el){
+  var i=_staffMentions.findIndex(function(m){return m.id===id&&m.type===type;});
+  if(i>=0){ _staffMentions.splice(i,1); el.classList.remove('on'); } else { _staffMentions.push({type:type,id:id,name:el.getAttribute('data-name')}); el.classList.add('on'); }
+};
+async function loadStaffNotes(id){ var r=await api({action:'lead_notes_get',lead_id:id}); renderStaffNotes((r&&r.success&&r.notes)||[]); }
+function renderStaffNotes(notes){
+  var el=document.getElementById('posNotesList'); if(!el) return;
+  if(!notes.length){ el.innerHTML='<div style="color:#94a3b8;font-size:13px;">No messages yet. Start the conversation below.</div>'; return; }
+  el.innerHTML=notes.map(function(n){
+    var staff=n.author_type==='staff';
+    var badge='<span class="pnote-badge" style="background:'+(staff?'#ffedd5;color:#9a3412':'#ccfbf1;color:#0f766e')+';">'+(staff?'Staff':'Partner')+'</span>';
+    var mentions=(n.mentions&&n.mentions.length)?'<div class="note-mentions">'+n.mentions.map(function(m){return '<span class="mchip">＠ '+esc(m.name||'')+'</span>';}).join('')+'</div>':'';
+    return '<div class="pnote"><div class="pnote-h">'+badge+'<span style="font-size:11px;color:#94a3b8;">'+esc(n.author_name||'')+' · '+dt(n.created_at)+'</span></div><div class="pnote-body">'+esc(n.body)+'</div>'+mentions+'</div>';
+  }).join('');
+}
+async function addStaffNote(id){
+  var ta=document.getElementById('posNoteInput'); var body=(ta.value||'').trim(); if(!body) return;
+  var btn=document.getElementById('posNoteAdd'); btn.disabled=true; btn.textContent='Saving…';
+  var r=await api({action:'lead_note_add',lead_id:id,body:body,mentions:_staffMentions});
+  btn.disabled=false; btn.innerHTML='<span class="material-icons" style="font-size:16px;vertical-align:-3px;">send</span> Add note';
+  if(r&&r.success){ ta.value=''; _staffMentions=[]; renderStaffTags(); renderStaffNotes(r.notes||[]); } else Swal.showValidationMessage((r&&r.message)||'Could not add note');
+}
+/* ── Bell notifications (staff) ── */
+function toggleBell(e){ if(e) e.stopPropagation(); var p=document.getElementById('bellPanel'); p.style.display=(p.style.display==='block')?'none':'block'; if(p.style.display==='block') loadBell(); }
+document.addEventListener('click',function(e){ var p=document.getElementById('bellPanel'); if(p&&p.style.display==='block'&&!p.contains(e.target)&&!e.target.closest('.bell')) p.style.display='none'; });
+async function loadBell(){
+  var r=await api({action:'pos_notifications'});
+  var ns=(r&&r.success&&r.notifications)||[]; var unread=(r&&r.unread)||0;
+  var b=document.getElementById('bellBadge'); if(unread>0){ b.style.display='flex'; b.textContent=unread>9?'9+':unread; } else b.style.display='none';
+  var list=document.getElementById('bellList');
+  list.innerHTML = ns.length ? ns.map(function(n){
+    return '<div class="bell-item'+(n.is_read?'':' unread')+'" onclick="openNotif(\''+n.id+'\',\''+esc(n.reference_id||'')+'\')"><div class="t">'+esc(n.title||'')+'</div><div class="b">'+esc(n.body||'')+'</div><div class="d">'+dt(n.created_at)+'</div></div>';
+  }).join('') : '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">No notifications yet.</div>';
+}
+window.openNotif=async function(nid, refId){
+  await api({action:'pos_notifications_read',id:nid});
+  document.getElementById('bellPanel').style.display='none'; loadBell();
+  if(refId){ if(!LEADS.some(function(l){return l.id===refId;})) await load(); openLead(refId); }
+};
 async function testHlSend(leadId){
   var la=await api({action:'hl_actions_list'});
   var acts=(la&&la.success&&la.actions)||[];
@@ -612,7 +693,9 @@ async function testHlSend(leadId){
 }
 var CAN_SETTINGS=(localStorage.getItem('pp_role')||'').toLowerCase().indexOf('super')!==-1 || localStorage.getItem('pp_access_pos_settings')==='true';
 if(!CAN_SETTINGS){ NAV=NAV.filter(function(n){return n[0]!=='settings';}); if(SEC==='settings') SEC='dashboard'; }
-renderNav(); load();
+renderNav(); load(); loadBell();
+setInterval(loadBell, 15000);
+window.addEventListener('focus', loadBell);
 </script>
 </body>
 </html>
