@@ -266,6 +266,25 @@ export default async function handler(req, res) {
             return ok(res, { received: true });
         }
 
+        // ── PARTNER: notes on one of THEIR leads (read + add) ──
+        if (action === 'lead_notes_get' || action === 'lead_note_add') {
+            const personId = await validatePartner(body.partner_token);
+            if (!personId) return bad(res, 'Not signed in', 401);
+            const { data: lead } = await supabase.from('pos_leads').select('id, partner_id, agent_id').eq('id', body.lead_id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            let owns = lead.partner_id === personId;
+            if (!owns) { const ids = await partnerAgentIds(personId); owns = !!lead.agent_id && ids.includes(lead.agent_id); }
+            if (!owns) return bad(res, 'Not your lead', 403);
+            if (action === 'lead_note_add') {
+                const bodyText = String(body.body || '').trim().slice(0, 2000);
+                if (!bodyText) return bad(res, 'Note is empty.');
+                const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).maybeSingle();
+                await supabase.from('pos_lead_notes').insert({ lead_id: body.lead_id, author_type: 'partner', author_id: personId, author_name: person?.full_name || 'Partner', body: bodyText });
+            }
+            const { data: notes } = await supabase.from('pos_lead_notes').select('id, author_type, author_name, body, created_at').eq('lead_id', body.lead_id).order('created_at', { ascending: true });
+            return ok(res, { notes: notes || [] });
+        }
+
         // ── PARTNER (portal): the leads THIS partner submitted (read-only) ──
         if (action === 'my_pos_leads') {
             const personId = await validatePartner(body.partner_token);

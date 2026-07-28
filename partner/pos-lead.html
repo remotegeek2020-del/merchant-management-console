@@ -2,9 +2,186 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=/partner/pos-leads">
-    <title>POS Express | PayProTec Partner Portal</title>
-    <script>location.replace('/partner/pos-leads');</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit POS Lead | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--teal:#0d9488;--teal-dark:#0f766e;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;}
+        .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;}
+        .sidebar-header{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo{height:28px;filter:brightness(0) invert(1);display:block;margin-bottom:16px;}
+        .sidebar-partner{display:flex;align-items:center;gap:10px;}
+        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;}
+        .sidebar-name{font-size:12px;font-weight:700;color:#fff;}.sidebar-tag{font-size:10px;color:rgba(255,255,255,0.4);}
+        .sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;}
+        .nav-item:hover{background:rgba(255,255,255,0.08);color:#fff;}.nav-item.active{background:var(--teal);color:#fff;}
+        .nav-item .material-icons{font-size:20px;flex-shrink:0;}.nav-divider{height:1px;background:rgba(255,255,255,0.08);margin:8px 0;}
+        .main{margin-left:240px;}
+        .topbar{background:#fff;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;}
+        .topbar-title{font-size:1.1rem;font-weight:800;margin:0;flex:1;}
+        .content{padding:24px;max-width:760px;}
+        .card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;}
+        label{display:block;font-size:11px;font-weight:700;color:var(--secondary);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px;}
+        input,textarea,select{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;background:#f8fafc;outline:none;}
+        input:focus,textarea:focus,select:focus{border-color:var(--teal);background:#fff;}
+        .row{display:flex;gap:12px;}.row>div{flex:1;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--teal);color:#fff;font-family:'DM Sans',sans-serif;text-decoration:none;}
+        .btn:hover{background:var(--teal-dark);}.btn:disabled{opacity:.6;}
+        /* Big page-switch button */
+        .switch-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;background:#eef2ff;color:#3730a3;border:1.5px solid #c7d2fe;}
+        .switch-btn:hover{background:#e0e7ff;}
+        .lookres{border:1px solid var(--border);border-radius:10px;margin-top:6px;max-height:180px;overflow:auto;}
+        @media(max-width:820px){.sidebar{display:none;}.main{margin-left:0;}}
+    </style>
 </head>
-<body></body>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner"><div class="sidebar-avatar" id="sidebarAvatar">?</div><div><div class="sidebar-name" id="sidebarName">Partner</div><div class="sidebar-tag">Partner Portal</div></div></div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item active" href="/partner/pos-lead"><span class="material-icons">post_add</span> Submit POS Lead</a>
+        <a class="nav-item" href="/partner/pos-leads"><span class="material-icons">point_of_sale</span> My POS Leads</a>
+        <a class="nav-item" href="/partner/sub-partners"><span class="material-icons">account_tree</span> Sub-Partners</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+</div>
+<div class="main">
+    <div class="topbar">
+        <h1 class="topbar-title">Submit a POS Lead</h1>
+        <a class="switch-btn" href="/partner/pos-leads"><span class="material-icons" style="font-size:19px;">trending_up</span> View My POS Leads →</a>
+    </div>
+    <div class="content">
+        <div class="card" id="formCard">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Submit a merchant lead for POS Express. Our team reviews it, and qualified leads are handed to the POS Express team.</div>
+            <label>Use Agent ID *</label>
+            <select id="agent"><option value="">Loading your Agent IDs…</option></select>
+
+            <label style="margin-top:18px;">Is this a current merchant?</label>
+            <div style="display:flex;gap:16px;margin-top:6px;">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="radio" name="curmerch" value="yes" onchange="onCurMerch()" style="width:auto;"> Yes</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;text-transform:none;letter-spacing:0;"><input type="radio" name="curmerch" value="no" checked onchange="onCurMerch()" style="width:auto;"> No</label>
+            </div>
+            <div id="lookupWrap" style="display:none;margin-top:10px;">
+              <label style="margin-top:0;">Find merchant by MID or DBA</label>
+              <input id="msearch" placeholder="Type MID or business name…" oninput="mSearch()" autocomplete="off">
+              <div id="mfindScope" style="font-size:12px;color:var(--muted);margin-top:5px;"></div>
+              <div class="lookres" id="mresults" style="display:none;"></div>
+            </div>
+
+            <label>Business (DBA) name *</label>
+            <input id="business">
+            <label>Merchant legal name</label>
+            <input id="legal">
+            <label>Business type</label>
+            <select id="btype"><option value="">— select —</option><option>Restaurant - Table Service</option><option>Restaurant - Quick Service</option><option>Retail</option><option>Other</option></select>
+            <label>Street address</label>
+            <input id="street">
+            <div class="row">
+              <div><label>City</label><input id="city"></div>
+              <div><label>State</label><input id="state"></div>
+              <div><label>Zip</label><input id="zip"></div>
+            </div>
+            <div class="row">
+              <div><label>Merchant first name</label><input id="mfirst"></div>
+              <div><label>Merchant last name</label><input id="mlast"></div>
+            </div>
+            <div class="row">
+              <div><label>Merchant phone</label><input id="phone"></div>
+              <div><label>Merchant email</label><input id="email" type="email"></div>
+            </div>
+            <label>Projected monthly volume ($)</label>
+            <input id="volume" type="number" inputmode="numeric">
+            <label>Proposal type</label>
+            <select id="proposal"><option value="">— select —</option><option>Purchase Only</option><option>Purchase and Placement</option><option>Placement Only</option></select>
+            <label>Merchant's recent processing statement</label>
+            <input type="file" id="statement" accept=".pdf,.png,.jpg,.jpeg,.webp" onchange="uploadStatement(this)">
+            <div id="stmtState" style="font-size:11px;color:var(--muted);"></div>
+            <label>Notes</label>
+            <textarea id="notes" rows="3"></textarea>
+            <label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer;"><input type="checkbox" id="sms" style="width:auto;margin-top:2px;"> I would like to receive SMS texts to track the progress of this merchant.</label>
+            <div style="margin-top:18px;"><button class="btn" id="submitBtn" onclick="submitLead()">Submit lead</button></div>
+            <div id="msg" style="font-size:13px;color:#dc2626;margin-top:10px;min-height:16px;"></div>
+        </div>
+    </div>
+</div>
+<script>
+var TOKEN=localStorage.getItem('pp_partner_token')||'';
+if(!TOKEN){ location.href='/partner'; }
+(function(){ var n=localStorage.getItem('pp_partner_name')||'Partner'; document.getElementById('sidebarName').textContent=n; document.getElementById('sidebarAvatar').textContent=(n.trim()[0]||'?').toUpperCase(); })();
+function papi(b){ b.partner_token=TOKEN; return fetch('/api/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function handleLogout(){ try{ localStorage.removeItem('pp_partner_token'); }catch(e){} location.href='/partner'; }
+(async function(){
+  var r=await papi({action:'my_agent_ids'});
+  var sel=document.getElementById('agent');
+  var ids=(r.success&&r.agent_ids)||[];
+  sel.innerHTML=ids.length?ids.map(function(id){return '<option value="'+id+'">'+id+'</option>';}).join(''):'<option value="">No Agent IDs on your account</option>';
+})();
+var _mid=null,_muuid=null,_stmt='',_msTimer=null;
+function g(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+function s(id,v){var el=document.getElementById(id);if(el)el.value=v==null?'':v;}
+function updateScope(){ var el=document.getElementById('mfindScope'); if(!el)return; var a=g('agent'); el.textContent=a?('🔎 Searching your merchants under Agent ID: '+a):''; }
+window.onCurMerch=function(){ var yes=document.querySelector('input[name=curmerch]:checked').value==='yes'; document.getElementById('lookupWrap').style.display=yes?'block':'none'; if(yes) updateScope(); };
+window.mSearch=function(){
+  if(_msTimer)clearTimeout(_msTimer); _msTimer=setTimeout(function(){
+    var q=g('msearch'),box=document.getElementById('mresults'); if(q.length<2||!g('agent')){box.style.display='none';return;}
+    papi({action:'merchant_lookup',agent_id:g('agent'),q:q}).then(function(d){
+      var ms=(d.success&&d.merchants)||[]; if(!ms.length){box.innerHTML='<div style="padding:9px 12px;color:var(--muted);">No matching merchants.</div>';box.style.display='block';return;}
+      window._ms=ms; box.innerHTML=ms.map(function(m,i){
+        var diff=(m.agent_id && g('agent') && String(m.agent_id)!==g('agent'));
+        var tag=m.agent_id?'<span style="font-size:11px;color:'+(diff?'#b45309':'var(--muted)')+';">'+(diff?'↪ ':'')+'ID '+m.agent_id+'</span>':'';
+        return '<div style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;" onclick="pickMerchant('+i+')"><b>'+(m.dba_name||'—')+'</b> · '+(m.merchant_id||'')+(m.city?' · '+m.city:'')+' &nbsp;'+tag+'</div>';
+      }).join(''); box.style.display='block';
+    });
+  },350);
+};
+window.pickMerchant=function(i){
+  var m=window._ms[i]; if(!m)return;
+  if(m.agent_id && String(m.agent_id)!==g('agent')){
+    var sel=document.getElementById('agent');
+    if(sel){ if(![].some.call(sel.options,function(o){return o.value===m.agent_id;})){ var o=document.createElement('option'); o.value=m.agent_id; o.textContent=m.agent_id; sel.appendChild(o); } sel.value=m.agent_id; updateScope(); }
+  }
+  s('business',m.dba_name);s('street',m.street_address);s('city',m.city);s('state',m.state);s('zip',m.zip);s('phone',m.phone);s('email',m.email);
+  if(m.contact){var p=String(m.contact).split(' ');s('mfirst',p.shift()||'');s('mlast',p.join(' '));}
+  document.getElementById('msearch').value=(m.dba_name||'')+' ('+(m.merchant_id||'')+')'; document.getElementById('mresults').style.display='none';
+  _mid=m.merchant_id; _muuid=m.id;
+};
+(function(){ var sel=document.getElementById('agent'); if(sel) sel.addEventListener('change',updateScope); })();
+window.uploadStatement=function(input){
+  var f=input.files&&input.files[0]; if(!f)return; var el=document.getElementById('stmtState'); el.textContent='Uploading…';
+  papi({action:'statement_upload_url',ext:(f.name.split('.').pop()||'pdf').toLowerCase()}).then(function(d){
+    if(!d.success){el.textContent='Upload failed.';return;}
+    return fetch(d.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type||'application/octet-stream'}}).then(function(r){ if(r.ok){_stmt=d.public_url;el.textContent='✓ '+f.name;}else el.textContent='Upload failed.'; });
+  }).catch(function(){el.textContent='Upload failed.';});
+};
+window.submitLead=function(){
+  var msg=document.getElementById('msg');
+  if(!g('agent')){ msg.textContent='Choose an Agent ID.'; return; }
+  if(!g('business')){ msg.textContent='Enter the business name.'; return; }
+  if(!g('email') && !g('phone')){ msg.textContent='Enter an email or phone.'; return; }
+  var yes=document.querySelector('input[name=curmerch]:checked').value==='yes';
+  var btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
+  papi({action:'submit_portal',agent_id:g('agent'),is_current_merchant:yes,mid:(yes?(_mid||g('msearch')):null),merchant_uuid:(yes?_muuid:null),
+    business_name:g('business'),merchant_legal_name:g('legal'),business_type:g('btype'),street_address:g('street'),city:g('city'),state:g('state'),zip:g('zip'),
+    merchant_first_name:g('mfirst'),merchant_last_name:g('mlast'),phone:g('phone'),email:g('email'),monthly_volume:g('volume'),proposal_type:g('proposal'),statement_url:_stmt,notes:g('notes'),sms_opt_in:document.getElementById('sms').checked})
+    .then(function(d){
+      if(d.success){ document.getElementById('formCard').innerHTML='<div style="text-align:center;padding:40px;"><div style="font-size:52px;">✅</div><div style="font-weight:800;font-size:20px;margin-top:10px;">Lead submitted!</div><div style="color:var(--muted);margin-top:6px;">Our team will review it shortly.</div><div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;"><button class="btn" onclick="location.reload()">Submit another</button><a class="switch-btn" href="/partner/pos-leads"><span class="material-icons" style="font-size:19px;">trending_up</span> View My POS Leads →</a></div></div>'; }
+      else { msg.textContent=d.message||'Something went wrong.'; btn.disabled=false; btn.textContent='Submit lead'; }
+    }).catch(function(){ msg.textContent='Network error — try again.'; btn.disabled=false; btn.textContent='Submit lead'; });
+};
+</script>
+</body>
 </html>
