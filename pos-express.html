@@ -295,6 +295,7 @@ function kbCard(l){
     +'<div class="row"><span class="material-icons">handshake</span>'+esc(l.partner_name||'—')+valid+'</div>'
     +(l.email?'<div class="row"><span class="material-icons">mail</span>'+esc(l.email)+'</div>':'')
     +(l.phone?'<div class="row"><span class="material-icons">call</span>'+esc(l.phone)+'</div>':'')
+    +(l.assigned_to?'<div class="row"><span class="material-icons">person</span>'+esc(STAFFMAP[l.assigned_to]||'Assigned')+'</div>':'')
     +'<div class="row"><span class="material-icons">payments</span><span class="vol">'+money(l.monthly_volume)+'</span></div>'
     +'<div class="row"><span class="material-icons">'+(l.source==='public'?'public':'badge')+'</span>'+esc(l.source||'—')+'&nbsp;·&nbsp;'+stPill(l.status)+'</div></div>';
 }
@@ -357,10 +358,13 @@ async function loadSettings(){
   var pipes=(r.pipelines||[]).map(pipelineEditor).join('')||'<div class="muted" style="padding:6px 0;">No pipelines yet — add one.</div>';
   var pipeCard='<div class="card"><h3>Pipelines &amp; Stages <button class="btn btn-o" style="float:right;padding:5px 11px;" onclick="addPipeline()">+ Pipeline</button></h3><div style="padding:16px 18px;">'
     +'<div class="muted" style="font-size:12px;margin-bottom:12px;">Define your pipelines and their stages (like HighLevel). Each stage can carry a workflow trigger URL that fires when a lead enters it.</div>'+pipes+'</div></div>';
-  box.innerHTML=conn+formCard+designerCard+pipeCard+portalAutoCard;
+  var assignCard='<div class="card"><h3>Lead Assignment <span class="muted" style="font-weight:600;font-size:12px;">— for new / unassigned leads</span></h3><div style="padding:16px 18px;" id="assignBody"></div></div>';
+  box.innerHTML=conn+formCard+designerCard+pipeCard+portalAutoCard+assignCard;
   var a=(window._pos&&window._pos.automations)||{};
   AUTO={ portal:(a.portal||[]).slice(), highlevel:[] };
   renderAutomations();
+  ASG=(window._pos&&window._pos.assignment)||{mode:'manual',pool:[],stage_id:null};
+  renderAssignment();
   // Load live HighLevel workflows + custom fields for the Send-to-workflow action.
   api({action:'ghl_meta'}).then(function(m){ window._ghlMeta=(m&&m.success)?m:{configured:false,workflows:[],custom_fields:[],wf_error:(m&&m.message)||'Request failed'}; window._ghlMeta._loaded=true; if(SEC==='settings') renderAutomations(); }).catch(function(e){ window._ghlMeta={configured:false,workflows:[],custom_fields:[],_loaded:true,wf_error:String(e)}; if(SEC==='settings') renderAutomations(); });
 }
@@ -578,6 +582,40 @@ window.saveAutomations=async function(btn){
   if(r&&r.success){ if(window._pos) window._pos.automations={portal:AUTO.portal.slice(),highlevel:[]}; Swal.fire({icon:'success',title:'Automations saved',timer:1100,showConfirmButton:false}); }
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');
 };
+
+/* ── Lead Assignment ── */
+var ASG={mode:'manual',pool:[],stage_id:null};
+function renderAssignment(){
+  var el=document.getElementById('assignBody'); if(!el) return;
+  var st=(window._pos&&window._pos.assign_staff)||[];
+  var mode=ASG.mode||'manual';
+  var h='<div class="muted" style="font-size:12px;margin-bottom:12px;">Choose how brand-new (unassigned) leads are handled the moment they come in.</div>'
+    +'<label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Assignment mode</label>'
+    +'<select onchange="asgMode(this.value)" style="'+IN+'width:100%;max-width:360px;font-weight:700;">'
+    +'<option value="manual"'+(mode==='manual'?' selected':'')+'>Manual — staff assign leads themselves</option>'
+    +'<option value="round_robin"'+(mode==='round_robin'?' selected':'')+'>Automatic — round-robin to POS Express users</option></select>';
+  if(mode==='round_robin'){
+    h+='<div style="margin-top:16px;"><label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Move new leads to stage</label>'
+      +'<select id="asgStage" style="'+IN+'width:100%;max-width:360px;">'+stageOptions(ASG.stage_id)+'</select></div>';
+    h+='<div style="margin-top:16px;"><label style="display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Round-robin pool</label>'
+      +'<div class="muted" style="font-size:11px;margin-bottom:8px;">Leads rotate evenly among the checked users. Leave all checked to include everyone with POS Express access.</div>';
+    h+=(st.length?st.map(function(u){ var checked=(!ASG.pool||!ASG.pool.length)?true:ASG.pool.indexOf(u.id)!==-1; return '<label class="fd-toggle" style="display:block;margin-bottom:6px;font-size:13px;"><input type="checkbox" class="asg-user" value="'+esc(u.id)+'" '+(checked?'checked':'')+'> '+esc(u.name)+'</label>'; }).join(''):'<div class="muted" style="font-size:12px;">No POS Express users found.</div>');
+    h+='</div>';
+  }
+  h+='<div style="margin-top:16px;"><button class="btn btn-o" onclick="saveAssignment(this)">Save assignment</button></div>';
+  el.innerHTML=h;
+}
+window.asgMode=function(v){ ASG.mode=v; renderAssignment(); };
+window.saveAssignment=async function(btn){
+  var stageEl=document.getElementById('asgStage');
+  var pool=Array.prototype.map.call(document.querySelectorAll('.asg-user:checked'),function(c){return c.value;});
+  var payload={ mode:ASG.mode, stage_id:(ASG.mode==='round_robin'&&stageEl)?(stageEl.value||null):null, pool:(ASG.mode==='round_robin')?pool:[] };
+  btn.disabled=true; var t=btn.textContent; btn.textContent='Saving…';
+  var r=await api({action:'assignment_set',assignment:payload});
+  btn.disabled=false; btn.textContent=t;
+  if(r&&r.success){ ASG={mode:payload.mode,pool:payload.pool,stage_id:payload.stage_id}; if(window._pos) window._pos.assignment=ASG; Swal.fire({icon:'success',title:'Assignment saved',timer:1100,showConfirmButton:false}); }
+  else Swal.fire('Error',(r&&r.message)||'Could not save','error');
+};
 function pipelineEditor(p){
   var vis=(p.partner_visible!==false);
   return '<div class="pipe" data-pid="'+p.id+'" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;background:#fffdf9;">'
@@ -649,6 +687,7 @@ async function openLead(id){
     html:'<div style="text-align:left;">'+(l.agent_valid?'':'<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px;">⚠️ Agent ID “'+esc(l.agent_id||'')+'” did not match a partner. Verify before sending.</div>')+info+
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Classification</label><select id="pl-class" class="swal2-input" style="margin:0;width:100%;"><option value="">— unclassified —</option><option value="good"'+(l.classification==='good'?' selected':'')+'>Good lead</option><option value="bad"'+(l.classification==='bad'?' selected':'')+'>Bad lead</option></select>'+
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Status</label><select id="pl-status" class="swal2-input" style="margin:0;width:100%;">'+['new','reviewing','qualified','rejected','sent'].map(function(s){return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'+
+      '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Assigned to</label><select id="pl-assignee" class="swal2-input" style="margin:0;width:100%;"><option value="">— unassigned —</option>'+STAFF.map(function(s){return '<option value="'+esc(s.id)+'"'+(l.assigned_to===s.id?' selected':'')+'>'+esc(s.name)+'</option>';}).join('')+'</select>'+
       '<label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px;">Review notes <span style="color:#94a3b8;font-weight:600;">(internal — not shown to partner)</span></label><textarea id="pl-notes" class="swal2-textarea" style="margin:0;width:100%;">'+esc(l.review_notes||'')+'</textarea>'+
       '<div style="margin-top:16px;border-top:1px solid #e2e8f0;padding-top:12px;">'+
         '<label style="display:block;font-size:12px;font-weight:700;margin:0 0 4px;">Conversation with partner</label>'+
@@ -669,9 +708,9 @@ async function openLead(id){
       setupMention('posNoteInput','posTagSug',function(){return _staffTaggable;},_staffMentions);
       var na=document.getElementById('posNoteAdd'); if(na) na.addEventListener('click',function(){ addStaffNote(l.id); });
     },
-    preConfirm:function(){ return {classification:document.getElementById('pl-class').value,status:document.getElementById('pl-status').value,review_notes:document.getElementById('pl-notes').value}; }
+    preConfirm:function(){ return {classification:document.getElementById('pl-class').value,status:document.getElementById('pl-status').value,review_notes:document.getElementById('pl-notes').value,assigned_to:document.getElementById('pl-assignee').value}; }
   });
-  if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes}); load(); }
+  if(res.isConfirmed&&res.value){ await api({action:'update',id:l.id,classification:res.value.classification||null,status:res.value.status,review_notes:res.value.review_notes,assigned_to:res.value.assigned_to||null}); load(); }
 }
 /* ── Staff shared notes + @-mention tagging ── */
 var _staffTaggable=[], _staffMentions=[];
@@ -764,7 +803,9 @@ async function testHlSend(leadId){
 }
 var CAN_SETTINGS=(localStorage.getItem('pp_role')||'').toLowerCase().indexOf('super')!==-1 || localStorage.getItem('pp_access_pos_settings')==='true';
 if(!CAN_SETTINGS){ NAV=NAV.filter(function(n){return n[0]!=='settings';}); if(SEC==='settings') SEC='dashboard'; }
-renderNav(); load(); loadBell();
+var STAFF=[], STAFFMAP={};
+function loadStaffList(){ api({action:'pos_taggable'}).then(function(r){ STAFF=((r&&r.people)||[]).filter(function(p){return p.type==='staff';}); STAFFMAP={}; STAFF.forEach(function(s){STAFFMAP[s.id]=s.name;}); if(SEC==='opps') render(); }); }
+renderNav(); load(); loadBell(); loadStaffList();
 setInterval(loadBell, 15000);
 window.addEventListener('focus', loadBell);
 </script>

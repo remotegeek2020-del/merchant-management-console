@@ -247,6 +247,35 @@ async function notifyMentions(mentions, ctx) {
     try { await supabase.from('notification_pulse').update({ updated_at: new Date().toISOString() }).gt('id', 0); } catch (e) {}
 }
 
+// ── Lead assignment (manual vs round-robin) ─────────────────────────────────
+async function getAssignment() {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'pos_assignment').maybeSingle();
+    try { const c = data?.value ? JSON.parse(data.value) : {}; return { mode: c.mode === 'round_robin' ? 'round_robin' : 'manual', pool: Array.isArray(c.pool) ? c.pool.map(String) : [], stage_id: c.stage_id || null, last_index: Number.isFinite(c.last_index) ? c.last_index : -1 }; }
+    catch (e) { return { mode: 'manual', pool: [], stage_id: null, last_index: -1 }; }
+}
+// On a new submission, round-robin assign to the next POS user + move to the
+// configured stage, and notify the assignee. Best-effort; manual mode = no-op.
+async function autoAssignLead(lead) {
+    try {
+        const a = await getAssignment();
+        if (a.mode !== 'round_robin') return;
+        let pool = a.pool;
+        if (!pool.length) pool = (await posAccessStaff()).map(s => s.id); // default: everyone with access
+        if (!pool.length) return;
+        const idx = (a.last_index + 1) % pool.length;
+        const userid = pool[idx];
+        const patch = { assigned_to: userid };
+        if (a.stage_id) {
+            const { data: stage } = await supabase.from('pos_stages').select('id, pipeline_id').eq('id', a.stage_id).maybeSingle();
+            if (stage) { patch.stage_id = stage.id; patch.pipeline_id = stage.pipeline_id; }
+        }
+        await supabase.from('pos_leads').update(patch).eq('id', lead.id);
+        Object.assign(lead, patch);
+        await supabase.from('app_settings').upsert({ key: 'pos_assignment', value: JSON.stringify({ ...a, last_index: idx }), updated_at: new Date().toISOString(), updated_by: 'system' }, { onConflict: 'key' });
+        await notifyMentions([{ type: 'staff', id: userid }], { title: 'New POS lead assigned to you', body: lead.business_name || 'New lead', actorId: '', actorName: 'Auto-assign', leadId: lead.id });
+    } catch (e) { /* never block submit */ }
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -307,6 +336,7 @@ export default async function handler(req, res) {
                 ...lead, meta: (body.meta && typeof body.meta === 'object') ? body.meta : null, created_by: 'public'
             }).select('*').single();
             if (error) return bad(res, error.message);
+            await autoAssignLead(row);
             await runAutomations('lead_submitted', row);
             return ok(res, { received: true });
         }
@@ -413,6 +443,7 @@ export default async function handler(req, res) {
                 ...lead, created_by: 'partner:' + personId
             }).select('*').single();
             if (error) return bad(res, error.message);
+            await autoAssignLead(row);
             await runAutomations('lead_submitted', row);
             return ok(res, { received: true });
         }
@@ -482,7 +513,9 @@ export default async function handler(req, res) {
             try { formConfig = fc?.value ? JSON.parse(fc.value) : {}; } catch (e) { formConfig = {}; }
             try { const a = au?.value ? JSON.parse(au.value) : {}; automations = { portal: a.portal || [], highlevel: a.highlevel || [] }; } catch (e) { automations = { portal: [], highlevel: [] }; }
             const staffList = (staff || []).map(u => ({ userid: u.userid, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.userid }));
-            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', key_len: pit ? pit.length : 0, location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig, automations, staff: staffList });
+            const assignment = await getAssignment();
+            const assignStaff = await posAccessStaff();
+            return ok(res, { key_set: !!pit, key_masked: pit ? ('••••' + pit.slice(-4)) : '', key_len: pit ? pit.length : 0, location_id: loc?.value || '', webhook_url: wh?.value || '', pipelines, form_config: formConfig, automations, staff: staffList, assignment, assign_staff: assignStaff });
         }
         if (action === 'set_pos_key') {
             if (!canSettings) return bad(res, 'No access.', 403);
@@ -533,6 +566,13 @@ export default async function handler(req, res) {
             const a = body.automations && typeof body.automations === 'object' ? body.automations : {};
             const clean = { portal: Array.isArray(a.portal) ? a.portal : [], highlevel: Array.isArray(a.highlevel) ? a.highlevel : [] };
             await supabase.from('app_settings').upsert({ key: 'pos_automations', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
+            return ok(res, {});
+        }
+        if (action === 'assignment_set') {
+            if (!canSettings) return bad(res, 'No access.', 403);
+            const a = body.assignment && typeof body.assignment === 'object' ? body.assignment : {};
+            const clean = { mode: a.mode === 'round_robin' ? 'round_robin' : 'manual', pool: Array.isArray(a.pool) ? a.pool.map(String) : [], stage_id: a.stage_id || null, last_index: -1 };
+            await supabase.from('app_settings').upsert({ key: 'pos_assignment', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: session.userid }, { onConflict: 'key' });
             return ok(res, {});
         }
         if (action === 'save_pipeline') {
