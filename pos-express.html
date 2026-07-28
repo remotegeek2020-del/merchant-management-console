@@ -199,8 +199,8 @@ function oppsView(){
     +'<button class="btn btn-o" onclick="applyOppSearch()"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">search</span> Search</button>'
     +'<button class="btn btn-n" onclick="clearOppSearch()">Clear</button>'
     +'<select onchange="setOppSort(this.value)" style="padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'
-    +'<option value="recent"'+(OPPSORT==='recent'?' selected':'')+'>Sort: Newest</option>'
-    +'<option value="vol"'+(OPPSORT==='vol'?' selected':'')+'>Sort: Monthly volume (high → low)</option></select></div>';
+    +'<option value="recent"'+(OPPSORT==='recent'?' selected':'')+'>Sort: Newest first</option>'
+    +'<option value="oldest"'+(OPPSORT==='oldest'?' selected':'')+'>Sort: Oldest first</option></select></div>';
   var toggle='<div class="tabs" style="margin-bottom:14px;">'
     +'<button class="tab '+(OPPVIEW==='board'?'on':'')+'" onclick="setOppView(\'board\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_kanban</span> Board</button>'
     +'<button class="tab '+(OPPVIEW==='list'?'on':'')+'" onclick="setOppView(\'list\')"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">view_list</span> List</button></div>';
@@ -222,7 +222,8 @@ function getOppLeads(){
     if(!q) return true;
     return [l.business_name,l.merchant_legal_name,l.mid,l.agent_id,l.partner_name].some(function(v){ return v&&String(v).toLowerCase().indexOf(q)!==-1; });
   });
-  if(OPPSORT==='vol') arr=arr.slice().sort(function(a,b){ return (Number(b.monthly_volume)||0)-(Number(a.monthly_volume)||0); });
+  if(OPPSORT==='oldest') arr=arr.slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+  else arr=arr.slice().sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
   return arr;
 }
 function setOppView(v){ OPPVIEW=v; render(); }
