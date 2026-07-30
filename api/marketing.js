@@ -199,12 +199,13 @@ export default async function handler(req, res) {
             if (action === 'list_campaigns') {
                 const { data } = await supabase.from('marketing_campaigns').select('*')
                     .order('created_at', { ascending: false });
-                // attach quick counts
+                // attach quick counts — aggregate in the DB (counting in JS would be
+                // capped at the 1000-row fetch limit and drop newer campaigns' events).
                 const ids = (data || []).map(c => c.id);
                 const stats = {};
                 if (ids.length) {
-                    const { data: ev } = await supabase.from('marketing_events').select('campaign_id, event_type').in('campaign_id', ids);
-                    (ev || []).forEach(e => { const s = stats[e.campaign_id] || (stats[e.campaign_id] = { impression: 0, click: 0, dismiss: 0 }); s[e.event_type] = (s[e.event_type] || 0) + 1; });
+                    const { data: rows } = await supabase.rpc('marketing_list_counts', { camp_ids: ids });
+                    (rows || []).forEach(r => { stats[r.campaign_id] = { impression: Number(r.impressions) || 0, click: Number(r.clicks) || 0, dismiss: Number(r.dismissals) || 0 }; });
                 }
                 return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 } })));
             }
@@ -318,7 +319,7 @@ export default async function handler(req, res) {
             if (action === 'get_stats') {
                 const { id } = req.body;
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id);
+                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id).limit(50000);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
                 const impressions = rows.filter(r => r.event_type === 'impression').length;
