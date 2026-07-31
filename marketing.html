@@ -176,16 +176,14 @@
         <div><label class="fld" style="margin-top:0;">Button link (URL)</label><input class="inp" id="f_cta_url" placeholder="https://… (e.g. YouTube live)"></div>
         <div style="grid-column:1 / -1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#f8fafc;">
           <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;cursor:pointer;">
-            <input type="checkbox" id="f_gate_enabled" onchange="document.getElementById('gateFields').style.display=this.checked?'block':'none';"> Gate this CTA behind an opt-in form <span class="muted" style="font-weight:400;">(external websites only)</span>
+            <input type="checkbox" id="f_gate_enabled" onchange="toggleGate(this)"> Gate this CTA behind an opt-in form <span class="muted" style="font-weight:400;">(external websites only)</span>
           </label>
           <div id="gateFields" style="display:none;margin-top:8px;">
-            <div class="muted" style="font-size:12px;margin-bottom:6px;">On external sites/GHL, clicking the button opens a HighLevel form first; after they submit, it reveals the link (e.g. the YouTube live). Submissions are counted as conversions automatically. Inside the staff/partner portals the button goes straight to the link.</div>
+            <div class="muted" style="font-size:12px;margin-bottom:6px;">On external sites/GHL, clicking the button opens the HighLevel form first; after they submit, it reveals the link (e.g. the YouTube live). Submissions are counted as conversions automatically. Inside the staff/partner portals the button goes straight to the link.</div>
             <div class="row2">
-              <div><label class="fld" style="margin-top:0;">HighLevel form ID</label><input class="inp" id="f_gate_form" placeholder="e.g. jmyZvbXKsrzwrN0Q0v"></div>
-              <div><label class="fld" style="margin-top:0;">HighLevel location ID <span class="muted">(for conversions)</span></label><input class="inp" id="f_gate_loc" placeholder="locationId"></div>
+              <div><label class="fld" style="margin-top:0;">HighLevel sub-account</label><select class="sel" id="gate_location" onchange="loadGateForms()"><option value="">— select —</option></select></div>
+              <div><label class="fld" style="margin-top:0;">Opt-in form</label><select class="sel" id="gate_form"><option value="">— pick a sub-account first —</option></select></div>
             </div>
-            <button type="button" class="btn btn-neutral" style="margin-top:8px;" onclick="scanGate(this)"><span class="material-icons" style="font-size:16px;">travel_explore</span> Detect form from the CTA link</button>
-            <span id="gateScanMsg" class="muted" style="font-size:12px;margin-left:8px;"></span>
           </div>
         </div>
       </div>
@@ -854,7 +852,7 @@ function openEditor(type){
   setBody('');
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
-  document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('f_gate_form').value=''; document.getElementById('f_gate_loc').value='';
+  document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('gate_location').innerHTML='<option value="">— select —</option>'; document.getElementById('gate_form').innerHTML='<option value="">— pick a sub-account first —</option>';
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_sv_scale').value='5';
@@ -908,7 +906,8 @@ async function editCampaign(id){
   setBody(c.body_text||'');
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
-  { var g=c.cta_gate||{}; document.getElementById('f_gate_enabled').checked=!!g.enabled; document.getElementById('gateFields').style.display=g.enabled?'block':'none'; document.getElementById('f_gate_form').value=g.form_id||''; document.getElementById('f_gate_loc').value=g.location_id||''; }
+  { var g=c.cta_gate||{}; document.getElementById('f_gate_enabled').checked=!!g.enabled; document.getElementById('gateFields').style.display=g.enabled?'block':'none';
+    if(g.enabled){ populateGateLocations(g.location_id||'').then(function(){ if(g.location_id) return loadGateForms(g.form_id||''); }); } }
   loadTheme(c.theme);
   await loadSurvey(c.survey);
   document.getElementById('f_audience').value=c.audience||'partner';
@@ -1152,8 +1151,8 @@ async function saveCampaign(){
     cta_enabled: document.getElementById('f_cta_enabled').checked,
     cta_label: document.getElementById('f_cta_label').value.trim()||null,
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
-    cta_gate: (document.getElementById('f_gate_enabled').checked && document.getElementById('f_gate_form').value.trim())
-      ? { enabled:true, form_id:document.getElementById('f_gate_form').value.trim(), location_id:document.getElementById('f_gate_loc').value.trim()||null } : null,
+    cta_gate: (document.getElementById('f_gate_enabled').checked && document.getElementById('gate_form').value)
+      ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null } : null,
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),
@@ -1690,21 +1689,27 @@ function ensureOption(selId, val, label){
   const sel=document.getElementById(selId);
   if(!Array.from(sel.options).some(o=>o.value===val)){ const o=document.createElement('option'); o.value=val; o.textContent=label; o.dataset.name=label; sel.appendChild(o); }
 }
-async function scanGate(btn){
-  const url=(document.getElementById('f_cta_url').value||'').trim();
-  const msg=document.getElementById('gateScanMsg');
-  if(!url){ msg.textContent='Enter the CTA link first.'; return; }
-  if(btn) btn.disabled=true; msg.textContent='Scanning…';
-  const r=await api({action:'scan_cta', url});
-  if(btn) btn.disabled=false;
-  const d=(r&&r.success&&r.data)||{};
-  if(d.found && d.form_id){
-    document.getElementById('f_gate_form').value=d.form_id;
-    if(d.location_id) document.getElementById('f_gate_loc').value=d.location_id;
-    msg.textContent='Found form '+d.form_id+(d.location_id?' · location '+d.location_id:'');
-  } else {
-    msg.textContent='No form found on that link — paste the HighLevel form ID manually.';
-  }
+async function toggleGate(cb){
+  document.getElementById('gateFields').style.display=cb.checked?'block':'none';
+  if(cb.checked && document.getElementById('gate_location').options.length<=1) await populateGateLocations('');
+}
+async function populateGateLocations(selectedId){
+  const sel=document.getElementById('gate_location');
+  const data=await getGhlLocations();
+  const locs=(data.locations||[]);
+  sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent=selectedId; sel.appendChild(o);} sel.value=selectedId; }
+}
+async function loadGateForms(preFormId){
+  const loc=document.getElementById('gate_location').value;
+  const fSel=document.getElementById('gate_form');
+  if(!loc){ fSel.innerHTML='<option value="">— pick a sub-account first —</option>'; return; }
+  fSel.innerHTML='<option value="">Loading…</option>';
+  const fr=await api({action:'ghl_forms',location_id:loc});
+  const forms=(fr.success?fr.data:[])||[];
+  fSel.innerHTML='<option value="">— select a form —</option>'+forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
+  if(!forms.length) fSel.innerHTML='<option value="">No forms found (check this sub-account’s token)</option>';
+  if(preFormId){ if(!Array.from(fSel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; fSel.appendChild(o);} fSel.value=preFormId; }
 }
 async function scanCta(btn){
   const url=(document.getElementById('f_cta_url').value||'').trim();
