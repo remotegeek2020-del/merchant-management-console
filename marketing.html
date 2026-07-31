@@ -186,7 +186,7 @@
             </div>
             <div style="margin-top:8px;"><label class="fld" style="margin-top:0;">Gate expires <span class="muted">(optional)</span></label>
               <input class="inp" type="datetime-local" id="f_gate_until">
-              <div class="muted" style="font-size:11px;margin-top:3px;">After this time the form is skipped and the button goes straight to the link (e.g. once the live has started, send people right to the replay). Leave blank to always gate.</div>
+              <div class="muted" style="font-size:11px;margin-top:3px;">🕓 In your timezone: <b id="tzLabelGate">…</b>. After this time the form is skipped and the button goes straight to the link (e.g. once the live has started, send people right to the replay). Leave blank to always gate.</div>
             </div>
           </div>
         </div>
@@ -384,6 +384,7 @@
         <div><label class="fld">Activation date</label><input class="inp" id="f_starts" type="datetime-local"></div>
         <div><label class="fld">Expiration date</label><input class="inp" id="f_ends" type="datetime-local"></div>
       </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">🕓 Times are in your timezone: <b id="tzLabelCampaign">…</b></div>
 
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
         <span class="switch"><input type="checkbox" id="f_show_embed" onchange="onShowEmbed()"><span class="slider"></span></span> Also show on external sites (Webflow / GoHighLevel) as a modal
@@ -514,6 +515,16 @@
 const token = localStorage.getItem('pp_session_token') || '';
 if (!token) location.href = '/';
 function api(body){ return fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
+// Show the viewer's timezone next to datetime fields so schedules aren't ambiguous.
+(function(){
+  try{
+    var tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'local time';
+    var off=-new Date().getTimezoneOffset(), s=off>=0?'+':'-', a=Math.abs(off);
+    var pad=function(n){return (n<10?'0':'')+n;};
+    var label=tz+' (GMT'+s+pad(Math.floor(a/60))+':'+pad(a%60)+')';
+    ['tzLabelCampaign','tzLabelGate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent=label; });
+  }catch(e){}
+})();
 const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const money = null;
 
