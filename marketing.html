@@ -515,16 +515,28 @@
 const token = localStorage.getItem('pp_session_token') || '';
 if (!token) location.href = '/';
 function api(body){ return fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
-// Show the viewer's timezone next to datetime fields so schedules aren't ambiguous.
-(function(){
+// All campaign/gate schedules use the COMPANY timezone (from Settings → business
+// profile), so every editor sees the same numbers no matter where they are.
+var COMPANY_TZ = localStorage.getItem('pp_tz') || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+function tzOffsetMin(tz, date){ // minutes tz is ahead of UTC at the given instant
   try{
-    var tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'local time';
-    var off=-new Date().getTimezoneOffset(), s=off>=0?'+':'-', a=Math.abs(off);
+    var dtf=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var p=dtf.formatToParts(date).reduce(function(a,x){a[x.type]=x.value;return a;},{});
+    var asUTC=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
+    return (asUTC-date.getTime())/60000;
+  }catch(e){ return -date.getTimezoneOffset(); }
+}
+function relabelTz(){
+  try{
+    var off=tzOffsetMin(COMPANY_TZ, new Date()), s=off>=0?'+':'-', a=Math.abs(off);
     var pad=function(n){return (n<10?'0':'')+n;};
-    var label=tz+' (GMT'+s+pad(Math.floor(a/60))+':'+pad(a%60)+')';
+    var label=COMPANY_TZ+' (GMT'+s+pad(Math.floor(a/60))+':'+pad(a%60)+')';
     ['tzLabelCampaign','tzLabelGate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent=label; });
   }catch(e){}
-})();
+}
+relabelTz();
+// Refresh the company timezone from the business profile (in case it isn't cached yet).
+(function(){ try{ var uid=localStorage.getItem('pp_userid')||''; fetch('/api/business-profile?userid='+encodeURIComponent(uid)).then(function(r){return r.json();}).then(function(r){ if(r&&r.success&&r.data&&r.data.timezone){ COMPANY_TZ=r.data.timezone; localStorage.setItem('pp_tz',COMPANY_TZ); relabelTz(); } }).catch(function(){}); }catch(e){} })();
 const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const money = null;
 
@@ -922,7 +934,7 @@ async function editCampaign(id){
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
   { var g=c.cta_gate||{}; document.getElementById('f_gate_enabled').checked=!!g.enabled; document.getElementById('gateFields').style.display=g.enabled?'block':'none';
-    document.getElementById('f_gate_until').value = g.until ? new Date(g.until).toISOString().slice(0,16) : '';
+    document.getElementById('f_gate_until').value = g.until ? toLocalInput(g.until) : '';
     if(g.enabled){ populateGateLocations(g.location_id||'').then(function(){ if(g.location_id) return loadGateForms(g.form_id||''); }); } }
   loadTheme(c.theme);
   await loadSurvey(c.survey);
@@ -972,8 +984,23 @@ async function editCampaign(id){
   document.getElementById('editorModal').style.display='flex'; try{ renderPreview(); }catch(e){}
 }
 
-function toLocalInput(iso){ if(!iso) return ''; const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
-function fromLocalInput(v){ return v ? new Date(v).toISOString() : null; }
+// UTC ISO → 'YYYY-MM-DDTHH:mm' wall-clock in the COMPANY timezone.
+function toLocalInput(iso){
+  if(!iso) return '';
+  var d=new Date(iso);
+  try{
+    var dtf=new Intl.DateTimeFormat('en-CA',{timeZone:COMPANY_TZ,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    var p=dtf.formatToParts(d).reduce(function(a,x){a[x.type]=x.value;return a;},{});
+    return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute;
+  }catch(e){ var q=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+q(d.getMonth()+1)+'-'+q(d.getDate())+'T'+q(d.getHours())+':'+q(d.getMinutes()); }
+}
+// 'YYYY-MM-DDTHH:mm' wall-clock in the COMPANY timezone → UTC ISO.
+function fromLocalInput(v){
+  if(!v) return null;
+  var guess=new Date(v+':00Z');                 // treat the wall-clock as UTC first
+  var off=tzOffsetMin(COMPANY_TZ, guess);        // then shift by the company tz offset
+  return new Date(guess.getTime()-off*60000).toISOString();
+}
 
 async function onPickImage(input){
   const f = input.files&&input.files[0]; input.value=''; if(!f) return;
@@ -1168,7 +1195,7 @@ async function saveCampaign(){
     cta_label: document.getElementById('f_cta_label').value.trim()||null,
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
     cta_gate: (document.getElementById('f_gate_enabled').checked && document.getElementById('gate_form').value)
-      ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null, until:(document.getElementById('f_gate_until').value ? new Date(document.getElementById('f_gate_until').value).toISOString() : null) } : null,
+      ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null, until: fromLocalInput(document.getElementById('f_gate_until').value) } : null,
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),
