@@ -261,8 +261,6 @@
         var str = ''; try { str = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data || ''); } catch (e) { str = ''; }
         if (/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) gateSubmitted();
     });
-    // Safety net: if the submit signal isn't caught, reveal the continue link after 20s.
-    setInterval(function () { if (_gateId && !_gateDone) { var c = document.getElementById('ppx-gate-cont'); if (c && c.style.display === 'none' && c.getAttribute('data-t')) { if (Date.now() - +c.getAttribute('data-t') > 20000) c.style.display = 'block'; } else if (c && !c.getAttribute('data-t')) c.setAttribute('data-t', Date.now()); } }, 3000);
 
     // ── Interactive survey (poll / rating / contact capture) ──────────────────
     var INP = 'width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;';
