@@ -184,6 +184,10 @@
               <div><label class="fld" style="margin-top:0;">HighLevel sub-account</label><select class="sel" id="gate_location" onchange="loadGateForms()"><option value="">— select —</option></select></div>
               <div><label class="fld" style="margin-top:0;">Opt-in form</label><select class="sel" id="gate_form"><option value="">— pick a sub-account first —</option></select></div>
             </div>
+            <div style="margin-top:8px;"><label class="fld" style="margin-top:0;">Gate expires <span class="muted">(optional)</span></label>
+              <input class="inp" type="datetime-local" id="f_gate_until">
+              <div class="muted" style="font-size:11px;margin-top:3px;">After this time the form is skipped and the button goes straight to the link (e.g. once the live has started, send people right to the replay). Leave blank to always gate.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -852,7 +856,7 @@ function openEditor(type){
   setBody('');
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
-  document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('gate_location').innerHTML='<option value="">— select —</option>'; document.getElementById('gate_form').innerHTML='<option value="">— pick a sub-account first —</option>';
+  document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('gate_location').innerHTML='<option value="">— select —</option>'; document.getElementById('gate_form').innerHTML='<option value="">— pick a sub-account first —</option>'; document.getElementById('f_gate_until').value='';
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_sv_scale').value='5';
@@ -907,6 +911,7 @@ async function editCampaign(id){
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
   { var g=c.cta_gate||{}; document.getElementById('f_gate_enabled').checked=!!g.enabled; document.getElementById('gateFields').style.display=g.enabled?'block':'none';
+    document.getElementById('f_gate_until').value = g.until ? new Date(g.until).toISOString().slice(0,16) : '';
     if(g.enabled){ populateGateLocations(g.location_id||'').then(function(){ if(g.location_id) return loadGateForms(g.form_id||''); }); } }
   loadTheme(c.theme);
   await loadSurvey(c.survey);
@@ -1152,7 +1157,7 @@ async function saveCampaign(){
     cta_label: document.getElementById('f_cta_label').value.trim()||null,
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
     cta_gate: (document.getElementById('f_gate_enabled').checked && document.getElementById('gate_form').value)
-      ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null } : null,
+      ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null, until:(document.getElementById('f_gate_until').value ? new Date(document.getElementById('f_gate_until').value).toISOString() : null) } : null,
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),

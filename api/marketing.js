@@ -283,7 +283,7 @@ export default async function handler(req, res) {
                     // CTA opt-in gate (external sites only): a HighLevel form shown before
                     // the CTA link (e.g. a YouTube live). Submissions become conversions.
                     cta_gate: (b.cta_gate && b.cta_gate.enabled && b.cta_gate.form_id)
-                        ? { enabled: true, form_id: String(b.cta_gate.form_id).trim(), location_id: b.cta_gate.location_id ? String(b.cta_gate.location_id).trim() : null }
+                        ? { enabled: true, form_id: String(b.cta_gate.form_id).trim(), location_id: b.cta_gate.location_id ? String(b.cta_gate.location_id).trim() : null, until: b.cta_gate.until || null }
                         : null,
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
