@@ -225,6 +225,45 @@
     function onClick(id, target) { track(id, 'click', target, current && current.variant); }
     window.__ppxClose = onClose; window.__ppxForget = onForget; window.__ppxAction = onAction; window.__ppxClick = onClick;
 
+    // ── CTA gate: opt-in HighLevel form before the (e.g. YouTube) link ────────
+    // External sites only (this pixel). Required: the video link is revealed after
+    // the form is submitted. GHL form submissions are counted as conversions via
+    // the campaign's conv_form_id (auto-set when the gate is configured).
+    var _gateId = null, _gateUrl = '', _gateDone = false;
+    window.__ppxGate = function (id) {
+        var c = current; if (!c || c.id !== id || !c.cta_gate || !c.cta_gate.form_id) return;
+        track(id, 'click', 'cta_gate_open', c.variant);
+        var modal = backdrop && backdrop.querySelector('.ppx-modal'); if (!modal) return;
+        _gateId = id; _gateUrl = safeUrl(c.cta_url); _gateDone = false;
+        modal.innerHTML = '<button class="ppx-x" onclick="__ppxClose()">×</button>'
+            + '<div class="ppx-body" style="text-align:center;">'
+            + '<div class="ppx-title" id="ppx-gate-title" style="margin-bottom:6px;">Register to watch</div>'
+            + '<div class="ppx-text" id="ppx-gate-sub" style="margin-bottom:12px;">Fill this out and we’ll take you straight to the video.</div>'
+            + '<iframe id="ppx-gate-form" src="https://api.leadconnectorhq.com/widget/form/' + esc(c.cta_gate.form_id) + '" style="width:100%;min-height:520px;border:none;" scrolling="yes"></iframe>'
+            + '<div id="ppx-gate-cont" style="margin-top:12px;display:none;"><a class="ppx-cta" id="ppx-gate-link" href="' + _gateUrl + '" target="_blank" rel="noopener" onclick="__ppxGateGo(\'' + id + '\')">▶ Continue to the video</a></div>'
+            + '</div>';
+    };
+    function gateSubmitted() {
+        if (!_gateId || _gateDone) return;
+        _gateDone = true;
+        track(_gateId, 'click', 'cta_gate_submit', current && current.variant);
+        var t = document.getElementById('ppx-gate-title'), s = document.getElementById('ppx-gate-sub'), cont = document.getElementById('ppx-gate-cont');
+        if (t) t.textContent = 'You’re registered! 🎉';
+        if (s) s.textContent = 'Click below to watch.';
+        if (cont) { cont.style.display = 'block'; try { cont.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
+    }
+    window.__ppxGateGo = function (id) { track(id, 'click', 'cta_gate_continue', current && current.variant); api({ action: 'dismiss', campaign_id: id }); setTimeout(close, 80); };
+    // Detect the HighLevel form submission (cross-origin postMessage from the iframe).
+    window.addEventListener('message', function (ev) {
+        if (!_gateId || _gateDone) return;
+        var o = String(ev.origin || '');
+        if (o.indexOf('leadconnectorhq.com') === -1 && o.indexOf('leadconnector') === -1) return;
+        var str = ''; try { str = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data || ''); } catch (e) { str = ''; }
+        if (/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) gateSubmitted();
+    });
+    // Safety net: if the submit signal isn't caught, reveal the continue link after 20s.
+    setInterval(function () { if (_gateId && !_gateDone) { var c = document.getElementById('ppx-gate-cont'); if (c && c.style.display === 'none' && c.getAttribute('data-t')) { if (Date.now() - +c.getAttribute('data-t') > 20000) c.style.display = 'block'; } else if (c && !c.getAttribute('data-t')) c.setAttribute('data-t', Date.now()); } }, 3000);
+
     // ── Interactive survey (poll / rating / contact capture) ──────────────────
     var INP = 'width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;';
     function req(s, f) { return s.contact && s.contact.required && s.contact.required.indexOf(f) !== -1; }
@@ -339,8 +378,13 @@
         if (showText && c.title) inner += '<div class="ppx-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
         if (showText && c.body_text) inner += '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
         if (c.cta_enabled && c.cta_url) {
-            var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
-            inner += '<a class="ppx-cta" style="' + th.btn + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
+            if (c.cta_gate && c.cta_gate.form_id) {
+                // Gate the CTA behind a HighLevel opt-in form (external sites only).
+                inner += '<button type="button" class="ppx-cta" style="' + th.btn + '" onclick="__ppxGate(\'' + cid + '\')">' + esc(c.cta_label || 'Learn more') + '</button>';
+            } else {
+                var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
+                inner += '<a class="ppx-cta" style="' + th.btn + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
+            }
         }
         inner += surveyHtml(c);
         if (dismissible) inner += '<label class="ppx-forget"><input type="checkbox" onchange="if(this.checked)__ppxForget()"> Don\'t show this again</label>';

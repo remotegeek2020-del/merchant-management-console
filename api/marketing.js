@@ -280,12 +280,23 @@ export default async function handler(req, res) {
                     conv_location_id: b.conv_location_id || null,
                     conv_form_id: b.conv_form_id || null, conv_form_name: b.conv_form_name || null,
                     conv_calendar_id: b.conv_calendar_id || null, conv_calendar_name: b.conv_calendar_name || null,
+                    // CTA opt-in gate (external sites only): a HighLevel form shown before
+                    // the CTA link (e.g. a YouTube live). Submissions become conversions.
+                    cta_gate: (b.cta_gate && b.cta_gate.enabled && b.cta_gate.form_id)
+                        ? { enabled: true, form_id: String(b.cta_gate.form_id).trim(), location_id: b.cta_gate.location_id ? String(b.cta_gate.location_id).trim() : null }
+                        : null,
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
                     priority: Number.isFinite(+b.priority) ? +b.priority : 0,
                     updated_at: new Date().toISOString()
                 };
+                // Auto-wire conversions to the gate form so submissions are counted
+                // as conversions (unless a conversion form was set explicitly).
+                if (rec.cta_gate && rec.cta_gate.form_id) {
+                    if (!rec.conv_form_id) rec.conv_form_id = rec.cta_gate.form_id;
+                    if (!rec.conv_location_id && rec.cta_gate.location_id) rec.conv_location_id = rec.cta_gate.location_id;
+                }
                 let row;
                 if (action === 'update_campaign') {
                     if (!b.id) return bad(res, 'id required');

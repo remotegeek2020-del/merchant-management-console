@@ -164,6 +164,7 @@ export default async function handler(req, res) {
                     cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
                     behavior, reshow_minutes: c.reshow_minutes || 5, survey: c.survey || null, theme: c.theme || null,
                     embed_format: c.embed_format || 'modal', embed_trigger: c.embed_trigger || 'load', embed_delay: c.embed_delay || 5,
+                    cta_gate: (c.cta_gate && c.cta_gate.enabled && c.cta_gate.form_id) ? { form_id: c.cta_gate.form_id, location_id: c.cta_gate.location_id || null } : null,
                     variant
                 };
             });
