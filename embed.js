@@ -247,6 +247,10 @@
         if (!_gateId || _gateDone) return;
         _gateDone = true;
         track(_gateId, 'click', 'cta_gate_submit', current && current.variant);
+        // Registered → don't show this ad again for this browser (localStorage,
+        // persists on a normal browser; incognito clears on close) + server-side.
+        permAdd(_gateId);
+        api({ action: 'dismiss', campaign_id: _gateId });
         var t = document.getElementById('ppx-gate-title'), s = document.getElementById('ppx-gate-sub'), cont = document.getElementById('ppx-gate-cont');
         if (t) t.textContent = 'You’re registered! 🎉';
         if (s) s.textContent = 'Click below to watch.';
