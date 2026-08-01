@@ -55,7 +55,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){retur
 var COURSES=[];
 function vidThumb(v){
   var img=v.thumbnail_url||'';
-  if(!img && v.provider==='youtube' && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/mqdefault.jpg'; }
+  if(!img && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/mqdefault.jpg'; }
   return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':'';
 }
 async function load(){

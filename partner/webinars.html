@@ -101,18 +101,20 @@ if(!TOKEN){ location.href='/partner'; }
 function papi(b){ b.partner_token=TOKEN; return fetch('/api/courses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function handleLogout(){ try{ localStorage.removeItem('pp_partner_token'); }catch(e){} location.href='/partner'; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+// Detect by URL (provider-agnostic) so a mislabeled item still embeds correctly.
+function ytId(url){ var m=String(url||'').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); return m?m[1]:''; }
 function embedSrc(provider,url){
   url=String(url||''); var m;
-  if(provider==='youtube'){ m=url.match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{6,})/); if(m) return 'https://www.youtube.com/embed/'+m[1]; }
-  if(provider==='vimeo'){ m=url.match(/vimeo\.com\/(?:video\/)?(\d+)/); if(m) return 'https://player.vimeo.com/video/'+m[1]; }
-  if(provider==='wistia'){ m=url.match(/(?:medias\/|wvideo=|wmediaid=|embed\/(?:iframe|medias)\/)([\w]+)/); if(m) return 'https://fast.wistia.net/embed/iframe/'+m[1]; }
+  if(/youtu\.?be|youtube\.com/i.test(url) || provider==='youtube'){ var id=ytId(url); if(id) return 'https://www.youtube.com/embed/'+id+'?rel=0'; }
+  if(/vimeo\.com/i.test(url) || provider==='vimeo'){ m=url.match(/vimeo\.com\/(?:video\/)?(\d+)/); if(m) return 'https://player.vimeo.com/video/'+m[1]; }
+  if(/wistia|wi\.st/i.test(url) || provider==='wistia'){ m=url.match(/(?:medias\/|wvideo=|wmediaid=|embed\/(?:iframe|medias)\/)([\w]+)/); if(m) return 'https://fast.wistia.net/embed/iframe/'+m[1]; }
   if(/^https:\/\//i.test(url)) return url;
   return '';
 }
 var VMAP={};
 function thumbBg(v){
   var img=v.thumbnail_url||'';
-  if(!img && v.provider==='youtube' && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/hqdefault.jpg'; }
+  if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; }
   return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':'';
 }
 function vidCard(v){
@@ -137,7 +139,7 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlaye
 var COURSES=[], LOCKED=[];
 function courseCover(co,videos){
   var img=co.thumbnail_url||'';
-  if(!img && videos && videos.length){ var v=videos[0]; if(v.thumbnail_url) img=v.thumbnail_url; else if(v.provider==='youtube' && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/hqdefault.jpg'; } }
+  if(!img && videos && videos.length){ var v=videos[0]; if(v.thumbnail_url) img=v.thumbnail_url; else { var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } }
   return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':'<span class="material-icons">video_library</span>';
 }
 function renderList(){
