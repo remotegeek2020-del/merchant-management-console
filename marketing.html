@@ -266,9 +266,11 @@
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px;">
           <div><label class="dlbl">Corners</label><input class="inp" type="range" min="0" max="30" id="t_radius" value="16" oninput="renderPreview()"></div>
-          <div><label class="dlbl">Width</label><select class="inp" id="t_width" onchange="renderPreview()"><option value="narrow">Narrow</option><option value="normal" selected>Normal</option><option value="wide">Wide</option></select></div>
+          <div><label class="dlbl">Modal width <span class="muted" style="font-weight:400;">(external)</span></label><select class="inp" id="t_width" onchange="renderPreview()"><option value="narrow">Narrow (380px)</option><option value="normal" selected>Normal (460px)</option><option value="wide">Wide (560px)</option><option value="xwide">Extra wide (680px)</option></select></div>
           <div><label class="dlbl">Text align</label><select class="inp" id="t_align" onchange="renderPreview()"><option value="left" selected>Left</option><option value="center">Center</option></select></div>
           <div><label class="dlbl">Button style</label><select class="inp" id="t_btnStyle" onchange="renderPreview()"><option value="solid" selected>Solid</option><option value="outline">Outline</option><option value="pill">Pill</option></select></div>
+          <div><label class="dlbl">Button size</label><select class="inp" id="t_btnSize" onchange="renderPreview()"><option value="sm">Small</option><option value="md" selected>Medium</option><option value="lg">Large</option></select></div>
+          <div><label class="dlbl">Button position</label><select class="inp" id="t_btnAlign" onchange="renderPreview()"><option value="full" selected>Full width</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
           <div><label class="dlbl">Image position</label><select class="inp" id="t_imgPos" onchange="renderPreview()"><option value="top" selected>Top</option><option value="bottom">Bottom</option></select></div>
           <div><label class="dlbl">Backdrop</label><select class="inp" id="t_overlay" onchange="renderPreview()"><option value="dark" selected>Dark</option><option value="light">Light</option></select></div>
         </div>
@@ -276,6 +278,12 @@
 
       <!-- ── LIVE PREVIEW ── -->
       <label class="fld">Live preview</label>
+      <div class="seg" style="margin-bottom:8px;">
+        <button type="button" id="pvWeb" class="on" onclick="setPreviewCtx('web')">🌐 External website</button>
+        <button type="button" id="pvGhl" onclick="setPreviewCtx('ghl')">🔗 HighLevel</button>
+        <button type="button" id="pvPortal" onclick="setPreviewCtx('portal')">🏢 Portal</button>
+      </div>
+      <div id="previewNote" class="muted" style="font-size:11px;margin-bottom:6px;"></div>
       <div id="previewStage" style="border:1px solid var(--border);border-radius:12px;padding:22px;display:flex;justify-content:center;background:#e9eef5;background-image:radial-gradient(#cbd5e1 1px,transparent 1px);background-size:14px 14px;"></div>
 
       <div class="row2">
@@ -585,19 +593,28 @@ function applyPreset(name){
 function buildTheme(){
   const g=id=>document.getElementById(id).value;
   return { bg:g('t_bg'), title:g('t_title'), text:g('t_text'), accent:g('t_accent'), btnText:g('t_btnText'),
-    radius:parseInt(g('t_radius'))||16, width:g('t_width'), align:g('t_align'), btnStyle:g('t_btnStyle'), imgPos:g('t_imgPos'), overlay:g('t_overlay') };
+    radius:parseInt(g('t_radius'))||16, width:g('t_width'), align:g('t_align'), btnStyle:g('t_btnStyle'), btnSize:g('t_btnSize'), btnAlign:g('t_btnAlign'), imgPos:g('t_imgPos'), overlay:g('t_overlay') };
 }
 function loadTheme(t){
   t=t||{}; const s=(id,v)=>{document.getElementById(id).value=v;};
   s('t_bg',t.bg||'#ffffff'); s('t_title',t.title||'#0a1628'); s('t_text',t.text||'#475569');
   s('t_accent',t.accent||'#004990'); s('t_btnText',t.btnText||'#ffffff');
   s('t_radius',t.radius!=null?t.radius:16); s('t_width',t.width||'normal'); s('t_align',t.align||'left');
-  s('t_btnStyle',t.btnStyle||'solid'); s('t_imgPos',t.imgPos||'top'); s('t_overlay',t.overlay||'dark');
+  s('t_btnStyle',t.btnStyle||'solid'); s('t_btnSize',t.btnSize||'md'); s('t_btnAlign',t.btnAlign||'full'); s('t_imgPos',t.imgPos||'top'); s('t_overlay',t.overlay||'dark');
 }
 function themeBtnCss(th){
-  return th.btnStyle==='outline'?`background:transparent;color:${th.accent};border:2px solid ${th.accent};border-radius:${th.radius}px;`
+  var size = th.btnSize==='sm'?'padding:8px 14px;font-size:12px;':th.btnSize==='lg'?'padding:14px 24px;font-size:15px;':'padding:11px 18px;font-size:13.5px;';
+  var base = th.btnStyle==='outline'?`background:transparent;color:${th.accent};border:2px solid ${th.accent};border-radius:${th.radius}px;`
     : th.btnStyle==='pill'?`background:${th.accent};color:${th.btnText};border:none;border-radius:999px;`
     : `background:${th.accent};color:${th.btnText};border:none;border-radius:${Math.min(th.radius,14)}px;`;
+  return base+size;
+}
+// Wrap the CTA so its position (full / left / center / right) is honored in preview.
+function ctaWrap(th, html){
+  var ba=th.btnAlign||'full';
+  if(ba==='full') return `<div style="margin-top:14px;"><a style="display:block;text-align:center;width:100%;box-sizing:border-box;${themeBtnCss(th)}">${html}</a></div>`;
+  var row = ba==='right'?'right':ba==='center'?'center':'left';
+  return `<div style="margin-top:14px;text-align:${row};"><a style="display:inline-block;${themeBtnCss(th)}">${html}</a></div>`;
 }
 function previewSurvey(th){
   if(currentType==='announcement') return '';
@@ -628,10 +645,11 @@ function renderPreview(){
   if(_previewTimer) clearTimeout(_previewTimer);
   _previewTimer=setTimeout(_renderPreviewNow, 60);
 }
+var PREVIEW_CTX='web';
+function setPreviewCtx(v){ PREVIEW_CTX=v; ['pvWeb','pvGhl','pvPortal'].forEach(function(id){ document.getElementById(id).classList.toggle('on', id.toLowerCase().indexOf(v)!==-1); }); _renderPreviewNow(); }
 function _renderPreviewNow(){
   const stage=document.getElementById('previewStage'); if(!stage) return;
   const th=buildTheme();
-  const wpx = th.width==='narrow'?290:th.width==='wide'?420:355;
   const ct=contentType;
   const showG=(ct==='graphic'||ct==='both')&&currentImageUrl;
   const showT=(ct==='text'||ct==='both');
@@ -644,12 +662,29 @@ function _renderPreviewNow(){
   if(showT) inner+=`<div style="font-weight:800;font-size:16px;color:${th.title};margin-bottom:6px;line-height:1.3;">${esc(title)}</div>`;
   if(showT&&body) inner+=`<div style="font-size:13px;color:${th.text};line-height:1.55;">${body}</div>`;
   inner+=previewSurvey(th);
-  if(ctaOn) inner+=`<a style="display:block;text-align:center;margin-top:14px;padding:11px;font-weight:700;text-decoration:none;${themeBtnCss(th)}">${esc(ctaLabel)}</a>`;
+  if(ctaOn) inner+=ctaWrap(th, esc(ctaLabel));
   const bodyBlock=`<div style="padding:18px;text-align:${th.align};">${inner}</div>`;
-  stage.innerHTML=`<div style="width:${wpx}px;max-width:100%;background:${th.bg};border-radius:${th.radius}px;box-shadow:0 20px 50px rgba(0,0,0,.28);overflow:hidden;position:relative;">
-    <div style="position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;text-align:center;line-height:26px;font-size:15px;">×</div>
-    ${th.imgPos==='bottom'?bodyBlock+img:img+bodyBlock}
-  </div>`;
+  const note=document.getElementById('previewNote');
+  if(PREVIEW_CTX==='portal'){
+    // Portal = an inline card in the hub (wider, no dark backdrop). Modal width doesn't apply.
+    if(note) note.textContent='Shown inside the staff/partner portal as a homepage card (fills its column). Modal width does not apply here.';
+    stage.style.background='#f8fafc'; stage.style.backgroundImage='none';
+    stage.innerHTML=`<div style="width:600px;max-width:100%;background:${th.bg};border-radius:${th.radius}px;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,.07);overflow:hidden;position:relative;">
+      <div style="position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;text-align:center;line-height:26px;font-size:15px;">×</div>
+      ${th.imgPos==='bottom'?bodyBlock+img:img+bodyBlock}
+    </div>`;
+  } else {
+    // External website / HighLevel = centered modal over a dark backdrop; uses modal width.
+    const wpx = th.width==='narrow'?290:th.width==='wide'?420:th.width==='xwide'?500:355;  // scaled to fit the editor
+    if(note) note.textContent = PREVIEW_CTX==='ghl'
+      ? 'Shown inside the HighLevel app (LeadConnector) as a centered popup — same as external websites.'
+      : 'Shown on an external website as a centered popup over a dimmed backdrop. Uses the modal width.';
+    stage.style.background='#e9eef5'; stage.style.backgroundImage='radial-gradient(#cbd5e1 1px,transparent 1px)'; stage.style.backgroundSize='14px 14px';
+    stage.innerHTML=`<div style="width:${wpx}px;max-width:100%;background:${th.bg};border-radius:${th.radius}px;box-shadow:0 20px 50px rgba(0,0,0,.28);overflow:hidden;position:relative;">
+      <div style="position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;text-align:center;line-height:26px;font-size:15px;">×</div>
+      ${th.imgPos==='bottom'?bodyBlock+img:img+bodyBlock}
+    </div>`;
+  }
 }
 function setBody(html){
   ensureQuill();

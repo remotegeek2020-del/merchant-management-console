@@ -123,15 +123,19 @@
         var t = c.theme || {};
         var g = function (v, d) { return v || d; };
         var accent = g(t.accent, '#004990'), btnText = g(t.btnText, '#ffffff'), radius = (t.radius != null ? t.radius : 16);
-        var btn = t.btnStyle === 'outline'
+        var sizeCss = t.btnSize === 'sm' ? 'padding:8px 14px;font-size:12px;' : t.btnSize === 'lg' ? 'padding:14px 24px;font-size:15px;' : 'padding:10px 18px;font-size:13px;';
+        var btn = (t.btnStyle === 'outline'
             ? ('background:transparent;color:' + accent + ';border:2px solid ' + accent + ';border-radius:' + radius + 'px;')
             : t.btnStyle === 'pill'
                 ? ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:999px;')
-                : ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:' + Math.min(radius, 14) + 'px;');
+                : ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:' + Math.min(radius, 14) + 'px;')) + sizeCss;
+        var ba = t.btnAlign || 'full';
+        var btnWrap = (ba === 'full' ? 'display:block;text-align:center;width:100%;' : 'display:inline-flex;') + 'margin-top:0;';
+        var btnRow = ba === 'full' ? '' : ('text-align:' + (ba === 'right' ? 'right' : ba === 'center' ? 'center' : 'left') + ';');
         return {
             card: 'background:' + g(t.bg, '#ffffff') + ';border-radius:' + radius + 'px;',
             title: g(t.title, '#0a1628'), text: g(t.text, '#475569'),
-            align: t.align === 'center' ? 'center' : 'left', btn: btn
+            align: t.align === 'center' ? 'center' : 'left', btn: btn, btnWrap: btnWrap, btnRow: btnRow
         };
     }
 
@@ -159,7 +163,7 @@
             html += '<div class="ppa-body" style="text-align:' + th.align + ';">';
             if (showText && c.title) html += '<div class="ppa-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
             if (showText && c.body_text) html += '<div class="ppa-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
-            if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" style="' + th.btn + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
+            if (c.cta_enabled && c.cta_url) html += '<div style="margin-top:14px;' + th.btnRow + '"><a class="ppa-cta" style="' + th.btn + th.btnWrap + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a></div>';
             html += surveyHtml(c);
             html += '</div>';
         }

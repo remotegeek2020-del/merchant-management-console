@@ -345,17 +345,22 @@
         var t = c.theme || {};
         var g = function (v, d) { return v || d; };
         var accent = g(t.accent, '#004990'), btnText = g(t.btnText, '#ffffff'), radius = (t.radius != null ? t.radius : 16);
-        var wpx = t.width === 'narrow' ? 380 : t.width === 'wide' ? 560 : 460;
-        var btn = t.btnStyle === 'outline'
+        var wpx = t.width === 'narrow' ? 380 : t.width === 'wide' ? 560 : t.width === 'xwide' ? 680 : 460;
+        var sizeCss = t.btnSize === 'sm' ? 'padding:9px 14px;font-size:13px;' : t.btnSize === 'lg' ? 'padding:15px 26px;font-size:16px;' : 'padding:13px 18px;font-size:14.5px;';
+        var btn = (t.btnStyle === 'outline'
             ? ('background:transparent;color:' + accent + ';border:2px solid ' + accent + ';border-radius:' + radius + 'px;')
             : t.btnStyle === 'pill'
                 ? ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:999px;')
-                : ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:' + Math.min(radius, 14) + 'px;');
+                : ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:' + Math.min(radius, 14) + 'px;')) + sizeCss;
+        // Button placement: full = block full-width; else inline aligned.
+        var ba = t.btnAlign || 'full';
+        var btnWrap = (ba === 'full' ? 'display:block;text-align:center;width:100%;' : 'display:inline-block;') + 'margin-top:0;';
+        var btnRow = ba === 'full' ? '' : ('text-align:' + (ba === 'right' ? 'right' : ba === 'center' ? 'center' : 'left') + ';');
         return {
             modal: 'background:' + g(t.bg, '#ffffff') + ';border-radius:' + radius + 'px;width:min(' + wpx + 'px,100%);',
             title: g(t.title, '#0a1628'), text: g(t.text, '#475569'),
             align: t.align === 'center' ? 'center' : 'left',
-            btn: btn, imgPos: t.imgPos === 'bottom' ? 'bottom' : 'top',
+            btn: btn, btnWrap: btnWrap, btnRow: btnRow, imgPos: t.imgPos === 'bottom' ? 'bottom' : 'top',
             overlay: t.overlay === 'light' ? 'light' : 'dark'
         };
     }
@@ -380,13 +385,14 @@
         if (showText && c.title) inner += '<div class="ppx-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
         if (showText && c.body_text) inner += '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
         if (c.cta_enabled && c.cta_url) {
+            var btnInner;
             if (c.cta_gate && c.cta_gate.form_id) {
-                // Gate the CTA behind a HighLevel opt-in form (external sites only).
-                inner += '<button type="button" class="ppx-cta" style="' + th.btn + '" onclick="__ppxGate(\'' + cid + '\')">' + esc(c.cta_label || 'Learn more') + '</button>';
+                btnInner = '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + '" onclick="__ppxGate(\'' + cid + '\')">' + esc(c.cta_label || 'Learn more') + '</button>';
             } else {
                 var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
-                inner += '<a class="ppx-cta" style="' + th.btn + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
+                btnInner = '<a class="ppx-cta" style="' + th.btn + th.btnWrap + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
             }
+            inner += '<div style="margin-top:14px;' + th.btnRow + '">' + btnInner + '</div>';
         }
         inner += surveyHtml(c);
         if (dismissible) inner += '<label class="ppx-forget"><input type="checkbox" onchange="if(this.checked)__ppxForget()"> Don\'t show this again</label>';

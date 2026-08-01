@@ -119,9 +119,11 @@ function normalizeTheme(t) {
         accent: col(t.accent, '#004990'),
         btnText: col(t.btnText, '#ffffff'),
         radius: Math.max(0, Math.min(40, parseInt(t.radius, 10) || 16)),
-        width: pick(t.width, ['narrow', 'normal', 'wide'], 'normal'),
+        width: pick(t.width, ['narrow', 'normal', 'wide', 'xwide'], 'normal'),
         align: pick(t.align, ['left', 'center'], 'left'),
         btnStyle: pick(t.btnStyle, ['solid', 'outline', 'pill'], 'solid'),
+        btnSize: pick(t.btnSize, ['sm', 'md', 'lg'], 'md'),
+        btnAlign: pick(t.btnAlign, ['left', 'center', 'right', 'full'], 'full'),
         imgPos: pick(t.imgPos, ['top', 'bottom'], 'top'),
         overlay: pick(t.overlay, ['dark', 'light'], 'dark')
     };
