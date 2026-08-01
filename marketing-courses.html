@@ -45,6 +45,7 @@
 <div class="top">
   <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
   <h1>🎓 Courses &amp; Webinars</h1>
+  <button class="btn btn-n" onclick="ytKeyModal()"><span class="material-icons" style="font-size:16px;">smart_display</span> YouTube API key</button>
   <button class="btn btn-p" onclick="editCourse()"><span class="material-icons" style="font-size:17px;">add</span> New course</button>
 </div>
 <div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
@@ -87,7 +88,10 @@ function render(){
       +'<span class="material-icons icon" style="color:#dc2626;" title="Delete course" onclick="delCourse(\''+c.id+'\')">delete</span></div>'
       +'<div class="course-body">'+(c.description?'<div class="muted" style="font-size:13px;margin-bottom:10px;">'+esc(c.description)+'</div>':'')
       +vids
-      +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-n" onclick="editVideo(\''+c.id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add video</button>'+accessBtn+'</div>'
+      +(c.yt_channel_id?'<div class="muted" style="font-size:12px;margin-top:10px;">📺 Auto-syncing lives from YouTube'+(c.yt_sync_enabled?'':' <b>(paused)</b>')+(c.yt_last_sync?' · last synced '+new Date(c.yt_last_sync).toLocaleString():'')+'</div>':'')
+      +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-n" onclick="editVideo(\''+c.id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add video</button>'
+      +(c.yt_channel_id?'<button class="btn btn-n" onclick="syncCourse(\''+c.id+'\',this)"><span class="material-icons" style="font-size:15px;">sync</span> Sync lives now</button>':'')
+      +accessBtn+'</div>'
       +'</div></div>';
   }).join('');
 }
@@ -100,13 +104,42 @@ window.editCourse=async function(id){
       +'<label>Thumbnail image URL (optional)</label><input id="c-thumb" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…/cover.jpg" value="'+esc(c.thumbnail_url||'')+'">'
       +'<label>Unlock mode</label><select id="c-mode" class="swal2-input" style="margin:0;width:100%;"><option value="manual"'+(c.unlock_mode!=='auto'?' selected':'')+'>Manual — only partners I grant access</option><option value="auto"'+(c.unlock_mode==='auto'?' selected':'')+'>Automatic — every partner sees it</option></select>'
       +'<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-top:14px;font-size:13px;cursor:pointer;"><input type="checkbox" id="c-pub" style="width:auto;" '+(c.is_published?'checked':'')+'> Published (visible to partners)</label>'
+      +'<div style="border-top:1px solid #e2e8f0;margin-top:14px;padding-top:10px;">'
+      +'<label>📺 Auto-sync YouTube lives <span style="color:#94a3b8;font-weight:400;text-transform:none;">(optional)</span></label>'
+      +'<input id="c-ytch" class="swal2-input" style="margin:0;width:100%;" placeholder="Channel URL, @handle, or channel ID (UC…)" value="'+esc(c.yt_channel_id||'')+'">'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">Pulls this channel\'s live broadcasts (past + in-progress) into the course automatically — title, description, date &amp; thumbnail. Checked hourly.</div>'
+      +'<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-top:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="c-ytsync" style="width:auto;" '+(c.yt_sync_enabled?'checked':'')+'> Enable auto-sync</label>'
+      +'</div>'
       +'</div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
-    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,thumbnail_url:document.getElementById('c-thumb').value.trim(),unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked}; }
+    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,thumbnail_url:document.getElementById('c-thumb').value.trim(),unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked,yt_channel_id:document.getElementById('c-ytch').value.trim(),yt_sync_enabled:document.getElementById('c-ytsync').checked}; }
   });
   if(!res.isConfirmed) return;
   var r=await api(Object.assign({action:'save_course',id:id||undefined},res.value));
-  if(r.success) load(); else Swal.fire('Error',r.message||'','error');
+  if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
+  // If a channel + sync were set, do an immediate first pull.
+  if(res.value.yt_channel_id && res.value.yt_sync_enabled){ var cid=r.id||id; Swal.fire({title:'Syncing lives from YouTube…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false}); var s=await api({action:'sync_course',course_id:cid}); if(s.success) Swal.fire({icon:'success',title:'Synced',text:(s.added||0)+' new live(s) added.',timer:1600,showConfirmButton:false}); else Swal.fire('Sync note',s.message||'Could not sync (check the YouTube API key).','warning'); }
+  load();
+};
+window.syncCourse=async function(id,btn){
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="material-icons" style="font-size:15px;">sync</span> Syncing…'; }
+  var r=await api({action:'sync_course',course_id:id});
+  if(r&&r.success){ Swal.fire({icon:'success',title:'Synced',text:(r.added||0)+' new live(s) added ('+(r.total||0)+' found).',timer:1800,showConfirmButton:false}); load(); }
+  else { if(btn){ btn.disabled=false; btn.innerHTML='<span class="material-icons" style="font-size:15px;">sync</span> Sync lives now'; } Swal.fire('Error',(r&&r.message)||'Sync failed','error'); }
+};
+window.ytKeyModal=async function(){
+  var st=await api({action:'yt_key_status'});
+  var res=await Swal.fire({title:'YouTube API key',width:520,
+    html:'<div style="text-align:left;">'
+      +'<div style="font-size:13px;color:#64748b;margin-bottom:8px;">Current: '+(st&&st.set?('<b style="color:#16a34a;">'+esc(st.masked)+'</b>'):'<b style="color:#dc2626;">not set</b>')+'</div>'
+      +'<input id="yt-key" class="swal2-input" style="margin:0;width:100%;" placeholder="Paste a YouTube Data API v3 key (leave blank to keep)">'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin-top:6px;">Create one free in Google Cloud → APIs &amp; Services → Credentials → API key, with the <b>YouTube Data API v3</b> enabled. Read-only public data; no OAuth needed.</div></div>',
+    showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
+    preConfirm:function(){ return {key:document.getElementById('yt-key').value.trim()}; }});
+  if(!res.isConfirmed) return;
+  var r=await api({action:'set_yt_key',key:res.value.key});
+  if(r&&r.success) Swal.fire({icon:'success',title:r.set?'Key saved':'Cleared',timer:1100,showConfirmButton:false});
+  else Swal.fire('Error',(r&&r.message)||'','error');
 };
 window.delCourse=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete course?',text:'All its videos and access grants are removed.',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_course',id:id}); load(); };
 window.editVideo=async function(courseId,vid){

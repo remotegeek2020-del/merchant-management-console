@@ -7,10 +7,72 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { validateSession } from './_validate.js';
+import { setConfigValue, getConfigValue } from './api-config.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// ── YouTube auto-sync: pull a channel's live broadcasts into a course ────────
+async function ytKey() { return (process.env.YOUTUBE_API_KEY || await getConfigValue('YOUTUBE_API_KEY') || '').trim(); }
+async function ytFetch(path) {
+    const r = await fetch('https://www.googleapis.com/youtube/v3/' + path);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error?.message || ('YouTube HTTP ' + r.status));
+    return j;
+}
+// Accept a channel ID (UC…), a @handle, or a channel URL and resolve to a channel ID.
+async function resolveChannelId(input, key) {
+    const s = String(input || '').trim();
+    let m = s.match(/channel\/(UC[\w-]{20,})/) || s.match(/^(UC[\w-]{20,})$/);
+    if (m) return m[1];
+    m = s.match(/@([A-Za-z0-9._-]+)/) || (s[0] === '@' ? [null, s.slice(1)] : null);
+    if (m) { const j = await ytFetch('channels?part=id&forHandle=' + encodeURIComponent(m[1]) + '&key=' + key); if (j.items && j.items[0]) return j.items[0].id; }
+    // Fallback: search for the channel by name.
+    const j = await ytFetch('search?part=snippet&type=channel&maxResults=1&q=' + encodeURIComponent(s) + '&key=' + key);
+    return (j.items && j.items[0]) ? j.items[0].snippet.channelId : null;
+}
+// Sync a course from its channel's live broadcasts (completed + in-progress).
+export async function syncCourseFromYouTube(course) {
+    const key = await ytKey();
+    if (!key) return { ok: false, error: 'No YouTube API key set.' };
+    if (!course.yt_channel_id) return { ok: false, error: 'No channel set.' };
+    const channelId = await resolveChannelId(course.yt_channel_id, key);
+    if (!channelId) return { ok: false, error: 'Could not resolve channel.' };
+    // Gather live-broadcast video IDs (completed = past lives, live = happening now).
+    const ids = [];
+    for (const ev of ['completed', 'live']) {
+        try {
+            const j = await ytFetch('search?part=id&channelId=' + channelId + '&eventType=' + ev + '&type=video&order=date&maxResults=50&key=' + key);
+            (j.items || []).forEach(it => { if (it.id && it.id.videoId) ids.push(it.id.videoId); });
+        } catch (e) { /* keep going */ }
+    }
+    if (!ids.length) { await supabase.from('courses').update({ yt_last_sync: new Date().toISOString() }).eq('id', course.id); return { ok: true, added: 0, total: 0 }; }
+    // Which are already in the course? (dedupe by youtube video id)
+    const { data: existing } = await supabase.from('course_videos').select('source_ref, url').eq('course_id', course.id);
+    const have = new Set();
+    (existing || []).forEach(v => { if (v.source_ref) have.add(v.source_ref); const mm = String(v.url || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); if (mm) have.add(mm[1]); });
+    const fresh = [...new Set(ids)].filter(id => !have.has(id));
+    let added = 0;
+    // Full details for the fresh ones (title, description, thumbnail, date).
+    for (let i = 0; i < fresh.length; i += 50) {
+        const batch = fresh.slice(i, i + 50);
+        const j = await ytFetch('videos?part=snippet&id=' + batch.join(',') + '&key=' + key);
+        for (const v of (j.items || [])) {
+            const sn = v.snippet || {};
+            const thumb = (sn.thumbnails && (sn.thumbnails.high || sn.thumbnails.medium || sn.thumbnails.default) || {}).url || null;
+            await supabase.from('course_videos').insert({
+                course_id: course.id, title: (sn.title || 'Live').slice(0, 200), description: (sn.description || '').slice(0, 2000),
+                provider: 'youtube', url: 'https://www.youtube.com/watch?v=' + v.id, thumbnail_url: thumb,
+                source: 'youtube', source_ref: v.id,
+                sort_order: sn.publishedAt ? Math.floor(new Date(sn.publishedAt).getTime() / 1000) : 0
+            });
+            added++;
+        }
+    }
+    await supabase.from('courses').update({ yt_last_sync: new Date().toISOString() }).eq('id', course.id);
+    return { ok: true, added, total: ids.length };
+}
 
 function cors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -118,13 +180,33 @@ export default async function handler(req, res) {
                 thumbnail_url: body.thumbnail_url ? String(body.thumbnail_url).slice(0, 1000) : null,
                 unlock_mode: body.unlock_mode === 'auto' ? 'auto' : 'manual',
                 is_published: !!body.is_published,
-                sort_order: Number.isFinite(+body.sort_order) ? +body.sort_order : 0
+                sort_order: Number.isFinite(+body.sort_order) ? +body.sort_order : 0,
+                yt_channel_id: body.yt_channel_id ? String(body.yt_channel_id).trim().slice(0, 200) : null,
+                yt_sync_enabled: !!body.yt_sync_enabled
             };
             if (!patch.title) return bad(res, 'Course title required.');
             if (body.id) { await supabase.from('courses').update(patch).eq('id', body.id); return ok(res, { id: body.id }); }
             const { data, error } = await supabase.from('courses').insert(patch).select('id').single();
             if (error) return bad(res, error.message);
             return ok(res, { id: data.id });
+        }
+        // YouTube API key (encrypted) — status + set.
+        if (action === 'yt_key_status') {
+            const k = await ytKey();
+            return ok(res, { set: !!k, masked: k ? ('••••' + k.slice(-4)) : '' });
+        }
+        if (action === 'set_yt_key') {
+            if (body.key && String(body.key).trim()) await setConfigValue('YOUTUBE_API_KEY', String(body.key).trim(), session.userid);
+            const k = await ytKey();
+            return ok(res, { set: !!k, masked: k ? ('••••' + k.slice(-4)) : '' });
+        }
+        // Sync a course from its YouTube channel now.
+        if (action === 'sync_course') {
+            const { data: course } = await supabase.from('courses').select('*').eq('id', body.course_id || body.id).maybeSingle();
+            if (!course) return bad(res, 'Course not found', 404);
+            const r = await syncCourseFromYouTube(course);
+            if (!r.ok) return bad(res, r.error || 'Sync failed');
+            return ok(res, r);
         }
         if (action === 'delete_course') { await supabase.from('courses').delete().eq('id', body.id); return ok(res, { deleted: true }); }
 
