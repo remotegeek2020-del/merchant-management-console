@@ -14,6 +14,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession } from './_validate.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
+import { loadActor, actorName, canMarketingSettings } from './_access.js';
+import { logActivity } from './_activity.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -127,13 +129,14 @@ export async function refreshPortalYtStats() {
     return { ok: true, updated };
 }
 
+// These are sensitive integration settings — require the granular
+// Marketing → Settings access (not just broad marketing access).
 async function requireStaff(req, res) {
     const session = await validateSession(req);
     if (!session) { bad(res, 'Unauthorized', 401); return null; }
-    const { data: actor } = await supabase.from('app_users').select('role, access_marketing').eq('userid', session.userid).maybeSingle();
-    const role = String(actor?.role || '').toLowerCase();
-    const canMarketing = role.includes('super') || role.includes('admin') || actor?.access_marketing === true;
-    if (!canMarketing) { bad(res, 'Access denied. Marketing access required.', 403); return null; }
+    const actor = await loadActor(session.userid);
+    if (!canMarketingSettings(actor)) { bad(res, 'Access denied. Marketing Settings access required.', 403); return null; }
+    session._actor = actor;
     return session;
 }
 
@@ -144,8 +147,8 @@ export default async function handler(req, res) {
     try {
         // ── OAuth callback (Google redirects here after consent) ──
         if (req.method === 'GET' && (req.query.code || req.query.error)) {
-            const backOk = '/marketing-courses?yt=connected';
-            const backErr = (m) => '/marketing-courses?yt=error&msg=' + encodeURIComponent(m || 'failed');
+            const backOk = '/marketing-settings?yt=connected';
+            const backErr = (m) => '/marketing-settings?yt=error&msg=' + encodeURIComponent(m || 'failed');
             if (req.query.error) return res.redirect(302, backErr(String(req.query.error)));
             const savedState = await getConfigValue('YT_OAUTH_STATE');
             if (!savedState || savedState !== req.query.state) return res.redirect(302, backErr('state mismatch'));
@@ -173,6 +176,7 @@ export default async function handler(req, res) {
                 const title = cj?.items?.[0]?.snippet?.title;
                 if (title) await setConfigValue('YT_ANALYTICS_CHANNEL', title, 'youtube-oauth');
             } catch { /* ignore */ }
+            logActivity({ email: 'youtube-oauth', action: 'YouTube Analytics channel connected via OAuth', category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_analytics' }, req);
             return res.redirect(302, backOk);
         }
 
@@ -197,11 +201,13 @@ export default async function handler(req, res) {
             if (body.client_id) await setConfigValue('YT_OAUTH_CLIENT_ID', String(body.client_id).trim(), session.userid);
             if (body.client_secret) await setConfigValue('YT_OAUTH_CLIENT_SECRET', String(body.client_secret).trim(), session.userid);
             const { id, secret } = await clientCreds();
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} updated YouTube Analytics OAuth client credentials`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_oauth_client' }, req);
             return ok(res, { client_set: !!(id && secret) });
         }
         if (action === 'set_hosts') {
             const session = await requireStaff(req, res); if (!session) return;
             await setConfigValue('YT_PORTAL_HOSTS', String(body.hosts || '').trim() || 'portal.mypayprotec.com', session.userid);
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} set YouTube portal-attribution hosts`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_portal_hosts', new_value: { hosts: body.hosts } }, req);
             return ok(res, { hosts: (await portalHosts()).join(', ') });
         }
         if (action === 'start') {
@@ -221,12 +227,14 @@ export default async function handler(req, res) {
             const session = await requireStaff(req, res); if (!session) return;
             await setConfigValue('YT_OAUTH_REFRESH_TOKEN', '', session.userid);
             await setConfigValue('YT_ANALYTICS_CHANNEL', '', session.userid);
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} disconnected the YouTube Analytics channel`, category: 'marketing', severity: 'warning', target_type: 'marketing_setting', target_id: 'yt_analytics' }, req);
             return ok(res, { connected: false });
         }
         if (action === 'refresh_portal_views') {
             const session = await requireStaff(req, res); if (!session) return;
             const r = await refreshPortalYtStats();
             if (!r.ok) return bad(res, r.error || 'Refresh failed');
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} refreshed portal-attributed YouTube views (${r.updated} videos)`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_portal_views' }, req);
             return ok(res, r);
         }
 

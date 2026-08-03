@@ -15,6 +15,7 @@ import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
 import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
+import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
 
 // Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
@@ -213,11 +214,13 @@ export default async function handler(req, res) {
             const session = await validateStaff(req);
             if (!session) return sessionErrorResponse(res);
             const { data: caller } = await supabase.from('app_users')
-                .select('role, access_marketing, first_name, last_name').eq('userid', session.userid).maybeSingle();
+                .select('role, access_marketing, access_marketing_settings, email, first_name, last_name').eq('userid', session.userid).maybeSingle();
             const canAccess = !!caller && (caller.role === 'super_admin' || caller.role === 'admin' || caller.access_marketing === true);
             if (action === 'can_access') return ok(res, { can_access: canAccess, role: caller?.role || null });
             if (!canAccess) return bad(res, 'You do not have access to Marketing.', 403);
             const actorName = caller ? `${caller.first_name || ''} ${caller.last_name || ''}`.trim() : session.userid;
+            const actorEmail = caller?.email || session.userid;
+            const log = (fields) => logActivity({ email: actorEmail, category: 'marketing', ...fields }, req);
 
             if (action === 'list_campaigns') {
                 const { data } = await supabase.from('marketing_campaigns').select('*')
@@ -326,11 +329,13 @@ export default async function handler(req, res) {
                     const { data, error } = await supabase.from('marketing_campaigns').update(rec).eq('id', b.id).select().single();
                     if (error) return bad(res, error.message);
                     row = data;
+                    log({ action: `${actorName} updated campaign "${row.title || b.id}"`, target_type: 'marketing_campaign', target_id: row.id });
                 } else {
                     rec.created_by = actorName;
                     const { data, error } = await supabase.from('marketing_campaigns').insert(rec).select().single();
                     if (error) return bad(res, error.message);
                     row = data;
+                    log({ action: `${actorName} created campaign "${row.title || ''}"`, target_type: 'marketing_campaign', target_id: row.id });
                 }
                 return ok(res, row);
             }
@@ -340,13 +345,16 @@ export default async function handler(req, res) {
                 const { data, error } = await supabase.from('marketing_campaigns')
                     .update({ is_active: !!is_active, updated_at: new Date().toISOString() }).eq('id', id).select().single();
                 if (error) return bad(res, error.message);
+                log({ action: `${actorName} ${is_active ? 'activated' : 'paused'} campaign "${data?.title || id}"`, target_type: 'marketing_campaign', target_id: id });
                 return ok(res, data);
             }
 
             if (action === 'delete_campaign') {
                 const { id } = req.body;
+                const { data: existing } = await supabase.from('marketing_campaigns').select('title').eq('id', id).maybeSingle();
                 const { error } = await supabase.from('marketing_campaigns').delete().eq('id', id);
                 if (error) return bad(res, error.message);
+                log({ action: `${actorName} deleted campaign "${existing?.title || id}"`, severity: 'warning', target_type: 'marketing_campaign', target_id: id });
                 return ok(res, { deleted: true });
             }
 
@@ -499,17 +507,20 @@ export default async function handler(req, res) {
                 const { data, error } = await supabase.from('marketing_sites')
                     .insert({ site_key, name, created_by: actorName }).select().single();
                 if (error) return bad(res, error.message);
+                log({ action: `${actorName} created marketing site "${name}"`, target_type: 'marketing_site', target_id: data.id });
                 return ok(res, data);
             }
             if (action === 'toggle_site') {
                 const { id, is_active } = req.body;
                 const { data, error } = await supabase.from('marketing_sites').update({ is_active: !!is_active }).eq('id', id).select().single();
                 if (error) return bad(res, error.message);
+                log({ action: `${actorName} ${is_active ? 'enabled' : 'disabled'} marketing site "${data?.name || id}"`, target_type: 'marketing_site', target_id: id });
                 return ok(res, data);
             }
             if (action === 'delete_site') {
                 const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
                 if (error) return bad(res, error.message);
+                log({ action: `${actorName} deleted a marketing site`, severity: 'warning', target_type: 'marketing_site', target_id: req.body.id });
                 return ok(res, { deleted: true });
             }
             // Referral report: leads captured per partner + published landing pages.

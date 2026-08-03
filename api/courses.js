@@ -8,6 +8,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession } from './_validate.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
+import { canMarketingSettings } from './_access.js';
+import { logActivity } from './_activity.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -222,10 +224,13 @@ export default async function handler(req, res) {
         // ── STAFF (session + marketing access) ──
         const session = await validateSession(req);
         if (!session) return bad(res, 'Unauthorized', 401);
-        const { data: actor } = await supabase.from('app_users').select('role, access_marketing').eq('userid', session.userid).maybeSingle();
+        const { data: actor } = await supabase.from('app_users').select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings').eq('userid', session.userid).maybeSingle();
         const role = String(actor?.role || '').toLowerCase();
         const canMarketing = role.includes('super') || role.includes('admin') || actor?.access_marketing === true;
         if (!canMarketing) return bad(res, 'Access denied. Marketing access required.', 403);
+        const actorEmail = actor?.email || session.userid;
+        const actorNm = `${actor?.first_name || ''} ${actor?.last_name || ''}`.trim() || actorEmail;
+        const log = (fields) => logActivity({ email: actorEmail, category: 'marketing', ...fields }, req);
 
         if (action === 'courses_admin_list') {
             const courses = await coursesWithVideos(false);
@@ -296,9 +301,14 @@ export default async function handler(req, res) {
                 yt_sync_enabled: !!body.yt_sync_enabled
             };
             if (!patch.title) return bad(res, 'Course title required.');
-            if (body.id) { await supabase.from('courses').update(patch).eq('id', body.id); return ok(res, { id: body.id }); }
+            if (body.id) {
+                await supabase.from('courses').update(patch).eq('id', body.id);
+                log({ action: `${actorNm} updated course "${patch.title}"`, target_type: 'course', target_id: body.id, new_value: patch });
+                return ok(res, { id: body.id });
+            }
             const { data, error } = await supabase.from('courses').insert(patch).select('id').single();
             if (error) return bad(res, error.message);
+            log({ action: `${actorNm} created course "${patch.title}"`, target_type: 'course', target_id: data.id, new_value: patch });
             return ok(res, { id: data.id });
         }
         // YouTube API key (encrypted) — status + set.
@@ -307,8 +317,11 @@ export default async function handler(req, res) {
             return ok(res, { set: !!k, masked: k ? ('••••' + k.slice(-4)) : '' });
         }
         if (action === 'set_yt_key') {
+            // Sensitive integration key — requires the granular Marketing Settings access.
+            if (!canMarketingSettings(actor)) return bad(res, 'Access denied. Marketing Settings access required.', 403);
             if (body.key && String(body.key).trim()) await setConfigValue('YOUTUBE_API_KEY', String(body.key).trim(), session.userid);
             const k = await ytKey();
+            log({ action: `${actorNm} updated the YouTube Data API key`, target_type: 'marketing_setting', target_id: 'youtube_api_key' });
             return ok(res, { set: !!k, masked: k ? ('••••' + k.slice(-4)) : '' });
         }
         // Sync a course from its YouTube channel now.
@@ -317,21 +330,36 @@ export default async function handler(req, res) {
             if (!course) return bad(res, 'Course not found', 404);
             const r = await syncCourseFromYouTube(course);
             if (!r.ok) return bad(res, r.error || 'Sync failed');
+            log({ action: `${actorNm} synced YouTube lives into "${course.title}" (${r.added || 0} added)`, target_type: 'course', target_id: course.id });
             return ok(res, r);
         }
-        if (action === 'delete_course') { await supabase.from('courses').delete().eq('id', body.id); return ok(res, { deleted: true }); }
+        if (action === 'delete_course') {
+            const { data: course } = await supabase.from('courses').select('title').eq('id', body.id).maybeSingle();
+            await supabase.from('courses').delete().eq('id', body.id);
+            log({ action: `${actorNm} deleted course "${course?.title || body.id}"`, severity: 'warning', target_type: 'course', target_id: body.id });
+            return ok(res, { deleted: true });
+        }
 
         if (action === 'save_video') {
             if (!body.course_id) return bad(res, 'course_id required.');
             const v = cleanVideo(body);
             if (!v.title) return bad(res, 'Video title required.');
             if (!v.url) return bad(res, 'Video embed URL required.');
-            if (body.id) { await supabase.from('course_videos').update(v).eq('id', body.id); return ok(res, { id: body.id }); }
+            if (body.id) {
+                await supabase.from('course_videos').update(v).eq('id', body.id);
+                log({ action: `${actorNm} updated video "${v.title}"`, target_type: 'course_video', target_id: body.id });
+                return ok(res, { id: body.id });
+            }
             const { data, error } = await supabase.from('course_videos').insert({ course_id: body.course_id, ...v }).select('id').single();
             if (error) return bad(res, error.message);
+            log({ action: `${actorNm} added video "${v.title}"`, target_type: 'course_video', target_id: data.id });
             return ok(res, { id: data.id });
         }
-        if (action === 'delete_video') { await supabase.from('course_videos').delete().eq('id', body.id); return ok(res, { deleted: true }); }
+        if (action === 'delete_video') {
+            await supabase.from('course_videos').delete().eq('id', body.id);
+            log({ action: `${actorNm} deleted a video`, severity: 'warning', target_type: 'course_video', target_id: body.id });
+            return ok(res, { deleted: true });
+        }
 
         // Manual unlock management
         if (action === 'course_access_list') {
@@ -351,10 +379,12 @@ export default async function handler(req, res) {
         if (action === 'grant_access') {
             if (!body.course_id || !body.person_id) return bad(res, 'course_id and person_id required.');
             await supabase.from('course_access').upsert({ course_id: body.course_id, person_id: body.person_id, granted_by: session.userid }, { onConflict: 'course_id,person_id' });
+            log({ action: `${actorNm} granted course access to a partner`, target_type: 'course_access', target_id: body.course_id, new_value: { person_id: body.person_id } });
             return ok(res, {});
         }
         if (action === 'revoke_access') {
             await supabase.from('course_access').delete().eq('course_id', body.course_id).eq('person_id', body.person_id);
+            log({ action: `${actorNm} revoked course access from a partner`, severity: 'warning', target_type: 'course_access', target_id: body.course_id, new_value: { person_id: body.person_id } });
             return ok(res, {});
         }
 
