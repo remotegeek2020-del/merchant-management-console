@@ -66,15 +66,12 @@ export async function syncCourseFromYouTube(course) {
         for (const v of (j.items || [])) {
             const sn = v.snippet || {};
             const thumb = (sn.thumbnails && (sn.thumbnails.high || sn.thumbnails.medium || sn.thumbnails.default) || {}).url || null;
-            // If it's a scheduled stream that hasn't aired yet, lock it as
-            // "coming [date]" until its scheduled start (reuses the drip logic).
+            // Release date + ordering both come from the stream's own timestamp.
+            // A future scheduled time locks it as a "coming [date]" teaser; a past
+            // one is the publish/stream date (shown on the row, already available).
             const lsd = v.liveStreamingDetails || {};
-            let available_on = null;
-            if (lsd.scheduledStartTime && !lsd.actualEndTime) {
-                const start = new Date(lsd.scheduledStartTime).getTime();
-                if (start > Date.now()) available_on = new Date(lsd.scheduledStartTime).toISOString().slice(0, 10);
-            }
             const sortTs = lsd.scheduledStartTime || lsd.actualStartTime || sn.publishedAt;
+            const available_on = sortTs ? new Date(sortTs).toISOString().slice(0, 10) : null;
             await supabase.from('course_videos').insert({
                 course_id: course.id, title: (sn.title || 'Live').slice(0, 200), description: (sn.description || '').slice(0, 2000),
                 provider: 'youtube', url: 'https://www.youtube.com/watch?v=' + v.id, thumbnail_url: thumb,
@@ -189,7 +186,8 @@ async function coursesWithVideos(filterPublished) {
     const { data: courses } = await q;
     const ids = (courses || []).map(c => c.id);
     let vids = [];
-    if (ids.length) { const { data } = await supabase.from('course_videos').select('*').in('course_id', ids).order('sort_order').order('created_at'); vids = data || []; }
+    // Newest / upcoming first (sort_order = the stream's unix timestamp).
+    if (ids.length) { const { data } = await supabase.from('course_videos').select('*').in('course_id', ids).order('sort_order', { ascending: false }).order('created_at', { ascending: false }); vids = data || []; }
     const byCourse = {};
     vids.forEach(v => { (byCourse[v.course_id] = byCourse[v.course_id] || []).push(v); });
     return (courses || []).map(c => ({ ...c, videos: byCourse[c.id] || [] }));
