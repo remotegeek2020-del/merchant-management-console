@@ -14,16 +14,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession } from './_validate.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
-import { loadActor, actorName, canMarketingSettings } from './_access.js';
+import { loadActor, actorName, canMarketing, canMarketingSettings } from './_access.js';
 import { logActivity } from './_activity.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// yt-analytics.readonly → analytics reports; youtube.force-ssl → read comments
+// AND reply to them as the channel (needed for the in-portal comment replies).
 const SCOPES = [
     'https://www.googleapis.com/auth/yt-analytics.readonly',
-    'https://www.googleapis.com/auth/youtube.readonly'
+    'https://www.googleapis.com/auth/youtube.force-ssl'
 ].join(' ');
 
 const ok = (res, data) => res.status(200).json({ success: true, ...data });
@@ -110,6 +112,31 @@ export async function ytAnalyticsConfigured() {
     return !!(id && secret && refresh);
 }
 
+// Does the current connection include the comment write scope? (Older
+// connections granted before force-ssl was added won't — they must reconnect.)
+async function ytHasCommentScope() {
+    const s = (await getConfigValue('YT_OAUTH_SCOPES')) || '';
+    return s.includes('youtube.force-ssl');
+}
+
+// YouTube Data API v3 helpers (OAuth token).
+async function ytDataGet(token, path) {
+    try {
+        const r = await fetch('https://www.googleapis.com/youtube/v3/' + path, { headers: { Authorization: 'Bearer ' + token } });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, j };
+    } catch (e) { return { ok: false, status: 0, j: null }; }
+}
+async function ytDataPost(token, path, body) {
+    try {
+        const r = await fetch('https://www.googleapis.com/youtube/v3/' + path, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, j };
+    } catch (e) { return { ok: false, status: 0, j: null }; }
+}
+
 // Rich per-video analytics (aggregate — YouTube never exposes viewer identity).
 // Returns null if not connected / unavailable.
 export async function fetchVideoAnalytics(videoId) {
@@ -175,6 +202,23 @@ async function requireStaff(req, res) {
     session._actor = actor;
     return session;
 }
+// Reading/replying to comments is an operational marketing action (not settings).
+async function requireMarketing(req, res) {
+    const session = await validateSession(req);
+    if (!session) { bad(res, 'Unauthorized', 401); return null; }
+    const actor = await loadActor(session.userid);
+    if (!canMarketing(actor)) { bad(res, 'Access denied. Marketing access required.', 403); return null; }
+    session._actor = actor;
+    return session;
+}
+// Resolve a YouTube video id from one of our course_videos rows.
+async function resolveYtId(body) {
+    if (body.youtube_id) return String(body.youtube_id);
+    if (!body.video_id) return null;
+    const { data: v } = await supabase.from('course_videos').select('url, source_ref').eq('id', body.video_id).maybeSingle();
+    if (!v) return null;
+    return v.source_ref || (String(v.url || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/) || [])[1] || null;
+}
 
 export default async function handler(req, res) {
     cors(res);
@@ -204,6 +248,7 @@ export default async function handler(req, res) {
                 return res.redirect(302, backErr(j.error_description || j.error || 'no refresh token'));
             }
             await setConfigValue('YT_OAUTH_REFRESH_TOKEN', j.refresh_token, 'youtube-oauth');
+            await setConfigValue('YT_OAUTH_SCOPES', j.scope || '', 'youtube-oauth');
             await setConfigValue('YT_OAUTH_STATE', '', 'youtube-oauth');
             // Best-effort: store the channel title for display.
             try {
@@ -227,6 +272,7 @@ export default async function handler(req, res) {
             return ok(res, {
                 client_set: !!(id && secret),
                 connected: !!refresh,
+                can_reply: await ytHasCommentScope(),
                 channel: (await getConfigValue('YT_ANALYTICS_CHANNEL')) || '',
                 hosts: (await portalHosts()).join(', '),
                 redirect_uri: redirectUri(req)
@@ -272,6 +318,53 @@ export default async function handler(req, res) {
             if (!r.ok) return bad(res, r.error || 'Refresh failed');
             logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} refreshed portal-attributed YouTube views (${r.updated} videos)`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_portal_views' }, req);
             return ok(res, r);
+        }
+
+        // ── YouTube comments (read + reply as the channel) ──
+        if (action === 'list_comments') {
+            const session = await requireMarketing(req, res); if (!session) return;
+            const token = await accessToken();
+            if (!token) return bad(res, 'YouTube channel not connected.');
+            const ytid = await resolveYtId(body);
+            if (!ytid) return bad(res, 'Not a YouTube video');
+            const { ok: okr, status, j } = await ytDataGet(token, 'commentThreads?part=snippet,replies&maxResults=50&order=time&textFormat=plainText&videoId=' + encodeURIComponent(ytid));
+            if (!okr) {
+                const reason = j?.error?.errors?.[0]?.reason || '';
+                if (reason === 'commentsDisabled') return ok(res, { disabled: true, threads: [], can_reply: await ytHasCommentScope() });
+                return bad(res, j?.error?.message || ('HTTP ' + status));
+            }
+            const threads = (j.items || []).map(it => {
+                const top = it.snippet?.topLevelComment; const s = top?.snippet || {};
+                const replies = (it.replies?.comments || []).map(c => ({
+                    id: c.id, author: c.snippet?.authorDisplayName || '', text: c.snippet?.textDisplay || c.snippet?.textOriginal || '',
+                    at: c.snippet?.publishedAt || null
+                }));
+                return {
+                    id: top?.id, author: s.authorDisplayName || '', authorImage: s.authorProfileImageUrl || '',
+                    text: s.textDisplay || s.textOriginal || '', likeCount: s.likeCount || 0, at: s.publishedAt || null,
+                    totalReplies: it.snippet?.totalReplyCount || 0, replies
+                };
+            });
+            return ok(res, { disabled: false, threads, can_reply: await ytHasCommentScope() });
+        }
+        if (action === 'reply_comment') {
+            const session = await requireMarketing(req, res); if (!session) return;
+            const token = await accessToken();
+            if (!token) return bad(res, 'YouTube channel not connected.');
+            const parentId = String(body.parent_id || '').trim();
+            const text = String(body.text || '').trim();
+            if (!parentId || !text) return bad(res, 'parent_id and text required');
+            if (!(await ytHasCommentScope())) return bad(res, 'Replying needs the comment permission — reconnect YouTube in Settings to enable it.', 403);
+            const { ok: okr, status, j } = await ytDataPost(token, 'comments?part=snippet', { snippet: { parentId, textOriginal: text } });
+            if (!okr) {
+                const reason = j?.error?.errors?.[0]?.reason || '';
+                if (status === 403 || reason === 'insufficientPermissions' || reason === 'forbidden')
+                    return bad(res, 'Replying needs the comment permission — reconnect YouTube in Settings to enable it.', 403);
+                return bad(res, j?.error?.message || ('HTTP ' + status));
+            }
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} replied to a YouTube comment`, category: 'marketing', target_type: 'youtube_comment', target_id: parentId, new_value: { text } }, req);
+            const c = j?.snippet || {};
+            return ok(res, { reply: { id: j?.id, author: c.authorDisplayName || '', text: c.textDisplay || c.textOriginal || text, at: c.publishedAt || null } });
         }
 
         return bad(res, 'Unknown action');

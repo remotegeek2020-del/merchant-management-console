@@ -56,6 +56,7 @@
 <script>
 var TOKEN=localStorage.getItem('pp_session_token')||'';
 function api(b){ return fetch('/api/courses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function yapi(b){ return fetch('/api/youtube-oauth',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 var COURSES=[];
 function fmtNum(n){ n=Number(n)||0; if(n>=1e6) return (n/1e6).toFixed(n>=1e7?0:1)+'M'; if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1)+'K'; return String(n); }
@@ -165,6 +166,7 @@ function render(){
       else if(v.drip_days>0) drip='<span class="badge b-manual" title="Days after a partner unlocks the course">⏳ +'+v.drip_days+'d</span>';
       return '<div class="vid"><div class="vthumb">'+vidThumb(v)+'<span class="material-icons play">play_circle</span></div>'
         +'<span class="g"><b>'+esc(v.title)+'</b><div style="margin-top:3px;"><span class="prov" style="display:inline-block;">'+esc(v.provider)+'</span> '+vidStats(v)+'</div></span>'+drip
+        +((v.source==='youtube'||/youtu\.?be|youtube\.com/i.test(v.url||''))?'<span class="material-icons icon" title="YouTube comments" onclick="showComments(\''+v.id+'\')">forum</span>':'')
         +'<span class="material-icons icon" title="Edit" onclick="editVideo(\''+c.id+'\',\''+v.id+'\')">edit</span>'
         +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delVideo(\''+v.id+'\')">delete</span></div>';
     }).join('')||'<div class="muted" style="font-size:12.5px;padding:8px 0;">No videos yet.</div>';
@@ -224,6 +226,46 @@ window.refreshYtStats=async function(btn){
   if(r&&r.success){ Swal.fire({icon:'success',title:'YouTube stats updated',text:(r.updated||0)+' video(s) refreshed.',timer:1800,showConfirmButton:false}); load(); }
   else Swal.fire('Note',(r&&r.message)||'Could not refresh (check the YouTube API key).','warning');
 };
+// ── YouTube comments (read + reply as the channel) ──
+window.showComments=async function(videoId){
+  Swal.fire({title:'Loading comments…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await yapi({action:'list_comments',video_id:videoId});
+  if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not load comments','error'); return; }
+  var canReply=!!r.can_reply;
+  var banner=canReply?'':'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12.5px;color:#92400e;text-align:left;">To reply as the channel, <a href="/marketing-settings" style="color:#b45309;font-weight:700;">reconnect YouTube in Settings</a> once — it grants the comment permission. You can still read comments below.</div>';
+  var bodyHtml;
+  if(r.disabled){ bodyHtml='<div class="empty">Comments are turned off on this video.</div>'; }
+  else if(!(r.threads||[]).length){ bodyHtml='<div class="empty">No comments yet.</div>'; }
+  else {
+    bodyHtml=(r.threads||[]).map(function(t,i){
+      var replies=(t.replies||[]).map(function(rp){
+        return '<div style="margin:6px 0 0 24px;padding:6px 9px;background:#f8fafc;border-radius:8px;font-size:12.5px;"><b>'+esc(rp.author)+'</b> <span class="muted" style="font-size:10.5px;">'+(rp.at?new Date(rp.at).toLocaleDateString():'')+'</span><div style="white-space:pre-wrap;">'+esc(rp.text)+'</div></div>';
+      }).join('');
+      var replyBox=canReply?('<div style="margin:7px 0 0 24px;display:flex;gap:6px;"><input id="rc-'+i+'" placeholder="Reply as the channel…" style="flex:1;padding:7px 9px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12.5px;background:#f8fafc;"><button class="btn btn-p" style="padding:6px 12px;" onclick="ytReply(\''+t.id+'\','+i+',this)">Reply</button></div>'):'';
+      return '<div style="border-bottom:1px solid #f1f5f9;padding:10px 2px;text-align:left;">'
+        +'<div style="display:flex;align-items:center;gap:7px;">'+(t.authorImage?'<img src="'+esc(t.authorImage)+'" style="width:24px;height:24px;border-radius:50%;" onerror="this.style.display=\'none\'">':'')+'<div style="font-size:13px;"><b>'+esc(t.author)+'</b> <span class="muted" style="font-size:11px;">'+(t.at?new Date(t.at).toLocaleDateString():'')+'</span></div></div>'
+        +'<div style="font-size:13px;margin-top:3px;white-space:pre-wrap;">'+esc(t.text)+'</div>'
+        +'<div class="muted" style="font-size:11px;margin-top:2px;">👍 '+(t.likeCount||0)+(t.totalReplies?' · '+t.totalReplies+' repl'+(t.totalReplies===1?'y':'ies'):'')+'</div>'
+        +'<div id="rl-'+i+'">'+replies+'</div>'+replyBox+'</div>';
+    }).join('');
+  }
+  Swal.fire({title:'💬 YouTube comments',width:680,
+    html:'<div style="text-align:left;">'+banner+'<div style="max-height:58vh;overflow:auto;">'+bodyHtml+'</div></div>',
+    confirmButtonText:'Done',confirmButtonColor:'#2563eb'});
+};
+window.ytReply=async function(parentId,idx,btn){
+  var inp=document.getElementById('rc-'+idx); var text=(inp&&inp.value||'').trim();
+  if(!text) return;
+  btn.disabled=true; var _h=btn.textContent; btn.textContent='…';
+  var r=await yapi({action:'reply_comment',parent_id:parentId,text:text});
+  btn.disabled=false; btn.textContent=_h;
+  if(r&&r.success){
+    inp.value='';
+    var box=document.getElementById('rl-'+idx);
+    if(box) box.insertAdjacentHTML('beforeend','<div style="margin:6px 0 0 24px;padding:6px 9px;background:#eff6ff;border-radius:8px;font-size:12.5px;"><b>'+esc((r.reply&&r.reply.author)||'You')+'</b> <span style="color:#2563eb;font-size:10px;font-weight:800;">(us)</span><div style="white-space:pre-wrap;">'+esc((r.reply&&r.reply.text)||text)+'</div></div>');
+  } else { Swal.fire('Could not reply',(r&&r.message)||'Failed to post reply','warning'); }
+};
+
 // YouTube API key + Analytics OAuth config moved to Marketing → Settings
 // (gated by access_marketing_settings). This page keeps only day-to-day actions.
 window.delCourse=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete course?',text:'All its videos and access grants are removed.',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_course',id:id}); load(); };

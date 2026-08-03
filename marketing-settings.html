@@ -138,7 +138,8 @@ async function renderSettings(){
     // YouTube Analytics (portal attribution)
     +'<div class="card"><div class="card-head"><span class="material-icons">verified</span><span class="t">YouTube Analytics — portal-attributed views</span>'+connPill+'</div>'
       +'<div class="card-body">'
-      +'<div class="muted" style="font-size:13px;">'+(connected&&st.channel?('Connected channel: <b>'+esc(st.channel)+'</b>. '):'')+'Counts views of your videos <b>embedded on the portal</b> specifically (needs OAuth as the channel owner). Data has a 2–3 day delay.</div>'
+      +'<div class="muted" style="font-size:13px;">'+(connected&&st.channel?('Connected channel: <b>'+esc(st.channel)+'</b>. '):'')+'Counts views of your videos <b>embedded on the portal</b> specifically (needs OAuth as the channel owner). Data has a 2–3 day delay. This connection also powers per-video analytics and <b>replying to YouTube comments</b> from the portal.</div>'
+      +((connected && !st.can_reply)?'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 12px;margin-top:10px;font-size:12.5px;color:#92400e;">⚠️ Your connection was made before comment replies were added. Click <b>Reconnect</b> below to grant the comment permission — otherwise you can read comments but not reply.</div>':'')
       +guideHtml((st&&st.redirect_uri)||'')
       +'<label>Google OAuth Client ID</label><input id="ycid" type="text" autocomplete="off" placeholder="'+(clientSet?'•••• (set — leave blank to keep)':'xxxxx.apps.googleusercontent.com')+'">'
       +'<label>Google OAuth Client Secret</label><input id="ycsec" type="text" autocomplete="off" placeholder="'+(clientSet?'•••• (set — leave blank to keep)':'GOCSPX-…')+'">'
@@ -146,6 +147,7 @@ async function renderSettings(){
       +'<label>Portal host(s) to attribute <span style="text-transform:none;color:#94a3b8;font-weight:400;">(comma-separated)</span></label><input id="yhosts" type="text" value="'+esc((st&&st.hosts)||'')+'">'
       +'<div class="rowbtns">'
         +'<button class="btn btn-p" onclick="saveAnalytics(this)"><span class="material-icons" style="font-size:16px;">'+(connected?'sync':'link')+'</span> '+(connected?'Save & refresh now':'Save & connect')+'</button>'
+        +(connected?'<button class="btn btn-n" onclick="reconnectAnalytics(this)"><span class="material-icons" style="font-size:16px;">autorenew</span> Reconnect</button>':'')
         +(connected?'<button class="btn btn-r" onclick="disconnectAnalytics()"><span class="material-icons" style="font-size:16px;">link_off</span> Disconnect</button>':'')
       +'</div>'
       +'</div></div>';
@@ -176,6 +178,16 @@ window.saveAnalytics=async function(btn){
     if(s&&s.success&&s.auth_url){ location.href=s.auth_url; }
     else Swal.fire('Error',(s&&s.message)||'Add the OAuth client ID + secret first.','error');
   }
+};
+window.reconnectAnalytics=async function(btn){
+  // Re-run the OAuth consent so Google re-grants the current scopes (e.g. after
+  // we add the comment-reply permission). Saves any edited client/hosts first.
+  var cid=(document.getElementById('ycid')||{}).value.trim(), csec=(document.getElementById('ycsec')||{}).value.trim(), hosts=(document.getElementById('yhosts')||{}).value.trim();
+  if(cid||csec) await yapi({action:'set_client',client_id:cid,client_secret:csec});
+  if(hosts) await yapi({action:'set_hosts',hosts:hosts});
+  var s=await yapi({action:'start'});
+  if(s&&s.success&&s.auth_url){ location.href=s.auth_url; }
+  else Swal.fire('Error',(s&&s.message)||'Could not start reconnect.','error');
 };
 window.disconnectAnalytics=async function(){
   var c=await Swal.fire({icon:'warning',title:'Disconnect channel?',text:'Portal-attributed views will stop refreshing.',showCancelButton:true,confirmButtonColor:'#dc2626',confirmButtonText:'Disconnect'});
