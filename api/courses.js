@@ -260,6 +260,12 @@ export default async function handler(req, res) {
                     .select('course_video_id').eq('replied', false).in('course_video_id', allVidIds).limit(50000);
                 (oc || []).forEach(r => { openComments[r.course_video_id] = (openComments[r.course_video_id] || 0) + 1; });
             }
+            // QR scans per video (aggregated in DB).
+            const qrMap = {};
+            if (allVidIds.length) {
+                const { data: qs } = await supabase.rpc('qr_scan_counts', { vids: allVidIds });
+                (qs || []).forEach(r => { qrMap[r.course_video_id] = Number(r.scans) || 0; });
+            }
             const withStats = courses.map(c => ({
                 ...c,
                 access_count: counts[c.id] || 0,
@@ -267,7 +273,8 @@ export default async function handler(req, res) {
                     ...v,
                     portal_views: viewMap[v.id]?.views || 0,
                     portal_viewers: viewMap[v.id]?.unique_viewers || 0,
-                    open_comments: openComments[v.id] || 0
+                    open_comments: openComments[v.id] || 0,
+                    qr_scans: qrMap[v.id] || 0
                 }))
             }));
             return ok(res, { courses: withStats });
@@ -408,6 +415,41 @@ export default async function handler(req, res) {
             if (ids.length) { const { data: p } = await supabase.from('persons').select('id, full_name, email').in('id', ids); persons = p || []; }
             const pmap = {}; persons.forEach(p => { pmap[p.id] = p; });
             return ok(res, { access: (data || []).map(a => ({ person_id: a.person_id, name: pmap[a.person_id]?.full_name || '—', email: pmap[a.person_id]?.email || '', created_at: a.created_at })) });
+        }
+        // Ensure a QR/tracking code exists for a video → returns the /go/<code> link.
+        if (action === 'qr_setup') {
+            if (!body.video_id) return bad(res, 'video_id required');
+            const { data: v } = await supabase.from('course_videos').select('id, qr_code, qr_enabled, ai_cta_link, ai_goal').eq('id', body.video_id).maybeSingle();
+            if (!v) return bad(res, 'Video not found', 404);
+            if (!v.ai_cta_link) return ok(res, { needs_link: true });
+            let code = v.qr_code;
+            if (!code) {
+                // Unique short slug; retry on the rare collision.
+                for (let i = 0; i < 5 && !code; i++) {
+                    const cand = Array.from({ length: 8 }, () => '0123456789abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 36)]).join('');
+                    const { error } = await supabase.from('course_videos').update({ qr_code: cand, qr_enabled: true }).eq('id', v.id).is('qr_code', null);
+                    if (!error) { const { data: chk } = await supabase.from('course_videos').select('qr_code').eq('id', v.id).maybeSingle(); code = chk?.qr_code; }
+                }
+            } else if (!v.qr_enabled) {
+                await supabase.from('course_videos').update({ qr_enabled: true }).eq('id', v.id);
+            }
+            if (!code) return bad(res, 'Could not create QR code');
+            const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+            const host = req.headers['x-forwarded-host'] || req.headers.host;
+            log({ action: `${actorNm} generated a QR code for a video`, target_type: 'course_video', target_id: v.id });
+            return ok(res, { code, link: `${proto}://${host}/go/${code}`, target: v.ai_cta_link, type: v.ai_goal });
+        }
+        if (action === 'qr_stats') {
+            if (!body.video_id) return bad(res, 'video_id required');
+            const { count } = await supabase.from('qr_scans').select('id', { count: 'exact', head: true }).eq('course_video_id', body.video_id);
+            const { data: last } = await supabase.from('qr_scans').select('scanned_at').eq('course_video_id', body.video_id).order('scanned_at', { ascending: false }).limit(1);
+            return ok(res, { scans: count || 0, last_scan: last?.[0]?.scanned_at || null });
+        }
+        if (action === 'qr_disable') {
+            if (!body.video_id) return bad(res, 'video_id required');
+            await supabase.from('course_videos').update({ qr_enabled: false }).eq('id', body.video_id);
+            log({ action: `${actorNm} disabled a video QR code`, target_type: 'course_video', target_id: body.video_id });
+            return ok(res, { disabled: true });
         }
         // HighLevel forms + calendars for the configured location (CTA picker).
         if (action === 'ghl_cta_options') {

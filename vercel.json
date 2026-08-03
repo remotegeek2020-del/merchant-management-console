@@ -62,6 +62,7 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/go/(.*)", "dest": "/api/qr-redirect?c=$1" },
     { "src": "/p/(.*)", "dest": "/landing.html" },
     { "src": "/bug-report\\.js", "dest": "/bug-report.js" },
     { "src": "/partner/dashboard", "dest": "/partner/dashboard.html" },

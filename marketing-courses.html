@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f8fafc;color:#0f172a;}
   :root{--pri:#2563eb;--pri-d:#1d4ed8;--border:#e2e8f0;--muted:#94a3b8;--red:#dc2626;--green:#16a34a;}
@@ -68,6 +69,7 @@ function vidStats(v){
   parts.push('<span class="vstat clk" onclick="showViewers(\''+v.id+'\',\''+esc((v.title||'').replace(/\\/g,"\\\\").replace(/\x27/g,"\\\x27"))+'\')" title="'+((Number(v.portal_views)||0))+' portal plays · '+((Number(v.portal_viewers)||0))+' unique partners — click to see who"><span class="material-icons" style="font-size:13px;">groups</span> '+fmtNum(v.portal_views)+' portal</span>');
   if(v.yt_view_count!=null) parts.push('<span class="vstat clk" onclick="showYtAnalytics(\''+v.id+'\')" title="YouTube stats — click for watch time, traffic sources & more"><span class="material-icons" style="font-size:13px;">smart_display</span> '+fmtNum(v.yt_view_count)+' YT</span>');
   if(v.yt_portal_views!=null) parts.push('<span class="vstat clk" style="background:#eef2ff;color:#4338ca;" onclick="showYtAnalytics(\''+v.id+'\')" title="YouTube views embedded on our portal (YouTube Analytics) — click for detail"><span class="material-icons" style="font-size:13px;">verified</span> '+fmtNum(v.yt_portal_views)+' YT-portal</span>');
+  if(v.qr_scans) parts.push('<span class="vstat" style="background:#ecfdf5;color:#047857;" title="QR code scans"><span class="material-icons" style="font-size:13px;">qr_code_scanner</span> '+fmtNum(v.qr_scans)+' scans</span>');
   return '<span class="vstats">'+parts.join('')+'</span>';
 }
 var TRAFFIC_LABELS={EMBEDDED:'Embedded players',YT_SEARCH:'YouTube search',RELATED_VIDEO:'Suggested videos',NO_LINK_OTHER:'Direct / unknown',NO_LINK_EMBEDDED:'External app embed',EXT_URL:'External websites',SUBSCRIBER:'Browse / feed',PLAYLIST:'Playlists',NOTIFICATION:'Notifications',YT_CHANNEL:'Channel page',YT_OTHER_PAGE:'Other YouTube',ADVERTISING:'Ads',PROMOTED:'Promoted',ANNOTATION:'Cards / annotations',END_SCREEN:'End screens',SHORTS:'Shorts feed',HASHTAGS:'Hashtags',SOUND_PAGE:'Sound page',LIVE_REDIRECT:'Live redirect',CAMPAIGN_CARD:'Campaign cards'};
@@ -169,6 +171,7 @@ function render(){
       return '<div class="vid"><div class="vthumb">'+vidThumb(v)+'<span class="material-icons play">play_circle</span></div>'
         +'<span class="g"><b>'+esc(v.title)+'</b><div style="margin-top:3px;"><span class="prov" style="display:inline-block;">'+esc(v.provider)+'</span> '+vidStats(v)+'</div></span>'+drip
         +((v.source==='youtube'||/youtu\.?be|youtube\.com/i.test(v.url||''))?'<span class="cbell" title="YouTube comments'+(v.open_comments?' — '+v.open_comments+' new/unanswered':'')+'" onclick="showComments(\''+v.id+'\')"><span class="material-icons icon">forum</span>'+(v.open_comments?'<span class="cbadge">'+(v.open_comments>99?'99+':v.open_comments)+'</span>':'')+'</span>':'')
+        +'<span class="material-icons icon" title="QR code'+(v.qr_scans?' — '+v.qr_scans+' scans':'')+'" onclick="openQr(\''+c.id+'\',\''+v.id+'\')">qr_code_2</span>'
         +'<span class="material-icons icon" title="Edit" onclick="editVideo(\''+c.id+'\',\''+v.id+'\')">edit</span>'
         +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delVideo(\''+v.id+'\')">delete</span></div>';
     }).join('')||'<div class="muted" style="font-size:12.5px;padding:8px 0;">No videos yet.</div>';
@@ -228,6 +231,35 @@ window.refreshYtStats=async function(btn){
   if(r&&r.success){ Swal.fire({icon:'success',title:'YouTube stats updated',text:(r.updated||0)+' video(s) refreshed.',timer:1800,showConfirmButton:false}); load(); }
   else Swal.fire('Note',(r&&r.message)||'Could not refresh (check the YouTube API key).','warning');
 };
+// ── QR code (trackable redirect → book/signup) ──
+window.openQr=async function(courseId,videoId){
+  Swal.fire({title:'Loading QR…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await api({action:'qr_setup',video_id:videoId});
+  if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not set up QR','error'); return; }
+  if(r.needs_link){
+    Swal.fire({icon:'info',title:'Set a goal + link first',html:'This video has no destination yet. Edit the video → <b>AI reply guidance</b> → pick a goal and a HighLevel form/calendar, then generate the QR.',confirmButtonText:'Edit video',confirmButtonColor:'#2563eb',showCancelButton:true}).then(function(x){ if(x.isConfirmed) editVideo(courseId,videoId); });
+    return;
+  }
+  var st=await api({action:'qr_stats',video_id:videoId});
+  var scans=(st&&st.scans)||0, last=(st&&st.last_scan)?new Date(st.last_scan).toLocaleString():'—';
+  var typeLabel=r.type==='appointment'?'Book an appointment':(r.type==='signup'?'Sign up (form)':'Redirect');
+  var dataUrl='';
+  try{ dataUrl=await QRCode.toDataURL(r.link,{width:440,margin:2}); }catch(e){}
+  Swal.fire({title:'📷 QR code',width:560,
+    html:'<div style="text-align:center;">'
+      +(dataUrl?'<img id="qrimg" src="'+dataUrl+'" style="width:260px;height:260px;border:1px solid #e2e8f0;border-radius:12px;">':'<div class="muted">Could not render QR.</div>')
+      +'<div style="margin-top:10px;font-size:12.5px;color:#475569;">Scanning opens: <b>'+esc(typeLabel)+'</b></div>'
+      +'<div style="display:flex;gap:6px;align-items:center;justify-content:center;margin-top:8px;"><input readonly value="'+esc(r.link)+'" style="flex:1;max-width:340px;padding:7px 9px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;background:#f8fafc;" onclick="this.select()"><button class="btn btn-n" onclick="copyText(\''+esc(r.link)+'\',this)">Copy</button></div>'
+      +'<div style="display:flex;gap:16px;justify-content:center;margin-top:14px;"><div><div style="font-size:22px;font-weight:800;color:#047857;">'+scans+'</div><div class="muted" style="font-size:11px;">Total scans</div></div><div><div style="font-size:13px;font-weight:700;margin-top:6px;">'+esc(last)+'</div><div class="muted" style="font-size:11px;">Last scan</div></div></div>'
+      +'<div class="muted" style="font-size:11.5px;margin-top:12px;text-align:left;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 11px;">Drop this PNG onto your livestream (OBS/StreamYard image overlay). Every scan is counted here and redirected to your goal. Best for desktop/TV viewers — pair it with a spoken/pinned link for mobile.</div>'
+      +'</div>',
+    showDenyButton:true,denyButtonText:'Download PNG',denyButtonColor:'#16a34a',
+    confirmButtonText:'Done',confirmButtonColor:'#2563eb'}).then(function(x){
+      if(x.isDenied && dataUrl){ var a=document.createElement('a'); a.href=dataUrl; a.download='qr-'+r.code+'.png'; document.body.appendChild(a); a.click(); a.remove(); }
+    });
+};
+window.copyText=function(t,btn){ if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){if(btn){var o=btn.textContent;btn.textContent='Copied!';setTimeout(function(){btn.textContent=o;},1200);}}).catch(function(){});} };
+
 // ── YouTube comments (read + reply as the channel) ──
 window.showComments=async function(videoId){
   Swal.fire({title:'Loading comments…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
