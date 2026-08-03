@@ -451,6 +451,37 @@ export default async function handler(req, res) {
             log({ action: `${actorNm} disabled a video QR code`, target_type: 'course_video', target_id: body.video_id });
             return ok(res, { disabled: true });
         }
+        // Detect an embedded HighLevel form/calendar from a public web page.
+        if (action === 'detect_embed') {
+            const url = String(body.url || '').trim();
+            if (!/^https?:\/\//i.test(url)) return bad(res, 'Enter a valid http(s) URL');
+            let html = '';
+            try {
+                const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PayProTecBot/1.0)' } });
+                html = await r.text();
+            } catch (e) { return bad(res, 'Could not fetch that page.'); }
+            const found = [];
+            const scan = (re, type) => { let m; while ((m = re.exec(html))) found.push({ type, id: m[1] }); };
+            scan(/leadconnectorhq\.com\/widget\/form\/([\w-]+)/ig, 'signup');
+            scan(/leadconnectorhq\.com\/widget\/(?:booking|bookings)\/([\w-]+)/ig, 'appointment');
+            scan(/msgsndr\.com\/widget\/form\/([\w-]+)/ig, 'signup');
+            scan(/msgsndr\.com\/widget\/(?:booking|bookings)\/([\w-]+)/ig, 'appointment');
+            scan(/data-form-id=["']([\w-]+)["']/ig, 'signup');
+            scan(/data-(?:calendar|widget)-id=["']([\w-]+)["']/ig, 'appointment');
+            const seen = new Set(); const uniq = [];
+            found.forEach(f => { const k = f.type + ':' + f.id; if (!seen.has(k)) { seen.add(k); uniq.push(f); } });
+            if (!uniq.length) return ok(res, { found: false });
+            // Name them from the HighLevel lists where possible.
+            const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+            let forms = [], cals = [];
+            if (locationId) { try { [forms, cals] = await Promise.all([ghlListForms(locationId), ghlListCalendars(locationId)]); } catch (e) { /* names optional */ } }
+            const nameFor = (f) => { const list = f.type === 'signup' ? forms : cals; const hit = (list || []).find(x => x.id === f.id); return hit ? hit.name : ''; };
+            const results = uniq.map(f => ({
+                type: f.type, id: f.id, name: nameFor(f),
+                link: f.type === 'signup' ? ('https://api.leadconnectorhq.com/widget/form/' + f.id) : ('https://api.leadconnectorhq.com/widget/booking/' + f.id)
+            }));
+            return ok(res, { found: true, results });
+        }
         // HighLevel forms + calendars for the configured location (CTA picker).
         if (action === 'ghl_cta_options') {
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
