@@ -39,12 +39,15 @@
   input:focus,select:focus,textarea:focus{border-color:var(--pri);background:#fff;}
   .muted{color:var(--muted);}.empty{text-align:center;padding:40px;color:var(--muted);}
   .row{display:flex;gap:10px;}.row>div{flex:1;}
+  .vstats{display:inline-flex;gap:6px;flex-wrap:wrap;vertical-align:middle;}
+  .vstat{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;color:#475569;background:#f1f5f9;border-radius:5px;padding:2px 6px;}
 </style>
 </head>
 <body>
 <div class="top">
   <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
   <h1>🎓 Courses &amp; Webinars</h1>
+  <button class="btn btn-n" onclick="refreshYtStats(this)"><span class="material-icons" style="font-size:16px;">insights</span> Refresh YouTube stats</button>
   <button class="btn btn-n" onclick="ytKeyModal()"><span class="material-icons" style="font-size:16px;">smart_display</span> YouTube API key</button>
   <button class="btn btn-p" onclick="editCourse()"><span class="material-icons" style="font-size:17px;">add</span> New course</button>
 </div>
@@ -54,6 +57,13 @@ var TOKEN=localStorage.getItem('pp_session_token')||'';
 function api(b){ return fetch('/api/courses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 var COURSES=[];
+function fmtNum(n){ n=Number(n)||0; if(n>=1e6) return (n/1e6).toFixed(n>=1e7?0:1)+'M'; if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1)+'K'; return String(n); }
+function vidStats(v){
+  var parts=[];
+  parts.push('<span class="vstat" title="'+((Number(v.portal_views)||0))+' portal plays · '+((Number(v.portal_viewers)||0))+' unique partners"><span class="material-icons" style="font-size:13px;">groups</span> '+fmtNum(v.portal_views)+' portal</span>');
+  if(v.yt_view_count!=null) parts.push('<span class="vstat" title="Total views on YouTube (all sources) — as of '+(v.yt_stats_at?new Date(v.yt_stats_at).toLocaleString():'—')+'"><span class="material-icons" style="font-size:13px;">smart_display</span> '+fmtNum(v.yt_view_count)+' YT</span>');
+  return '<span class="vstats">'+parts.join('')+'</span>';
+}
 function vidThumb(v){
   var img=v.thumbnail_url||'';
   if(!img && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/mqdefault.jpg'; }
@@ -74,7 +84,7 @@ function render(){
       if(v.available_on) drip='<span class="badge b-manual" title="Releases on this date">📅 '+esc(v.available_on)+'</span>';
       else if(v.drip_days>0) drip='<span class="badge b-manual" title="Days after a partner unlocks the course">⏳ +'+v.drip_days+'d</span>';
       return '<div class="vid"><div class="vthumb">'+vidThumb(v)+'<span class="material-icons play">play_circle</span></div>'
-        +'<span class="g"><b>'+esc(v.title)+'</b><div class="prov" style="display:inline-block;margin-top:3px;">'+esc(v.provider)+'</div></span>'+drip
+        +'<span class="g"><b>'+esc(v.title)+'</b><div style="margin-top:3px;"><span class="prov" style="display:inline-block;">'+esc(v.provider)+'</span> '+vidStats(v)+'</div></span>'+drip
         +'<span class="material-icons icon" title="Edit" onclick="editVideo(\''+c.id+'\',\''+v.id+'\')">edit</span>'
         +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delVideo(\''+v.id+'\')">delete</span></div>';
     }).join('')||'<div class="muted" style="font-size:12.5px;padding:8px 0;">No videos yet.</div>';
@@ -126,6 +136,13 @@ window.syncCourse=async function(id,btn){
   var r=await api({action:'sync_course',course_id:id});
   if(r&&r.success){ Swal.fire({icon:'success',title:'Synced',text:(r.added||0)+' new live(s) added ('+(r.total||0)+' found).',timer:1800,showConfirmButton:false}); load(); }
   else { if(btn){ btn.disabled=false; btn.innerHTML='<span class="material-icons" style="font-size:15px;">sync</span> Sync lives now'; } Swal.fire('Error',(r&&r.message)||'Sync failed','error'); }
+};
+window.refreshYtStats=async function(btn){
+  if(btn){ btn.disabled=true; var _h=btn.innerHTML; btn.innerHTML='<span class="material-icons" style="font-size:16px;">insights</span> Refreshing…'; }
+  var r=await api({action:'refresh_yt_stats'});
+  if(btn){ btn.disabled=false; btn.innerHTML=_h; }
+  if(r&&r.success){ Swal.fire({icon:'success',title:'YouTube stats updated',text:(r.updated||0)+' video(s) refreshed.',timer:1800,showConfirmButton:false}); load(); }
+  else Swal.fire('Note',(r&&r.message)||'Could not refresh (check the YouTube API key).','warning');
 };
 window.ytKeyModal=async function(){
   var st=await api({action:'yt_key_status'});

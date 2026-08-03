@@ -74,6 +74,55 @@ export async function syncCourseFromYouTube(course) {
     return { ok: true, added, total: ids.length };
 }
 
+// ── YouTube public view counts (statistics) ─────────────────────────────────
+// The YouTube video id we already store as source_ref (or parse from the url).
+function ytVideoId(v) {
+    if (v.source_ref) return v.source_ref;
+    const m = String(v.url || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/);
+    return m ? m[1] : null;
+}
+// Refresh cached YouTube statistics (viewCount/likeCount/commentCount) for a set
+// of course_videos rows. Best-effort; returns how many rows were updated.
+// NOTE: viewCount is the video's TOTAL public views across all of YouTube, not
+// portal-only — shown alongside the portal count as context.
+export async function refreshYtStatsFor(videoRows) {
+    const key = await ytKey();
+    if (!key) return { ok: false, error: 'No YouTube API key set.', updated: 0 };
+    // Map youtube video id → our course_videos rows (a video id can repeat across courses).
+    const byYt = {};
+    (videoRows || []).forEach(v => { const id = ytVideoId(v); if (id) (byYt[id] = byYt[id] || []).push(v); });
+    const ids = Object.keys(byYt);
+    let updated = 0;
+    for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50);
+        let j;
+        try { j = await ytFetch('videos?part=statistics&id=' + batch.join(',') + '&key=' + key); }
+        catch (e) { continue; }
+        const now = new Date().toISOString();
+        for (const item of (j.items || [])) {
+            const st = item.statistics || {};
+            const patch = {
+                yt_view_count: st.viewCount != null ? parseInt(st.viewCount, 10) : null,
+                yt_like_count: st.likeCount != null ? parseInt(st.likeCount, 10) : null,
+                yt_comment_count: st.commentCount != null ? parseInt(st.commentCount, 10) : null,
+                yt_stats_at: now
+            };
+            for (const row of (byYt[item.id] || [])) {
+                await supabase.from('course_videos').update(patch).eq('id', row.id);
+                updated++;
+            }
+        }
+    }
+    return { ok: true, updated };
+}
+// Refresh YouTube stats for every YouTube-backed video in the library.
+export async function refreshAllYtStats() {
+    const { data: vids } = await supabase.from('course_videos')
+        .select('id, url, source, source_ref').limit(50000);
+    const yt = (vids || []).filter(v => v.source === 'youtube' || ytVideoId(v));
+    return refreshYtStatsFor(yt);
+}
+
 function cors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -158,6 +207,18 @@ export default async function handler(req, res) {
             return ok(res, { courses: visible, locked });
         }
 
+        // ── PARTNER: log a portal view (fired when a partner plays a video) ──
+        if (action === 'log_view') {
+            const personId = await validatePartner(body.partner_token);
+            if (!personId) return bad(res, 'Not signed in', 401);
+            if (!body.video_id) return bad(res, 'video_id required');
+            // Trust the DB for course_id (don't rely on the client) + confirm the video exists.
+            const { data: vid } = await supabase.from('course_videos').select('id, course_id').eq('id', body.video_id).maybeSingle();
+            if (!vid) return bad(res, 'Video not found', 404);
+            await supabase.from('course_video_views').insert({ video_id: vid.id, course_id: vid.course_id, person_id: personId });
+            return ok(res, {});
+        }
+
         // ── STAFF (session + marketing access) ──
         const session = await validateSession(req);
         if (!session) return bad(res, 'Unauthorized', 401);
@@ -171,7 +232,30 @@ export default async function handler(req, res) {
             const { data: acc } = await supabase.from('course_access').select('course_id');
             const counts = {};
             (acc || []).forEach(a => { counts[a.course_id] = (counts[a.course_id] || 0) + 1; });
-            return ok(res, { courses: courses.map(c => ({ ...c, access_count: counts[c.id] || 0 })) });
+            // Portal view counts per video, aggregated in the DB (no 1000-row cap).
+            const allVidIds = [];
+            courses.forEach(c => (c.videos || []).forEach(v => allVidIds.push(v.id)));
+            const viewMap = {};
+            if (allVidIds.length) {
+                const { data: vc } = await supabase.rpc('course_video_view_counts', { vids: allVidIds });
+                (vc || []).forEach(r => { viewMap[r.video_id] = { views: Number(r.views) || 0, unique_viewers: Number(r.unique_viewers) || 0 }; });
+            }
+            const withStats = courses.map(c => ({
+                ...c,
+                access_count: counts[c.id] || 0,
+                videos: (c.videos || []).map(v => ({
+                    ...v,
+                    portal_views: viewMap[v.id]?.views || 0,
+                    portal_viewers: viewMap[v.id]?.unique_viewers || 0
+                }))
+            }));
+            return ok(res, { courses: withStats });
+        }
+        // Refresh cached YouTube view counts for the whole library.
+        if (action === 'refresh_yt_stats') {
+            const r = await refreshAllYtStats();
+            if (!r.ok) return bad(res, r.error || 'Could not refresh (check the YouTube API key).');
+            return ok(res, r);
         }
         if (action === 'save_course') {
             const patch = {

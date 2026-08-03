@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { syncCourseFromYouTube } from './courses.js';
+import { syncCourseFromYouTube, refreshAllYtStats } from './courses.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -22,7 +22,10 @@ export default async function handler(req, res) {
             try { const r = await syncCourseFromYouTube(c); results.push({ course: c.title, ...r }); }
             catch (e) { results.push({ course: c.title, ok: false, error: e.message }); }
         }
-        return res.status(200).json({ success: true, synced: results.length, results });
+        // Refresh cached YouTube view counts for every YouTube-backed video.
+        let stats = { updated: 0 };
+        try { stats = await refreshAllYtStats(); } catch (e) { stats = { ok: false, error: e.message }; }
+        return res.status(200).json({ success: true, synced: results.length, results, stats });
     } catch (e) {
         return res.status(500).json({ success: false, message: e.message });
     }

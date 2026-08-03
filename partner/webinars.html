@@ -133,6 +133,8 @@ window.playVideo=function(id){
   if(!src){ alert('This video link could not be played.'); return; }
   document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
   document.getElementById('player').style.display='flex';
+  // Log a portal view (best-effort; never blocks playback).
+  try{ papi({action:'log_view',video_id:id}); }catch(e){}
 };
 window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; };
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
