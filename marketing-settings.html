@@ -33,6 +33,19 @@
   code{font-size:11.5px;background:#f1f5f9;padding:2px 6px;border-radius:5px;word-break:break-all;}
   .hint{font-size:11.5px;color:#94a3b8;margin-top:5px;line-height:1.5;}
   .rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .copybtn{border:1px solid var(--border);background:#fff;color:var(--pri);border-radius:6px;font-size:11px;font-weight:700;padding:2px 8px;cursor:pointer;font-family:inherit;margin-left:6px;}
+  .copybtn:hover{background:#eff6ff;}
+  details.guide{margin:14px 0 4px;border:1px solid #dbeafe;background:#f5f9ff;border-radius:10px;overflow:hidden;}
+  details.guide summary{cursor:pointer;list-style:none;padding:11px 14px;font-size:13px;font-weight:800;color:#1d4ed8;display:flex;align-items:center;gap:6px;user-select:none;}
+  details.guide summary::-webkit-details-marker{display:none;}
+  details.guide[open] summary{border-bottom:1px solid #dbeafe;}
+  .guide-body{padding:12px 16px 16px;font-size:12.5px;color:#334155;line-height:1.6;}
+  .guide-body ol{margin:6px 0;padding-left:20px;}
+  .guide-body li{margin-bottom:9px;}
+  .guide-body a{color:var(--pri);font-weight:700;}
+  .gnote{background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin:6px 0;}
+  .gcode{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;}
+  .gcode code{flex:1;min-width:200px;}
 </style>
 </head>
 <body>
@@ -78,6 +91,31 @@ window.requestPerm=async function(btn){
   } else { note.textContent=(r&&r.message)||'Could not send the request.'; }
 };
 
+// ── Copy helper ──
+window.copyText=function(t,btn){
+  function done(){ if(btn){ var o=btn.textContent; btn.textContent='Copied!'; setTimeout(function(){btn.textContent=o;},1200); } }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done).catch(function(){}); }
+  else { try{ var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }catch(e){} }
+};
+
+// ── Setup guide (collapsible) ──
+function guideHtml(redirect){
+  return '<details class="guide"><summary><span class="material-icons" style="font-size:16px;vertical-align:-3px;">menu_book</span> Setup guide — how to get the Client ID &amp; Secret</summary>'
+    +'<div class="guide-body">'
+    +'<div class="gnote">Do this once, signed in with the Google account that <b>owns the YouTube channel</b>. It\'s free.</div>'
+    +'<ol>'
+      +'<li><b>Open Google Cloud Console</b> → <a href="https://console.cloud.google.com" target="_blank" rel="noopener">console.cloud.google.com</a> → create or pick a project (e.g. "PayProTec Portal").</li>'
+      +'<li><b>Enable the APIs.</b> APIs &amp; Services → <b>Library</b> → search <b>"YouTube Analytics API"</b> → Enable. (Also enable <b>YouTube Data API v3</b> if it isn\'t already.)</li>'
+      +'<li><b>Configure the consent screen.</b> APIs &amp; Services → <b>OAuth consent screen</b> → User type <b>External</b> → fill app name + your email. Under <b>Test users</b>, add the channel owner\'s Google email. You can leave it in <b>Testing</b> mode.</li>'
+      +'<li><b>Create the client.</b> APIs &amp; Services → <b>Credentials</b> → Create Credentials → <b>OAuth client ID</b> → Application type <b>Web application</b>.</li>'
+      +'<li><b>Add the redirect URI</b> — under "Authorized redirect URIs", paste this <b>exactly</b>:<div class="gcode"><code>'+esc(redirect||'')+'</code><button class="copybtn" onclick="copyText(this.previousElementSibling.textContent,this)">Copy</button></div></li>'
+      +'<li>Click <b>Create</b>. Google shows a <b>Client ID</b> (…apps.googleusercontent.com) and <b>Client Secret</b> (GOCSPX-…). Paste both into the fields below.</li>'
+      +'<li>Click <b>Save &amp; connect</b> → approve as the channel owner → you\'ll return here <b>Connected</b>. Then click <b>Save &amp; refresh</b>.</li>'
+    +'</ol>'
+    +'<div class="gnote"><b>How it works:</b> once connected, for each video we ask YouTube Analytics how many of its <b>embedded-player</b> views happened on your portal host — that becomes the <b>YT-portal</b> chip on each video. It refreshes hourly. Note: YouTube Analytics lags <b>2–3 days</b> and only reports a domain once it clears YouTube\'s minimum threshold, so the instant <b>portal</b> play count (with partner names) stays the most reliable "watched from the portal" number.</div>'
+    +'</div></details>';
+}
+
 // ── Settings panels ──
 async function renderSettings(){
   var w=document.getElementById('wrap');
@@ -100,9 +138,10 @@ async function renderSettings(){
     +'<div class="card"><div class="card-head"><span class="material-icons">verified</span><span class="t">YouTube Analytics — portal-attributed views</span>'+connPill+'</div>'
       +'<div class="card-body">'
       +'<div class="muted" style="font-size:13px;">'+(connected&&st.channel?('Connected channel: <b>'+esc(st.channel)+'</b>. '):'')+'Counts views of your videos <b>embedded on the portal</b> specifically (needs OAuth as the channel owner). Data has a 2–3 day delay.</div>'
+      +guideHtml((st&&st.redirect_uri)||'')
       +'<label>Google OAuth Client ID</label><input id="ycid" type="text" autocomplete="off" placeholder="'+(clientSet?'•••• (set — leave blank to keep)':'xxxxx.apps.googleusercontent.com')+'">'
       +'<label>Google OAuth Client Secret</label><input id="ycsec" type="text" autocomplete="off" placeholder="'+(clientSet?'•••• (set — leave blank to keep)':'GOCSPX-…')+'">'
-      +'<div class="hint">In Google Cloud → Credentials, create an <b>OAuth client (Web application)</b> with the <b>YouTube Analytics API</b> enabled and this exact Authorized redirect URI:<br><code>'+esc((st&&st.redirect_uri)||'')+'</code></div>'
+      +'<div class="hint">Create the client below in Google Cloud (see the guide above). Authorized redirect URI must be exactly:<br><code id="rediUri">'+esc((st&&st.redirect_uri)||'')+'</code> <button class="copybtn" onclick="copyText(document.getElementById(\'rediUri\').textContent,this)">Copy</button></div>'
       +'<label>Portal host(s) to attribute <span style="text-transform:none;color:#94a3b8;font-weight:400;">(comma-separated)</span></label><input id="yhosts" type="text" value="'+esc((st&&st.hosts)||'')+'">'
       +'<div class="rowbtns">'
         +'<button class="btn btn-p" onclick="saveAnalytics(this)"><span class="material-icons" style="font-size:16px;">'+(connected?'sync':'link')+'</span> '+(connected?'Save & refresh now':'Save & connect')+'</button>'
