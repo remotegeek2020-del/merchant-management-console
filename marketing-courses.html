@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
   *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f8fafc;color:#0f172a;}
   :root{--pri:#2563eb;--pri-d:#1d4ed8;--border:#e2e8f0;--muted:#94a3b8;--red:#dc2626;--green:#16a34a;}
@@ -245,7 +245,7 @@ window.openQr=async function(courseId,videoId){
   var scans=(st&&st.scans)||0, last=(st&&st.last_scan)?new Date(st.last_scan).toLocaleString():'—';
   var typeLabel=r.type==='appointment'?'Book an appointment':(r.type==='signup'?'Sign up (form)':'Redirect');
   var dataUrl='';
-  try{ dataUrl=await QRCode.toDataURL(r.link,{width:440,margin:2}); }catch(e){}
+  try{ if(window.qrcode){ var q=qrcode(0,'M'); q.addData(r.link); q.make(); dataUrl=q.createDataURL(8,16); } }catch(e){}
   window._qrDL={dataUrl:dataUrl,code:r.code};
   var goalWord=r.type==='signup'?'Signed up':'Booked';
   Swal.fire({title:'📷 QR code',width:560,
@@ -273,7 +273,8 @@ function capi(b){ return api(b); }
 window.qrDownload=function(){
   var d=window._qrDL||{};
   if(!d.dataUrl){ Swal.fire('QR not ready','Could not generate the image — try reopening.','warning'); return; }
-  var a=document.createElement('a'); a.href=d.dataUrl; a.download='qr-'+(d.code||'code')+'.png';
+  var ext=d.dataUrl.indexOf('image/png')>-1?'png':(d.dataUrl.indexOf('image/gif')>-1?'gif':'png');
+  var a=document.createElement('a'); a.href=d.dataUrl; a.download='qr-'+(d.code||'code')+'.'+ext;
   document.body.appendChild(a); a.click(); setTimeout(function(){a.remove();},100);
 };
 window.copyText=function(t,btn){ if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){if(btn){var o=btn.textContent;btn.textContent='Copied!';setTimeout(function(){btn.textContent=o;},1200);}}).catch(function(){});} };
