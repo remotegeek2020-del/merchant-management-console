@@ -63,10 +63,61 @@ function vidStats(v){
   var parts=[];
   // Portal plays — clickable to see WHO watched (matched to HighLevel).
   parts.push('<span class="vstat clk" onclick="showViewers(\''+v.id+'\',\''+esc((v.title||'').replace(/\\/g,"\\\\").replace(/\x27/g,"\\\x27"))+'\')" title="'+((Number(v.portal_views)||0))+' portal plays · '+((Number(v.portal_viewers)||0))+' unique partners — click to see who"><span class="material-icons" style="font-size:13px;">groups</span> '+fmtNum(v.portal_views)+' portal</span>');
-  if(v.yt_view_count!=null) parts.push('<span class="vstat" title="Total views on YouTube (all sources) — as of '+(v.yt_stats_at?new Date(v.yt_stats_at).toLocaleString():'—')+'"><span class="material-icons" style="font-size:13px;">smart_display</span> '+fmtNum(v.yt_view_count)+' YT</span>');
-  if(v.yt_portal_views!=null) parts.push('<span class="vstat" style="background:#eef2ff;color:#4338ca;" title="YouTube views embedded on our portal (YouTube Analytics) — as of '+(v.yt_portal_views_at?new Date(v.yt_portal_views_at).toLocaleString():'—')+'"><span class="material-icons" style="font-size:13px;">verified</span> '+fmtNum(v.yt_portal_views)+' YT-portal</span>');
+  if(v.yt_view_count!=null) parts.push('<span class="vstat clk" onclick="showYtAnalytics(\''+v.id+'\')" title="YouTube stats — click for watch time, traffic sources & more"><span class="material-icons" style="font-size:13px;">smart_display</span> '+fmtNum(v.yt_view_count)+' YT</span>');
+  if(v.yt_portal_views!=null) parts.push('<span class="vstat clk" style="background:#eef2ff;color:#4338ca;" onclick="showYtAnalytics(\''+v.id+'\')" title="YouTube views embedded on our portal (YouTube Analytics) — click for detail"><span class="material-icons" style="font-size:13px;">verified</span> '+fmtNum(v.yt_portal_views)+' YT-portal</span>');
   return '<span class="vstats">'+parts.join('')+'</span>';
 }
+var TRAFFIC_LABELS={EMBEDDED:'Embedded players',YT_SEARCH:'YouTube search',RELATED_VIDEO:'Suggested videos',NO_LINK_OTHER:'Direct / unknown',NO_LINK_EMBEDDED:'External app embed',EXT_URL:'External websites',SUBSCRIBER:'Browse / feed',PLAYLIST:'Playlists',NOTIFICATION:'Notifications',YT_CHANNEL:'Channel page',YT_OTHER_PAGE:'Other YouTube',ADVERTISING:'Ads',PROMOTED:'Promoted',ANNOTATION:'Cards / annotations',END_SCREEN:'End screens',SHORTS:'Shorts feed',HASHTAGS:'Hashtags',SOUND_PAGE:'Sound page',LIVE_REDIRECT:'Live redirect',CAMPAIGN_CARD:'Campaign cards'};
+function fmtDur(sec){ sec=Math.round(Number(sec)||0); var m=Math.floor(sec/60), s=sec%60; return m+':'+(s<10?'0':'')+s; }
+function fmtWatch(min){ min=Number(min)||0; if(min>=60){ var h=Math.floor(min/60); return h.toLocaleString()+'h '+Math.round(min%60)+'m'; } return Math.round(min)+' min'; }
+function tile(label,val,sub){ return '<div style="flex:1;min-width:120px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;"><div style="font-size:20px;font-weight:800;">'+val+'</div><div style="font-size:11px;color:#64748b;font-weight:700;margin-top:2px;">'+label+'</div>'+(sub?'<div style="font-size:10.5px;color:#94a3b8;margin-top:1px;">'+sub+'</div>':'')+'</div>'; }
+window.showYtAnalytics=async function(videoId){
+  Swal.fire({title:'Loading analytics…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await api({action:'video_analytics',video_id:videoId});
+  if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not load analytics','error'); return; }
+  var c=r.cached||{}, a=r.analytics, p=r.portal||{};
+  // Row of headline tiles: prefer live Analytics figures, fall back to cached.
+  var tiles=''
+    +tile('YouTube views',fmtNum(a?a.views:c.views||0))
+    +tile('Likes',fmtNum(a?a.likes:(c.likes!=null?c.likes:0)))
+    +tile('Comments',fmtNum(a?a.comments:(c.comments!=null?c.comments:0)))
+    +tile('Portal plays',fmtNum(p.views||0),(p.unique_viewers||0)+' unique');
+  var deep='';
+  if(r.connected && a){
+    deep+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
+      +tile('Watch time',fmtWatch(a.minutesWatched))
+      +tile('Avg. view',fmtDur(a.avgDuration),'min:sec')
+      +tile('Shares',fmtNum(a.shares))
+      +tile('Subs gained',fmtNum(a.subscribersGained))
+      +'</div>';
+    var ts=(a.trafficSources||[]).filter(function(x){return x.views>0;});
+    var tot=ts.reduce(function(s,x){return s+x.views;},0)||1;
+    if(ts.length){
+      deep+='<div style="text-align:left;margin-top:14px;"><div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Where views came from</div>';
+      ts.slice(0,8).forEach(function(x){
+        var pct=Math.round(x.views/tot*100);
+        var isPortal=(x.type==='EMBEDDED');
+        deep+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12.5px;">'
+          +'<div style="width:130px;color:#334155;'+(isPortal?'font-weight:800;':'')+'">'+esc(TRAFFIC_LABELS[x.type]||x.type)+(isPortal?' 📍':'')+'</div>'
+          +'<div style="flex:1;background:#eef2f7;border-radius:6px;height:14px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(isPortal?'#4338ca':'#2563eb')+';"></div></div>'
+          +'<div style="width:88px;text-align:right;color:#64748b;">'+fmtNum(x.views)+' · '+pct+'%</div></div>';
+      });
+      deep+='<div class="muted" style="font-size:11px;margin-top:4px;">📍 “Embedded players” includes your portal.</div></div>';
+    }
+    var co=(a.countries||[]).filter(function(x){return x.views>0;});
+    if(co.length){
+      deep+='<div style="text-align:left;margin-top:12px;"><div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Top countries</div><div style="font-size:12.5px;color:#334155;">'+co.map(function(x){return esc(x.country)+' ('+fmtNum(x.views)+')';}).join(' · ')+'</div></div>';
+    }
+    deep+='<div class="muted" style="font-size:11px;margin-top:12px;">YouTube Analytics data lags 2–3 days and is aggregate — YouTube never shows who watched.</div>';
+  } else if(!r.connected){
+    deep+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:#92400e;text-align:left;">Connect <b>YouTube Analytics</b> in <a href="/marketing-settings" style="color:#b45309;font-weight:700;">Settings</a> to see watch time, average view duration, and traffic sources (incl. how much came from your portal).</div>';
+  } else {
+    deep+='<div class="muted" style="font-size:12px;margin-top:12px;">No YouTube Analytics rows yet for this video (needs a couple days of data).</div>';
+  }
+  Swal.fire({title:esc(r.title||'YouTube analytics'),width:640,
+    html:'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+tiles+'</div>'+deep,
+    confirmButtonText:'Done',confirmButtonColor:'#2563eb'});
+};
 window.showViewers=async function(videoId,title){
   Swal.fire({title:'Loading viewers…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
   var r=await api({action:'video_viewers',video_id:videoId});

@@ -10,6 +10,7 @@ import { validateSession } from './_validate.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
 import { canMarketingSettings } from './_access.js';
 import { logActivity } from './_activity.js';
+import { ytAnalyticsConfigured, fetchVideoAnalytics } from './youtube-oauth.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -282,6 +283,29 @@ export default async function handler(req, res) {
             });
             const totalViews = viewers.reduce((s, v) => s + v.views, 0);
             return ok(res, { viewers, unique_viewers: viewers.length, total_views: totalViews });
+        }
+        // Per-video analytics popup (aggregate YouTube data + our portal counts).
+        if (action === 'video_analytics') {
+            if (!body.video_id) return bad(res, 'video_id required');
+            const { data: v } = await supabase.from('course_videos')
+                .select('id, url, title, source, source_ref, yt_view_count, yt_like_count, yt_comment_count, yt_portal_views, yt_stats_at')
+                .eq('id', body.video_id).maybeSingle();
+            if (!v) return bad(res, 'Video not found', 404);
+            const ytid = v.source_ref || (String(v.url || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/) || [])[1] || null;
+            let connected = false, analytics = null;
+            if (ytid) {
+                connected = await ytAnalyticsConfigured();
+                if (connected) { try { analytics = await fetchVideoAnalytics(ytid); } catch (e) { /* best-effort */ } }
+            }
+            let portal = { views: 0, unique_viewers: 0 };
+            const { data: vc } = await supabase.rpc('course_video_view_counts', { vids: [v.id] });
+            if (vc && vc[0]) portal = { views: Number(vc[0].views) || 0, unique_viewers: Number(vc[0].unique_viewers) || 0 };
+            return ok(res, {
+                title: v.title,
+                youtube_id: ytid,
+                cached: { views: v.yt_view_count, likes: v.yt_like_count, comments: v.yt_comment_count, portal_views: v.yt_portal_views, at: v.yt_stats_at },
+                portal, connected, analytics
+            });
         }
         // Refresh cached YouTube view counts for the whole library.
         if (action === 'refresh_yt_stats') {

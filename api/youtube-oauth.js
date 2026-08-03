@@ -103,6 +103,42 @@ async function portalViewsForVideo(token, videoId, hosts, endDate) {
     return sum;
 }
 
+// Is the Analytics channel connected (client creds + refresh token present)?
+export async function ytAnalyticsConfigured() {
+    const { id, secret } = await clientCreds();
+    const refresh = await getConfigValue('YT_OAUTH_REFRESH_TOKEN');
+    return !!(id && secret && refresh);
+}
+
+// Rich per-video analytics (aggregate — YouTube never exposes viewer identity).
+// Returns null if not connected / unavailable.
+export async function fetchVideoAnalytics(videoId) {
+    const token = await accessToken();
+    if (!token || !videoId) return null;
+    const endDate = new Date().toISOString().slice(0, 10);
+    const base = 'https://youtubeanalytics.googleapis.com/v2/reports';
+    const common = `ids=channel==MINE&startDate=2005-01-01&endDate=${endDate}&filters=video==${encodeURIComponent(videoId)}`;
+    const num = (v) => Number(v) || 0;
+    async function q(extra) {
+        try {
+            const r = await fetch(base + '?' + common + extra, { headers: { Authorization: 'Bearer ' + token } });
+            if (!r.ok) return null;
+            return await r.json().catch(() => null);
+        } catch { return null; }
+    }
+    const totals = await q('&metrics=views,estimatedMinutesWatched,averageViewDuration,likes,comments,shares,subscribersGained');
+    const traffic = await q('&metrics=views&dimensions=insightTrafficSourceType&sort=-views&maxResults=15');
+    const countries = await q('&metrics=views&dimensions=country&sort=-views&maxResults=5');
+    if (!totals && !traffic && !countries) return null;
+    const t = (totals && totals.rows && totals.rows[0]) || [];
+    return {
+        views: num(t[0]), minutesWatched: num(t[1]), avgDuration: num(t[2]),
+        likes: num(t[3]), comments: num(t[4]), shares: num(t[5]), subscribersGained: num(t[6]),
+        trafficSources: ((traffic && traffic.rows) || []).map(r => ({ type: r[0], views: num(r[1]) })),
+        countries: ((countries && countries.rows) || []).map(r => ({ country: r[0], views: num(r[1]) }))
+    };
+}
+
 // Refresh portal-attributed views for every YouTube-backed video.
 export async function refreshPortalYtStats() {
     const token = await accessToken();
