@@ -181,6 +181,7 @@ function render(){
       +'<span class="t">'+esc(c.title)+'</span>'
       +'<span class="badge '+(c.is_published?'b-live':'b-draft')+'">'+(c.is_published?'Published':'Draft')+'</span>'
       +'<span class="badge '+(c.unlock_mode==='auto'?'b-auto':'b-manual')+'">'+(c.unlock_mode==='auto'?'Auto-unlock':'Manual unlock')+'</span>'
+      +(c.yt_channel_id?'<button class="btn btn-n" style="padding:6px 11px;" title="Sync YouTube lives now (past, live & upcoming)" onclick="syncCourse(\''+c.id+'\',this)"><span class="material-icons" style="font-size:15px;">sync</span> Sync lives</button>':'')
       +'<span class="material-icons icon" title="Edit course" onclick="editCourse(\''+c.id+'\')">edit</span>'
       +'<span class="material-icons icon" style="color:#dc2626;" title="Delete course" onclick="delCourse(\''+c.id+'\')">delete</span></div>'
       +'<div class="course-body">'+(c.description?'<div class="muted" style="font-size:13px;margin-bottom:10px;">'+esc(c.description)+'</div>':'')
