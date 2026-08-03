@@ -162,9 +162,34 @@ async function renderSettings(){
       +'<div class="row" style="display:flex;gap:12px;margin-top:12px;"><div style="flex:1;"><label>Reply after — min (minutes)</label><input id="ai-min" type="number" min="1" max="120" value="'+(ai.min_minutes||1)+'"></div>'
       +'<div style="flex:1;"><label>…to max (minutes)</label><input id="ai-max" type="number" min="1" max="120" value="'+(ai.max_minutes||10)+'"></div></div>'
       +'<div class="hint">Each reply posts at a random time between these two values after the comment is detected (default 1–10 min). Comments are checked every ~2 minutes.</div>'
-      +'<div class="rowbtns"><button class="btn btn-p" onclick="saveAi(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button></div>'
+      +'<div class="rowbtns"><button class="btn btn-p" onclick="saveAi(this)"><span class="material-icons" style="font-size:16px;">save</span> Save comment settings</button></div>'
+      // ── Live chat responder (separate, faster) ──
+      +'<div style="border-top:1px solid #e2e8f0;margin-top:18px;padding-top:14px;">'
+      +'<div style="display:flex;align-items:center;gap:8px;"><span class="material-icons" style="color:#dc2626;font-size:19px;">sensors</span><span style="font-weight:800;font-size:14px;">Live-chat responder</span>'+(ai.live_enabled?'<span class="pill on">On</span>':'<span class="pill off">Off</span>')+'</div>'
+      +'<div class="muted" style="font-size:13px;margin-top:6px;">During a <b>livestream</b>, AI answers chat in near-real-time. It stays natural by being <b>selective</b> (only real questions / messages to you — greetings &amp; emojis are ignored), <b>throttled</b> (a max per minute), and <b>staggered</b> (a few random seconds each) so it never floods the chat when many people type at once.</div>'
+      +'<label style="display:flex;align-items:center;gap:9px;text-transform:none;letter-spacing:0;margin-top:12px;font-size:14px;cursor:pointer;font-weight:700;"><input type="checkbox" id="lv-en" style="width:auto;" '+(ai.live_enabled?'checked':'')+'> Answer live chat during my streams</label>'
+      +'<label style="display:flex;align-items:center;gap:9px;text-transform:none;letter-spacing:0;margin-top:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="lv-q" style="width:auto;" '+(ai.live_questions_only!==false?'checked':'')+'> Only answer genuine questions / messages directed at us <span class="muted">(recommended)</span></label>'
+      +'<div class="row" style="display:flex;gap:12px;margin-top:12px;"><div style="flex:1;"><label>Max replies / minute</label><input id="lv-mpm" type="number" min="1" max="30" value="'+(ai.live_max_per_min||4)+'"></div>'
+      +'<div style="flex:1;"><label>Delay min (sec)</label><input id="lv-dmin" type="number" min="0" max="120" value="'+(ai.live_delay_min_sec!=null?ai.live_delay_min_sec:3)+'"></div>'
+      +'<div style="flex:1;"><label>…max (sec)</label><input id="lv-dmax" type="number" min="0" max="300" value="'+(ai.live_delay_max_sec!=null?ai.live_delay_max_sec:20)+'"></div></div>'
+      +'<div class="hint">Checked every minute; when you\'re live it polls chat continuously. Heads-up: heavy live use consumes more YouTube API quota.</div>'
+      +'<div class="rowbtns"><button class="btn btn-p" onclick="saveLive(this)"><span class="material-icons" style="font-size:16px;">save</span> Save live-chat settings</button></div>'
+      +'</div>'
       +'</div></div>';
 }
+window.saveLive=async function(btn){
+  var en=(document.getElementById('lv-en')||{}).checked;
+  var q=(document.getElementById('lv-q')||{}).checked;
+  var mpm=parseInt((document.getElementById('lv-mpm')||{}).value,10)||4;
+  var dmin=parseInt((document.getElementById('lv-dmin')||{}).value,10); if(isNaN(dmin))dmin=3;
+  var dmax=parseInt((document.getElementById('lv-dmax')||{}).value,10); if(isNaN(dmax))dmax=20;
+  if(dmax<dmin){ Swal.fire('Check the range','Max seconds must be ≥ min seconds.','warning'); return; }
+  btn.disabled=true;
+  var r=await yapi({action:'set_live_config',enabled:en,questions_only:q,max_per_min:mpm,delay_min_sec:dmin,delay_max_sec:dmax});
+  btn.disabled=false;
+  if(r&&r.success){ Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false}); renderSettings(); }
+  else Swal.fire('Error',(r&&r.message)||'Could not save','error');
+};
 window.saveAi=async function(btn){
   var en=(document.getElementById('ai-en')||{}).checked;
   var mn=parseInt((document.getElementById('ai-min')||{}).value,10)||1;

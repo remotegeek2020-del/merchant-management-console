@@ -169,11 +169,23 @@ export async function fetchVideoAnalytics(videoId) {
 
 // ── AI auto-reply config ─────────────────────────────────────────────────────
 async function geminiKey() { return process.env.GEMINI_API_KEY || (await getConfigValue('GEMINI_API_KEY')) || ''; }
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const clampInt = (v, lo, hi, dflt) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt; };
+
 export async function getAiConfig() {
     const enabled = (await getConfigValue('YT_AI_AUTOREPLY_ENABLED')) === 'true';
     let min = parseInt(await getConfigValue('YT_AI_DELAY_MIN'), 10); if (!Number.isFinite(min) || min < 1) min = 1;
     let max = parseInt(await getConfigValue('YT_AI_DELAY_MAX'), 10); if (!Number.isFinite(max) || max < min) max = Math.max(min, 10);
-    return { enabled, min_minutes: min, max_minutes: max, gemini_set: !!(await geminiKey()) };
+    // Live-chat responder (separate, faster).
+    const live_enabled = (await getConfigValue('YT_LIVE_ENABLED')) === 'true';
+    const live_max_per_min = clampInt(await getConfigValue('YT_LIVE_MAX_PM'), 1, 30, 4);
+    const live_delay_min_sec = clampInt(await getConfigValue('YT_LIVE_DELAY_MIN'), 0, 120, 3);
+    const live_delay_max_sec = Math.max(live_delay_min_sec, clampInt(await getConfigValue('YT_LIVE_DELAY_MAX'), 0, 300, 20));
+    const live_questions_only = (await getConfigValue('YT_LIVE_QONLY')) !== 'false';   // default true
+    return {
+        enabled, min_minutes: min, max_minutes: max, gemini_set: !!(await geminiKey()),
+        live_enabled, live_max_per_min, live_delay_min_sec, live_delay_max_sec, live_questions_only
+    };
 }
 
 // Generate a reply to a comment with Gemini (analyzing the comment + video).
@@ -289,6 +301,108 @@ export async function pollAndProcessComments() {
         }
     }
     return { ok: true, new_comments: newCount, ai_posted: posted, ai_failed: failed };
+}
+
+// ── Live-chat responder ──────────────────────────────────────────────────────
+// Cheap pre-filter: is this worth a host reply at all? (Selectivity, step 1.)
+function liveLooksWorthy(t) {
+    t = String(t || '').trim();
+    if (t.length < 8) return false;
+    if (/\?/.test(t)) return true;
+    if (/\b(how|what|when|where|why|who|can|could|does|do|is|are|should|which|help|price|cost|support|sign\s?up|join)\b/i.test(t)) return true;
+    return false;
+}
+// Gemini decides skip vs a short reply (Selectivity, step 2 + drafting).
+export async function generateLiveChatDecision(msg, video) {
+    const key = await geminiKey();
+    if (!key) return null;
+    try {
+        const genAI = new GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.6, responseMimeType: 'application/json' } });
+        const prompt = `You moderate our own PayProTec YouTube LIVE chat, replying as the channel.
+Video: "${video?.title || ''}". ${String(video?.description || '').slice(0, 250)}
+A live-chat viewer "${msg.author}" wrote: "${String(msg.text || '').slice(0, 250)}"
+Decide if this deserves a quick host reply. SKIP greetings, emojis, reactions, spam, or small talk that needs no answer. Reply ONLY to genuine questions or messages directed at us.
+Return strict JSON: {"skip":true} to ignore, OR {"skip":false,"reply":"<short friendly reply, max 180 chars, no hashtags, at most one emoji>"}.`;
+        const r = await model.generateContent(prompt);
+        const j = JSON.parse((r?.response?.text() || '{}').trim());
+        if (j.skip || !j.reply) return { skip: true };
+        return { skip: false, reply: String(j.reply).slice(0, 190) };
+    } catch (e) { return null; }
+}
+
+// Poll the active live broadcast's chat until `deadlineMs`, replying selectively.
+export async function pollLiveChat(deadlineMs) {
+    const cfg = await getAiConfig();
+    if (!cfg.live_enabled) return { ok: true, skipped: 'disabled' };
+    if (!cfg.gemini_set) return { ok: false, error: 'no Gemini key' };
+    const token = await accessToken();
+    if (!token) return { ok: false, error: 'not connected' };
+    const lb = await ytDataGet(token, 'liveBroadcasts?part=snippet&broadcastStatus=active&broadcastType=all&maxResults=5');
+    if (!lb.ok) return { ok: false, error: 'liveBroadcasts failed' };
+    const broadcasts = (lb.j.items || []).filter(b => b.snippet?.liveChatId);
+    if (!broadcasts.length) return { ok: true, live: false };
+
+    let seen = 0, posted = 0;
+    for (const b of broadcasts) {
+        const liveChatId = b.snippet.liveChatId;
+        const { data: cv } = await supabase.from('course_videos').select('id, title, description').eq('source_ref', b.id).maybeSingle();
+        const video = cv || { title: b.snippet.title, description: b.snippet.description };
+        const { data: stRow } = await supabase.from('youtube_livechat_state').select('page_token').eq('live_chat_id', liveChatId).maybeSingle();
+        let pageToken = stRow?.page_token || '';
+
+        while (Date.now() < deadlineMs) {
+            const { ok, j } = await ytDataGet(token, 'liveChat/messages?part=snippet,authorDetails&maxResults=200&liveChatId=' + encodeURIComponent(liveChatId) + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''));
+            if (!ok) break;
+            pageToken = j.nextPageToken || pageToken;
+            for (const it of (j.items || [])) {
+                try {
+                    const sn = it.snippet || {}; const ad = it.authorDetails || {};
+                    if (sn.type !== 'textMessageEvent') continue;
+                    if (ad.isChatOwner) continue;                            // never reply to ourselves
+                    const mid = it.id;
+                    const text = sn.displayMessage || sn.textMessageDetails?.messageText || '';
+                    const { data: ex } = await supabase.from('youtube_livechat').select('id').eq('message_id', mid).maybeSingle();
+                    if (ex) continue;
+                    seen++;
+                    const base = { live_chat_id: liveChatId, message_id: mid, author: ad.displayName || '', text };
+                    // Step 1 — cheap selectivity filter.
+                    if (cfg.live_questions_only && !liveLooksWorthy(text)) {
+                        await supabase.from('youtube_livechat').insert({ ...base, status: 'skipped' }); continue;
+                    }
+                    // Throttle — max replies/minute.
+                    const sinceIso = new Date(Date.now() - 60000).toISOString();
+                    const { count } = await supabase.from('youtube_livechat').select('id', { count: 'exact', head: true }).eq('replied', true).gte('detected_at', sinceIso);
+                    if ((count || 0) >= cfg.live_max_per_min) {
+                        await supabase.from('youtube_livechat').insert({ ...base, status: 'skipped', error: 'rate_limited' }); continue;
+                    }
+                    // Step 2 — Gemini decides + drafts.
+                    const dec = await generateLiveChatDecision({ author: ad.displayName, text }, video);
+                    if (!dec || dec.skip || !dec.reply) {
+                        await supabase.from('youtube_livechat').insert({ ...base, status: 'skipped' }); continue;
+                    }
+                    // Stagger with a small random delay (human-like).
+                    const jitter = (cfg.live_delay_min_sec + Math.random() * (cfg.live_delay_max_sec - cfg.live_delay_min_sec)) * 1000;
+                    if (Date.now() + jitter + 2000 > deadlineMs) {           // not enough time — leave for next run
+                        await supabase.from('youtube_livechat').insert({ ...base, status: 'seen' }); continue;
+                    }
+                    await sleep(jitter);
+                    const reply = dec.reply.slice(0, 190);
+                    const ins = await ytDataPost(token, 'liveChat/messages?part=snippet', { snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: reply } } });
+                    if (ins.ok) {
+                        await supabase.from('youtube_livechat').insert({ ...base, status: 'replied', replied: true, ai_reply: reply }); posted++;
+                    } else {
+                        await supabase.from('youtube_livechat').insert({ ...base, status: 'error', error: ins.j?.error?.message || 'post failed' });
+                    }
+                } catch (e) { /* skip this message, keep polling */ }
+            }
+            await supabase.from('youtube_livechat_state').upsert({ live_chat_id: liveChatId, page_token: pageToken, updated_at: new Date().toISOString() }, { onConflict: 'live_chat_id' });
+            const wait = Math.min(Math.max(j.pollingIntervalMillis || 6000, 4000), 12000);
+            if (Date.now() + wait >= deadlineMs) break;
+            await sleep(wait);
+        }
+    }
+    return { ok: true, live: true, seen, posted };
 }
 
 // Refresh portal-attributed views for every YouTube-backed video.
@@ -459,6 +573,19 @@ export default async function handler(req, res) {
             await setConfigValue('YT_AI_DELAY_MIN', String(mn), session.userid);
             await setConfigValue('YT_AI_DELAY_MAX', String(mx), session.userid);
             logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} ${body.enabled ? 'enabled' : 'disabled'} YouTube AI auto-reply (${mn}–${mx} min delay)`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_ai_autoreply', new_value: { enabled: !!body.enabled, min: mn, max: mx } }, req);
+            return ok(res, await getAiConfig());
+        }
+        if (action === 'set_live_config') {
+            const session = await requireStaff(req, res); if (!session) return;
+            const mpm = clampInt(body.max_per_min, 1, 30, 4);
+            const dmin = clampInt(body.delay_min_sec, 0, 120, 3);
+            const dmax = Math.max(dmin, clampInt(body.delay_max_sec, 0, 300, 20));
+            await setConfigValue('YT_LIVE_ENABLED', body.enabled ? 'true' : 'false', session.userid);
+            await setConfigValue('YT_LIVE_MAX_PM', String(mpm), session.userid);
+            await setConfigValue('YT_LIVE_DELAY_MIN', String(dmin), session.userid);
+            await setConfigValue('YT_LIVE_DELAY_MAX', String(dmax), session.userid);
+            await setConfigValue('YT_LIVE_QONLY', body.questions_only ? 'true' : 'false', session.userid);
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} ${body.enabled ? 'enabled' : 'disabled'} YouTube live-chat AI responder (max ${mpm}/min, ${dmin}-${dmax}s)`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_livechat_ai' }, req);
             return ok(res, await getAiConfig());
         }
         // Draft an AI reply for a single comment (does NOT post).
