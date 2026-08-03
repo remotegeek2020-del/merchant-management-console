@@ -282,7 +282,7 @@ window.ytReply=async function(parentId,idx,btn){
 window.delCourse=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete course?',text:'All its videos and access grants are removed.',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_course',id:id}); load(); };
 window.editVideo=async function(courseId,vid){
   var v=vid?(COURSES.find(function(c){return c.id===courseId;}).videos||[]).find(function(x){return x.id===vid;}):{title:'',description:'',provider:'youtube',url:''};
-  var res=await Swal.fire({title:vid?'Edit video':'Add video',width:560,
+  var res=await Swal.fire({title:vid?'Edit video':'Add video',width:600,
     html:'<div style="text-align:left;">'
       +'<label>Video title</label><input id="v-title" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.title||'')+'">'
       +'<label>Provider</label><select id="v-prov" class="swal2-input" style="margin:0;width:100%;">'+['youtube','wistia','vimeo','other'].map(function(p){return '<option value="'+p+'"'+(v.provider===p?' selected':'')+'>'+p+'</option>';}).join('')+'</select>'
@@ -294,9 +294,49 @@ window.editVideo=async function(courseId,vid){
       +'<div class="row" style="margin-top:6px;"><div><label>Release on date</label><input id="v-avail" type="date" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.available_on||'')+'"></div>'
       +'<div><label>…or days after partner unlocks the course</label><input id="v-drip" type="number" min="0" class="swal2-input" style="margin:0;width:100%;" placeholder="0 = right away" value="'+((v.drip_days!=null&&v.drip_days>0)?v.drip_days:'')+'"></div></div>'
       +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Leave both blank for immediate access. If both are set, the later one wins.</div>'
+      // ── AI reply guidance ──
+      +'<div style="border-top:1px solid #e2e8f0;margin:14px 0 0;padding-top:10px;font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;">🤖 AI reply guidance (comments + live chat)</div>'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin:4px 0 2px;">Grounds the AI so it won\'t make things up, and points it at your goal for this video.</div>'
+      +'<label>What should the AI know about this video? <span style="text-transform:none;color:#94a3b8;font-weight:400;">(facts only — the AI uses ONLY this)</span></label>'
+      +'<textarea id="v-aictx" class="swal2-textarea" style="margin:0;width:100%;" placeholder="e.g. This session covers X. We help merchants with Y. Pricing/details it can mention…">'+esc(v.ai_context||'')+'</textarea>'
+      +'<label>Goal for this video</label><select id="v-aigoal" class="swal2-input" style="margin:0;width:100%;"><option value="none">No goal — just answer helpfully</option><option value="appointment">Book an appointment (HighLevel calendar)</option><option value="signup">Sign up (HighLevel form)</option></select>'
+      +'<div id="v-aisrcwrap" style="display:none;"><label id="v-aisrclabel">HighLevel source</label><select id="v-aisrc" class="swal2-input" style="margin:0;width:100%;"><option value="">Loading…</option></select></div>'
+      +'<label>Link the AI shares <span style="text-transform:none;color:#94a3b8;font-weight:400;">(auto-filled from the pick above; editable)</span></label><input id="v-ailink" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…" value="'+esc(v.ai_cta_link||'')+'">'
+      +'<label>Invite wording <span style="text-transform:none;color:#94a3b8;font-weight:400;">(optional, e.g. "book a free demo")</span></label><input id="v-ailabel" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.ai_cta_label||'')+'">'
+      +'<input type="hidden" id="v-airef" value="'+esc(v.ai_cta_ref||'')+'">'
       +'</div>',
-    showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
-    preConfirm:function(){ var t=document.getElementById('v-title').value.trim(),u=document.getElementById('v-url').value.trim(); if(!t){Swal.showValidationMessage('Title required');return false;} if(!u){Swal.showValidationMessage('Embed URL required');return false;} return {title:t,provider:document.getElementById('v-prov').value,url:u,thumbnail_url:document.getElementById('v-thumb').value.trim(),description:document.getElementById('v-desc').value,available_on:document.getElementById('v-avail').value||null,drip_days:document.getElementById('v-drip').value||0}; }
+    width:600,showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
+    didOpen:function(){
+      var goalSel=document.getElementById('v-aigoal'); goalSel.value=(v.ai_goal||'none');
+      var wrap=document.getElementById('v-aisrcwrap'), srcSel=document.getElementById('v-aisrc'), lbl=document.getElementById('v-aisrclabel');
+      var CTA={forms:[],calendars:[],loaded:false};
+      function ctaLink(kind,id){ return kind==='signup'?('https://api.leadconnectorhq.com/widget/form/'+id):('https://api.leadconnectorhq.com/widget/booking/'+id); }
+      function fillSrc(){
+        var goal=goalSel.value;
+        if(goal==='none'){ wrap.style.display='none'; return; }
+        wrap.style.display='block';
+        var list=goal==='signup'?CTA.forms:CTA.calendars;
+        lbl.textContent=goal==='signup'?'HighLevel form':'HighLevel calendar';
+        if(!CTA.loaded){ srcSel.innerHTML='<option value="">Loading…</option>'; return; }
+        srcSel.innerHTML='<option value="">— Select '+(goal==='signup'?'a form':'a calendar')+' —</option>'+list.map(function(o){return '<option value="'+esc(o.id)+'"'+((v.ai_cta_ref===o.id)?' selected':'')+'>'+esc(o.name)+'</option>';}).join('');
+      }
+      goalSel.onchange=fillSrc;
+      srcSel.onchange=function(){
+        var id=srcSel.value; if(!id) return;
+        var goal=goalSel.value; var list=goal==='signup'?CTA.forms:CTA.calendars;
+        var picked=list.find(function(o){return o.id===id;});
+        document.getElementById('v-ailink').value=ctaLink(goal,id);
+        if(picked && !document.getElementById('v-ailabel').value.trim()) document.getElementById('v-ailabel').value=picked.name;
+        document.getElementById('v-airef').value=id;
+      };
+      fillSrc();
+      api({action:'ghl_cta_options'}).then(function(r){
+        if(r&&r.success){ CTA.forms=r.forms||[]; CTA.calendars=r.calendars||[]; CTA.loaded=true; if(!r.configured){ /* no location */ } }
+        else { CTA.loaded=true; }
+        fillSrc();
+      });
+    },
+    preConfirm:function(){ var t=document.getElementById('v-title').value.trim(),u=document.getElementById('v-url').value.trim(); if(!t){Swal.showValidationMessage('Title required');return false;} if(!u){Swal.showValidationMessage('Embed URL required');return false;} return {title:t,provider:document.getElementById('v-prov').value,url:u,thumbnail_url:document.getElementById('v-thumb').value.trim(),description:document.getElementById('v-desc').value,available_on:document.getElementById('v-avail').value||null,drip_days:document.getElementById('v-drip').value||0,ai_context:document.getElementById('v-aictx').value.trim(),ai_goal:document.getElementById('v-aigoal').value,ai_cta_link:document.getElementById('v-ailink').value.trim(),ai_cta_label:document.getElementById('v-ailabel').value.trim(),ai_cta_ref:document.getElementById('v-airef').value}; }
   });
   if(!res.isConfirmed) return;
   var r=await api(Object.assign({action:'save_video',id:vid||undefined,course_id:courseId},res.value));

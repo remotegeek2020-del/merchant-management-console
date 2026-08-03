@@ -11,6 +11,7 @@ import { setConfigValue, getConfigValue } from './api-config.js';
 import { canMarketingSettings } from './_access.js';
 import { logActivity } from './_activity.js';
 import { ytAnalyticsConfigured, fetchVideoAnalytics } from './youtube-oauth.js';
+import { ghlListForms, ghlListCalendars, ghlLocationNames } from './_ghl.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -152,7 +153,13 @@ function cleanVideo(b) {
         thumbnail_url: b.thumbnail_url ? String(b.thumbnail_url).slice(0, 1000) : null,
         available_on: (b.available_on && /^\d{4}-\d{2}-\d{2}$/.test(b.available_on)) ? b.available_on : null,
         drip_days: Number.isFinite(drip) && drip > 0 ? drip : 0,
-        sort_order: Number.isFinite(+b.sort_order) ? +b.sort_order : 0
+        sort_order: Number.isFinite(+b.sort_order) ? +b.sort_order : 0,
+        // Per-video AI guidance (keeps auto-replies grounded + goal-driven).
+        ai_context: b.ai_context == null ? null : String(b.ai_context).slice(0, 4000),
+        ai_goal: ['appointment', 'signup'].includes(b.ai_goal) ? b.ai_goal : 'none',
+        ai_cta_link: b.ai_cta_link ? String(b.ai_cta_link).slice(0, 1000) : null,
+        ai_cta_label: b.ai_cta_label ? String(b.ai_cta_label).slice(0, 200) : null,
+        ai_cta_ref: b.ai_cta_ref ? String(b.ai_cta_ref).slice(0, 200) : null
     };
 }
 // When (if ever) a video unlocks for a partner enrolled on `enrollDate`.
@@ -401,6 +408,15 @@ export default async function handler(req, res) {
             if (ids.length) { const { data: p } = await supabase.from('persons').select('id, full_name, email').in('id', ids); persons = p || []; }
             const pmap = {}; persons.forEach(p => { pmap[p.id] = p; });
             return ok(res, { access: (data || []).map(a => ({ person_id: a.person_id, name: pmap[a.person_id]?.full_name || '—', email: pmap[a.person_id]?.email || '', created_at: a.created_at })) });
+        }
+        // HighLevel forms + calendars for the configured location (CTA picker).
+        if (action === 'ghl_cta_options') {
+            const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+            if (!locationId) return ok(res, { configured: false, forms: [], calendars: [] });
+            const [forms, calendars, names] = await Promise.all([
+                ghlListForms(locationId), ghlListCalendars(locationId), ghlLocationNames([locationId])
+            ]);
+            return ok(res, { configured: true, location_id: locationId, location_name: names[locationId] || '', forms: forms || [], calendars: calendars || [] });
         }
         if (action === 'partner_search') {
             const q = String(body.q || '').trim();

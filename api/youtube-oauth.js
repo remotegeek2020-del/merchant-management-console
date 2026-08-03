@@ -188,22 +188,37 @@ export async function getAiConfig() {
     };
 }
 
+// Per-video grounding + goal block (keeps replies factual and on-mission).
+function ctaBlock(video) {
+    const ctx = video?.ai_context ? `\n\nFACTUAL CONTEXT (the ONLY facts you may use about this topic):\n${String(video.ai_context).slice(0, 1500)}` : '';
+    const link = video?.ai_cta_link || ''; const label = video?.ai_cta_label || '';
+    let goal = '';
+    if (video?.ai_goal === 'appointment' && link) goal = `\n\nPRIMARY GOAL: when it fits naturally, invite the viewer to BOOK AN APPOINTMENT. Share this EXACT link (never alter it): ${link}${label ? ` — ${label}` : ''}.`;
+    else if (video?.ai_goal === 'signup' && link) goal = `\n\nPRIMARY GOAL: when it fits naturally, invite the viewer to SIGN UP via our form. Share this EXACT link (never alter it): ${link}${label ? ` — ${label}` : ''}.`;
+    return ctx + goal;
+}
+const ANTI_HALLUCINATE = `\n\nSTRICT RULES (must follow):
+- Use ONLY the video title/description and the factual context above. Do NOT invent features, pricing, dates, availability, guarantees, or any claim not given.
+- If you don't know something, do NOT guess — either invite them to the link above (if provided) or say our team will follow up.
+- Never invent or modify a link. Only use the exact link provided above, and only if one is provided.`;
+
 // Generate a reply to a comment with Gemini (analyzing the comment + video).
 export async function generateCommentReply(comment, video) {
     const key = await geminiKey();
     if (!key) return null;
     try {
         const genAI = new GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.7 } });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.6 } });
         const prompt = `You are the PayProTec team replying to a comment on our own YouTube video, as the channel owner.
 Video title: "${video?.title || ''}"
-Video description (context): ${String(video?.description || '').slice(0, 700)}
+Video description: ${String(video?.description || '').slice(0, 500)}${ctaBlock(video)}
+
 A viewer named "${comment?.author || 'viewer'}" commented: "${String(comment?.text || '').slice(0, 700)}"
 
 Write a warm, concise, genuinely helpful reply as PayProTec — 1 to 3 sentences, professional and friendly.
-- Address their comment specifically; if they ask something, answer or point them the right way.
+- Address their comment specifically; if they ask something, answer from the context or point them the right way.
 - If the comment is spam, offensive, or nonsensical, reply briefly and politely (or a simple thank-you).
-- No hashtags, no emojis overload (at most one), no surrounding quotes, plain text only.
+- No hashtags, at most one emoji, no surrounding quotes, plain text only.${ANTI_HALLUCINATE}
 Reply text only:`;
         const r = await model.generateContent(prompt);
         let t = (r?.response?.text() || '').trim();
@@ -287,7 +302,7 @@ export async function pollAndProcessComments() {
     const { data: due } = await supabase.from('youtube_comments')
         .select('*').eq('ai_status', 'scheduled').lte('scheduled_at', new Date().toISOString()).limit(20);
     for (const c of (due || [])) {
-        const { data: vv } = await supabase.from('course_videos').select('title, description').eq('id', c.course_video_id).maybeSingle();
+        const { data: vv } = await supabase.from('course_videos').select('title, description, ai_context, ai_goal, ai_cta_link, ai_cta_label').eq('id', c.course_video_id).maybeSingle();
         const reply = await generateCommentReply({ author: c.author, text: c.text }, vv || {});
         if (!reply) { await supabase.from('youtube_comments').update({ ai_status: 'error', error: 'AI generation failed' }).eq('id', c.id); failed++; continue; }
         const { ok, j, status } = await ytDataPost(token, 'comments?part=snippet', { snippet: { parentId: c.comment_id, textOriginal: reply } });
@@ -320,9 +335,10 @@ export async function generateLiveChatDecision(msg, video) {
         const genAI = new GoogleGenerativeAI(key);
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.6, responseMimeType: 'application/json' } });
         const prompt = `You moderate our own PayProTec YouTube LIVE chat, replying as the channel.
-Video: "${video?.title || ''}". ${String(video?.description || '').slice(0, 250)}
+Video: "${video?.title || ''}". ${String(video?.description || '').slice(0, 250)}${ctaBlock(video)}
+
 A live-chat viewer "${msg.author}" wrote: "${String(msg.text || '').slice(0, 250)}"
-Decide if this deserves a quick host reply. SKIP greetings, emojis, reactions, spam, or small talk that needs no answer. Reply ONLY to genuine questions or messages directed at us.
+Decide if this deserves a quick host reply. SKIP greetings, emojis, reactions, spam, or small talk that needs no answer. Reply ONLY to genuine questions or messages directed at us.${ANTI_HALLUCINATE}
 Return strict JSON: {"skip":true} to ignore, OR {"skip":false,"reply":"<short friendly reply, max 180 chars, no hashtags, at most one emoji>"}.`;
         const r = await model.generateContent(prompt);
         const j = JSON.parse((r?.response?.text() || '{}').trim());
@@ -346,7 +362,7 @@ export async function pollLiveChat(deadlineMs) {
     let seen = 0, posted = 0;
     for (const b of broadcasts) {
         const liveChatId = b.snippet.liveChatId;
-        const { data: cv } = await supabase.from('course_videos').select('id, title, description').eq('source_ref', b.id).maybeSingle();
+        const { data: cv } = await supabase.from('course_videos').select('id, title, description, ai_context, ai_goal, ai_cta_link, ai_cta_label').eq('source_ref', b.id).maybeSingle();
         const video = cv || { title: b.snippet.title, description: b.snippet.description };
         const { data: stRow } = await supabase.from('youtube_livechat_state').select('page_token').eq('live_chat_id', liveChatId).maybeSingle();
         let pageToken = stRow?.page_token || '';
@@ -593,7 +609,7 @@ export default async function handler(req, res) {
             const session = await requireMarketing(req, res); if (!session) return;
             let video = { title: body.title || '', description: body.description || '' };
             if (body.video_id) {
-                const { data: v } = await supabase.from('course_videos').select('title, description').eq('id', body.video_id).maybeSingle();
+                const { data: v } = await supabase.from('course_videos').select('title, description, ai_context, ai_goal, ai_cta_link, ai_cta_label').eq('id', body.video_id).maybeSingle();
                 if (v) video = v;
             }
             const draft = await generateCommentReply({ author: body.author || '', text: body.text || '' }, video);
