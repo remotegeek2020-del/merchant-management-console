@@ -451,15 +451,30 @@ export default async function handler(req, res) {
             log({ action: `${actorNm} disabled a video QR code`, target_type: 'course_video', target_id: body.video_id });
             return ok(res, { disabled: true });
         }
-        // Detect an embedded HighLevel form/calendar from a public web page.
+        // Detect an embedded HighLevel form/calendar from a page URL, OR from
+        // pasted embed code / a direct widget link (no fetch needed).
         if (action === 'detect_embed') {
-            const url = String(body.url || '').trim();
-            if (!/^https?:\/\//i.test(url)) return bad(res, 'Enter a valid http(s) URL');
+            const input = String(body.url || '').trim();
+            if (!input) return bad(res, 'Paste a page URL, the embed code, or the calendar/form link.');
             let html = '';
-            try {
-                const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PayProTecBot/1.0)' } });
-                html = await r.text();
-            } catch (e) { return bad(res, 'Could not fetch that page.'); }
+            // If they pasted embed code or a widget/booking link, scan it directly.
+            if (/leadconnector|msgsndr|<iframe|widget\/(form|booking)|data-(form|calendar|widget)-id/i.test(input)) {
+                html = input;
+            }
+            if (!html) {
+                if (!/^https?:\/\//i.test(input)) return bad(res, 'Enter a valid http(s) URL, or paste the embed code / calendar link.');
+                try {
+                    const r = await fetch(input, { headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9'
+                    } });
+                    html = await r.text().catch(() => '');
+                    if (!r.ok && !/leadconnector|msgsndr|widget\//i.test(html)) {
+                        return bad(res, `The site blocked our request (HTTP ${r.status}) or loads the calendar with JavaScript. Paste the embed code or the calendar link instead.`);
+                    }
+                } catch (e) { return bad(res, 'Could not fetch that page. Paste the embed code or the calendar link instead.'); }
+            }
             const found = [];
             const scan = (re, type) => { let m; while ((m = re.exec(html))) found.push({ type, id: m[1] }); };
             scan(/leadconnectorhq\.com\/widget\/form\/([\w-]+)/ig, 'signup');
