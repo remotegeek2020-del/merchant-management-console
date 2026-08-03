@@ -41,12 +41,14 @@
   .row{display:flex;gap:10px;}.row>div{flex:1;}
   .vstats{display:inline-flex;gap:6px;flex-wrap:wrap;vertical-align:middle;}
   .vstat{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;color:#475569;background:#f1f5f9;border-radius:5px;padding:2px 6px;}
+  .vstat.clk{cursor:pointer;}.vstat.clk:hover{background:#e2e8f0;}
 </style>
 </head>
 <body>
 <div class="top">
   <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
   <h1>🎓 Courses &amp; Webinars</h1>
+  <button class="btn btn-n" onclick="ytAnalyticsModal()"><span class="material-icons" style="font-size:16px;">verified</span> YouTube Analytics</button>
   <button class="btn btn-n" onclick="refreshYtStats(this)"><span class="material-icons" style="font-size:16px;">insights</span> Refresh YouTube stats</button>
   <button class="btn btn-n" onclick="ytKeyModal()"><span class="material-icons" style="font-size:16px;">smart_display</span> YouTube API key</button>
   <button class="btn btn-p" onclick="editCourse()"><span class="material-icons" style="font-size:17px;">add</span> New course</button>
@@ -60,10 +62,38 @@ var COURSES=[];
 function fmtNum(n){ n=Number(n)||0; if(n>=1e6) return (n/1e6).toFixed(n>=1e7?0:1)+'M'; if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1)+'K'; return String(n); }
 function vidStats(v){
   var parts=[];
-  parts.push('<span class="vstat" title="'+((Number(v.portal_views)||0))+' portal plays · '+((Number(v.portal_viewers)||0))+' unique partners"><span class="material-icons" style="font-size:13px;">groups</span> '+fmtNum(v.portal_views)+' portal</span>');
+  // Portal plays — clickable to see WHO watched (matched to HighLevel).
+  parts.push('<span class="vstat clk" onclick="showViewers(\''+v.id+'\',\''+esc((v.title||'').replace(/\\/g,"\\\\").replace(/\x27/g,"\\\x27"))+'\')" title="'+((Number(v.portal_views)||0))+' portal plays · '+((Number(v.portal_viewers)||0))+' unique partners — click to see who"><span class="material-icons" style="font-size:13px;">groups</span> '+fmtNum(v.portal_views)+' portal</span>');
   if(v.yt_view_count!=null) parts.push('<span class="vstat" title="Total views on YouTube (all sources) — as of '+(v.yt_stats_at?new Date(v.yt_stats_at).toLocaleString():'—')+'"><span class="material-icons" style="font-size:13px;">smart_display</span> '+fmtNum(v.yt_view_count)+' YT</span>');
+  if(v.yt_portal_views!=null) parts.push('<span class="vstat" style="background:#eef2ff;color:#4338ca;" title="YouTube views embedded on our portal (YouTube Analytics) — as of '+(v.yt_portal_views_at?new Date(v.yt_portal_views_at).toLocaleString():'—')+'"><span class="material-icons" style="font-size:13px;">verified</span> '+fmtNum(v.yt_portal_views)+' YT-portal</span>');
   return '<span class="vstats">'+parts.join('')+'</span>';
 }
+window.showViewers=async function(videoId,title){
+  Swal.fire({title:'Loading viewers…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await api({action:'video_viewers',video_id:videoId});
+  if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not load viewers','error'); return; }
+  var vw=r.viewers||[];
+  function hlLink(v){ return v.hl_contact_id?('<a href="https://app.mypayprotec.com/contacts/detail/'+esc(v.hl_contact_id)+'" target="_blank" title="Open in HighLevel" style="color:#0369a1;text-decoration:none;"><span class="material-icons" style="font-size:15px;vertical-align:middle;">open_in_new</span></a>'):'<span class="muted" style="font-size:11px;" title="No HighLevel contact linked">—</span>'; }
+  var rows=vw.length?vw.map(function(v){
+    return '<tr>'
+      +'<td style="padding:7px 6px;border-bottom:1px solid #f1f5f9;"><b>'+esc(v.name)+'</b>'+(v.email?'<div class="muted" style="font-size:11.5px;">'+esc(v.email)+'</div>':'')+(v.phone?'<div class="muted" style="font-size:11.5px;">'+esc(v.phone)+'</div>':'')+'</td>'
+      +'<td style="padding:7px 6px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:800;">'+v.views+'</td>'
+      +'<td style="padding:7px 6px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b;white-space:nowrap;">'+(v.last_viewed?new Date(v.last_viewed).toLocaleString():'—')+'</td>'
+      +'<td style="padding:7px 6px;border-bottom:1px solid #f1f5f9;text-align:center;">'+hlLink(v)+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="4" style="padding:20px;text-align:center;color:#94a3b8;">No portal views yet.</td></tr>';
+  Swal.fire({title:esc(title||'Viewers'),width:640,
+    html:'<div style="text-align:left;">'
+      +'<div class="muted" style="font-size:12.5px;margin-bottom:8px;">'+r.total_views+' plays · '+r.unique_viewers+' unique partners · names &amp; contact from HighLevel</div>'
+      +'<div style="max-height:52vh;overflow:auto;border:1px solid #e2e8f0;border-radius:10px;">'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f8fafc;position:sticky;top:0;">'
+      +'<th style="text-align:left;padding:8px 6px;font-size:11px;color:#64748b;text-transform:uppercase;">Partner</th>'
+      +'<th style="padding:8px 6px;font-size:11px;color:#64748b;text-transform:uppercase;">Plays</th>'
+      +'<th style="text-align:left;padding:8px 6px;font-size:11px;color:#64748b;text-transform:uppercase;">Last viewed</th>'
+      +'<th style="padding:8px 6px;font-size:11px;color:#64748b;text-transform:uppercase;">HighLevel</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table></div></div>',
+    confirmButtonText:'Done',confirmButtonColor:'#2563eb'});
+};
 function vidThumb(v){
   var img=v.thumbnail_url||'';
   if(!img && v.url){ var m=String(v.url).match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); if(m) img='https://img.youtube.com/vi/'+m[1]+'/mqdefault.jpg'; }
@@ -144,6 +174,42 @@ window.refreshYtStats=async function(btn){
   if(r&&r.success){ Swal.fire({icon:'success',title:'YouTube stats updated',text:(r.updated||0)+' video(s) refreshed.',timer:1800,showConfirmButton:false}); load(); }
   else Swal.fire('Note',(r&&r.message)||'Could not refresh (check the YouTube API key).','warning');
 };
+function yapi(b){ return fetch('/api/youtube-oauth',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+window.ytAnalyticsModal=async function(){
+  var st=await yapi({action:'status'});
+  if(!st||!st.success){ Swal.fire('Error',(st&&st.message)||'Could not load status','error'); return; }
+  var connected=st.connected, clientSet=st.client_set;
+  var statusLine=connected
+    ? '<b style="color:#16a34a;">Connected</b>'+(st.channel?' — '+esc(st.channel):'')
+    : (clientSet?'<b style="color:#b45309;">Not connected</b>':'<b style="color:#dc2626;">OAuth client not set</b>');
+  var html='<div style="text-align:left;font-size:13px;">'
+    +'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:12px;">Status: '+statusLine+'</div>'
+    +'<div style="font-size:12px;color:#64748b;margin-bottom:10px;">Portal-attributed views come from the <b>YouTube Analytics API</b>, which needs a one-time channel connection (OAuth). This counts views of your videos <b>embedded on the portal</b> specifically. Data has a 2–3 day delay and only shows domains above YouTube\'s reporting threshold.</div>'
+    +'<label>Google OAuth Client ID</label><input id="ya-cid" class="swal2-input" style="margin:0;width:100%;" placeholder="'+(clientSet?'•••• (set — leave blank to keep)':'xxxxx.apps.googleusercontent.com')+'">'
+    +'<label>Google OAuth Client Secret</label><input id="ya-csec" class="swal2-input" style="margin:0;width:100%;" placeholder="'+(clientSet?'•••• (set — leave blank to keep)':'GOCSPX-…')+'">'
+    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:4px;">In Google Cloud → APIs &amp; Services → Credentials, create an <b>OAuth client (Web application)</b> with the <b>YouTube Analytics API</b> enabled, and add this exact Authorized redirect URI:<br><code style="font-size:11px;background:#f1f5f9;padding:2px 5px;border-radius:4px;word-break:break-all;">'+esc(st.redirect_uri||'')+'</code></div>'
+    +'<label style="margin-top:14px;">Portal host(s) to attribute <span style="color:#94a3b8;font-weight:400;text-transform:none;">(comma-separated)</span></label><input id="ya-hosts" class="swal2-input" style="margin:0;width:100%;" value="'+esc(st.hosts||'')+'">'
+    +'</div>';
+  var res=await Swal.fire({title:'YouTube Analytics',width:600,html:html,showCancelButton:true,showDenyButton:connected,
+    confirmButtonText:connected?'Save & refresh now':'Save & connect',confirmButtonColor:'#2563eb',
+    denyButtonText:'Disconnect',denyButtonColor:'#dc2626',cancelButtonText:'Close',
+    preConfirm:function(){ return {client_id:document.getElementById('ya-cid').value.trim(),client_secret:document.getElementById('ya-csec').value.trim(),hosts:document.getElementById('ya-hosts').value.trim()}; }});
+  if(res.isDenied){ await yapi({action:'disconnect'}); Swal.fire({icon:'success',title:'Disconnected',timer:1200,showConfirmButton:false}); return; }
+  if(!res.isConfirmed) return;
+  var v=res.value;
+  if(v.client_id||v.client_secret) await yapi({action:'set_client',client_id:v.client_id,client_secret:v.client_secret});
+  if(v.hosts) await yapi({action:'set_hosts',hosts:v.hosts});
+  if(connected){
+    Swal.fire({title:'Refreshing portal-attributed views…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+    var rr=await yapi({action:'refresh_portal_views'});
+    if(rr&&rr.success){ Swal.fire({icon:'success',title:'Updated',text:(rr.updated||0)+' video(s) refreshed.',timer:1800,showConfirmButton:false}); load(); }
+    else Swal.fire('Note',(rr&&rr.message)||'Could not refresh.','warning');
+  } else {
+    var s=await yapi({action:'start'});
+    if(s&&s.success&&s.auth_url){ location.href=s.auth_url; }
+    else Swal.fire('Error',(s&&s.message)||'Add the OAuth client ID + secret first.','error');
+  }
+};
 window.ytKeyModal=async function(){
   var st=await api({action:'yt_key_status'});
   var res=await Swal.fire({title:'YouTube API key',width:520,
@@ -205,6 +271,13 @@ window.acSearch=function(courseId){
 };
 window.acGrant=async function(courseId,pid){ await api({action:'grant_access',course_id:courseId,person_id:pid}); load(); manageAccess(courseId); };
 window.acRevoke=async function(courseId,pid){ await api({action:'revoke_access',course_id:courseId,person_id:pid}); load(); manageAccess(courseId); };
+// OAuth return toast (Google redirects back to /marketing-courses?yt=…).
+(function(){
+  var p=new URLSearchParams(location.search), yt=p.get('yt');
+  if(yt==='connected'){ Swal.fire({icon:'success',title:'YouTube channel connected',text:'Click "YouTube Analytics" → Save & refresh to pull portal-attributed views.',confirmButtonColor:'#2563eb'}); }
+  else if(yt==='error'){ Swal.fire('Connection failed',p.get('msg')||'Could not connect the channel.','error'); }
+  if(yt){ history.replaceState({}, '', location.pathname); }
+})();
 load();
 </script>
 </body>

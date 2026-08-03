@@ -17,6 +17,7 @@
     "api/cron-alerts.js": { "maxDuration": 60 },
     "api/cron-task-digest.js": { "maxDuration": 60 },
     "api/cron-youtube-sync.js": { "maxDuration": 60 },
+    "api/youtube-oauth.js": { "maxDuration": 60 },
     "api/ghl-documents.js": { "maxDuration": 30 }
   },
   "crons": [

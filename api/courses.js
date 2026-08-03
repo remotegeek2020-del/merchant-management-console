@@ -251,6 +251,33 @@ export default async function handler(req, res) {
             }));
             return ok(res, { courses: withStats });
         }
+        // Who watched a specific video (portal viewers) — matched to the
+        // HighLevel-synced partner record (persons.hl_contact_id).
+        if (action === 'video_viewers') {
+            if (!body.video_id) return bad(res, 'video_id required');
+            const { data: rows } = await supabase.rpc('course_video_viewers', { vid: body.video_id });
+            const ids = [...new Set((rows || []).map(r => r.person_id).filter(Boolean))];
+            let pmap = {};
+            if (ids.length) {
+                const { data: persons } = await supabase.from('persons').select('id, full_name, email, phone_number, hl_contact_id').in('id', ids);
+                (persons || []).forEach(p => { pmap[p.id] = p; });
+            }
+            const viewers = (rows || []).map(r => {
+                const p = pmap[r.person_id] || {};
+                return {
+                    person_id: r.person_id,
+                    name: p.full_name || '—',
+                    email: p.email || '',
+                    phone: p.phone_number || '',
+                    hl_contact_id: p.hl_contact_id || null,   // matched to HighLevel
+                    views: Number(r.views) || 0,
+                    first_viewed: r.first_viewed,
+                    last_viewed: r.last_viewed
+                };
+            });
+            const totalViews = viewers.reduce((s, v) => s + v.views, 0);
+            return ok(res, { viewers, unique_viewers: viewers.length, total_views: totalViews });
+        }
         // Refresh cached YouTube view counts for the whole library.
         if (action === 'refresh_yt_stats') {
             const r = await refreshAllYtStats();
