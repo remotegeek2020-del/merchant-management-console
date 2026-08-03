@@ -11,7 +11,7 @@ import { setConfigValue, getConfigValue } from './api-config.js';
 import { canMarketingSettings } from './_access.js';
 import { logActivity } from './_activity.js';
 import { ytAnalyticsConfigured, fetchVideoAnalytics } from './youtube-oauth.js';
-import { ghlListForms, ghlListCalendars, ghlLocationNames } from './_ghl.js';
+import { ghlListForms, ghlListCalendars, ghlLocationNames, ghlCalendarAppointments, ghlFormSubmissions, ghlContactInfo } from './_ghl.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -463,6 +463,32 @@ export default async function handler(req, res) {
             const { count } = await supabase.from('qr_scans').select('id', { count: 'exact', head: true }).eq('course_video_id', body.video_id);
             const { data: last } = await supabase.from('qr_scans').select('scanned_at').eq('course_video_id', body.video_id).order('scanned_at', { ascending: false }).limit(1);
             return ok(res, { scans: count || 0, last_scan: last?.[0]?.scanned_at || null });
+        }
+        // Bookings / signups that came from this video's QR (matched in HighLevel).
+        if (action === 'qr_conversions') {
+            if (!body.video_id) return bad(res, 'video_id required');
+            const { data: v } = await supabase.from('course_videos').select('id, ai_goal, ai_cta_ref, ai_cta_link, created_at').eq('id', body.video_id).maybeSingle();
+            if (!v) return bad(res, 'Video not found', 404);
+            const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+            if (!locationId) return ok(res, { configured: false });
+            const parseId = (re) => { const m = String(v.ai_cta_link || '').match(re); return m ? m[1] : null; };
+            const calId = v.ai_goal === 'appointment' ? (v.ai_cta_ref || parseId(/widget\/bookings?\/([A-Za-z0-9]+)/)) : null;
+            const formId = v.ai_goal === 'signup' ? (v.ai_cta_ref || parseId(/widget\/form\/([A-Za-z0-9]+)/)) : null;
+            if (!calId && !formId) return ok(res, { configured: false, reason: 'no calendar/form set for this video' });
+            const startMs = v.created_at ? new Date(v.created_at).getTime() : Date.now() - 180 * 864e5;
+            const endMs = Date.now();
+            const list = calId ? await ghlCalendarAppointments(locationId, calId, startMs, endMs) : await ghlFormSubmissions(locationId, formId, startMs, endMs);
+            // Attribute to THIS QR via the contact's captured UTM (portal_qr / video id).
+            const withId = (list || []).filter(x => x.contact_id).slice(0, 300);
+            let qr = 0;
+            for (let i = 0; i < withId.length; i += 8) {
+                const batch = withId.slice(i, i + 8);
+                await Promise.all(batch.map(async x => {
+                    const info = await ghlContactInfo(locationId, x.contact_id);
+                    if (String(info.source || '').toLowerCase().includes('portal_qr') || String(info.campaign || '') === String(v.id)) qr++;
+                }));
+            }
+            return ok(res, { configured: true, type: calId ? 'appointment' : 'signup', total: (list || []).length, qr_attributed: qr });
         }
         if (action === 'qr_disable') {
             if (!body.video_id) return bad(res, 'video_id required');

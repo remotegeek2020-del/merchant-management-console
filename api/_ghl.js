@@ -189,7 +189,9 @@ export async function ghlContactInfo(locationId, contactId) {
         const fa = c.attributionSource || {};
         const page = la.url || fa.url || la.referrer || fa.referrer || '';
         const source = la.utmSource || fa.utmSource || la.sessionSource || la.medium || '';
-        return { tags, page, source };
+        const campaign = la.campaign || la.utmCampaign || fa.campaign || fa.utmCampaign || '';
+        const medium = la.utmMedium || la.medium || fa.utmMedium || '';
+        return { tags, page, source, campaign, medium };
     } catch { return { tags: [], page: '', source: '' }; }
 }
 
