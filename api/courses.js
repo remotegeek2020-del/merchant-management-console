@@ -475,26 +475,19 @@ export default async function handler(req, res) {
                     }
                 } catch (e) { return bad(res, 'Could not fetch that page. Paste the embed code or the calendar link instead.'); }
             }
-            const found = [];
-            const scan = (re, type) => { let m; while ((m = re.exec(html))) found.push({ type, id: m[1] }); };
-            scan(/leadconnectorhq\.com\/widget\/form\/([\w-]+)/ig, 'signup');
-            scan(/leadconnectorhq\.com\/widget\/(?:booking|bookings)\/([\w-]+)/ig, 'appointment');
-            scan(/msgsndr\.com\/widget\/form\/([\w-]+)/ig, 'signup');
-            scan(/msgsndr\.com\/widget\/(?:booking|bookings)\/([\w-]+)/ig, 'appointment');
-            scan(/data-form-id=["']([\w-]+)["']/ig, 'signup');
-            scan(/data-(?:calendar|widget)-id=["']([\w-]+)["']/ig, 'appointment');
-            const seen = new Set(); const uniq = [];
-            found.forEach(f => { const k = f.type + ':' + f.id; if (!seen.has(k)) { seen.add(k); uniq.push(f); } });
-            if (!uniq.length) return ok(res, { found: false });
+            // Same proven detection as the campaign "Scan CTA" (domain-agnostic).
+            const hay = input + '\n' + html;
+            const grab = (re) => { const m = hay.match(re); return m ? m[1] : null; };
+            const formId = grab(/widget\/form\/([A-Za-z0-9]{6,40})/) || grab(/data-form-id=["']([A-Za-z0-9]{6,40})["']/) || grab(/[?&]formId=([A-Za-z0-9]{6,40})/);
+            const calId = grab(/widget\/bookings?\/([A-Za-z0-9]{6,40})/) || grab(/data-(?:calendar|widget)-id=["']([A-Za-z0-9]{6,40})["']/) || grab(/[?&]calendarId=([A-Za-z0-9]{6,40})/) || grab(/\/widget\/appointment\/([A-Za-z0-9]{6,40})/);
+            if (!formId && !calId) return ok(res, { found: false });
             // Name them from the HighLevel lists where possible.
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             let forms = [], cals = [];
             if (locationId) { try { [forms, cals] = await Promise.all([ghlListForms(locationId), ghlListCalendars(locationId)]); } catch (e) { /* names optional */ } }
-            const nameFor = (f) => { const list = f.type === 'signup' ? forms : cals; const hit = (list || []).find(x => x.id === f.id); return hit ? hit.name : ''; };
-            const results = uniq.map(f => ({
-                type: f.type, id: f.id, name: nameFor(f),
-                link: f.type === 'signup' ? ('https://api.leadconnectorhq.com/widget/form/' + f.id) : ('https://api.leadconnectorhq.com/widget/booking/' + f.id)
-            }));
+            const results = [];
+            if (calId) { const hit = (cals || []).find(x => x.id === calId); results.push({ type: 'appointment', id: calId, name: hit ? hit.name : '', link: 'https://api.leadconnectorhq.com/widget/booking/' + calId }); }
+            if (formId) { const hit = (forms || []).find(x => x.id === formId); results.push({ type: 'signup', id: formId, name: hit ? hit.name : '', link: 'https://api.leadconnectorhq.com/widget/form/' + formId }); }
             return ok(res, { found: true, results });
         }
         // HighLevel forms + calendars for the configured location (CTA picker).
