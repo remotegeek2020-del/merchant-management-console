@@ -1935,13 +1935,15 @@ async function loadConversions(id, clicks){
   if(!d.configured){ box.innerHTML='<label class="fld">Conversions</label><div class="muted" style="font-size:12px;">No GHL form/calendar linked. Edit the campaign → Conversion tracking to enable.</div>'; return; }
   const rate = clicks ? Math.round(d.count/clicks*1000)/10 : null;
   const bt=d.by_type||{};
+  const partnerBadge='<span class="pill" style="font-size:10px;background:#fef3c7;color:#92400e;">Current partner</span>';
   const rows=(d.list||[]).map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
-    <span style="display:flex;align-items:center;gap:8px;"><span class="pill" style="font-size:10px;background:${x.type==='appointment'?'#dcfce7':'#e0f2fe'};color:${x.type==='appointment'?'#166534':'#0369a1'};">${x.type==='appointment'?'Booking':'Form'}</span><b>${esc(x.name||'Lead')}</b>${x.email?` <span class="muted" style="font-size:11px;">${esc(x.email)}</span>`:''}${x.phone?` <span class="muted" style="font-size:11px;">${esc(x.phone)}</span>`:''}</span>
+    <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="pill" style="font-size:10px;background:${x.type==='appointment'?'#dcfce7':'#e0f2fe'};color:${x.type==='appointment'?'#166534':'#0369a1'};">${x.type==='appointment'?'Booking':'Form'}</span><b>${esc(x.name||'Lead')}</b>${x.is_partner?(' '+partnerBadge):''}${x.email?` <span class="muted" style="font-size:11px;">${esc(x.email)}</span>`:''}${x.phone?` <span class="muted" style="font-size:11px;">${esc(x.phone)}</span>`:''}</span>
     <span class="muted" style="font-size:11px;white-space:nowrap;">${x.at?new Date(x.at).toLocaleDateString():''}</span></div>`).join('');
   box.innerHTML=`<label class="fld">Conversions</label>
-    <div class="statgrid" style="grid-template-columns:repeat(3,1fr);">
+    <div class="statgrid" style="grid-template-columns:repeat(4,1fr);">
       <div class="statbox"><div class="n" style="color:var(--green);">${d.count}</div><div class="l">Conversions</div></div>
-      <div class="statbox"><div class="n">${bt.form||0}</div><div class="l">Form</div></div>
+      <div class="statbox"><div class="n" style="color:#92400e;">${d.partners||0}</div><div class="l">Current partners</div></div>
+      <div class="statbox"><div class="n">${d.non_partners!=null?d.non_partners:(d.count-(d.partners||0))}</div><div class="l">New / non-partner</div></div>
       <div class="statbox"><div class="n">${bt.appointment||0}</div><div class="l">Booked</div></div>
     </div>
     ${rate!=null?`<div class="muted" style="font-size:12px;margin-top:6px;">${rate}% of clicks converted.</div>`:''}

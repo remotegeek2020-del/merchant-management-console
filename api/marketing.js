@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import * as webflow from './_webflow.js';
 
@@ -733,9 +733,21 @@ export default async function handler(req, res) {
                     ghlCalendarAppointments(c.conv_location_id, c.conv_calendar_id, startMs, endMs)
                 ]);
                 const list = [...(forms || []), ...(appts || [])].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+                // Flag each signup whose HighLevel contact carries the "ppt partner"
+                // tag as a current partner (checked live). Batched to limit API calls.
+                const PARTNER_TAG = 'ppt partner';
+                const withId = list.filter(x => x.contact_id).slice(0, 150);
+                for (let i = 0; i < withId.length; i += 8) {
+                    const batch = withId.slice(i, i + 8);
+                    await Promise.all(batch.map(async x => {
+                        const tags = await ghlContactTags(c.conv_location_id, x.contact_id);
+                        x.is_partner = tags.some(t => t.indexOf(PARTNER_TAG) !== -1);
+                    }));
+                }
                 const byType = {};
-                list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
-                return ok(res, { configured: true, count: list.length, by_type: byType, list: list.slice(0, 100) });
+                let partners = 0;
+                list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; if (x.is_partner) partners++; });
+                return ok(res, { configured: true, count: list.length, partners, non_partners: list.length - partners, by_type: byType, list: list.slice(0, 100) });
             }
 
             // ── Webflow connector ────────────────────────────────────────────

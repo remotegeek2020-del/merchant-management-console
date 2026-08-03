@@ -167,6 +167,16 @@ export async function ghlListLocations() {
 }
 
 // Fetch a contact's address block by contact id. Returns null if unavailable.
+// Lower-cased tag list for a contact in a sub-account (via the location token).
+export async function ghlContactTags(locationId, contactId) {
+    if (!contactId) return [];
+    try {
+        const d = await locGet(locationId, `/contacts/${encodeURIComponent(contactId)}`);
+        const c = (d && (d.contact || d)) || {};
+        return Array.isArray(c.tags) ? c.tags.map(t => String(t).toLowerCase()) : [];
+    } catch { return []; }
+}
+
 export async function ghlGetContactAddress(contactId) {
     const key = await ghlKeys();
     if (!key || !contactId) return null;
