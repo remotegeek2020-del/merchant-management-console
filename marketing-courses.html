@@ -365,13 +365,16 @@ window.editVideo=async function(courseId,vid){
         if(picked && !document.getElementById('v-ailabel').value.trim()) document.getElementById('v-ailabel').value=picked.name;
         document.getElementById('v-airef').value=id;
       };
-      function applyDetected(f){
+      function applyDetected(f,pageUrl){
         goalSel.value=f.type; fillSrc();
-        document.getElementById('v-ailink').value=f.link;
+        // If they detected from THEIR external page, share that page link.
+        var shareLink=pageUrl||f.link;
+        document.getElementById('v-ailink').value=shareLink;
         if(!document.getElementById('v-ailabel').value.trim()) document.getElementById('v-ailabel').value=f.name||'';
         document.getElementById('v-airef').value=f.id;
         try{ document.getElementById('v-aisrc').value=f.id; }catch(e){}
-        document.getElementById('v-detectout').innerHTML='<span style="color:#16a34a;">✓ Applied: '+esc(f.name||(f.type==='signup'?'Form':'Calendar'))+'</span>';
+        var via=pageUrl?(' — AI will share your page: '+esc(pageUrl)):'';
+        document.getElementById('v-detectout').innerHTML='<span style="color:#16a34a;">✓ Applied: '+esc(f.name||(f.type==='signup'?'Form':'Calendar'))+via+'</span>';
       }
       document.getElementById('v-detectbtn').onclick=async function(){
         var u=(document.getElementById('v-detecturl').value||'').trim();
@@ -382,8 +385,8 @@ window.editVideo=async function(courseId,vid){
         if(!r||!r.success){ out.innerHTML='<span style="color:#dc2626;">'+esc((r&&r.message)||'Could not detect')+'</span>'; return; }
         if(!r.found){ out.innerHTML='<span style="color:#b45309;">No HighLevel form or calendar found on that page.</span>'; return; }
         out.innerHTML=r.results.map(function(f,i){ return '<div class="detrow" data-i="'+i+'" style="cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;margin-bottom:5px;display:flex;gap:8px;align-items:center;"><span class="material-icons" style="font-size:16px;color:#2563eb;">'+(f.type==='signup'?'description':'event')+'</span><span style="flex:1;"><b>'+esc(f.name||(f.type==='signup'?'Form':'Calendar'))+'</b><div style="color:#94a3b8;font-size:11px;">'+(f.type==='signup'?'Sign-up form':'Appointment calendar')+' · '+esc(f.id)+'</div></span><span style="color:#16a34a;font-weight:700;">Use</span></div>'; }).join('');
-        Array.prototype.forEach.call(out.querySelectorAll('.detrow'),function(el){ el.onclick=function(){ applyDetected(r.results[+el.getAttribute('data-i')]); }; });
-        if(r.results.length===1) applyDetected(r.results[0]);
+        Array.prototype.forEach.call(out.querySelectorAll('.detrow'),function(el){ el.onclick=function(){ applyDetected(r.results[+el.getAttribute('data-i')],r.page_url); }; });
+        if(r.results.length===1) applyDetected(r.results[0],r.page_url);
       };
       fillSrc();
       api({action:'ghl_cta_options'}).then(function(r){

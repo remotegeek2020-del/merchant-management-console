@@ -481,6 +481,11 @@ export default async function handler(req, res) {
             const formId = grab(/widget\/form\/([A-Za-z0-9]{6,40})/) || grab(/data-form-id=["']([A-Za-z0-9]{6,40})["']/) || grab(/[?&]formId=([A-Za-z0-9]{6,40})/);
             const calId = grab(/widget\/bookings?\/([A-Za-z0-9]{6,40})/) || grab(/data-(?:calendar|widget)-id=["']([A-Za-z0-9]{6,40})["']/) || grab(/[?&]calendarId=([A-Za-z0-9]{6,40})/) || grab(/\/widget\/appointment\/([A-Za-z0-9]{6,40})/);
             if (!formId && !calId) return ok(res, { found: false });
+            // If they gave us THEIR external page (not a raw widget/embed), that's
+            // the link the AI should share — the branded page they built.
+            const isHttp = /^https?:\/\//i.test(input);
+            const directWidget = /^https?:\/\/[^\/]*(leadconnectorhq|msgsndr)\.com\/(widget|js)\//i.test(input);
+            const pageUrl = (isHttp && !directWidget) ? input : null;
             // Name them from the HighLevel lists where possible.
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             let forms = [], cals = [];
@@ -488,7 +493,7 @@ export default async function handler(req, res) {
             const results = [];
             if (calId) { const hit = (cals || []).find(x => x.id === calId); results.push({ type: 'appointment', id: calId, name: hit ? hit.name : '', link: 'https://api.leadconnectorhq.com/widget/booking/' + calId }); }
             if (formId) { const hit = (forms || []).find(x => x.id === formId); results.push({ type: 'signup', id: formId, name: hit ? hit.name : '', link: 'https://api.leadconnectorhq.com/widget/form/' + formId }); }
-            return ok(res, { found: true, results });
+            return ok(res, { found: true, results, page_url: pageUrl });
         }
         // HighLevel forms + calendars for the configured location (CTA picker).
         if (action === 'ghl_cta_options') {
