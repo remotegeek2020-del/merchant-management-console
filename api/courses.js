@@ -43,9 +43,10 @@ export async function syncCourseFromYouTube(course) {
     if (!course.yt_channel_id) return { ok: false, error: 'No channel set.' };
     const channelId = await resolveChannelId(course.yt_channel_id, key);
     if (!channelId) return { ok: false, error: 'Could not resolve channel.' };
-    // Gather live-broadcast video IDs (completed = past lives, live = happening now).
+    // Gather live-broadcast video IDs: completed = past lives, live = happening
+    // now, upcoming = scheduled streams (shown as "coming [date]" until they air).
     const ids = [];
-    for (const ev of ['completed', 'live']) {
+    for (const ev of ['completed', 'live', 'upcoming']) {
         try {
             const j = await ytFetch('search?part=id&channelId=' + channelId + '&eventType=' + ev + '&type=video&order=date&maxResults=50&key=' + key);
             (j.items || []).forEach(it => { if (it.id && it.id.videoId) ids.push(it.id.videoId); });
@@ -61,15 +62,24 @@ export async function syncCourseFromYouTube(course) {
     // Full details for the fresh ones (title, description, thumbnail, date).
     for (let i = 0; i < fresh.length; i += 50) {
         const batch = fresh.slice(i, i + 50);
-        const j = await ytFetch('videos?part=snippet&id=' + batch.join(',') + '&key=' + key);
+        const j = await ytFetch('videos?part=snippet,liveStreamingDetails&id=' + batch.join(',') + '&key=' + key);
         for (const v of (j.items || [])) {
             const sn = v.snippet || {};
             const thumb = (sn.thumbnails && (sn.thumbnails.high || sn.thumbnails.medium || sn.thumbnails.default) || {}).url || null;
+            // If it's a scheduled stream that hasn't aired yet, lock it as
+            // "coming [date]" until its scheduled start (reuses the drip logic).
+            const lsd = v.liveStreamingDetails || {};
+            let available_on = null;
+            if (lsd.scheduledStartTime && !lsd.actualEndTime) {
+                const start = new Date(lsd.scheduledStartTime).getTime();
+                if (start > Date.now()) available_on = new Date(lsd.scheduledStartTime).toISOString().slice(0, 10);
+            }
+            const sortTs = lsd.scheduledStartTime || lsd.actualStartTime || sn.publishedAt;
             await supabase.from('course_videos').insert({
                 course_id: course.id, title: (sn.title || 'Live').slice(0, 200), description: (sn.description || '').slice(0, 2000),
                 provider: 'youtube', url: 'https://www.youtube.com/watch?v=' + v.id, thumbnail_url: thumb,
-                source: 'youtube', source_ref: v.id,
-                sort_order: sn.publishedAt ? Math.floor(new Date(sn.publishedAt).getTime() / 1000) : 0
+                source: 'youtube', source_ref: v.id, available_on,
+                sort_order: sortTs ? Math.floor(new Date(sortTs).getTime() / 1000) : 0
             });
             added++;
         }
