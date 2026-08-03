@@ -551,11 +551,13 @@ export default async function handler(req, res) {
             if (action === 'dashboard') {
                 const days = 30;
                 const sinceIso = new Date(Date.now() - days * 864e5).toISOString();
-                const [{ data: camps }, { data: evs }, { count: leadCount }] = await Promise.all([
+                const [{ data: camps }, { data: agg }, { count: leadCount }] = await Promise.all([
                     supabase.from('marketing_campaigns').select('id, title, is_active, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at'),
-                    supabase.from('marketing_events').select('campaign_id, event_type, user_type, ghl_location, created_at').gte('created_at', sinceIso).limit(50000),
+                    // Aggregate events in the DB (JS counting would be capped at 1000 rows).
+                    supabase.rpc('marketing_dashboard', { since: sinceIso }),
                     supabase.from('marketing_responses').select('id', { count: 'exact', head: true }).or('email.not.is.null,phone.not.is.null')
                 ]);
+                const A = agg || {};
                 // Aggregate GHL conversions + partner split across conversion-tracked
                 // campaigns (bounded so the dashboard stays fast).
                 let convTotal = 0, convPartners = 0, partnerBudget = 150;
@@ -572,30 +574,18 @@ export default async function handler(req, res) {
                 }
                 convByCampaign.sort((a, b) => b.total - a.total);
                 const titleOf = {}; (camps || []).forEach(c => { titleOf[c.id] = c.title; });
-                let imp = 0, clk = 0, dis = 0;
-                const channel = { partner: 0, staff: 0, ghl: 0, website: 0 };
-                const perCampaign = {};   // id -> {imp, clk}
-                const trend = {};         // yyyy-mm-dd -> {imp, clk}
-                (evs || []).forEach(e => {
-                    const day = (e.created_at || '').slice(0, 10);
-                    if (!trend[day]) trend[day] = { imp: 0, clk: 0 };
-                    if (!perCampaign[e.campaign_id]) perCampaign[e.campaign_id] = { imp: 0, clk: 0 };
-                    if (e.event_type === 'impression') { imp++; trend[day].imp++; perCampaign[e.campaign_id].imp++; }
-                    else if (e.event_type === 'click') {
-                        clk++; trend[day].clk++; perCampaign[e.campaign_id].clk++;
-                        if (e.user_type === 'partner') channel.partner++;
-                        else if (e.user_type === 'staff') channel.staff++;
-                        else if (e.ghl_location) channel.ghl++;
-                        else channel.website++;
-                    } else if (e.event_type === 'dismiss') dis++;
-                });
-                const top = Object.entries(perCampaign)
-                    .map(([id, v]) => ({ id, title: titleOf[id] || '(deleted)', impressions: v.imp, clicks: v.clk, ctr: v.imp ? Math.round(v.clk / v.imp * 1000) / 10 : 0 }))
+                const T = A.totals || { impressions: 0, clicks: 0, dismissals: 0 };
+                const imp = Number(T.impressions) || 0, clk = Number(T.clicks) || 0, dis = Number(T.dismissals) || 0;
+                const ch = A.channel || {};
+                const channel = { partner: Number(ch.partner) || 0, staff: Number(ch.staff) || 0, ghl: Number(ch.ghl) || 0, website: Number(ch.website) || 0 };
+                const top = (A.per_campaign || [])
+                    .map(v => ({ id: v.campaign_id, title: titleOf[v.campaign_id] || '(deleted)', impressions: Number(v.impressions) || 0, clicks: Number(v.clicks) || 0, ctr: v.impressions ? Math.round(v.clicks / v.impressions * 1000) / 10 : 0 }))
                     .sort((a, b) => b.clicks - a.clicks).slice(0, 10);
+                const trendMap = {}; (A.trend || []).forEach(r => { trendMap[r.day] = { imp: Number(r.imp) || 0, clk: Number(r.clk) || 0 }; });
                 const trendArr = [];
                 for (let i = days - 1; i >= 0; i--) {
                     const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
-                    trendArr.push({ day: d, imp: (trend[d] || {}).imp || 0, clk: (trend[d] || {}).clk || 0 });
+                    trendArr.push({ day: d, imp: (trendMap[d] || {}).imp || 0, clk: (trendMap[d] || {}).clk || 0 });
                 }
                 return ok(res, {
                     window_days: days,
