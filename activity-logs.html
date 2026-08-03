@@ -134,6 +134,9 @@
             <option value="users">👥 Users</option>
             <option value="partners">🤝 Partners</option>
             <option value="tickets">🎫 Tickets</option>
+            <option value="marketing">📣 Marketing</option>
+            <option value="security">🔒 Security</option>
+            <option value="admin">🛠️ Admin</option>
             <option value="general">⚙️ General</option>
         </select>
         <select class="pp-select" id="sevFilter" onchange="resetLoad()">
@@ -471,7 +474,16 @@ async function exportCSV() {
     Swal.fire({ icon:'success', title:`Exported ${data.length} logs`, timer:1500, showConfirmButton:false });
 }
 
-window.onload = loadLogs;
+// Deep-link support: /activity-logs?category=marketing&severity=warning presets the filters.
+window.onload = function(){
+    try {
+        const q = new URLSearchParams(location.search);
+        const cat = q.get('category'); if (cat) { const el = document.getElementById('catFilter'); if (el) el.value = cat; }
+        const sev = q.get('severity'); if (sev) { const el = document.getElementById('sevFilter'); if (el) el.value = sev; }
+        const s = q.get('search'); if (s) { const el = document.getElementById('search'); if (el) el.value = s; }
+    } catch(e) {}
+    loadLogs();
+};
 </script>
 <script src="/js/site-config.js"></script>
 <script src="/bug-report.js"></script>
