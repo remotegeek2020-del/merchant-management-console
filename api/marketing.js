@@ -559,14 +559,18 @@ export default async function handler(req, res) {
                 // Aggregate GHL conversions + partner split across conversion-tracked
                 // campaigns (bounded so the dashboard stays fast).
                 let convTotal = 0, convPartners = 0, partnerBudget = 150;
+                const convByCampaign = [];
                 const convCamps = (camps || []).filter(c => c.conv_location_id && (c.conv_form_id || c.conv_calendar_id)).slice(0, 20);
                 for (const c of convCamps) {
                     try {
                         const list = await convFetch(c);
-                        convTotal += list.length;
-                        if (partnerBudget > 0) { const cap = Math.min(partnerBudget, list.length); convPartners += await convEnrichPartners(list, c.conv_location_id, cap); partnerBudget -= cap; }
+                        let p = 0;
+                        if (partnerBudget > 0) { const cap = Math.min(partnerBudget, list.length); p = await convEnrichPartners(list, c.conv_location_id, cap); partnerBudget -= cap; }
+                        convTotal += list.length; convPartners += p;
+                        if (list.length) convByCampaign.push({ id: c.id, title: c.title, total: list.length, partners: p });
                     } catch (e) { /* skip a campaign that errors */ }
                 }
+                convByCampaign.sort((a, b) => b.total - a.total);
                 const titleOf = {}; (camps || []).forEach(c => { titleOf[c.id] = c.title; });
                 let imp = 0, clk = 0, dis = 0;
                 const channel = { partner: 0, staff: 0, ghl: 0, website: 0 };
@@ -596,7 +600,7 @@ export default async function handler(req, res) {
                 return ok(res, {
                     window_days: days,
                     totals: { campaigns: (camps || []).length, active: (camps || []).filter(c => c.is_active).length, impressions: imp, clicks: clk, dismissals: dis, ctr: imp ? Math.round(clk / imp * 1000) / 10 : 0, leads: leadCount || 0 },
-                    conversions: { total: convTotal, partners: convPartners, non_partners: Math.max(0, convTotal - convPartners) },
+                    conversions: { total: convTotal, partners: convPartners, non_partners: Math.max(0, convTotal - convPartners), by_campaign: convByCampaign },
                     channel, top, trend: trendArr
                 });
             }

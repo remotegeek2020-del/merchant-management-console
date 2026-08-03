@@ -1386,6 +1386,9 @@ async function renderMktDashboard(){
     </svg><div style="font-size:11px;color:var(--muted);"><span style="color:#0369a1;">■</span> views &nbsp; <span style="color:#16a34a;">■</span> clicks</div></div>
     <label class="fld">Top campaigns (by clicks)</label>
     <div style="overflow-x:auto;"><table style="width:100%;"><thead><tr><th style="text-align:left;padding:7px 10px;">Campaign</th><th class="num" style="padding:7px 10px;">Views</th><th class="num" style="padding:7px 10px;">Clicks</th><th class="num" style="padding:7px 10px;">CTR</th></tr></thead><tbody>${topRows}</tbody></table></div>
+    ${(d.conversions&&d.conversions.by_campaign&&d.conversions.by_campaign.length)?`
+    <label class="fld">Conversions by campaign</label>
+    <div style="overflow-x:auto;"><table style="width:100%;"><thead><tr><th style="text-align:left;padding:7px 10px;">Campaign</th><th class="num" style="padding:7px 10px;">Conversions</th><th class="num" style="padding:7px 10px;">Current partners</th><th class="num" style="padding:7px 10px;">New</th></tr></thead><tbody>${d.conversions.by_campaign.map(c=>`<tr><td style="padding:7px 10px;font-weight:600;">${esc(c.title||'(untitled)')}</td><td class="num" style="padding:7px 10px;color:var(--green);font-weight:700;">${c.total}</td><td class="num" style="padding:7px 10px;color:#92400e;font-weight:700;">${c.partners}</td><td class="num" style="padding:7px 10px;">${Math.max(0,c.total-c.partners)}</td></tr>`).join('')}</tbody></table></div>`:''}
   `;
 }
 function calMove(d){ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+d, 1); renderCalendar(); }
