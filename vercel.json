@@ -17,6 +17,7 @@
     "api/cron-alerts.js": { "maxDuration": 60 },
     "api/cron-task-digest.js": { "maxDuration": 60 },
     "api/cron-youtube-sync.js": { "maxDuration": 60 },
+    "api/cron-youtube-comments.js": { "maxDuration": 60 },
     "api/youtube-oauth.js": { "maxDuration": 60 },
     "api/ghl-documents.js": { "maxDuration": 30 }
   },
@@ -48,6 +49,10 @@
     {
       "path": "/api/cron-youtube-sync",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron-youtube-comments",
+      "schedule": "*/2 * * * *"
     }
   ],
   "routes": [

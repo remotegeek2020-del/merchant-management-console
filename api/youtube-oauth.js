@@ -16,6 +16,7 @@ import { validateSession } from './_validate.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
 import { loadActor, actorName, canMarketing, canMarketingSettings } from './_access.js';
 import { logActivity } from './_activity.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -166,6 +167,130 @@ export async function fetchVideoAnalytics(videoId) {
     };
 }
 
+// ── AI auto-reply config ─────────────────────────────────────────────────────
+async function geminiKey() { return process.env.GEMINI_API_KEY || (await getConfigValue('GEMINI_API_KEY')) || ''; }
+export async function getAiConfig() {
+    const enabled = (await getConfigValue('YT_AI_AUTOREPLY_ENABLED')) === 'true';
+    let min = parseInt(await getConfigValue('YT_AI_DELAY_MIN'), 10); if (!Number.isFinite(min) || min < 1) min = 1;
+    let max = parseInt(await getConfigValue('YT_AI_DELAY_MAX'), 10); if (!Number.isFinite(max) || max < min) max = Math.max(min, 10);
+    return { enabled, min_minutes: min, max_minutes: max, gemini_set: !!(await geminiKey()) };
+}
+
+// Generate a reply to a comment with Gemini (analyzing the comment + video).
+export async function generateCommentReply(comment, video) {
+    const key = await geminiKey();
+    if (!key) return null;
+    try {
+        const genAI = new GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.7 } });
+        const prompt = `You are the PayProTec team replying to a comment on our own YouTube video, as the channel owner.
+Video title: "${video?.title || ''}"
+Video description (context): ${String(video?.description || '').slice(0, 700)}
+A viewer named "${comment?.author || 'viewer'}" commented: "${String(comment?.text || '').slice(0, 700)}"
+
+Write a warm, concise, genuinely helpful reply as PayProTec — 1 to 3 sentences, professional and friendly.
+- Address their comment specifically; if they ask something, answer or point them the right way.
+- If the comment is spam, offensive, or nonsensical, reply briefly and politely (or a simple thank-you).
+- No hashtags, no emojis overload (at most one), no surrounding quotes, plain text only.
+Reply text only:`;
+        const r = await model.generateContent(prompt);
+        let t = (r?.response?.text() || '').trim();
+        t = t.replace(/^["'`\s]+|["'`\s]+$/g, '').slice(0, 900);
+        return t || null;
+    } catch (e) { return null; }
+}
+
+// Notify marketing staff (global bell = user_notifications) of a new comment.
+async function notifyNewComment(video, row) {
+    try {
+        const { data: staff } = await supabase.from('app_users')
+            .select('userid, role, is_active, access_marketing').limit(2000);
+        const recips = (staff || []).filter(u => u.is_active !== false &&
+            (String(u.role || '').toLowerCase().match(/admin|super/) || u.access_marketing === true));
+        if (recips.length) {
+            const body = `${row.author || 'Someone'}: ${String(row.text || '').slice(0, 140)}`;
+            const rows = recips.map(u => ({
+                user_id: String(u.userid), type: 'yt_comment',
+                title: `New YouTube comment on "${String(video.title || '').slice(0, 60)}"`,
+                body, from_name: row.author || 'YouTube', is_read: false,
+                alert_key: 'ytc:' + row.comment_id
+            }));
+            await supabase.from('user_notifications').insert(rows);
+        }
+        await supabase.from('youtube_comments').update({ notified: true }).eq('comment_id', row.comment_id);
+    } catch (e) { /* best-effort */ }
+}
+
+function ytIdOf(v) {
+    return v.source_ref || (String(v.url || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/) || [])[1] || null;
+}
+
+// Poll channel-wide for new comments (cheap: one allThreadsRelatedToChannelId call
+// per page), record + notify, schedule AI replies; then post any due AI replies.
+export async function pollAndProcessComments() {
+    const token = await accessToken();
+    if (!token) return { ok: false, error: 'not connected' };
+    const channelId = await getConfigValue('YT_ANALYTICS_CHANNEL_ID');
+    if (!channelId) return { ok: false, error: 'no channel id — reconnect YouTube in Settings' };
+
+    // Map our course videos by YouTube id.
+    const { data: vids } = await supabase.from('course_videos').select('id, title, description, url, source, source_ref').limit(50000);
+    const byYt = {}; (vids || []).forEach(v => { const id = ytIdOf(v); if (id) byYt[id] = v; });
+
+    const cfg = await getAiConfig();
+    let pageToken = '', pages = 0, newCount = 0;
+    do {
+        const { ok, j } = await ytDataGet(token, 'commentThreads?part=snippet&order=time&maxResults=100&textFormat=plainText&allThreadsRelatedToChannelId=' + encodeURIComponent(channelId) + (pageToken ? '&pageToken=' + pageToken : ''));
+        if (!ok) break;
+        let hitKnown = false;
+        for (const it of (j.items || [])) {
+            const s = it.snippet || {}; const top = s.topLevelComment; const cs = top?.snippet || {};
+            const cId = top?.id; const vId = s.videoId;
+            if (!cId) continue;
+            const v = byYt[vId]; if (!v) continue;                       // not one of our course videos
+            const { data: existing } = await supabase.from('youtube_comments').select('id').eq('comment_id', cId).maybeSingle();
+            if (existing) { hitKnown = true; continue; }                  // time-ordered → we've caught up
+            const authorChannelId = cs.authorChannelId?.value || '';
+            const isOwn = authorChannelId && authorChannelId === channelId;
+            const row = {
+                comment_id: cId, youtube_video_id: vId, course_video_id: v.id,
+                author: cs.authorDisplayName || '', text: cs.textOriginal || cs.textDisplay || '',
+                published_at: cs.publishedAt || null, ai_status: 'none'
+            };
+            if (cfg.enabled && cfg.gemini_set && !isOwn) {
+                const delayMs = (cfg.min_minutes + Math.random() * (cfg.max_minutes - cfg.min_minutes)) * 60000;
+                row.ai_status = 'scheduled';
+                row.scheduled_at = new Date(Date.now() + delayMs).toISOString();
+            }
+            await supabase.from('youtube_comments').insert(row);
+            newCount++;
+            if (!isOwn) await notifyNewComment(v, row);
+        }
+        pageToken = j.nextPageToken || ''; pages++;
+        if (hitKnown) break;
+    } while (pageToken && pages < 5);
+
+    // Post any due AI replies.
+    let posted = 0, failed = 0;
+    const { data: due } = await supabase.from('youtube_comments')
+        .select('*').eq('ai_status', 'scheduled').lte('scheduled_at', new Date().toISOString()).limit(20);
+    for (const c of (due || [])) {
+        const { data: vv } = await supabase.from('course_videos').select('title, description').eq('id', c.course_video_id).maybeSingle();
+        const reply = await generateCommentReply({ author: c.author, text: c.text }, vv || {});
+        if (!reply) { await supabase.from('youtube_comments').update({ ai_status: 'error', error: 'AI generation failed' }).eq('id', c.id); failed++; continue; }
+        const { ok, j, status } = await ytDataPost(token, 'comments?part=snippet', { snippet: { parentId: c.comment_id, textOriginal: reply } });
+        if (ok) {
+            await supabase.from('youtube_comments').update({ ai_status: 'posted', ai_reply: reply, replied: true, replied_by: 'ai' }).eq('id', c.id);
+            posted++;
+            logActivity({ email: 'ai-autoreply', action: `AI replied to a YouTube comment by ${c.author || 'a viewer'}`, category: 'marketing', target_type: 'youtube_comment', target_id: c.comment_id, new_value: { reply } });
+        } else {
+            await supabase.from('youtube_comments').update({ ai_status: 'error', error: (j?.error?.message || ('HTTP ' + status)) }).eq('id', c.id);
+            failed++;
+        }
+    }
+    return { ok: true, new_comments: newCount, ai_posted: posted, ai_failed: failed };
+}
+
 // Refresh portal-attributed views for every YouTube-backed video.
 export async function refreshPortalYtStats() {
     const token = await accessToken();
@@ -254,8 +379,9 @@ export default async function handler(req, res) {
             try {
                 const cr = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: 'Bearer ' + j.access_token } });
                 const cj = await cr.json().catch(() => ({}));
-                const title = cj?.items?.[0]?.snippet?.title;
-                if (title) await setConfigValue('YT_ANALYTICS_CHANNEL', title, 'youtube-oauth');
+                const item = cj?.items?.[0];
+                if (item?.snippet?.title) await setConfigValue('YT_ANALYTICS_CHANNEL', item.snippet.title, 'youtube-oauth');
+                if (item?.id) await setConfigValue('YT_ANALYTICS_CHANNEL_ID', item.id, 'youtube-oauth');   // for channel-wide comment polling
             } catch { /* ignore */ }
             logActivity({ email: 'youtube-oauth', action: 'YouTube Analytics channel connected via OAuth', category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_analytics' }, req);
             return res.redirect(302, backOk);
@@ -318,6 +444,34 @@ export default async function handler(req, res) {
             if (!r.ok) return bad(res, r.error || 'Refresh failed');
             logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} refreshed portal-attributed YouTube views (${r.updated} videos)`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_portal_views' }, req);
             return ok(res, r);
+        }
+
+        // ── AI auto-reply config (Marketing Settings) ──
+        if (action === 'get_ai_config') {
+            const session = await requireStaff(req, res); if (!session) return;
+            return ok(res, await getAiConfig());
+        }
+        if (action === 'set_ai_config') {
+            const session = await requireStaff(req, res); if (!session) return;
+            let mn = parseInt(body.min_minutes, 10); if (!Number.isFinite(mn) || mn < 1) mn = 1; mn = Math.min(mn, 120);
+            let mx = parseInt(body.max_minutes, 10); if (!Number.isFinite(mx) || mx < mn) mx = Math.max(mn, 10); mx = Math.min(mx, 120);
+            await setConfigValue('YT_AI_AUTOREPLY_ENABLED', body.enabled ? 'true' : 'false', session.userid);
+            await setConfigValue('YT_AI_DELAY_MIN', String(mn), session.userid);
+            await setConfigValue('YT_AI_DELAY_MAX', String(mx), session.userid);
+            logActivity({ email: session._actor?.email || session.userid, action: `${actorName(session._actor)} ${body.enabled ? 'enabled' : 'disabled'} YouTube AI auto-reply (${mn}–${mx} min delay)`, category: 'marketing', target_type: 'marketing_setting', target_id: 'yt_ai_autoreply', new_value: { enabled: !!body.enabled, min: mn, max: mx } }, req);
+            return ok(res, await getAiConfig());
+        }
+        // Draft an AI reply for a single comment (does NOT post).
+        if (action === 'ai_draft') {
+            const session = await requireMarketing(req, res); if (!session) return;
+            let video = { title: body.title || '', description: body.description || '' };
+            if (body.video_id) {
+                const { data: v } = await supabase.from('course_videos').select('title, description').eq('id', body.video_id).maybeSingle();
+                if (v) video = v;
+            }
+            const draft = await generateCommentReply({ author: body.author || '', text: body.text || '' }, video);
+            if (!draft) return bad(res, 'Could not generate a draft (check the Gemini API key).');
+            return ok(res, { draft });
         }
 
         // ── YouTube comments (read + reply as the channel) ──

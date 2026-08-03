@@ -123,6 +123,7 @@ async function renderSettings(){
   w.innerHTML='<div class="empty">Loading settings…</div>';
   var ks=await capi({action:'yt_key_status'});
   var st=await yapi({action:'status'});
+  var ai=await yapi({action:'get_ai_config'}); if(!ai||!ai.success) ai={};
   var keySet=ks&&ks.success&&ks.set;
   var connected=st&&st.success&&st.connected, clientSet=st&&st.client_set;
   var connPill=connected?'<span class="pill on">Connected</span>':(clientSet?'<span class="pill off">Not connected</span>':'<span class="pill err">Client not set</span>');
@@ -150,8 +151,31 @@ async function renderSettings(){
         +(connected?'<button class="btn btn-n" onclick="reconnectAnalytics(this)"><span class="material-icons" style="font-size:16px;">autorenew</span> Reconnect</button>':'')
         +(connected?'<button class="btn btn-r" onclick="disconnectAnalytics()"><span class="material-icons" style="font-size:16px;">link_off</span> Disconnect</button>':'')
       +'</div>'
+      +'</div></div>'
+    // AI comment auto-reply
+    +'<div class="card"><div class="card-head"><span class="material-icons">auto_awesome</span><span class="t">AI comment auto-reply</span>'
+      +(ai.enabled?'<span class="pill on">On</span>':'<span class="pill off">Off</span>')+'</div>'
+      +'<div class="card-body">'
+      +'<div class="muted" style="font-size:13px;">When on, Gemini reads each new YouTube comment (and the video) and posts a reply <b>as your channel</b> automatically — after a random delay so it feels human. Leave off to just get the notification and reply yourself (with the ✨ AI draft button).</div>'
+      +(ai.gemini_set?'':'<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:10px 12px;margin-top:10px;font-size:12.5px;color:#b91c1c;">⚠️ No Gemini API key detected — AI drafting and auto-reply won\'t work until <code>GEMINI_API_KEY</code> is configured.</div>')
+      +'<label style="display:flex;align-items:center;gap:9px;text-transform:none;letter-spacing:0;margin-top:14px;font-size:14px;cursor:pointer;font-weight:700;"><input type="checkbox" id="ai-en" style="width:auto;" '+(ai.enabled?'checked':'')+'> Yes, let AI answer comments on my behalf</label>'
+      +'<div class="row" style="display:flex;gap:12px;margin-top:12px;"><div style="flex:1;"><label>Reply after — min (minutes)</label><input id="ai-min" type="number" min="1" max="120" value="'+(ai.min_minutes||1)+'"></div>'
+      +'<div style="flex:1;"><label>…to max (minutes)</label><input id="ai-max" type="number" min="1" max="120" value="'+(ai.max_minutes||10)+'"></div></div>'
+      +'<div class="hint">Each reply posts at a random time between these two values after the comment is detected (default 1–10 min). Comments are checked every ~2 minutes.</div>'
+      +'<div class="rowbtns"><button class="btn btn-p" onclick="saveAi(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button></div>'
       +'</div></div>';
 }
+window.saveAi=async function(btn){
+  var en=(document.getElementById('ai-en')||{}).checked;
+  var mn=parseInt((document.getElementById('ai-min')||{}).value,10)||1;
+  var mx=parseInt((document.getElementById('ai-max')||{}).value,10)||10;
+  if(mx<mn){ Swal.fire('Check the range','Max minutes must be ≥ min minutes.','warning'); return; }
+  btn.disabled=true;
+  var r=await yapi({action:'set_ai_config',enabled:en,min_minutes:mn,max_minutes:mx});
+  btn.disabled=false;
+  if(r&&r.success){ Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false}); renderSettings(); }
+  else Swal.fire('Error',(r&&r.message)||'Could not save','error');
+};
 window.saveKey=async function(btn){
   var k=(document.getElementById('ytkey')||{}).value.trim();
   btn.disabled=true;

@@ -246,13 +246,21 @@ export default async function handler(req, res) {
                 const { data: vc } = await supabase.rpc('course_video_view_counts', { vids: allVidIds });
                 (vc || []).forEach(r => { viewMap[r.video_id] = { views: Number(r.views) || 0, unique_viewers: Number(r.unique_viewers) || 0 }; });
             }
+            // Open (unreplied) YouTube comments per video → badge on the row.
+            const openComments = {};
+            if (allVidIds.length) {
+                const { data: oc } = await supabase.from('youtube_comments')
+                    .select('course_video_id').eq('replied', false).in('course_video_id', allVidIds).limit(50000);
+                (oc || []).forEach(r => { openComments[r.course_video_id] = (openComments[r.course_video_id] || 0) + 1; });
+            }
             const withStats = courses.map(c => ({
                 ...c,
                 access_count: counts[c.id] || 0,
                 videos: (c.videos || []).map(v => ({
                     ...v,
                     portal_views: viewMap[v.id]?.views || 0,
-                    portal_viewers: viewMap[v.id]?.unique_viewers || 0
+                    portal_viewers: viewMap[v.id]?.unique_viewers || 0,
+                    open_comments: openComments[v.id] || 0
                 }))
             }));
             return ok(res, { courses: withStats });
