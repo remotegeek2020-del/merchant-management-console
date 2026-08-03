@@ -61,6 +61,27 @@ function embedLoaderSource(origin, siteKey) {
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// ── Conversions (GHL) helpers, shared by get_conversions / export / dashboard ──
+const PARTNER_TAG = 'ppt partner';
+async function convFetch(c) {
+    const startMs = c.starts_at ? new Date(c.starts_at).getTime() : (c.created_at ? new Date(c.created_at).getTime() : Date.now() - 90 * 864e5);
+    const endMs = c.ends_at ? Math.min(new Date(c.ends_at).getTime(), Date.now()) : Date.now();
+    const [forms, appts] = await Promise.all([
+        ghlFormSubmissions(c.conv_location_id, c.conv_form_id, startMs, endMs),
+        ghlCalendarAppointments(c.conv_location_id, c.conv_calendar_id, startMs, endMs)
+    ]);
+    return [...(forms || []), ...(appts || [])].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+}
+// Mark signups whose HighLevel contact carries the "ppt partner" tag (bounded).
+async function convEnrichPartners(list, locationId, cap) {
+    const withId = list.filter(x => x.contact_id).slice(0, cap || 150);
+    for (let i = 0; i < withId.length; i += 8) {
+        const batch = withId.slice(i, i + 8);
+        await Promise.all(batch.map(async x => { const tags = await ghlContactTags(locationId, x.contact_id); x.is_partner = tags.some(t => t.indexOf(PARTNER_TAG) !== -1); }));
+    }
+    return list.filter(x => x.is_partner).length;
+}
+
 // Normalize a page URL/path to a comparable "host/path" (or "/path"): lowercase,
 // no scheme, no www., no query/hash, no trailing slash. Mirrors api/embed.js.
 function normPage(input) {
@@ -138,7 +159,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'scan_cta',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'export_conversions', 'scan_cta',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -531,10 +552,21 @@ export default async function handler(req, res) {
                 const days = 30;
                 const sinceIso = new Date(Date.now() - days * 864e5).toISOString();
                 const [{ data: camps }, { data: evs }, { count: leadCount }] = await Promise.all([
-                    supabase.from('marketing_campaigns').select('id, title, is_active'),
+                    supabase.from('marketing_campaigns').select('id, title, is_active, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at'),
                     supabase.from('marketing_events').select('campaign_id, event_type, user_type, ghl_location, created_at').gte('created_at', sinceIso).limit(50000),
                     supabase.from('marketing_responses').select('id', { count: 'exact', head: true }).or('email.not.is.null,phone.not.is.null')
                 ]);
+                // Aggregate GHL conversions + partner split across conversion-tracked
+                // campaigns (bounded so the dashboard stays fast).
+                let convTotal = 0, convPartners = 0, partnerBudget = 150;
+                const convCamps = (camps || []).filter(c => c.conv_location_id && (c.conv_form_id || c.conv_calendar_id)).slice(0, 20);
+                for (const c of convCamps) {
+                    try {
+                        const list = await convFetch(c);
+                        convTotal += list.length;
+                        if (partnerBudget > 0) { const cap = Math.min(partnerBudget, list.length); convPartners += await convEnrichPartners(list, c.conv_location_id, cap); partnerBudget -= cap; }
+                    } catch (e) { /* skip a campaign that errors */ }
+                }
                 const titleOf = {}; (camps || []).forEach(c => { titleOf[c.id] = c.title; });
                 let imp = 0, clk = 0, dis = 0;
                 const channel = { partner: 0, staff: 0, ghl: 0, website: 0 };
@@ -564,6 +596,7 @@ export default async function handler(req, res) {
                 return ok(res, {
                     window_days: days,
                     totals: { campaigns: (camps || []).length, active: (camps || []).filter(c => c.is_active).length, impressions: imp, clicks: clk, dismissals: dis, ctr: imp ? Math.round(clk / imp * 1000) / 10 : 0, leads: leadCount || 0 },
+                    conversions: { total: convTotal, partners: convPartners, non_partners: Math.max(0, convTotal - convPartners) },
                     channel, top, trend: trendArr
                 });
             }
@@ -726,28 +759,24 @@ export default async function handler(req, res) {
                 const { data: c } = await supabase.from('marketing_campaigns')
                     .select('conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
                 if (!c || !c.conv_location_id || (!c.conv_form_id && !c.conv_calendar_id)) return ok(res, { configured: false, count: 0, list: [] });
-                const startMs = c.starts_at ? new Date(c.starts_at).getTime() : (c.created_at ? new Date(c.created_at).getTime() : Date.now() - 90 * 864e5);
-                const endMs = c.ends_at ? Math.min(new Date(c.ends_at).getTime(), Date.now()) : Date.now();
-                const [forms, appts] = await Promise.all([
-                    ghlFormSubmissions(c.conv_location_id, c.conv_form_id, startMs, endMs),
-                    ghlCalendarAppointments(c.conv_location_id, c.conv_calendar_id, startMs, endMs)
-                ]);
-                const list = [...(forms || []), ...(appts || [])].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
-                // Flag each signup whose HighLevel contact carries the "ppt partner"
-                // tag as a current partner (checked live). Batched to limit API calls.
-                const PARTNER_TAG = 'ppt partner';
-                const withId = list.filter(x => x.contact_id).slice(0, 150);
-                for (let i = 0; i < withId.length; i += 8) {
-                    const batch = withId.slice(i, i + 8);
-                    await Promise.all(batch.map(async x => {
-                        const tags = await ghlContactTags(c.conv_location_id, x.contact_id);
-                        x.is_partner = tags.some(t => t.indexOf(PARTNER_TAG) !== -1);
-                    }));
-                }
+                const list = await convFetch(c);
+                const partners = await convEnrichPartners(list, c.conv_location_id, 150);
                 const byType = {};
-                let partners = 0;
-                list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; if (x.is_partner) partners++; });
+                list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
                 return ok(res, { configured: true, count: list.length, partners, non_partners: list.length - partners, by_type: byType, list: list.slice(0, 100) });
+            }
+            // CSV export of a campaign's conversions, incl. a current-partner column.
+            if (action === 'export_conversions') {
+                const { id } = req.body;
+                const { data: c } = await supabase.from('marketing_campaigns')
+                    .select('conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
+                if (!c || !c.conv_location_id || (!c.conv_form_id && !c.conv_calendar_id)) return ok(res, { csv: 'type,name,email,phone,current_partner,at\n' });
+                const list = await convFetch(c);
+                await convEnrichPartners(list, c.conv_location_id, 500);
+                const esc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+                const header = 'type,name,email,phone,current_partner,at';
+                const csv = [header].concat(list.map(r => [r.type, r.name, r.email, r.phone, r.is_partner ? 'yes' : 'no', r.at].map(esc).join(','))).join('\n');
+                return ok(res, { csv });
             }
 
             // ── Webflow connector ────────────────────────────────────────────

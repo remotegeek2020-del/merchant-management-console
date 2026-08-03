@@ -1369,6 +1369,10 @@ async function renderMktDashboard(){
     <div class="statgrid" style="margin-bottom:18px;">
       ${card(t.impressions,'Views')}${card(t.clicks,'Clicks')}${card(t.ctr+'%','CTR','var(--green)')}${card(t.dismissals,'Dismissed')}${card(t.leads,'Leads captured','#b45309')}${card(t.active+' / '+t.campaigns,'Active campaigns')}
     </div>
+    ${d.conversions?`<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Conversions (HighLevel signups)</div>
+    <div class="statgrid" style="margin-bottom:18px;">
+      ${card(d.conversions.total,'Conversions','var(--green)')}${card(d.conversions.partners,'Current partners','#92400e')}${card(d.conversions.non_partners,'New / non-partner')}
+    </div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
       <div><label class="fld" style="margin-top:0;">Funnel</label>
         ${funnelRow('Views',t.impressions,'#0369a1')}${funnelRow('Clicks',t.clicks,'#16a34a')}${funnelRow('Leads',t.leads,'#b45309')}</div>
@@ -1925,6 +1929,15 @@ async function exportResponses(id, title){
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 
+async function exportConversions(id){
+  Swal.fire({title:'Preparing CSV…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  const r=await api({action:'export_conversions', id});
+  if(!r.success || !r.data || !r.data.csv){ Swal.fire('No data','Nothing to export yet.','info'); return; }
+  Swal.close();
+  const blob=new Blob([r.data.csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='conversions-'+String(id).slice(0,8)+'.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 // Live GHL conversions (form submissions + appointments) for this campaign.
 async function loadConversions(id, clicks){
   const box=document.getElementById('convSection'); if(!box) return;
@@ -1939,7 +1952,7 @@ async function loadConversions(id, clicks){
   const rows=(d.list||[]).map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
     <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="pill" style="font-size:10px;background:${x.type==='appointment'?'#dcfce7':'#e0f2fe'};color:${x.type==='appointment'?'#166534':'#0369a1'};">${x.type==='appointment'?'Booking':'Form'}</span><b>${esc(x.name||'Lead')}</b>${x.is_partner?(' '+partnerBadge):''}${x.email?` <span class="muted" style="font-size:11px;">${esc(x.email)}</span>`:''}${x.phone?` <span class="muted" style="font-size:11px;">${esc(x.phone)}</span>`:''}</span>
     <span class="muted" style="font-size:11px;white-space:nowrap;">${x.at?new Date(x.at).toLocaleDateString():''}</span></div>`).join('');
-  box.innerHTML=`<label class="fld">Conversions</label>
+  box.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><label class="fld" style="margin:14px 0 6px;">Conversions</label><button class="btn btn-neutral" style="padding:5px 10px;" onclick='exportConversions(${JSON.stringify(id)})'><span class="material-icons" style="font-size:15px;">download</span> CSV</button></div>
     <div class="statgrid" style="grid-template-columns:repeat(4,1fr);">
       <div class="statbox"><div class="n" style="color:var(--green);">${d.count}</div><div class="l">Conversions</div></div>
       <div class="statbox"><div class="n" style="color:#92400e;">${d.partners||0}</div><div class="l">Current partners</div></div>
