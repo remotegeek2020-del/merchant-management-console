@@ -177,6 +177,22 @@ export async function ghlContactTags(locationId, contactId) {
     } catch { return []; }
 }
 
+// Tags + opt-in page (attribution) for a contact, in one call.
+// page = the URL captured when they opted in (last touch, else first touch).
+export async function ghlContactInfo(locationId, contactId) {
+    if (!contactId) return { tags: [], page: '', source: '' };
+    try {
+        const d = await locGet(locationId, `/contacts/${encodeURIComponent(contactId)}`);
+        const c = (d && (d.contact || d)) || {};
+        const tags = Array.isArray(c.tags) ? c.tags.map(t => String(t).toLowerCase()) : [];
+        const la = c.lastAttributionSource || {};
+        const fa = c.attributionSource || {};
+        const page = la.url || fa.url || la.referrer || fa.referrer || '';
+        const source = la.utmSource || fa.utmSource || la.sessionSource || la.medium || '';
+        return { tags, page, source };
+    } catch { return { tags: [], page: '', source: '' }; }
+}
+
 export async function ghlGetContactAddress(contactId) {
     const key = await ghlKeys();
     if (!key || !contactId) return null;

@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
@@ -78,7 +78,12 @@ async function convEnrichPartners(list, locationId, cap) {
     const withId = list.filter(x => x.contact_id).slice(0, cap || 150);
     for (let i = 0; i < withId.length; i += 8) {
         const batch = withId.slice(i, i + 8);
-        await Promise.all(batch.map(async x => { const tags = await ghlContactTags(locationId, x.contact_id); x.is_partner = tags.some(t => t.indexOf(PARTNER_TAG) !== -1); }));
+        await Promise.all(batch.map(async x => {
+            const info = await ghlContactInfo(locationId, x.contact_id);
+            x.is_partner = info.tags.some(t => t.indexOf(PARTNER_TAG) !== -1);
+            x.page = info.page || '';       // which page they opted in on
+            x.source = info.source || '';
+        }));
     }
     return list.filter(x => x.is_partner).length;
 }
@@ -779,8 +784,8 @@ export default async function handler(req, res) {
                 const list = await convFetch(c);
                 await convEnrichPartners(list, c.conv_location_id, 500);
                 const esc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-                const header = 'type,name,email,phone,current_partner,at';
-                const csv = [header].concat(list.map(r => [r.type, r.name, r.email, r.phone, r.is_partner ? 'yes' : 'no', r.at].map(esc).join(','))).join('\n');
+                const header = 'type,name,email,phone,current_partner,opt_in_page,source,at';
+                const csv = [header].concat(list.map(r => [r.type, r.name, r.email, r.phone, r.is_partner ? 'yes' : 'no', r.page || '', r.source || '', r.at].map(esc).join(','))).join('\n');
                 return ok(res, { csv });
             }
 
