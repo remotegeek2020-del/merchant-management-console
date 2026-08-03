@@ -52,37 +52,44 @@ export async function syncCourseFromYouTube(course) {
             (j.items || []).forEach(it => { if (it.id && it.id.videoId) ids.push(it.id.videoId); });
         } catch (e) { /* keep going */ }
     }
-    if (!ids.length) { await supabase.from('courses').update({ yt_last_sync: new Date().toISOString() }).eq('id', course.id); return { ok: true, added: 0, total: 0 }; }
-    // Which are already in the course? (dedupe by youtube video id)
-    const { data: existing } = await supabase.from('course_videos').select('source_ref, url').eq('course_id', course.id);
-    const have = new Set();
-    (existing || []).forEach(v => { if (v.source_ref) have.add(v.source_ref); const mm = String(v.url || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); if (mm) have.add(mm[1]); });
-    const fresh = [...new Set(ids)].filter(id => !have.has(id));
-    let added = 0;
-    // Full details for the fresh ones (title, description, thumbnail, date).
-    for (let i = 0; i < fresh.length; i += 50) {
-        const batch = fresh.slice(i, i + 50);
+    if (!ids.length) { await supabase.from('courses').update({ yt_last_sync: new Date().toISOString() }).eq('id', course.id); return { ok: true, added: 0, updated: 0, total: 0 }; }
+    const parseYt = (u) => { const mm = String(u || '').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); return mm ? mm[1] : null; };
+    // Map YouTube id → our existing row id, so we can UPDATE dates (not just insert).
+    const { data: existing } = await supabase.from('course_videos').select('id, source_ref, url').eq('course_id', course.id);
+    const rowByYt = {};
+    (existing || []).forEach(v => { const yid = v.source_ref || parseYt(v.url); if (yid) rowByYt[yid] = v.id; });
+    const uniqIds = [...new Set(ids)];
+    let added = 0, updated = 0;
+    for (let i = 0; i < uniqIds.length; i += 50) {
+        const batch = uniqIds.slice(i, i + 50);
         const j = await ytFetch('videos?part=snippet,liveStreamingDetails&id=' + batch.join(',') + '&key=' + key);
         for (const v of (j.items || [])) {
             const sn = v.snippet || {};
-            const thumb = (sn.thumbnails && (sn.thumbnails.high || sn.thumbnails.medium || sn.thumbnails.default) || {}).url || null;
-            // Release date + ordering both come from the stream's own timestamp.
-            // A future scheduled time locks it as a "coming [date]" teaser; a past
-            // one is the publish/stream date (shown on the row, already available).
             const lsd = v.liveStreamingDetails || {};
-            const sortTs = lsd.scheduledStartTime || lsd.actualStartTime || sn.publishedAt;
-            const available_on = sortTs ? new Date(sortTs).toISOString().slice(0, 10) : null;
-            await supabase.from('course_videos').insert({
-                course_id: course.id, title: (sn.title || 'Live').slice(0, 200), description: (sn.description || '').slice(0, 2000),
-                provider: 'youtube', url: 'https://www.youtube.com/watch?v=' + v.id, thumbnail_url: thumb,
-                source: 'youtube', source_ref: v.id, available_on,
-                sort_order: sortTs ? Math.floor(new Date(sortTs).getTime() / 1000) : 0
-            });
-            added++;
+            // Release date = the stream's own timestamp (scheduled for upcoming,
+            // actual start once aired, else published). Future date locks it as a
+            // "coming [date]" teaser; a past date is when it aired.
+            const ts = lsd.scheduledStartTime || lsd.actualStartTime || sn.publishedAt;
+            const available_on = ts ? new Date(ts).toISOString().slice(0, 10) : null;
+            const sort_order = ts ? Math.floor(new Date(ts).getTime() / 1000) : 0;
+            const existingId = rowByYt[v.id];
+            if (existingId) {
+                // Keep the (possibly hand-edited) title/description; just correct the date.
+                await supabase.from('course_videos').update({ available_on, sort_order }).eq('id', existingId);
+                updated++;
+            } else {
+                const thumb = (sn.thumbnails && (sn.thumbnails.high || sn.thumbnails.medium || sn.thumbnails.default) || {}).url || null;
+                await supabase.from('course_videos').insert({
+                    course_id: course.id, title: (sn.title || 'Live').slice(0, 200), description: (sn.description || '').slice(0, 2000),
+                    provider: 'youtube', url: 'https://www.youtube.com/watch?v=' + v.id, thumbnail_url: thumb,
+                    source: 'youtube', source_ref: v.id, available_on, sort_order
+                });
+                added++;
+            }
         }
     }
     await supabase.from('courses').update({ yt_last_sync: new Date().toISOString() }).eq('id', course.id);
-    return { ok: true, added, total: ids.length };
+    return { ok: true, added, updated, total: ids.length };
 }
 
 // ── YouTube public view counts (statistics) ─────────────────────────────────
@@ -186,8 +193,9 @@ async function coursesWithVideos(filterPublished) {
     const { data: courses } = await q;
     const ids = (courses || []).map(c => c.id);
     let vids = [];
-    // Newest / upcoming first (sort_order = the stream's unix timestamp).
-    if (ids.length) { const { data } = await supabase.from('course_videos').select('*').in('course_id', ids).order('sort_order', { ascending: false }).order('created_at', { ascending: false }); vids = data || []; }
+    // Sort by RELEASE DATE — newest / upcoming first (nulls last). sort_order is a
+    // finer tiebreaker for same-day items.
+    if (ids.length) { const { data } = await supabase.from('course_videos').select('*').in('course_id', ids).order('available_on', { ascending: false, nullsFirst: false }).order('sort_order', { ascending: false }).order('created_at', { ascending: false }); vids = data || []; }
     const byCourse = {};
     vids.forEach(v => { (byCourse[v.course_id] = byCourse[v.course_id] || []).push(v); });
     return (courses || []).map(c => ({ ...c, videos: byCourse[c.id] || [] }));
@@ -400,7 +408,10 @@ export default async function handler(req, res) {
             if (!v.title) return bad(res, 'Video title required.');
             if (!v.url) return bad(res, 'Video embed URL required.');
             if (body.id) {
-                await supabase.from('course_videos').update(v).eq('id', body.id);
+                // Don't reset ordering/date fields the edit form didn't send.
+                const patch = { ...v };
+                if (body.sort_order === undefined) delete patch.sort_order;
+                await supabase.from('course_videos').update(patch).eq('id', body.id);
                 log({ action: `${actorNm} updated video "${v.title}"`, target_type: 'course_video', target_id: body.id });
                 return ok(res, { id: body.id });
             }
