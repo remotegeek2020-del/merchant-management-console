@@ -1944,6 +1944,19 @@ async function exportConversions(id){
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 // Live GHL conversions (form submissions + appointments) for this campaign.
+// Compact, readable version of an opt-in URL (drops scheme/query, trims long
+// HighLevel trigger-link paths). Full URL stays in the link href + tooltip.
+function prettyUrl(u){
+  try{
+    var p=new URL(u);
+    var host=p.hostname.replace(/^www\./,'');
+    var path=p.pathname==='/'?'':p.pathname;
+    // HighLevel trigger links (/r/2/<long-jwt>) — show a friendly label.
+    if(/^\/r\//.test(path)) return host+' (trigger link)';
+    var s=host+path;
+    return s.length>46?s.slice(0,46)+'…':s;
+  }catch(e){ var t=String(u||''); return t.length>46?t.slice(0,46)+'…':t; }
+}
 async function loadConversions(id, clicks){
   const box=document.getElementById('convSection'); if(!box) return;
   box.innerHTML='<label class="fld">Conversions</label><div class="muted" style="font-size:12px;">Checking GoHighLevel…</div>';
@@ -1959,7 +1972,7 @@ async function loadConversions(id, clicks){
       <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="pill" style="font-size:10px;background:${x.type==='appointment'?'#dcfce7':'#e0f2fe'};color:${x.type==='appointment'?'#166534':'#0369a1'};">${x.type==='appointment'?'Booking':'Form'}</span><b>${esc(x.name||'Lead')}</b>${x.is_partner?(' '+partnerBadge):''}${x.email?` <span class="muted" style="font-size:11px;">${esc(x.email)}</span>`:''}${x.phone?` <span class="muted" style="font-size:11px;">${esc(x.phone)}</span>`:''}</span>
       <span class="muted" style="font-size:11px;white-space:nowrap;">${x.at?new Date(x.at).toLocaleDateString():''}</span>
     </div>
-    ${x.page?`<div class="muted" style="font-size:11px;margin-top:2px;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;">link</span> Opted in on: <a href="${esc(x.page)}" target="_blank" rel="noopener" style="color:#0369a1;text-decoration:none;">${esc(x.page)}</a>${x.source?` <span style="color:#94a3b8;">· ${esc(x.source)}</span>`:''}</div>`:''}
+    ${x.page?`<div class="muted" style="font-size:11px;margin-top:2px;display:flex;align-items:center;gap:4px;min-width:0;"><span class="material-icons" style="font-size:12px;flex-shrink:0;">link</span><span style="flex-shrink:0;">Opted in on:</span><a href="${esc(x.page)}" title="${esc(x.page)}" target="_blank" rel="noopener" style="color:#0369a1;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">${esc(prettyUrl(x.page))}</a>${x.source?`<span style="color:#94a3b8;white-space:nowrap;flex-shrink:0;">· ${esc(x.source)}</span>`:''}</div>`:''}
   </div>`).join('');
   box.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><label class="fld" style="margin:14px 0 6px;">Conversions</label><button class="btn btn-neutral" style="padding:5px 10px;" onclick='exportConversions(${JSON.stringify(id)})'><span class="material-icons" style="font-size:15px;">download</span> CSV</button></div>
     <div class="statgrid" style="grid-template-columns:repeat(4,1fr);">
