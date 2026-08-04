@@ -631,6 +631,50 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: out, count: out.length });
         }
 
+        // ── PEOPLE YOU MAY KNOW ──
+        if (action === 'suggested_people') {
+            const me = user.id;
+            // Everyone I'm already linked to (any status) + myself → excluded.
+            const { data: mine } = await supabase.from('community_peers')
+                .select('requester_id, addressee_id, status').or(`requester_id.eq.${me},addressee_id.eq.${me}`);
+            const excluded = new Set([me]);
+            const myPeers = [];
+            (mine || []).forEach(r => { const other = r.requester_id === me ? r.addressee_id : r.requester_id; excluded.add(other); if (r.status === 'accepted') myPeers.push(other); });
+            // Peers-of-peers → mutual-connection suggestions.
+            const mutual = {};
+            if (myPeers.length) {
+                const { data: fof } = await supabase.from('community_peers')
+                    .select('requester_id, addressee_id').eq('status', 'accepted').or(`requester_id.in.(${myPeers.join(',')}),addressee_id.in.(${myPeers.join(',')})`);
+                (fof || []).forEach(r => {
+                    [r.requester_id, r.addressee_id].forEach(id => { if (!excluded.has(id)) mutual[id] = (mutual[id] || 0) + 1; });
+                });
+            }
+            // My company → same-company suggestions.
+            const { data: meProf } = await supabase.from('user_profiles').select('company').eq('user_id', me).maybeSingle();
+            const myCompany = (meProf?.company || '').trim();
+            let sameCo = [];
+            if (myCompany) {
+                const { data } = await supabase.from('user_profiles').select('user_id').ilike('company', myCompany).neq('user_id', me).limit(50);
+                sameCo = (data || []).map(p => p.user_id).filter(id => !excluded.has(id));
+            }
+            // Fill with other recent members.
+            const { data: recent } = await supabase.from('user_profiles').select('user_id').order('created_at', { ascending: false }).limit(80);
+            const recentIds = (recent || []).map(p => p.user_id).filter(id => !excluded.has(id));
+            // Rank: mutual first (by count), then same company, then recent.
+            const ordered = [];
+            const seen = new Set();
+            Object.keys(mutual).sort((a, b) => mutual[b] - mutual[a]).forEach(id => { if (!seen.has(id)) { seen.add(id); ordered.push({ id, reason: mutual[id] + ' mutual peer' + (mutual[id] === 1 ? '' : 's') }); } });
+            sameCo.forEach(id => { if (!seen.has(id)) { seen.add(id); ordered.push({ id, reason: myCompany }); } });
+            recentIds.forEach(id => { if (!seen.has(id)) { seen.add(id); ordered.push({ id, reason: 'On the network' }); } });
+            const pick = ordered.slice(0, 12);
+            const ids = pick.map(x => x.id);
+            let profs = [];
+            if (ids.length) { const { data } = await supabase.from('user_profiles').select('user_id, user_type, display_name, avatar_url, company, tagline').in('user_id', ids); profs = data || []; }
+            const pmap = {}; profs.forEach(p => pmap[p.user_id] = p);
+            const out = pick.map(x => Object.assign({ reason: x.reason }, pmap[x.id])).filter(x => x.user_id);
+            return res.status(200).json({ success: true, data: out });
+        }
+
         // ── SEARCH PEOPLE (name or affiliated company) ──
         if (action === 'search_people') {
             const q = String(req.body.q || '').trim();

@@ -284,6 +284,9 @@
                 <span class="material-icons si">search</span>
             </div>
 
+            <div id="peersList" style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:8px 10px;margin-bottom:14px;max-height:230px;overflow:auto;"></div>
+            <div id="peopleStrip" style="margin-bottom:14px;display:none;"></div>
+
             <!-- POSTS -->
             <div id="feedContainer">
                 <div class="spinner"></div>
@@ -959,5 +962,6 @@ document.getElementById('postInput').addEventListener('keydown', e => { if (e.ke
 <script src="/js/site-config.js"></script>
 <script src="/js/partner-nav.js"></script>
 <script src="/js/community-peers.js"></script>
+<script>window.addEventListener('load', function(){ setTimeout(function(){ if(window.PeerUI){ PeerUI.renderSuggestions('peopleStrip'); PeerUI.renderPeersList('peersList'); } }, 900); });</script>
 </body>
 </html>

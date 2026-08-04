@@ -153,13 +153,52 @@
       var n = (r && r.count) || 0;
       document.querySelectorAll('[data-peer-badge]').forEach(function (el) { el.textContent = n; el.style.display = n ? 'inline-block' : 'none'; });
     }).catch(function () {});
+    if (document.getElementById('peersList')) renderPeersList('peersList');
+    if (document.getElementById('peopleStrip')) renderSuggestions('peopleStrip');
   }
 
-  window.PeerUI = { openProfile: openProfile, editProfile: editProfile, openPeers: openPeers, tab: setTab, send: send, respond: respond, remove: remove, refreshBadge: refreshBadge };
+  // ── "People you may know" strip ──
+  function renderSuggestions(containerId) {
+    var box = document.getElementById(containerId); if (!box) return;
+    CAPI({ action: 'suggested_people' }).then(function (r) {
+      var list = (r && r.data) || [];
+      if (!list.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+      box.style.display = '';
+      box.innerHTML = '<div style="font-weight:800;font-size:13px;margin:0 2px 8px;color:#334155;">People you may know</div>' +
+        '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;">' + list.map(function (p) {
+          return '<div style="flex:0 0 152px;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center;background:#fff;">' +
+            '<div style="cursor:pointer;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + avatar(p, 56).replace('width:56px', 'width:56px;margin:0 auto') + '</div>' +
+            '<div style="font-weight:700;font-size:12.5px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + esc(p.display_name || 'Member') + '</div>' +
+            '<div style="font-size:10.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">' + esc(p.reason || '') + '</div>' +
+            '<button class="pu-btn pu-primary" style="width:100%;margin-top:8px;" onclick="PeerUI.suggestAdd(this,\'' + esc(p.user_id) + '\',\'' + esc(p.user_type) + '\')">+ Add Peer</button>' +
+          '</div>';
+        }).join('') + '</div>';
+    });
+  }
+  function suggestAdd(btn, id, type) {
+    CAPI({ action: 'send_peer_request', addressee_id: id, addressee_type: type }).then(function (r) {
+      if (r && r.success) { btn.textContent = r.peer_status === 'peers' ? '✓ Peer' : 'Requested'; btn.disabled = true; btn.className = 'pu-btn pu-neutral'; refreshBadge(); }
+    });
+  }
+  // ── Peers list (Facebook-style friends list in the side rail) ──
+  function renderPeersList(containerId) {
+    var box = document.getElementById(containerId); if (!box) return;
+    CAPI({ action: 'list_peers' }).then(function (r) {
+      var list = (r && r.data) || [];
+      box.innerHTML = '<div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;padding:8px 6px 4px;">Your Peers (' + list.length + ')</div>' +
+        (list.length ? list.map(function (p) {
+          return '<div class="peer-row" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + avatar(p, 32) +
+            '<div style="min-width:0;flex:1;"><div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(p.display_name || 'Member') + '</div>' +
+            (p.company ? '<div style="font-size:10.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(p.company) + '</div>' : '') + '</div></div>';
+        }).join('') : '<div style="color:#94a3b8;font-size:12px;padding:8px 6px;">No peers yet — use “Find People” to connect.</div>');
+    });
+  }
+
+  window.PeerUI = { openProfile: openProfile, editProfile: editProfile, openPeers: openPeers, tab: setTab, send: send, respond: respond, remove: remove, refreshBadge: refreshBadge, renderSuggestions: renderSuggestions, suggestAdd: suggestAdd, renderPeersList: renderPeersList };
 
   // Styles + auto-open from ?peers=1
   var css = document.createElement('style');
-  css.textContent = '.pu-btn{border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}.pu-primary{background:#2563eb;color:#fff;}.pu-neutral{background:#f1f5f9;color:#334155;}.pu-tab{border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;}.pu-tab.on{background:#2563eb;color:#fff;border-color:#2563eb;}.pu-lbl{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px;}.pu-in{margin:0!important;width:100%!important;box-sizing:border-box;}';
+  css.textContent = '.pu-btn{border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}.pu-primary{background:#2563eb;color:#fff;}.pu-neutral{background:#f1f5f9;color:#334155;}.pu-tab{border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;}.pu-tab.on{background:#2563eb;color:#fff;border-color:#2563eb;}.pu-lbl{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px;}.pu-in{margin:0!important;width:100%!important;box-sizing:border-box;}.peer-row{display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;cursor:pointer;}.peer-row:hover{background:#f1f5f9;}';
   document.head.appendChild(css);
   document.addEventListener('DOMContentLoaded', function () {
     setTimeout(refreshBadge, 800);

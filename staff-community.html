@@ -235,13 +235,15 @@
                 <input type="text" id="feedSearch" placeholder="Search posts…" oninput="filterFeed(this.value)">
                 <span class="material-icons si">search</span>
             </div>
+            <div id="peopleStrip" style="margin-bottom:14px;display:none;"></div>
             <div id="feedContainer"><div class="spinner"></div></div>
             <div id="loadMore" class="load-more" style="display:none" onclick="loadFeed(true)">Load more</div>
         </div>
     </div>
 
-    <!-- RIGHT: Members -->
+    <!-- RIGHT: Peers + Members -->
     <div class="right-col">
+        <div id="peersList" style="margin-bottom:16px;"></div>
         <div class="right-title">Network Members</div>
         <div id="membersList"><div class="spinner"></div></div>
     </div>
@@ -870,5 +872,6 @@ window.onload = init;
     window.CAPI = function(b){ return api(b); };
   </script>
   <script src="/js/community-peers.js"></script>
+  <script>window.addEventListener('load', function(){ if(window.PeerUI){ PeerUI.renderSuggestions('peopleStrip'); PeerUI.renderPeersList('peersList'); } });</script>
 </body>
 </html>
