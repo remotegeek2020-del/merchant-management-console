@@ -403,13 +403,17 @@ export default async function handler(req, res) {
 
         // ── GET / UPDATE PROFILE ──────────────────────────
         if (action === 'get_profile') {
-            const { profile_user_id } = req.body;
-            const targetId = profile_user_id || user.id;
-            const profile = await getOrCreateProfile({ id: targetId, type: user.type, name: user.name });
+            const targetId = req.body.user_id || req.body.profile_user_id || user.id;
+            let profile = await getOrCreateProfile({ id: targetId, type: user.type, name: user.name });
+            const isSelf = targetId === user.id;
+            const sm = isSelf ? {} : await peerStatusMap(user.id, [targetId]);
+            const peer_status = isSelf ? 'self' : (sm[targetId] || 'none');
+            const peer_count = await peerCount(targetId);
+            const locked = !isSelf && profile.is_public === false && peer_status !== 'peers';
 
-            // If own profile or staff, get portfolio stats for partners
+            // Partner portfolio stats (only when visible).
             let stats = null;
-            if (profile.user_type === 'partner') {
+            if (!locked && profile.user_type === 'partner') {
                 const { data: agents } = await supabase.from('agents').select('id').eq('parent_agent_id', targetId);
                 if (agents?.length) {
                     const { data: identifiers } = await supabase.from('agent_identifiers').select('id_string').in('agent_id', agents.map(a => a.id));
@@ -422,12 +426,14 @@ export default async function handler(req, res) {
                     }
                 }
             }
-
-            return res.status(200).json({ success: true, profile, stats });
+            if (locked) {
+                profile = { user_id: profile.user_id, user_type: profile.user_type, display_name: profile.display_name, avatar_url: profile.avatar_url, company: profile.company, is_public: false, locked: true };
+            }
+            return res.status(200).json({ success: true, profile, data: profile, stats, peer_status, peer_count });
         }
 
         if (action === 'update_profile') {
-            const { display_name, bio, tagline, phone, location, website, avatar_url } = req.body;
+            const { display_name, bio, tagline, phone, location, website, avatar_url, company, is_public } = req.body;
             const updates = {};
             if (display_name !== undefined) updates.display_name = display_name;
             if (bio !== undefined) updates.bio = bio;
@@ -436,6 +442,8 @@ export default async function handler(req, res) {
             if (location !== undefined) updates.location = location;
             if (website !== undefined) updates.website = website;
             if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+            if (company !== undefined) updates.company = company;
+            if (is_public !== undefined) updates.is_public = !!is_public;
 
             const { error: upErr } = await supabase.from('user_profiles').upsert({ user_id: user.id, user_type: user.type, display_name: user.name, ...updates }, { onConflict: 'user_id' });
             if (upErr) return res.status(500).json({ success: false, message: upErr.message });
@@ -527,6 +535,115 @@ export default async function handler(req, res) {
             else q = q.eq('is_read', false);
             await q;
             return res.status(200).json({ success: true });
+        }
+
+        // ══════════ PEERS (Facebook/LinkedIn-style connections) ══════════
+        // Compute peer status between me and a set of other user ids.
+        async function peerStatusMap(meId, otherIds) {
+            const map = {};
+            if (!otherIds.length) return map;
+            const { data } = await supabase.from('community_peers')
+                .select('requester_id, addressee_id, status')
+                .or(`and(requester_id.eq.${meId},addressee_id.in.(${otherIds.join(',')})),and(addressee_id.eq.${meId},requester_id.in.(${otherIds.join(',')}))`);
+            (data || []).forEach(r => {
+                const other = r.requester_id === meId ? r.addressee_id : r.requester_id;
+                if (r.status === 'accepted') map[other] = 'peers';
+                else if (r.status === 'pending') map[other] = (r.requester_id === meId) ? 'pending_out' : 'pending_in';
+            });
+            return map;
+        }
+        async function peerCount(uid) {
+            const { count } = await supabase.from('community_peers').select('id', { count: 'exact', head: true })
+                .eq('status', 'accepted').or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
+            return count || 0;
+        }
+
+        // ── SEND PEER REQUEST ──
+        if (action === 'send_peer_request') {
+            const { addressee_id, addressee_type } = req.body;
+            if (!addressee_id || addressee_id === user.id) return res.status(400).json({ success: false, message: 'Invalid peer.' });
+            // If they already requested me, accept instead of creating a duplicate.
+            const { data: reverse } = await supabase.from('community_peers')
+                .select('id, status').eq('requester_id', addressee_id).eq('addressee_id', user.id).maybeSingle();
+            if (reverse) {
+                if (reverse.status !== 'accepted') await supabase.from('community_peers').update({ status: 'accepted', responded_at: new Date().toISOString() }).eq('id', reverse.id);
+                return res.status(200).json({ success: true, peer_status: 'peers' });
+            }
+            await getOrCreateProfile(user);
+            const { error } = await supabase.from('community_peers')
+                .upsert({ requester_id: user.id, requester_type: user.type, addressee_id, addressee_type: addressee_type || 'partner', status: 'pending', responded_at: null }, { onConflict: 'requester_id,addressee_id' });
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            await supabase.from('notifications').insert({
+                recipient_id: addressee_id, recipient_type: addressee_type || 'partner', type: 'peer_request',
+                title: `${user.name} wants to connect`, body: 'Sent you a peer request', actor_id: user.id, actor_name: user.name,
+                reference_id: user.id, link: (addressee_type === 'staff' ? '/staff-community?peers=1' : '/partner/community?peers=1'), is_read: false
+            }).then(() => {}).catch(() => {});
+            try { await supabase.from('user_notifications').insert({ user_id: addressee_id, type: 'peer_request', title: `${user.name} wants to connect`, body: 'Sent you a peer request', from_name: user.name }); } catch (e) {}
+            return res.status(200).json({ success: true, peer_status: 'pending_out' });
+        }
+
+        // ── RESPOND TO A PEER REQUEST ──
+        if (action === 'respond_peer_request') {
+            const { requester_id, decision } = req.body;
+            const status = decision === 'accept' ? 'accepted' : 'declined';
+            const { data: row } = await supabase.from('community_peers')
+                .select('id, requester_type').eq('requester_id', requester_id).eq('addressee_id', user.id).eq('status', 'pending').maybeSingle();
+            if (!row) return res.status(404).json({ success: false, message: 'Request not found' });
+            await supabase.from('community_peers').update({ status, responded_at: new Date().toISOString() }).eq('id', row.id);
+            if (decision === 'accept') {
+                await supabase.from('notifications').insert({
+                    recipient_id: requester_id, recipient_type: row.requester_type, type: 'peer_accepted',
+                    title: `${user.name} accepted your peer request`, body: 'You are now peers', actor_id: user.id, actor_name: user.name,
+                    reference_id: user.id, link: (row.requester_type === 'staff' ? '/staff-community' : '/partner/community'), is_read: false
+                }).then(() => {}).catch(() => {});
+                try { await supabase.from('user_notifications').insert({ user_id: requester_id, type: 'peer_accepted', title: `${user.name} accepted your peer request`, body: 'You are now peers', from_name: user.name }); } catch (e) {}
+            }
+            return res.status(200).json({ success: true });
+        }
+
+        // ── REMOVE A PEER ──
+        if (action === 'remove_peer') {
+            const { peer_id } = req.body;
+            await supabase.from('community_peers').delete()
+                .or(`and(requester_id.eq.${user.id},addressee_id.eq.${peer_id}),and(requester_id.eq.${peer_id},addressee_id.eq.${user.id})`);
+            return res.status(200).json({ success: true });
+        }
+
+        // ── LIST MY PEERS ──
+        if (action === 'list_peers') {
+            const { data } = await supabase.from('community_peers')
+                .select('requester_id, addressee_id').eq('status', 'accepted').or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+            const ids = [...new Set((data || []).map(r => r.requester_id === user.id ? r.addressee_id : r.requester_id))];
+            let peers = [];
+            if (ids.length) { const { data: profs } = await supabase.from('user_profiles').select('user_id, user_type, display_name, avatar_url, company, tagline').in('user_id', ids); peers = profs || []; }
+            return res.status(200).json({ success: true, data: peers });
+        }
+
+        // ── INCOMING PEER REQUESTS (for the bell / requests view) ──
+        if (action === 'list_peer_requests') {
+            const { data } = await supabase.from('community_peers')
+                .select('requester_id, requester_type, created_at').eq('addressee_id', user.id).eq('status', 'pending').order('created_at', { ascending: false });
+            const ids = (data || []).map(r => r.requester_id);
+            let profs = [];
+            if (ids.length) { const { data: p } = await supabase.from('user_profiles').select('user_id, user_type, display_name, avatar_url, company, tagline').in('user_id', ids); profs = p || []; }
+            const pmap = {}; profs.forEach(p => pmap[p.user_id] = p);
+            const out = (data || []).map(r => ({ ...(pmap[r.requester_id] || { user_id: r.requester_id, display_name: 'Member', user_type: r.requester_type }), requested_at: r.created_at }));
+            return res.status(200).json({ success: true, data: out, count: out.length });
+        }
+
+        // ── SEARCH PEOPLE (name or affiliated company) ──
+        if (action === 'search_people') {
+            const q = String(req.body.q || '').trim();
+            if (q.length < 2) return res.status(200).json({ success: true, data: [] });
+            const like = `%${q.replace(/[%,]/g, '')}%`;
+            const { data } = await supabase.from('user_profiles')
+                .select('user_id, user_type, display_name, avatar_url, company, tagline')
+                .or(`display_name.ilike.${like},company.ilike.${like},tagline.ilike.${like}`)
+                .neq('user_id', user.id).limit(30);
+            const ids = (data || []).map(p => p.user_id);
+            const sm = await peerStatusMap(user.id, ids);
+            const out = (data || []).map(p => ({ ...p, peer_status: sm[p.user_id] || 'none' }));
+            return res.status(200).json({ success: true, data: out });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

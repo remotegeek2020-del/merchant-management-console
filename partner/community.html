@@ -229,9 +229,12 @@
 <div class="main">
     <div class="topbar">
         <h1 class="topbar-title" id="topbarTitle">🌐 Community Feed</h1>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-outline btn-sm" onclick="PeerUI.openPeers('find')"><span class="material-icons" style="font-size:14px;">person_search</span> Find People</button>
+            <button class="btn btn-outline btn-sm" onclick="PeerUI.openPeers('requests')" style="position:relative;"><span class="material-icons" style="font-size:14px;">group</span> Peers <span data-peer-badge style="display:none;background:#ef4444;color:#fff;border-radius:99px;font-size:9px;font-weight:800;padding:0 5px;margin-left:2px;">0</span></button>
+            <button class="btn btn-outline btn-sm" onclick="PeerUI.openProfile(window.CURRENT_UID)"><span class="material-icons" style="font-size:14px;">account_circle</span> My Profile</button>
             <button class="btn btn-outline btn-sm" onclick="openDMSearch()"><span class="material-icons" style="font-size:14px;">mail</span> New Message</button>
-        
+
         <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
             <button class="notif-bell" onclick="toggleNotifPanel()" title="Notifications">
                 <span class="material-icons">notifications</span>
@@ -344,6 +347,8 @@ async function init() {
         const auth = await api('partner-auth', { action:'validate', token });
         if (!auth.success) { localStorage.clear(); window.location.href='/partner'; return; }
         currentUser = { id: auth.partner.id, type: 'partner', name: auth.partner.name };
+        window.CURRENT_UID = currentUser.id; window.CURRENT_TYPE = 'partner';
+        if (window.PeerUI) PeerUI.refreshBadge();
 
         const initials = auth.partner.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
         document.getElementById('sidebarAvatar').innerHTML = `<span>${initials}</span>`;
@@ -370,6 +375,7 @@ function api(endpoint, body) {
     return fetch(`/api/${endpoint}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
 }
 window.trackPostClick = function(postId){ try{ api('community', { action:'track_post_click', token, post_id: postId }); }catch(e){} };
+window.CAPI = function(b){ return api('community', Object.assign({ token: token }, b)); };
 
 // ── CHANNELS ──────────────────────────────────────────────
 async function loadChannels() {
@@ -759,6 +765,13 @@ async function loadOnlineUsers() {
 }
 
 // ── PROFILE ───────────────────────────────────────────────
+function peerButtonHtml(uid, utype, status){
+    var base='width:100%;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;';
+    if(status==='peers') return '<button style="'+base+'background:#f1f5f9;color:#334155;" onclick="PeerUI.remove(\''+uid+'\')">✓ Peers · Remove</button>';
+    if(status==='pending_out') return '<button style="'+base+'background:#f1f5f9;color:#94a3b8;" disabled>Peer request sent</button>';
+    if(status==='pending_in') return '<button style="'+base+'background:#2563eb;color:#fff;" onclick="PeerUI.respond(\''+uid+'\',\'accept\')">Accept peer request</button>';
+    return '<button style="'+base+'background:#2563eb;color:#fff;" onclick="PeerUI.send(\''+uid+'\',\''+utype+'\')">+ Add a Peer</button>';
+}
 async function openProfile(userId) {
     const res = await api('community', { action:'get_profile', token, profile_user_id: userId });
     if (!res.success) return;
@@ -792,11 +805,13 @@ async function openProfile(userId) {
                     <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">90D Vol</div>
                 </div>
             </div>` : ''}
+            <div style="margin-top:8px;">👥 ${res.peer_count||0} peer${(res.peer_count===1)?'':'s'}</div>
             ${userId !== currentUser?.id ? `
-            <button onclick="Swal.close();openDM('${userId}','${(p.display_name||'').replace(/'/g,"\\'")}','${p.user_type}')" 
-                    style="width:100%;margin-top:14px;padding:10px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">
+            <div style="margin-top:12px;">${peerButtonHtml(userId, p.user_type, res.peer_status)}</div>
+            <button onclick="Swal.close();openDM('${userId}','${(p.display_name||'').replace(/'/g,"\\'")}','${p.user_type}')"
+                    style="width:100%;margin-top:8px;padding:10px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">
                 <span class="material-icons" style="font-size:14px;vertical-align:middle;">send</span> Send Message
-            </button>` : ''}`,
+            </button>` : `<button onclick="Swal.close();PeerUI.editProfile()" style="width:100%;margin-top:12px;padding:10px;background:#f1f5f9;color:#334155;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">Edit my profile</button>`}`,
         showConfirmButton: false,
         showCloseButton: true,
         width: 400
@@ -943,5 +958,6 @@ document.getElementById('postInput').addEventListener('keydown', e => { if (e.ke
 </script>
 <script src="/js/site-config.js"></script>
 <script src="/js/partner-nav.js"></script>
+<script src="/js/community-peers.js"></script>
 </body>
 </html>

@@ -164,6 +164,16 @@
     <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="nav-logo">
     <span class="nav-title">Partner Community</span>
     <div class="nav-right">
+        <button class="nav-btn" onclick="PeerUI.openPeers('find')">
+            <span class="material-icons" style="font-size:14px;">person_search</span> Find People
+        </button>
+        <button class="nav-btn" onclick="PeerUI.openPeers('requests')">
+            <span class="material-icons" style="font-size:14px;">group</span> Peers
+            <span class="nav-badge" data-peer-badge style="display:none;">0</span>
+        </button>
+        <button class="nav-btn" onclick="PeerUI.openProfile(window.CURRENT_UID)">
+            <span class="material-icons" style="font-size:14px;">account_circle</span> My Profile
+        </button>
         <button class="nav-btn" onclick="toggleConvPanel()">
             <span class="material-icons" style="font-size:14px;">forum</span> Messages
             <span class="nav-badge" id="dmBadge">0</span>
@@ -433,9 +443,11 @@ function buildPostCard(p) {
 
     var header = document.createElement('div'); header.className = 'post-header';
     var av = avatarEl(author, 38); av.className = 'post-avatar';
+    if (p.author_id) { av.style.cursor = 'pointer'; av.onclick = (function(id){ return function(){ PeerUI.openProfile(id); }; })(p.author_id); }
     var meta = document.createElement('div'); meta.style.flex = '1';
     var authorLine = document.createElement('div'); authorLine.className = 'post-author';
     authorLine.textContent = author.display_name || 'Unknown';
+    if (p.author_id) { authorLine.style.cursor = 'pointer'; authorLine.onclick = (function(id){ return function(){ PeerUI.openProfile(id); }; })(p.author_id); }
     if (isStaff) { var sb = document.createElement('span'); sb.className='staff-badge'; sb.textContent='Staff'; authorLine.appendChild(sb); }
     if (ch) { var cb = document.createElement('span'); cb.className='ch-badge'; cb.style.cssText='background:'+ch.color+'22;color:'+ch.color+';'; cb.textContent=ch.name; authorLine.appendChild(cb); }
     var timeLine = document.createElement('div'); timeLine.className='post-time'; timeLine.textContent=timeAgo(p.created_at);
@@ -852,5 +864,11 @@ window.onload = init;
 <script src="/js/realm-transition.js"></script>
 <script src="/js/portal-transition.js"></script>
   <script src="js/notif-bell.js" defer></script>
+  <script>
+    window.CURRENT_UID = staffId;
+    window.CURRENT_TYPE = 'staff';
+    window.CAPI = function(b){ return api(b); };
+  </script>
+  <script src="/js/community-peers.js"></script>
 </body>
 </html>
