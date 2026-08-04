@@ -97,10 +97,10 @@
 
 <script>
 var TOKEN=localStorage.getItem('pp_lead_token')||'';
-if(!TOKEN){ location.href='/lead/register'; }
+if(!TOKEN){ location.href='/partner'; }
 function api(b){ b.token=TOKEN; return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
-function logout(){ api({action:'lead_logout'}); localStorage.removeItem('pp_lead_token'); localStorage.removeItem('pp_lead_name'); location.href='/lead/register'; }
+function logout(){ api({action:'lead_logout'}); localStorage.removeItem('pp_lead_token'); localStorage.removeItem('pp_lead_name'); location.href='/partner'; }
 function initials(n){ return String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).join('').toUpperCase().slice(0,2); }
 function ytId(url){ var m=String(url||'').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); return m?m[1]:''; }
 function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|youtube\.com/i.test(url)||provider==='youtube'){var id=ytId(url); if(id) return 'https://www.youtube.com/embed/'+id+'?rel=0';} if(/vimeo\.com/i.test(url)||provider==='vimeo'){m=url.match(/vimeo\.com\/(?:video\/)?(\d+)/); if(m) return 'https://player.vimeo.com/video/'+m[1];} if(/wistia|wi\.st/i.test(url)||provider==='wistia'){m=url.match(/(?:medias\/|wvideo=|wmediaid=|embed\/(?:iframe|medias)\/)([\w]+)/); if(m) return 'https://fast.wistia.net/embed/iframe/'+m[1];} if(/^https:\/\//i.test(url)) return url; return ''; }
@@ -162,7 +162,7 @@ async function loadCourses(){
 }
 (async function(){
   var r=await api({action:'lead_validate'});
-  if(!r.success){ localStorage.removeItem('pp_lead_token'); location.href='/lead/register'; return; }
+  if(!r.success){ localStorage.removeItem('pp_lead_token'); location.href='/partner'; return; }
   if(!r.lead.onboarding_completed){ location.href='/lead/onboarding'; return; }
   document.getElementById('hi').textContent='Welcome, '+((r.lead.full_name||'').split(' ')[0]||'')+'!';
   loadBook(); loadAnn(); loadCourses();

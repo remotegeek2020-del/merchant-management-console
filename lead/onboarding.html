@@ -38,7 +38,7 @@
 </div>
 <script>
 var TOKEN=localStorage.getItem('pp_lead_token')||'';
-if(!TOKEN){ location.href='/lead/register'; }
+if(!TOKEN){ location.href='/partner'; }
 function api(b){ b.token=TOKEN; return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 var QS=[];
@@ -59,7 +59,7 @@ function readAns(q,i){
 }
 async function load(){
   var vr=await api({action:'lead_validate'});
-  if(!vr.success){ localStorage.removeItem('pp_lead_token'); location.href='/lead/register'; return; }
+  if(!vr.success){ localStorage.removeItem('pp_lead_token'); location.href='/partner'; return; }
   var r=await api({action:'lead_get_onboarding'});
   QS=(r&&r.questions)||[];
   var f=document.getElementById('form');

@@ -125,9 +125,9 @@
         <span class="forgot" onclick="handleForgot()">Forgot your password?</span>
         <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;">
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Not a partner yet?</div>
-            <a href="/lead/register" class="btn" style="background:#001e3c;color:#fff;text-decoration:none;">
+            <button class="btn" onclick="showLeadRegister()" style="background:#001e3c;color:#fff;">
                 <span class="material-icons" style="font-size:18px;">rocket_launch</span> Become a Partner
-            </a>
+            </button>
         </div>
     </div>
 
@@ -158,11 +158,21 @@
 </div>
 
 <script>
-    // Check if already logged in (skip when a magic link is being consumed)
+    // Check if already logged in (skip when a magic link is being consumed).
+    // Same page serves partners AND prospects (leads) — check both sessions.
     const existingToken = localStorage.getItem('pp_partner_token');
+    const existingLeadToken = localStorage.getItem('pp_lead_token');
     if (existingToken && !new URLSearchParams(window.location.search).get('magic')) {
         fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'validate', token: existingToken }) })
             .then(r => r.json()).then(result => { if (result.success) window.location.href = '/partner/dashboard'; });
+    } else if (existingLeadToken && !new URLSearchParams(window.location.search).get('magic')) {
+        fetch('/api/lead-portal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'lead_validate', token: existingLeadToken }) })
+            .then(r => r.json()).then(result => { if (result.success && result.lead) routeLead(result.lead); });
+    }
+
+    // Send a signed-in prospect to onboarding (if unfinished) or their home.
+    function routeLead(lead) {
+        window.location.href = lead.onboarding_completed ? '/lead/home' : '/lead/onboarding';
     }
 
     // Check for invite/reset token in URL
@@ -265,10 +275,23 @@
                 localStorage.setItem('pp_partner_name', result.partner.name);
                 localStorage.setItem('pp_partner_id', result.partner.id);
                 window.location.href = '/partner/dashboard';
-            } else {
-                Swal.fire({ icon: 'error', title: 'Sign In Failed', text: result.message, confirmButtonColor: '#0d9488' });
-                btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">login</span> Sign In';
+                return;
             }
+            // Not a partner? Try a prospect (Lead Portal) account with the same
+            // credentials — one login box for both.
+            const leadRes = await fetch('/api/lead-portal', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'lead_login', email, password: pass })
+            });
+            const leadResult = await leadRes.json();
+            if (leadResult.success && leadResult.lead) {
+                localStorage.setItem('pp_lead_token', leadResult.token);
+                localStorage.setItem('pp_lead_name', leadResult.lead.full_name || '');
+                routeLead(leadResult.lead);
+                return;
+            }
+            Swal.fire({ icon: 'error', title: 'Sign In Failed', text: result.message || 'Invalid email or password.', confirmButtonColor: '#0d9488' });
+            btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">login</span> Sign In';
         } catch (err) {
             Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Could not reach the server. Please try again.', confirmButtonColor: '#0d9488' });
             btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">login</span> Sign In';
@@ -324,6 +347,66 @@
             </button>
             <div class="footer-note">PayProTec Partner Portal · Secure Setup</div>
         `;
+    }
+
+    // ── Prospect (Lead Portal) self-registration — inline on this same page ──
+    function showLeadRegister() {
+        document.getElementById('loginCard').innerHTML = `
+            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+            <div style="text-align:center;">
+                <span class="portal-tag"><span class="material-icons" style="font-size:12px;">rocket_launch</span> Become a Partner</span>
+                <h1>Create your account</h1>
+                <p class="sub">Join the PayProTec Partner Program</p>
+            </div>
+            <label>Full Name</label>
+            <div class="input-wrap"><span class="material-icons">person</span>
+                <input type="text" id="regName" placeholder="Your name" autocomplete="name"></div>
+            <label>Email Address</label>
+            <div class="input-wrap"><span class="material-icons">email</span>
+                <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email"></div>
+            <label>Phone <span style="text-transform:none;font-weight:400;color:#94a3b8;">(optional)</span></label>
+            <div class="input-wrap"><span class="material-icons">phone</span>
+                <input type="text" id="regPhone" placeholder="(555) 555-5555" autocomplete="tel"></div>
+            <label>Password</label>
+            <div class="input-wrap"><span class="material-icons">lock</span>
+                <input type="password" id="regPass" placeholder="Minimum 6 characters" autocomplete="new-password">
+                <span class="view-toggle material-icons" onclick="togglePass('regPass', this)">visibility_off</span></div>
+            <button class="btn" onclick="handleLeadRegister()" id="regBtn" style="margin-top:8px;">
+                <span class="material-icons" style="font-size:18px;">rocket_launch</span> Create Account
+            </button>
+            <span class="forgot" onclick="location.href='/partner'">&larr; Back to sign in</span>
+            <div class="footer-note">Already have an account? <a href="/partner" style="color:#0d9488;font-weight:700;text-decoration:none;">Sign in</a></div>`;
+        setTimeout(() => { const n = document.getElementById('regName'); if (n) n.focus(); }, 60);
+    }
+
+    async function handleLeadRegister() {
+        const full_name = (document.getElementById('regName').value || '').trim();
+        const email = (document.getElementById('regEmail').value || '').trim();
+        const phone = (document.getElementById('regPhone').value || '').trim();
+        const password = document.getElementById('regPass').value || '';
+        if (!full_name) return Swal.fire({ icon: 'warning', title: 'Name required', confirmButtonColor: '#0d9488' });
+        if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return Swal.fire({ icon: 'warning', title: 'Valid email required', confirmButtonColor: '#0d9488' });
+        if (password.length < 6) return Swal.fire({ icon: 'warning', title: 'Password too short', text: 'Use at least 6 characters.', confirmButtonColor: '#0d9488' });
+        const btn = document.getElementById('regBtn');
+        btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:18px;">sync</span> Creating…';
+        try {
+            const res = await fetch('/api/lead-portal', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'lead_register', full_name, email, phone, password })
+            });
+            const result = await res.json();
+            if (result.success) {
+                localStorage.setItem('pp_lead_token', result.token);
+                localStorage.setItem('pp_lead_name', (result.lead && result.lead.full_name) || full_name);
+                window.location.href = '/lead/onboarding';
+            } else {
+                Swal.fire({ icon: 'error', title: 'Could not register', text: result.message || 'Please try again.', confirmButtonColor: '#0d9488' });
+                btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">rocket_launch</span> Create Account';
+            }
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Could not reach the server. Please try again.', confirmButtonColor: '#0d9488' });
+            btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">rocket_launch</span> Create Account';
+        }
     }
 
     function checkStrength(val) {
