@@ -87,16 +87,29 @@ window.editQ=async function(id){
     '<div style="text-align:left;">'
     +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Question</label><input id="q-text" class="swal2-input" style="margin:0;width:100%;" value="'+esc(q.question||'')+'">'
     +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Help text (optional)</label><input id="q-help" class="swal2-input" style="margin:0;width:100%;" value="'+esc(q.help_text||'')+'">'
-    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Answer type</label><select id="q-type" class="swal2-input" style="margin:0;width:100%;" onchange="document.getElementById(\'q-optwrap\').style.display=[\'multiple_choice\',\'checkboxes\',\'dropdown\'].indexOf(this.value)>-1?\'block\':\'none\';">'+TYPES.map(function(t){return '<option value="'+t[0]+'"'+(q.type===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select>'
-    +'<div id="q-optwrap" style="display:'+((['multiple_choice','checkboxes','dropdown'].indexOf(q.type)>-1)?'block':'none')+';"><label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Options (one per line)</label><textarea id="q-opts" class="swal2-textarea" style="margin:0;width:100%;">'+esc((q.options||[]).join('\n'))+'</textarea></div>'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Answer type</label><select id="q-type" class="swal2-input" style="margin:0;width:100%;" onchange="onQType(this.value)">'+TYPES.map(function(t){return '<option value="'+t[0]+'"'+(q.type===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select>'
+    +'<div id="q-optwrap" style="display:'+((['multiple_choice','checkboxes','dropdown'].indexOf(q.type)>-1)?'block':'none')+';"><label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Options</label><div id="q-optlist"></div><button type="button" onclick="optAdd()" style="margin-top:4px;border:1px dashed #cbd5e1;background:#f8fafc;color:#2563eb;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:15px;">add</span> Add option</button></div>'
     +'<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="q-req" style="width:auto;" '+(q.required?'checked':'')+'> Required</label>'
     +'<label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;cursor:pointer;"><input type="checkbox" id="q-active" style="width:auto;" '+(q.is_active!==false?'checked':'')+'> Active (shown to leads)</label>'
     +'</div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
-    preConfirm:function(){ var t=document.getElementById('q-text').value.trim(); if(!t){Swal.showValidationMessage('Question required');return false;} return {question:t,help_text:document.getElementById('q-help').value.trim(),type:document.getElementById('q-type').value,options:document.getElementById('q-opts').value.split('\n').map(function(s){return s.trim();}).filter(Boolean),required:document.getElementById('q-req').checked,is_active:document.getElementById('q-active').checked}; }});
+    didOpen:function(){ var opts=(q.options||[]); if(opts.length){ opts.forEach(function(o){optAdd(o);}); } else if(['multiple_choice','checkboxes','dropdown'].indexOf(q.type)>-1){ optAdd(); optAdd(); } },
+    preConfirm:function(){ var t=document.getElementById('q-text').value.trim(); if(!t){Swal.showValidationMessage('Question required');return false;} var type=document.getElementById('q-type').value; var opts=Array.prototype.map.call(document.querySelectorAll('#q-optlist .opt-inp'),function(e){return e.value.trim();}).filter(Boolean); if(['multiple_choice','checkboxes','dropdown'].indexOf(type)>-1 && opts.length<2){Swal.showValidationMessage('Add at least 2 options');return false;} return {question:t,help_text:document.getElementById('q-help').value.trim(),type:type,options:opts,required:document.getElementById('q-req').checked,is_active:document.getElementById('q-active').checked}; }});
   if(!res.isConfirmed) return;
   var r=await api(Object.assign({action:'save_question',id:id||undefined},res.value));
   if(r.success) loadSurvey(); else Swal.fire('Error',r.message||'','error');
+};
+window.optAdd=function(v){
+  var l=document.getElementById('q-optlist'); if(!l) return;
+  var d=document.createElement('div'); d.style.cssText='display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  d.innerHTML='<span class="material-icons" style="color:#cbd5e1;font-size:18px;">radio_button_unchecked</span><input class="opt-inp" style="flex:1;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;" placeholder="Option text"><button type="button" class="material-icons" title="Remove" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="this.parentNode.remove()">close</button>';
+  l.appendChild(d);
+  if(typeof v==='string'){ d.querySelector('input').value=v; } else { d.querySelector('input').focus(); }
+};
+window.onQType=function(t){
+  var choice=['multiple_choice','checkboxes','dropdown'].indexOf(t)>-1;
+  var w=document.getElementById('q-optwrap'); if(w) w.style.display=choice?'block':'none';
+  if(choice && !document.querySelectorAll('#q-optlist .opt-inp').length){ optAdd(); optAdd(); }
 };
 window.delQ=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete question?',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_question',id:id}); loadSurvey(); };
 window.moveQ=async function(i,dir){ var qs=window._qs||[]; var j=i+dir; if(j<0||j>=qs.length) return; var ids=qs.map(function(q){return q.id;}); var tmp=ids[i]; ids[i]=ids[j]; ids[j]=tmp; await api({action:'reorder_questions',ids:ids}); loadSurvey(); };
