@@ -1180,9 +1180,11 @@ export default async function handler(req, res) {
         // IDs default to 0% (until a rev_share is set). Aggregated in-DB for scale.
         if (action === 'residuals_ledger_all') {
             const statuses = ['Approved', 'Approved - Collections'];
-            // .limit lifts PostgREST's 1000-row default so ALL agent IDs come back.
-            const { data: agg, error: aggErr } = await supabase.rpc('residuals_ledger_data', { statuses }).limit(200000);
+            // RPC returns ONE jsonb array (all agent IDs) so the 1000-row cap can't
+            // truncate it.
+            const { data: aggJson, error: aggErr } = await supabase.rpc('residuals_ledger_data', { statuses });
             if (aggErr) throw aggErr;
+            const agg = Array.isArray(aggJson) ? aggJson : [];
             const ids = [...new Set((agg || []).map(a => a.agent_id).filter(Boolean))];
             const revMap = {};
             for (let i = 0; i < ids.length; i += 1000) {
