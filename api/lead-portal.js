@@ -61,7 +61,7 @@ export default async function handler(req, res) {
             try {
                 const { ghlUpsertContact } = await import('./_ghl.js');
                 const locationId = (await import('./api-config.js')).getConfigValue ? await (await import('./api-config.js')).getConfigValue('GHL_LOCATION_ID') : null;
-                if (locationId) { const r = await ghlUpsertContact(locationId, { name: full_name, email, phone }, ['lead portal']); if (r?.id) await supabase.from('leads').update({ ghl_contact_id: r.id }).eq('id', lead.id); }
+                if (locationId) { const r = await ghlUpsertContact(locationId, { name: full_name, email, phone }, ['Prospect']); if (r?.id) await supabase.from('leads').update({ ghl_contact_id: r.id }).eq('id', lead.id); }
             } catch (e) { /* non-blocking */ }
             return ok(res, { token: t, lead: { id: lead.id, full_name: lead.full_name, email: lead.email, onboarding_completed: false } });
         }
@@ -142,7 +142,7 @@ export default async function handler(req, res) {
             const nowIso = new Date().toISOString();
             const { data: camps } = await supabase.from('marketing_campaigns')
                 .select('id, title, body_text, image_url, cta_enabled, cta_label, cta_url, starts_at, ends_at, priority, created_at')
-                .eq('show_on_lead_portal', true).eq('is_active', true)
+                .in('audience', ['prospect', 'all']).eq('is_active', true)
                 .order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(50);
             const live = (camps || []).filter(c =>
                 (!c.starts_at || c.starts_at <= nowIso) && (!c.ends_at || c.ends_at >= nowIso));

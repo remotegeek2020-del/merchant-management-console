@@ -274,7 +274,7 @@ export default async function handler(req, res) {
                     cta_label: b.cta_label ?? null,
                     cta_url: b.cta_url ?? null,
                     hotspots: Array.isArray(b.hotspots) ? b.hotspots : [],
-                    audience: ['partner', 'staff', 'both'].includes(b.audience) ? b.audience : 'partner',
+                    audience: ['partner', 'staff', 'both', 'prospect', 'all'].includes(b.audience) ? b.audience : 'partner',
                     display_mode: [
                         'card_dismissible', 'card_persistent', 'card_until_action',
                         'floating_dismissible', 'floating_persistent', 'floating_until_action',
@@ -291,7 +291,6 @@ export default async function handler(req, res) {
                     ab_split: Number.isFinite(+b.ab_split) ? Math.min(100, Math.max(0, Math.round(+b.ab_split))) : 50,
                     variant_b: variantB,
                     show_on_embed: !!b.show_on_embed,
-                    show_on_lead_portal: !!b.show_on_lead_portal,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
                     // External-site capture format + trigger.
@@ -409,7 +408,7 @@ export default async function handler(req, res) {
                 const classify = (r) => {
                     if (r.user_type === 'staff') return { name: nameMap['staff:' + r.user_id] || 'Staff', channel: 'staff', source: 'Staff portal' };
                     if (r.user_type === 'partner') return { name: nameMap['partner:' + r.user_id] || 'Partner', channel: 'partner', source: 'Partner portal' };
-                    if (r.user_type === 'lead') return { name: nameMap['lead:' + r.user_id] || 'Lead', channel: 'lead', source: 'Lead Portal' };
+                    if (r.user_type === 'lead') return { name: nameMap['lead:' + r.user_id] || 'Prospect', channel: 'prospect', source: 'Lead Portal (Prospect)' };
                     // embed viewer (external site / GHL)
                     const email = String(r.user_id || '').indexOf('email:') === 0 ? String(r.user_id).slice(6) : '';
                     if (r.ghl_location) {
@@ -420,7 +419,7 @@ export default async function handler(req, res) {
                     return { name: email || 'Website visitor', channel: 'website', source: site };
                 };
 
-                const byAudience = { partner: 0, staff: 0, lead: 0, ghl: 0, website: 0 };
+                const byAudience = { partner: 0, staff: 0, prospect: 0, ghl: 0, website: 0 };
                 rows.filter(r => r.event_type === 'click').forEach(r => { const ch = classify(r).channel; if (byAudience[ch] != null) byAudience[ch]++; });
 
                 // Aggregate a per-person list for a given event type (most recent first).
@@ -600,7 +599,7 @@ export default async function handler(req, res) {
                 const T = A.totals || { impressions: 0, clicks: 0, dismissals: 0 };
                 const imp = Number(T.impressions) || 0, clk = Number(T.clicks) || 0, dis = Number(T.dismissals) || 0;
                 const ch = A.channel || {};
-                const channel = { partner: Number(ch.partner) || 0, staff: Number(ch.staff) || 0, ghl: Number(ch.ghl) || 0, website: Number(ch.website) || 0 };
+                const channel = { partner: Number(ch.partner) || 0, staff: Number(ch.staff) || 0, prospect: Number(ch.prospect) || 0, ghl: Number(ch.ghl) || 0, website: Number(ch.website) || 0 };
                 const top = (A.per_campaign || [])
                     .map(v => ({ id: v.campaign_id, title: titleOf[v.campaign_id] || '(deleted)', impressions: Number(v.impressions) || 0, clicks: Number(v.clicks) || 0, ctr: v.impressions ? Math.round(v.clicks / v.impressions * 1000) / 10 : 0 }))
                     .sort((a, b) => b.clicks - a.clicks).slice(0, 10);
@@ -967,7 +966,7 @@ export default async function handler(req, res) {
                 // Active + audience match; date-window + dismissals filtered in JS for clarity.
                 const { data: all } = await supabase.from('marketing_campaigns').select('*')
                     .eq('is_active', true)
-                    .in('audience', [who.type, 'both'])
+                    .in('audience', [who.type, 'both', 'all'])
                     .order('priority', { ascending: false })
                     .order('created_at', { ascending: false });
                 const now = Date.now();
