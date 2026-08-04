@@ -72,15 +72,16 @@ export default async function handler(req, res) {
             const { channel_id, page = 0, limit = 20 } = req.body;
             
             let query = supabase.from('community_posts')
-                .select(`id, body, image_url, is_pinned, created_at, author_id, author_type, channel_id,
+                .select(`id, body, image_url, is_pinned, is_announcement, cta_label, cta_url, created_at, author_id, author_type, channel_id,
                     community_channels(name, icon, color),
                     community_reactions(id, user_id, emoji),
                     community_comments(id)`, { count: 'exact' })
                 .eq('is_deleted', false);
-            
+
             if (channel_id) query = query.eq('channel_id', channel_id);
-            
+
             const { data, count } = await query
+                .order('is_announcement', { ascending: false })   // announcements first (important)
                 .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
@@ -106,16 +107,24 @@ export default async function handler(req, res) {
 
         // ── CREATE POST ───────────────────────────────────
         if (action === 'create_post') {
-            const { body, channel_id, image_url } = req.body;
+            const { body, channel_id, image_url, cta_label, cta_url } = req.body;
             // Facebook-style: a post can be text, photo, or both
             if (!body?.trim() && !image_url) return res.status(400).json({ success: false, message: 'Post needs text or a photo' });
 
             // Check announcement channel permissions
+            let isAnnouncement = false;
             if (channel_id) {
                 const { data: channel } = await supabase.from('community_channels').select('is_announcement').eq('id', channel_id).single();
-                if (channel?.is_announcement && user.type !== 'staff') {
+                isAnnouncement = !!channel?.is_announcement;
+                if (isAnnouncement && user.type !== 'staff') {
                     return res.status(403).json({ success: false, message: 'Only staff can post in Announcements.' });
                 }
+            }
+            // CTA: staff-only, and a valid http(s)/relative link.
+            let ctaLabel = null, ctaUrl = null;
+            if (user.type === 'staff' && cta_url && String(cta_url).trim()) {
+                const u = String(cta_url).trim();
+                if (/^(https?:\/\/|\/)/i.test(u)) { ctaUrl = u.slice(0, 1000); ctaLabel = String(cta_label || 'Learn more').trim().slice(0, 60); }
             }
 
             await getOrCreateProfile(user);
@@ -125,7 +134,10 @@ export default async function handler(req, res) {
                 author_type: user.type,
                 channel_id: channel_id || null,
                 body: (body || '').trim(),
-                image_url: image_url || null
+                image_url: image_url || null,
+                is_announcement: isAnnouncement,
+                cta_label: ctaLabel,
+                cta_url: ctaUrl
             }).select().single();
 
             if (error) throw error;
@@ -150,6 +162,65 @@ export default async function handler(req, res) {
             }
 
             return res.status(200).json({ success: true, data: post });
+        }
+
+        // ── TRACK CTA CLICK (any signed-in member) ────────
+        if (action === 'track_post_click') {
+            const { post_id } = req.body;
+            if (!post_id) return res.status(400).json({ success: false, message: 'post_id required' });
+            // Only record for posts that actually have a CTA.
+            const { data: post } = await supabase.from('community_posts').select('id, cta_url').eq('id', post_id).single();
+            if (post?.cta_url) {
+                await supabase.from('community_post_clicks').insert({ post_id, user_id: user.id, user_type: user.type });
+            }
+            return res.status(200).json({ success: true });
+        }
+
+        // ── ANNOUNCEMENT STATS (staff + marketing) ────────
+        if (action === 'announcement_stats') {
+            if (user.type !== 'staff') return res.status(403).json({ success: false, message: 'Staff only.' });
+            const roleL = String(user.role || '').toLowerCase();
+            let canMkt = roleL.includes('super') || roleL.includes('admin');
+            if (!canMkt) {
+                const { data: au } = await supabase.from('app_users').select('access_marketing, access_marketing_settings').eq('userid', user.id).maybeSingle();
+                canMkt = !!(au?.access_marketing || au?.access_marketing_settings);
+            }
+            if (!canMkt) return res.status(403).json({ success: false, message: 'Marketing access required.' });
+
+            // Announcement posts that carry a CTA.
+            const { data: posts } = await supabase.from('community_posts')
+                .select('id, body, image_url, cta_label, cta_url, created_at, author_id')
+                .eq('is_announcement', true).eq('is_deleted', false).not('cta_url', 'is', null)
+                .order('created_at', { ascending: false }).limit(200);
+            const ids = (posts || []).map(p => p.id);
+            const stats = {};
+            ids.forEach(id => { stats[id] = { clicks: 0, clickers: {}, likes: 0, comments: 0 }; });
+            if (ids.length) {
+                const [{ data: clicks }, { data: reactions }, { data: comments }] = await Promise.all([
+                    supabase.from('community_post_clicks').select('post_id, user_id, user_type, clicked_at').in('post_id', ids).limit(50000),
+                    supabase.from('community_reactions').select('post_id').in('post_id', ids).limit(50000),
+                    supabase.from('community_comments').select('post_id').in('post_id', ids).eq('is_deleted', false).limit(50000)
+                ]);
+                (clicks || []).forEach(c => { const s = stats[c.post_id]; if (!s) return; s.clicks++; const k = c.user_id; if (!s.clickers[k]) s.clickers[k] = { user_id: c.user_id, user_type: c.user_type, count: 0, last: null }; s.clickers[k].count++; if (!s.clickers[k].last || c.clicked_at > s.clickers[k].last) s.clickers[k].last = c.clicked_at; });
+                (reactions || []).forEach(r => { if (stats[r.post_id]) stats[r.post_id].likes++; });
+                (comments || []).forEach(c => { if (stats[c.post_id]) stats[c.post_id].comments++; });
+            }
+            // Resolve author + clicker names.
+            const allUserIds = new Set();
+            (posts || []).forEach(p => allUserIds.add(p.author_id));
+            Object.values(stats).forEach(s => Object.keys(s.clickers).forEach(k => allUserIds.add(k)));
+            const { data: profs } = allUserIds.size ? await supabase.from('user_profiles').select('user_id, display_name, user_type').in('user_id', [...allUserIds]) : { data: [] };
+            const nameOf = {}; (profs || []).forEach(p => { nameOf[p.user_id] = p.display_name; });
+            const out = (posts || []).map(p => {
+                const s = stats[p.id];
+                const clickers = Object.values(s.clickers).map(c => ({ name: nameOf[c.user_id] || (c.user_type === 'staff' ? 'Staff' : 'Partner'), user_type: c.user_type, count: c.count, last: c.last })).sort((a, b) => b.count - a.count);
+                return {
+                    id: p.id, body: p.body, image_url: p.image_url, cta_label: p.cta_label, cta_url: p.cta_url,
+                    created_at: p.created_at, author: nameOf[p.author_id] || 'Staff',
+                    clicks: s.clicks, unique_clickers: clickers.length, likes: s.likes, comments: s.comments, clickers
+                };
+            });
+            return res.status(200).json({ success: true, data: out });
         }
 
         // ── TOGGLE PIN (staff only) ───────────────────────

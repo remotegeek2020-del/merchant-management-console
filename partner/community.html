@@ -77,7 +77,10 @@
         .post-channel{display:inline-flex;align-items:center;gap:4px;background:var(--teal-bg);color:var(--teal-dark);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;margin-left:6px;}
         .post-pin{color:var(--teal);font-size:14px;margin-left:auto;}
         .post-body{padding:12px 16px;font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;}
-        .post-image{width:100%;max-height:400px;object-fit:cover;}
+        .post-image-wrap{background:#f1f5f9;border-radius:10px;margin:0 16px 12px;overflow:hidden;}
+        .post-image{width:100%;height:340px;object-fit:contain;display:block;}
+        .post-cta{display:inline-flex;align-items:center;gap:5px;background:#2563eb;color:#fff;font-weight:700;font-size:13px;text-decoration:none;padding:9px 16px;border-radius:9px;}
+        .post-cta:hover{filter:brightness(1.05);}
         .post-footer{padding:8px 16px 12px;display:flex;align-items:center;gap:4px;border-top:1px solid var(--border);}
         .reaction-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);transition:all 0.2s;font-family:'DM Sans',sans-serif;}
         .reaction-btn:hover{background:var(--teal-bg);color:var(--teal);}
@@ -366,6 +369,7 @@ async function init() {
 function api(endpoint, body) {
     return fetch(`/api/${endpoint}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
 }
+window.trackPostClick = function(postId){ try{ api('community', { action:'track_post_click', token, post_id: postId }); }catch(e){} };
 
 // ── CHANNELS ──────────────────────────────────────────────
 async function loadChannels() {
@@ -473,7 +477,8 @@ function renderPost(post) {
             ${post.author_id === currentUser?.id ? `<button onclick="deletePost('${post.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;" title="Delete post"><span class="material-icons" style="font-size:16px;">delete_outline</span></button>` : ''}
         </div>
         <div class="post-body">${escHtml(post.body)}</div>
-        ${post.image_url ? `<img src="${post.image_url}" class="post-image" alt="Post image" onclick="openLightbox('${post.image_url}')">` : ''}
+        ${post.image_url ? `<div class="post-image-wrap"><img src="${post.image_url}" class="post-image" alt="Post image" onclick="openLightbox('${post.image_url}')"></div>` : ''}
+        ${post.cta_url ? `<div style="padding:0 16px 12px;"><a class="post-cta" href="${escHtml(post.cta_url)}" target="_blank" rel="noopener" onclick="trackPostClick('${post.id}')"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">ads_click</span> ${escHtml(post.cta_label||'Learn more')}</a></div>` : ''}
         <div class="post-footer">
             <div class="reaction-wrap">
                 <button class="reaction-btn ${post.user_reacted?'reacted':''}" id="react-btn-${post.id}" onclick="toggleEmojiTray('${post.id}',event)">

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Announcement Stats | Marketing</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f8fafc;color:#0f172a;}
+  :root{--pri:#2563eb;--border:#e2e8f0;--muted:#94a3b8;--green:#16a34a;}
+  .top{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;}
+  .top h1{font-size:18px;font-weight:800;margin:0;flex:1;}
+  .top a.back{color:var(--muted);text-decoration:none;font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px;}
+  .wrap{max-width:920px;margin:0 auto;padding:24px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;margin-bottom:14px;overflow:hidden;}
+  .card-head{display:flex;gap:12px;padding:14px 16px;align-items:flex-start;}
+  .thumb{width:64px;height:44px;border-radius:8px;background:#f1f5f9;flex-shrink:0;object-fit:cover;}
+  .ttl{font-weight:700;font-size:14px;line-height:1.35;}
+  .muted{color:var(--muted);}.empty{text-align:center;padding:48px;color:var(--muted);}
+  .stat-row{display:flex;gap:10px;flex-wrap:wrap;padding:0 16px 12px;}
+  .stat{flex:1;min-width:96px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:9px 12px;}
+  .stat .n{font-size:20px;font-weight:800;}.stat .l{font-size:11px;color:#64748b;font-weight:700;}
+  .cta-link{font-size:12px;color:var(--pri);text-decoration:none;word-break:break-all;}
+  .who{border-top:1px solid var(--border);}
+  .who summary{cursor:pointer;padding:10px 16px;font-size:13px;font-weight:700;color:#334155;list-style:none;}
+  .who summary::-webkit-details-marker{display:none;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:7px 16px;border-bottom:1px solid #f1f5f9;}
+  th{font-size:11px;color:#64748b;text-transform:uppercase;}
+  .pill{font-size:10px;font-weight:800;border-radius:20px;padding:2px 8px;}
+  .p-staff{background:#dbeafe;color:#1d4ed8;}.p-partner{background:#dcfce7;color:#166534;}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
+  <h1>📣 Announcement Stats</h1>
+  <button onclick="load()" style="border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 13px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">refresh</span> Refresh</button>
+</div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+<script>
+var TOKEN=localStorage.getItem('pp_session_token')||'', UID=localStorage.getItem('pp_userid')||'';
+function api(b){ return fetch('/api/community',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(Object.assign({staff_userid:UID},b))}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function excerpt(t){ t=String(t||'').replace(/\s+/g,' ').trim(); return t.length>90?t.slice(0,90)+'…':(t||'(photo announcement)'); }
+async function load(){
+  var w=document.getElementById('wrap'); w.innerHTML='<div class="empty">Loading…</div>';
+  var r=await api({action:'announcement_stats'});
+  if(!r||!r.success){ w.innerHTML='<div class="empty" style="color:#9a3412;">'+esc((r&&r.message)||'Failed to load')+'</div>'; return; }
+  var posts=r.data||[];
+  if(!posts.length){ w.innerHTML='<div class="empty"><div style="font-size:40px;">📣</div><div style="font-weight:800;color:#334155;margin-top:8px;">No announcement posts with a call-to-action yet</div><div style="margin-top:4px;">Add a CTA button when posting in the Announcements channel — its clicks, likes &amp; comments show up here.</div></div>'; return; }
+  w.innerHTML=posts.map(function(p){
+    var ctr=p.clicks&&p.unique_clickers?'':'';
+    var rows=(p.clickers||[]).map(function(c){
+      return '<tr><td>'+esc(c.name)+' <span class="pill '+(c.user_type==='staff'?'p-staff':'p-partner')+'">'+(c.user_type==='staff'?'Staff':'Partner')+'</span></td><td>'+c.count+'</td><td class="muted">'+(c.last?new Date(c.last).toLocaleString():'—')+'</td></tr>';
+    }).join('')||'<tr><td colspan="3" class="muted" style="padding:12px 16px;">No clicks yet.</td></tr>';
+    var thumb=p.image_url?'<img class="thumb" src="'+esc(p.image_url)+'" onerror="this.style.display=\'none\'">':'<div class="thumb" style="display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="color:#cbd5e1;font-size:20px;">campaign</span></div>';
+    return '<div class="card">'
+      +'<div class="card-head">'+thumb+'<div style="flex:1;min-width:0;"><div class="ttl">'+esc(excerpt(p.body))+'</div>'
+      +'<div class="muted" style="font-size:11.5px;margin-top:3px;">by '+esc(p.author)+' · '+(p.created_at?new Date(p.created_at).toLocaleDateString():'')+'</div>'
+      +'<div style="margin-top:4px;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;color:#2563eb;">ads_click</span> <b style="font-size:12px;">'+esc(p.cta_label||'CTA')+'</b> → <a class="cta-link" href="'+esc(p.cta_url)+'" target="_blank" rel="noopener">'+esc(p.cta_url)+'</a></div>'
+      +'</div></div>'
+      +'<div class="stat-row">'
+        +'<div class="stat"><div class="n" style="color:var(--pri);">'+p.clicks+'</div><div class="l">Total clicks</div></div>'
+        +'<div class="stat"><div class="n">'+p.unique_clickers+'</div><div class="l">Unique people</div></div>'
+        +'<div class="stat"><div class="n" style="color:#dc2626;">'+p.likes+'</div><div class="l">Likes</div></div>'
+        +'<div class="stat"><div class="n">'+p.comments+'</div><div class="l">Comments</div></div>'
+      +'</div>'
+      +'<details class="who"><summary>👥 Who clicked ('+p.unique_clickers+')</summary>'
+      +'<table><thead><tr><th>Person</th><th>Clicks</th><th>Last click</th></tr></thead><tbody>'+rows+'</tbody></table></details>'
+      +'</div>';
+  }).join('');
+}
+load();
+</script>
+</body>
+</html>

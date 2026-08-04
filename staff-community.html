@@ -73,7 +73,10 @@
         .staff-badge{font-size:9px;background:#eff6ff;color:#2563eb;padding:1px 6px;border-radius:99px;font-weight:800;margin-left:4px;}
         .ch-badge{font-size:9px;padding:1px 7px;border-radius:99px;font-weight:700;margin-left:4px;}
         .post-body{padding:0 14px 10px;font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;}
-        .post-image{width:100%;max-height:400px;object-fit:cover;cursor:pointer;display:block;}
+        .post-image-wrap{background:#f1f5f9;border-radius:10px;margin:0 16px 12px;overflow:hidden;}
+        .post-image{width:100%;height:340px;object-fit:contain;cursor:pointer;display:block;}
+        .post-cta{display:inline-flex;align-items:center;gap:5px;background:var(--brand,#2563eb);color:#fff;font-weight:700;font-size:13px;text-decoration:none;padding:9px 16px;border-radius:9px;}
+        .post-cta:hover{filter:brightness(1.05);}
         .post-actions{display:flex;gap:2px;padding:6px 10px;border-top:1px solid var(--border);}
         .action-btn{display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:none;background:none;color:#475569;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
         .action-btn:hover{background:#f1f5f9;}
@@ -199,9 +202,16 @@
                 </div>
                 <div class="char-counter" id="charCounter"></div>
                 <div id="mediaPreview" class="media-preview"></div>
+                <div id="ctaFields" style="display:none;gap:8px;margin-top:8px;">
+                    <input id="ctaLabel" placeholder="Button text (e.g. Register now)" maxlength="60" style="flex:0 0 40%;padding:8px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">
+                    <input id="ctaUrl" placeholder="Button link (https://…)" style="flex:1;padding:8px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">
+                </div>
                 <div class="composer-footer">
                     <button class="media-btn photo" onclick="document.getElementById('photoInput').click()">
                         <span class="material-icons" style="font-size:15px;">photo</span> Photo
+                    </button>
+                    <button class="pin-btn" id="ctaToggle" onclick="toggleCtaFields()" title="Add a call-to-action button">
+                        <span class="material-icons" style="font-size:14px;">ads_click</span> CTA
                     </button>
                     <button class="pin-btn" id="pinToggle" onclick="togglePin()" title="Pin this post">
                         <span class="material-icons" style="font-size:14px;">push_pin</span> Pin
@@ -459,9 +469,17 @@ function buildPostCard(p) {
         var body = document.createElement('div'); body.className='post-body'; body.textContent=p.body; card.appendChild(body);
     }
     if (p.image_url) {
+        var imgWrap = document.createElement('div'); imgWrap.className='post-image-wrap';
         var img = document.createElement('img'); img.className='post-image'; img.src=p.image_url; img.loading='lazy';
         img.onclick = function(){ openLightbox(this.src); };
-        card.appendChild(img);
+        imgWrap.appendChild(img); card.appendChild(imgWrap);
+    }
+    if (p.cta_url) {
+        var ctaWrap = document.createElement('div'); ctaWrap.style.cssText='padding:0 16px 12px;';
+        var cta = document.createElement('a'); cta.className='post-cta'; cta.href=p.cta_url; cta.target='_blank'; cta.rel='noopener';
+        cta.innerHTML='<span class="material-icons" style="font-size:16px;vertical-align:-3px;">ads_click</span> '+(p.cta_label||'Learn more');
+        cta.onclick=(function(id){return function(){ try{ api({action:'track_post_click',post_id:id}); }catch(e){} };})(p.id);
+        ctaWrap.appendChild(cta); card.appendChild(ctaWrap);
     }
 
     var actions = document.createElement('div'); actions.className='post-actions';
@@ -594,6 +612,13 @@ function togglePin() {
     btn.classList.toggle('active', pinPost);
     btn.querySelector('.material-icons').textContent = pinPost ? 'push_pin' : 'push_pin';
 }
+function toggleCtaFields() {
+    var f = document.getElementById('ctaFields');
+    var on = f.style.display === 'none' || !f.style.display;
+    f.style.display = on ? 'flex' : 'none';
+    document.getElementById('ctaToggle').classList.toggle('active', on);
+    if (on) document.getElementById('ctaLabel').focus();
+}
 
 function compressImage(file, callback) {
     var reader = new FileReader();
@@ -650,7 +675,9 @@ async function submitPost() {
         }
 
         var channelId = activeChannelId && activeChannelId !== 'mine' ? activeChannelId : null;
-        var result = await api({ action:'create_post', body:text, image_url:imageUrl, channel_id:channelId });
+        var ctaLabel = (document.getElementById('ctaLabel').value||'').trim();
+        var ctaUrl = (document.getElementById('ctaUrl').value||'').trim();
+        var result = await api({ action:'create_post', body:text, image_url:imageUrl, channel_id:channelId, cta_label:ctaLabel, cta_url:ctaUrl });
 
         if (result.success) {
             // Pin BEFORE resetting state — the old order cleared pinPost first, so pin never fired
@@ -658,6 +685,8 @@ async function submitPost() {
             document.getElementById('postText').value='';
             updateCharCount();
             pendingImage=null; document.getElementById('mediaPreview').innerHTML='';
+            document.getElementById('ctaLabel').value=''; document.getElementById('ctaUrl').value='';
+            document.getElementById('ctaFields').style.display='none'; document.getElementById('ctaToggle').classList.remove('active');
             pinPost=false; document.getElementById('pinToggle').classList.remove('active');
             loadFeed(false);
         } else { Swal.fire('Error', result.message, 'error'); }
