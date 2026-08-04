@@ -1174,6 +1174,43 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
+        // Full residuals ledger: ALL partner IDs (not just Prime49), driven by each
+        // ID's rev_share. net = 30-day volume x 3%; agent payout = net x rev_share%;
+        // PPT = remainder. Prime49 IDs default to 50% when rev_share is blank; other
+        // IDs default to 0% (until a rev_share is set). Aggregated in-DB for scale.
+        if (action === 'residuals_ledger_all') {
+            const statuses = ['Approved', 'Approved - Collections'];
+            const { data: agg, error: aggErr } = await supabase.rpc('residuals_ledger_data', { statuses });
+            if (aggErr) throw aggErr;
+            const ids = [...new Set((agg || []).map(a => a.agent_id).filter(Boolean))];
+            const revMap = {};
+            for (let i = 0; i < ids.length; i += 1000) {
+                const batch = ids.slice(i, i + 1000);
+                const { data: ai } = await supabase.from('agent_identifiers').select('id_string, rev_share, prime49').in('id_string', batch).limit(10000);
+                (ai || []).forEach(x => { revMap[x.id_string] = { rev: x.rev_share, p49: !!x.prime49 }; });
+            }
+            const partners = {};
+            const totals = { merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0, id_count: ids.length };
+            (agg || []).forEach(a => {
+                const info = revMap[a.agent_id] || {};
+                const hasRev = info.rev != null && String(info.rev).trim() !== '';
+                const revPct = hasRev ? (parseFloat(String(info.rev).replace(/%/g, '')) || 0) : (info.p49 ? 50 : 0);
+                const vol = Number(a.volume_30d) || 0;
+                const net = vol * 0.03;
+                const agent = net * (revPct / 100);
+                const ppt = net - agent;
+                const mc = Number(a.merchant_count) || 0;
+                const pname = a.partner_name || '— Unassigned —';
+                if (!partners[pname]) partners[pname] = { partner_name: pname, company: a.company || '—', ids: [], merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0 };
+                const P = partners[pname];
+                P.ids.push({ id_string: a.agent_id, rev_share: revPct, prime49: !!info.p49, merchant_count: mc, volume_30d: vol, net_residual: net, ppt_residual: ppt, agent_residual: agent });
+                P.merchant_count += mc; P.volume_30d += vol; P.net_residual += net; P.ppt_residual += ppt; P.agent_residual += agent;
+                totals.merchant_count += mc; totals.volume_30d += vol; totals.net_residual += net; totals.ppt_residual += ppt; totals.agent_residual += agent;
+            });
+            const list = Object.values(partners).map(p => { p.ids.sort((a, b) => b.agent_residual - a.agent_residual); return p; }).sort((a, b) => b.agent_residual - a.agent_residual);
+            return res.status(200).json({ success: true, data: { date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), partners: list, totals } });
+        }
+
         if (action === 'get_recipients') {
             const { data, error } = await supabase.from('report_recipients')
                 .select('*').eq('report_type', report_type).order('created_at', { ascending: true });
