@@ -1201,14 +1201,25 @@ export default async function handler(req, res) {
                 const agent = net * (revPct / 100);
                 const ppt = net - agent;
                 const mc = Number(a.merchant_count) || 0;
-                const pname = a.partner_name || '— Unassigned —';
-                if (!partners[pname]) partners[pname] = { partner_name: pname, company: a.company || '—', ids: [], merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0 };
-                const P = partners[pname];
-                P.ids.push({ id_string: a.agent_id, rev_share: revPct, prime49: !!info.p49, merchant_count: mc, volume_30d: vol, net_residual: net, ppt_residual: ppt, agent_residual: agent });
-                P.merchant_count += mc; P.volume_30d += vol; P.net_residual += net; P.ppt_residual += ppt; P.agent_residual += agent;
+                // Group by the PARTNER PERSON (so a partner with multiple companies
+                // stays one record); fall back to the name when no person resolves.
+                const pkey = a.partner_id ? ('id:' + a.partner_id) : ('name:' + (a.partner_name || 'Unassigned'));
+                const pname = (a.partner_name || '—').replace(/\s*\([^)]*\)\s*$/, '').trim() || '—';
+                const coName = a.company || '—';
+                if (!partners[pkey]) partners[pkey] = { partner_id: a.partner_id || null, partner_name: pname, companies: {}, merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0, id_count: 0 };
+                const P = partners[pkey];
+                if (!P.companies[coName]) P.companies[coName] = { company: coName, ids: [], merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0 };
+                const C = P.companies[coName];
+                const idRow = { id_string: a.agent_id, rev_share: revPct, prime49: !!info.p49, merchant_count: mc, volume_30d: vol, net_residual: net, ppt_residual: ppt, agent_residual: agent };
+                C.ids.push(idRow); C.merchant_count += mc; C.volume_30d += vol; C.net_residual += net; C.ppt_residual += ppt; C.agent_residual += agent;
+                P.merchant_count += mc; P.volume_30d += vol; P.net_residual += net; P.ppt_residual += ppt; P.agent_residual += agent; P.id_count += 1;
                 totals.merchant_count += mc; totals.volume_30d += vol; totals.net_residual += net; totals.ppt_residual += ppt; totals.agent_residual += agent;
             });
-            const list = Object.values(partners).map(p => { p.ids.sort((a, b) => b.agent_residual - a.agent_residual); return p; }).sort((a, b) => b.agent_residual - a.agent_residual);
+            const list = Object.values(partners).map(p => {
+                p.companies = Object.values(p.companies).map(c => { c.ids.sort((a, b) => b.agent_residual - a.agent_residual); return c; }).sort((a, b) => b.agent_residual - a.agent_residual);
+                p.company_count = p.companies.length;
+                return p;
+            }).sort((a, b) => b.agent_residual - a.agent_residual);
             return res.status(200).json({ success: true, data: { date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), partners: list, totals } });
         }
 
