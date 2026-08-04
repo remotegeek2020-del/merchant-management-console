@@ -7,7 +7,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export async function loadActor(userid) {
     if (!userid) return null;
     const { data } = await supabase.from('app_users')
-        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings')
+        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal')
         .eq('userid', userid).maybeSingle();
     return data || null;
 }
@@ -30,4 +30,9 @@ export function canMarketing(a) {
 // Granular Marketing → Settings access (integration keys / OAuth).
 export function canMarketingSettings(a) {
     return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_marketing_settings === true);
+}
+
+// Granular Lead Portal admin access.
+export function canLeadPortal(a) {
+    return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_lead_portal === true);
 }

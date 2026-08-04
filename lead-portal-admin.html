@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Portal | Marketing</title>
+<link rel="icon" href="/api/favicon" />
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f8fafc;color:#0f172a;}
+  :root{--pri:#2563eb;--pri-d:#1d4ed8;--border:#e2e8f0;--muted:#94a3b8;--green:#16a34a;}
+  .top{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;}
+  .top h1{font-size:18px;font-weight:800;margin:0;flex:1;}
+  .top a.back{color:var(--muted);text-decoration:none;font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px;}
+  .wrap{max-width:1000px;margin:0 auto;padding:24px;}
+  .btn{border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+  .btn-p{background:var(--pri);color:#fff;}.btn-p:hover{background:var(--pri-d);}
+  .btn-n{background:#fff;color:#475569;border:1px solid var(--border);}
+  .tabs{display:flex;gap:8px;margin-bottom:16px;}
+  .tab{border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;}
+  .tab.on{background:var(--pri);color:#fff;border-color:var(--pri);}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;margin-bottom:12px;padding:14px 16px;}
+  .q-row{display:flex;align-items:center;gap:12px;}
+  .q-type{font-size:10px;font-weight:800;color:#4338ca;background:#eef2ff;border-radius:6px;padding:2px 8px;text-transform:uppercase;}
+  .req{font-size:10px;font-weight:800;color:#b45309;background:#fef3c7;border-radius:6px;padding:2px 7px;}
+  .icon{cursor:pointer;color:var(--muted);}.icon:hover{color:var(--pri);}
+  .muted{color:var(--muted);}.empty{text-align:center;padding:44px;color:var(--muted);}
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;}
+  .stat{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .stat .n{font-size:1.5rem;font-weight:800;}.stat .l{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  th{background:#f8fafc;padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;}
+  td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;}
+  tr.lead-row{cursor:pointer;}tr.lead-row:hover{background:#f8fafc;}
+  .pill{font-size:10px;font-weight:800;border-radius:20px;padding:2px 8px;}
+  .pill.done{background:#dcfce7;color:#166534;}.pill.pend{background:#fef3c7;color:#b45309;}.pill.conv{background:#dbeafe;color:#1d4ed8;}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
+  <h1>🚪 Lead Portal</h1>
+</div>
+<div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
+<script>
+var TOKEN=localStorage.getItem('pp_session_token')||'', UID=localStorage.getItem('pp_userid')||'';
+function api(b){ return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(Object.assign({staff_userid:UID},b))}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+var TYPES=[['short_text','Short text'],['long_text','Paragraph'],['multiple_choice','Multiple choice (pick one)'],['checkboxes','Checkboxes (pick many)'],['dropdown','Dropdown'],['yes_no','Yes / No'],['number','Number']];
+var tab='survey';
+
+function shell(){
+  document.getElementById('wrap').innerHTML=
+    '<div class="tabs"><button class="tab" id="t-survey" onclick="setTab(\'survey\')">Onboarding Survey</button><button class="tab" id="t-leads" onclick="setTab(\'leads\')">Leads</button></div>'
+    +'<div id="panel"></div>';
+  setTab(tab);
+}
+window.setTab=function(t){ tab=t; document.getElementById('t-survey').className='tab'+(t==='survey'?' on':''); document.getElementById('t-leads').className='tab'+(t==='leads'?' on':''); (t==='survey'?loadSurvey:loadLeads)(); };
+
+// ── Onboarding survey builder ──
+async function loadSurvey(){
+  var p=document.getElementById('panel'); p.innerHTML='<div class="empty">Loading…</div>';
+  var r=await api({action:'list_questions'});
+  if(!r.success){ p.innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed')+'</div>'; return; }
+  var qs=r.questions||[];
+  var typeLabel={}; TYPES.forEach(function(t){typeLabel[t[0]]=t[1];});
+  p.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div class="muted" style="font-size:13px;">These questions are asked to every new lead right after they sign up, before they reach their home screen.</div><button class="btn btn-p" onclick="editQ()"><span class="material-icons" style="font-size:16px;">add</span> Add question</button></div>'
+    +(qs.length?qs.map(function(q,i){
+      return '<div class="card"><div class="q-row"><span class="muted" style="font-weight:800;width:22px;">'+(i+1)+'</span>'
+        +'<div style="flex:1;"><div style="font-weight:700;font-size:14px;">'+esc(q.question)+(q.required?' <span class="req">Required</span>':'')+(q.is_active?'':' <span class="req" style="background:#f1f5f9;color:#64748b;">Hidden</span>')+'</div>'
+        +'<div style="margin-top:4px;"><span class="q-type">'+esc(typeLabel[q.type]||q.type)+'</span>'+((q.options&&q.options.length)?' <span class="muted" style="font-size:11.5px;">'+q.options.map(esc).join(' · ')+'</span>':'')+'</div>'
+        +(q.help_text?'<div class="muted" style="font-size:11.5px;margin-top:2px;">'+esc(q.help_text)+'</div>':'')+'</div>'
+        +'<span class="material-icons icon" title="Move up" onclick="moveQ('+i+',-1)">arrow_upward</span>'
+        +'<span class="material-icons icon" title="Move down" onclick="moveQ('+i+',1)">arrow_downward</span>'
+        +'<span class="material-icons icon" title="Edit" onclick="editQ(\''+q.id+'\')">edit</span>'
+        +'<span class="material-icons icon" style="color:#dc2626;" title="Delete" onclick="delQ(\''+q.id+'\')">delete</span>'
+        +'</div></div>';
+    }).join(''):'<div class="empty">No questions yet. Add your first onboarding question.</div>');
+  window._qs=qs;
+}
+window.editQ=async function(id){
+  var q=id?(window._qs||[]).find(function(x){return x.id===id;}):{question:'',type:'short_text',options:[],required:false,is_active:true};
+  var res=await Swal.fire({title:id?'Edit question':'Add question',width:560,html:
+    '<div style="text-align:left;">'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Question</label><input id="q-text" class="swal2-input" style="margin:0;width:100%;" value="'+esc(q.question||'')+'">'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Help text (optional)</label><input id="q-help" class="swal2-input" style="margin:0;width:100%;" value="'+esc(q.help_text||'')+'">'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Answer type</label><select id="q-type" class="swal2-input" style="margin:0;width:100%;" onchange="document.getElementById(\'q-optwrap\').style.display=[\'multiple_choice\',\'checkboxes\',\'dropdown\'].indexOf(this.value)>-1?\'block\':\'none\';">'+TYPES.map(function(t){return '<option value="'+t[0]+'"'+(q.type===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select>'
+    +'<div id="q-optwrap" style="display:'+((['multiple_choice','checkboxes','dropdown'].indexOf(q.type)>-1)?'block':'none')+';"><label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:10px;display:block;">Options (one per line)</label><textarea id="q-opts" class="swal2-textarea" style="margin:0;width:100%;">'+esc((q.options||[]).join('\n'))+'</textarea></div>'
+    +'<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="q-req" style="width:auto;" '+(q.required?'checked':'')+'> Required</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;cursor:pointer;"><input type="checkbox" id="q-active" style="width:auto;" '+(q.is_active!==false?'checked':'')+'> Active (shown to leads)</label>'
+    +'</div>',
+    showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
+    preConfirm:function(){ var t=document.getElementById('q-text').value.trim(); if(!t){Swal.showValidationMessage('Question required');return false;} return {question:t,help_text:document.getElementById('q-help').value.trim(),type:document.getElementById('q-type').value,options:document.getElementById('q-opts').value.split('\n').map(function(s){return s.trim();}).filter(Boolean),required:document.getElementById('q-req').checked,is_active:document.getElementById('q-active').checked}; }});
+  if(!res.isConfirmed) return;
+  var r=await api(Object.assign({action:'save_question',id:id||undefined},res.value));
+  if(r.success) loadSurvey(); else Swal.fire('Error',r.message||'','error');
+};
+window.delQ=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete question?',showCancelButton:true,confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; await api({action:'delete_question',id:id}); loadSurvey(); };
+window.moveQ=async function(i,dir){ var qs=window._qs||[]; var j=i+dir; if(j<0||j>=qs.length) return; var ids=qs.map(function(q){return q.id;}); var tmp=ids[i]; ids[i]=ids[j]; ids[j]=tmp; await api({action:'reorder_questions',ids:ids}); loadSurvey(); };
+
+// ── Leads ──
+async function loadLeads(){
+  var p=document.getElementById('panel'); p.innerHTML='<div class="empty">Loading…</div>';
+  var r=await api({action:'list_leads'});
+  if(!r.success){ p.innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed')+'</div>'; return; }
+  var s=r.stats||{}, leads=r.leads||[];
+  var rows=leads.length?leads.map(function(l){
+    var ob=l.status==='converted'?'<span class="pill conv">Converted</span>':(l.onboarding_completed?'<span class="pill done">Onboarded</span>':'<span class="pill pend">Pending</span>');
+    return '<tr class="lead-row" onclick="leadDetail(\''+l.id+'\')"><td><b>'+esc(l.full_name||'—')+'</b></td><td class="muted">'+esc(l.email||'')+'</td><td class="muted">'+esc(l.phone||'')+'</td><td>'+ob+'</td><td class="muted">'+esc(l.source||'')+'</td><td class="muted" style="white-space:nowrap;">'+(l.created_at?new Date(l.created_at).toLocaleDateString():'')+'</td></tr>';
+  }).join(''):'<tr><td colspan="6" class="empty">No leads have signed up yet.</td></tr>';
+  p.innerHTML='<div class="statgrid">'
+    +'<div class="stat"><div class="n">'+(s.total||0)+'</div><div class="l">Total leads</div></div>'
+    +'<div class="stat"><div class="n" style="color:var(--green);">'+(s.onboarded||0)+'</div><div class="l">Onboarded</div></div>'
+    +'<div class="stat"><div class="n" style="color:#b45309;">'+(s.pending||0)+'</div><div class="l">Pending onboarding</div></div>'
+    +'<div class="stat"><div class="n" style="color:var(--pri);">'+(s.converted||0)+'</div><div class="l">Converted to partner</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Onboarding</th><th>Source</th><th>Signed up</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+window.leadDetail=async function(id){
+  Swal.fire({title:'Loading…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await api({action:'lead_detail',lead_id:id});
+  if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
+  var l=r.lead, ans=r.answers||[];
+  function fmtA(a){ return Array.isArray(a.answer)?a.answer.map(esc).join(', '):esc(a.answer); }
+  Swal.fire({title:esc(l.full_name||'Lead'),width:600,html:'<div style="text-align:left;">'
+    +'<div class="muted" style="font-size:12.5px;">'+esc(l.email||'')+(l.phone?' · '+esc(l.phone):'')+'</div>'
+    +'<div style="margin-top:6px;font-size:12px;">Status: <b>'+esc(l.status)+'</b> · Onboarding: <b>'+(l.onboarding_completed?'complete':'pending')+'</b> · Signed up '+(l.created_at?new Date(l.created_at).toLocaleString():'')+'</div>'
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Onboarding answers</div>'
+    +(ans.length?ans.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div class="muted" style="font-size:11.5px;">'+esc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No answers yet.</div>')
+    +'</div>',confirmButtonText:'Close',confirmButtonColor:'#64748b'});
+};
+
+(async function(){
+  var chk=await api({action:'can_access'});
+  if(chk&&chk.success){ shell(); }
+  else { document.getElementById('wrap').innerHTML='<div class="card"><div class="empty"><span class="material-icons" style="font-size:48px;color:#cbd5e1;">lock</span><div style="font-weight:800;margin-top:8px;">You don\'t have Lead Portal access</div><div class="muted" style="margin-top:4px;">Ask an admin to enable the “Lead Portal” permission in User Management.</div></div></div>'; }
+})();
+</script>
+</body>
+</html>

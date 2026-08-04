@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partner Program | PayProTec</title>
+<link rel="icon" href="/api/favicon" />
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;}
+  .top{background:#001e3c;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:12px;}
+  .top img{height:24px;filter:brightness(0) invert(1);}
+  .top .t{font-weight:800;font-size:15px;flex:1;}
+  .top button{background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .wrap{max-width:900px;margin:0 auto;padding:24px;}
+  .hero{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:16px;padding:26px;margin-bottom:18px;}
+  .hero h1{margin:0 0 4px;font-size:24px;font-weight:800;}
+  .hero p{margin:0;opacity:.92;font-size:14px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;}
+  .card h3{margin:0 0 6px;font-size:15px;font-weight:800;display:flex;align-items:center;gap:7px;}
+  .card p{margin:0;color:#64748b;font-size:13px;line-height:1.5;}
+  .card .cta{margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:#0d9488;color:#fff;text-decoration:none;padding:9px 15px;border-radius:9px;font-size:13px;font-weight:700;}
+  .journey{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;margin-bottom:18px;}
+  .steps{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+  .step{flex:1;min-width:150px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;}
+  .step .n{width:24px;height:24px;border-radius:50%;background:#0d9488;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;}
+  .step .st{font-weight:700;font-size:13px;}.step .sd{font-size:11.5px;color:#64748b;margin-top:2px;}
+</style>
+</head>
+<body>
+<div class="top">
+  <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProTec">
+  <span class="t">Partner Program</span>
+  <button onclick="logout()">Sign out</button>
+</div>
+<div class="wrap">
+  <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Explore the resources below, and when you're ready, book your become-a-partner call.</p></div>
+
+  <div class="journey">
+    <div style="font-weight:800;font-size:14px;">Your journey to becoming a partner</div>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div class="st">You're in ✓</div><div class="sd">Registered for the Partner Program.</div></div>
+      <div class="step"><div class="n">2</div><div class="st">Learn</div><div class="sd">Watch webinars & program updates.</div></div>
+      <div class="step"><div class="n">3</div><div class="st">Book a call</div><div class="sd">Meet a rep to become a partner.</div></div>
+      <div class="step"><div class="n">4</div><div class="st">Graduate</div><div class="sd">Get approved → full Partner Portal.</div></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3><span class="material-icons" style="color:#0d9488;">event_available</span> Book your call</h3><p>Ready to become a partner? Book a call with our team.</p><a class="cta" id="bookBtn" href="#" onclick="book(event)"><span class="material-icons" style="font-size:16px;">calendar_month</span> Book a call</a></div>
+    <div class="card"><h3><span class="material-icons" style="color:#0d9488;">play_circle</span> Webinars & training</h3><p>On-demand sessions to help you succeed with PayProTec. <b>Coming to your portal.</b></p></div>
+    <div class="card"><h3><span class="material-icons" style="color:#0d9488;">campaign</span> Announcements</h3><p>Program news and event invites will appear here.</p></div>
+  </div>
+</div>
+<script>
+var TOKEN=localStorage.getItem('pp_lead_token')||'';
+if(!TOKEN){ location.href='/lead/register'; }
+function api(b){ b.token=TOKEN; return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function logout(){ api({action:'lead_logout'}); localStorage.removeItem('pp_lead_token'); localStorage.removeItem('pp_lead_name'); location.href='/lead/register'; }
+function book(e){ e.preventDefault(); alert('Booking calendar coming next — this will open your rep’s HighLevel calendar.'); }
+(async function(){
+  var r=await api({action:'lead_validate'});
+  if(!r.success){ localStorage.removeItem('pp_lead_token'); location.href='/lead/register'; return; }
+  if(!r.lead.onboarding_completed){ location.href='/lead/onboarding'; return; }
+  document.getElementById('hi').textContent='Welcome, '+((r.lead.full_name||'').split(' ')[0]||'')+'!';
+})();
+</script>
+</body>
+</html>

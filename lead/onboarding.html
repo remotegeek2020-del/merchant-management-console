@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome — a few quick questions | PayProTec</title>
+<link rel="icon" href="/api/favicon" />
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;padding:24px;}
+  .wrap{max-width:640px;margin:0 auto;}
+  .head{text-align:center;margin-bottom:20px;}
+  .head img{height:28px;margin-bottom:10px;}
+  .head h1{font-size:22px;font-weight:800;color:#001e3c;margin:6px 0 2px;}
+  .head p{color:#64748b;font-size:13.5px;margin:0;}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;margin-bottom:12px;}
+  .q{font-weight:700;font-size:15px;margin-bottom:2px;}
+  .q .star{color:#dc2626;}
+  .help{color:#94a3b8;font-size:12px;margin-bottom:10px;}
+  input[type=text],input[type=number],textarea,select{width:100%;padding:11px 13px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;background:#f8fafc;}
+  input:focus,textarea:focus,select:focus{border-color:#0d9488;background:#fff;}
+  .opt{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:10px;margin-top:7px;cursor:pointer;font-size:14px;}
+  .opt:hover{border-color:#0d9488;}
+  .btn{width:100%;padding:13px;border:none;border-radius:10px;background:#0d9488;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px;}
+  .btn:disabled{opacity:.6;}
+  .msg{text-align:center;color:#dc2626;font-size:13px;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProTec">
+    <h1>Welcome aboard! 👋</h1>
+    <p>Answer a few quick questions so we can tailor your Partner Program experience.</p>
+  </div>
+  <div id="form"><div class="card">Loading…</div></div>
+</div>
+<script>
+var TOKEN=localStorage.getItem('pp_lead_token')||'';
+if(!TOKEN){ location.href='/lead/register'; }
+function api(b){ b.token=TOKEN; return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+var QS=[];
+function inputFor(q,i){
+  var v=q.answer;
+  if(q.type==='long_text') return '<textarea id="q'+i+'" rows="3">'+esc(v||'')+'</textarea>';
+  if(q.type==='number') return '<input id="q'+i+'" type="number" value="'+esc(v==null?'':v)+'">';
+  if(q.type==='dropdown') return '<select id="q'+i+'"><option value="">— Select —</option>'+(q.options||[]).map(function(o){return '<option'+(v===o?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select>';
+  if(q.type==='yes_no') return ['Yes','No'].map(function(o){return '<label class="opt"><input type="radio" name="q'+i+'" value="'+o+'"'+(v===o?' checked':'')+'> '+o+'</label>';}).join('');
+  if(q.type==='multiple_choice') return (q.options||[]).map(function(o){return '<label class="opt"><input type="radio" name="q'+i+'" value="'+esc(o)+'"'+(v===o?' checked':'')+'> '+esc(o)+'</label>';}).join('');
+  if(q.type==='checkboxes') return (q.options||[]).map(function(o){var on=Array.isArray(v)&&v.indexOf(o)>-1; return '<label class="opt"><input type="checkbox" name="q'+i+'" value="'+esc(o)+'"'+(on?' checked':'')+'> '+esc(o)+'</label>';}).join('');
+  return '<input id="q'+i+'" type="text" value="'+esc(v||'')+'">';
+}
+function readAns(q,i){
+  if(q.type==='yes_no'||q.type==='multiple_choice'){ var el=document.querySelector('input[name="q'+i+'"]:checked'); return el?el.value:null; }
+  if(q.type==='checkboxes'){ return Array.prototype.map.call(document.querySelectorAll('input[name="q'+i+'"]:checked'),function(e){return e.value;}); }
+  var e=document.getElementById('q'+i); return e?e.value.trim():null;
+}
+async function load(){
+  var vr=await api({action:'lead_validate'});
+  if(!vr.success){ localStorage.removeItem('pp_lead_token'); location.href='/lead/register'; return; }
+  var r=await api({action:'lead_get_onboarding'});
+  QS=(r&&r.questions)||[];
+  var f=document.getElementById('form');
+  if(!QS.length){ // nothing to ask → mark done and go home
+    await api({action:'lead_submit_onboarding',answers:[]}); location.href='/lead/home'; return;
+  }
+  f.innerHTML=QS.map(function(q,i){ return '<div class="card"><div class="q">'+esc(q.question)+(q.required?' <span class="star">*</span>':'')+'</div>'+(q.help_text?'<div class="help">'+esc(q.help_text)+'</div>':'<div style="height:6px;"></div>')+inputFor(q,i)+'</div>'; }).join('')
+    +'<button class="btn" id="submitBtn" onclick="submitAll()">Continue to my portal →</button><div class="msg" id="msg"></div>';
+}
+async function submitAll(){
+  var answers=[];
+  for(var i=0;i<QS.length;i++){ var a=readAns(QS[i],i); if(QS[i].required){ var empty=a==null||a===''||(Array.isArray(a)&&a.length===0); if(empty){ document.getElementById('msg').textContent='Please answer: '+QS[i].question; return; } } answers.push({question_id:QS[i].id, answer:a}); }
+  var btn=document.getElementById('submitBtn'); btn.disabled=true;
+  var r=await api({action:'lead_submit_onboarding',answers:answers});
+  btn.disabled=false;
+  if(r&&r.success){ location.href='/lead/home'; } else document.getElementById('msg').textContent=(r&&r.message)||'Could not save.';
+}
+load();
+</script>
+</body>
+</html>

@@ -74,6 +74,9 @@
     { "src": "/partner/profile", "dest": "/partner/profile.html" },
     { "src": "/partner", "dest": "/partner/index.html" },
     { "src": "/partner/", "dest": "/partner/index.html" },
+    { "src": "/lead", "dest": "/lead/register.html" },
+    { "src": "/lead/", "dest": "/lead/register.html" },
+    { "src": "/lead/(.*)", "dest": "/lead/$1.html" },
     { "src": "/(.*)\\.html", "dest": "/$1.html" },
     { "src": "/(.*)", "dest": "/$1.html" }
   ]
