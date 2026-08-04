@@ -118,7 +118,7 @@ export default async function handler(req, res) {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
             const { data: courses } = await supabase.from('courses').select('id, title, description, thumbnail_url')
-                .eq('is_published', true).eq('unlock_mode', 'auto').order('sort_order').order('created_at');
+                .eq('is_published', true).eq('lead_visible', true).order('sort_order').order('created_at');
             const ids = (courses || []).map(c => c.id);
             let vids = [];
             if (ids.length) {

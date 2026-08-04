@@ -358,6 +358,7 @@ export default async function handler(req, res) {
                 thumbnail_url: body.thumbnail_url ? String(body.thumbnail_url).slice(0, 1000) : null,
                 unlock_mode: body.unlock_mode === 'auto' ? 'auto' : 'manual',
                 is_published: !!body.is_published,
+                lead_visible: !!body.lead_visible,
                 sort_order: Number.isFinite(+body.sort_order) ? +body.sort_order : 0,
                 yt_channel_id: body.yt_channel_id ? String(body.yt_channel_id).trim().slice(0, 200) : null,
                 yt_sync_enabled: !!body.yt_sync_enabled

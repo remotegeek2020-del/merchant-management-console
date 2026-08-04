@@ -182,6 +182,7 @@ function render(){
       +'<span class="t">'+esc(c.title)+'</span>'
       +'<span class="badge '+(c.is_published?'b-live':'b-draft')+'">'+(c.is_published?'Published':'Draft')+'</span>'
       +'<span class="badge '+(c.unlock_mode==='auto'?'b-auto':'b-manual')+'">'+(c.unlock_mode==='auto'?'Auto-unlock':'Manual unlock')+'</span>'
+      +(c.lead_visible?'<span class="badge b-live" style="background:#ede9fe;color:#6d28d9;">🚪 Lead Portal</span>':'')
       +(c.yt_channel_id?'<button class="btn btn-n" style="padding:6px 11px;" title="Sync YouTube lives now (past, live & upcoming)" onclick="syncCourse(\''+c.id+'\',this)"><span class="material-icons" style="font-size:15px;">sync</span> Sync lives</button>':'')
       +'<span class="material-icons icon" title="Edit course" onclick="editCourse(\''+c.id+'\')">edit</span>'
       +'<span class="material-icons icon" style="color:#dc2626;" title="Delete course" onclick="delCourse(\''+c.id+'\')">delete</span></div>'
@@ -203,6 +204,7 @@ window.editCourse=async function(id){
       +'<label>Thumbnail image URL (optional)</label><input id="c-thumb" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…/cover.jpg" value="'+esc(c.thumbnail_url||'')+'">'
       +'<label>Unlock mode</label><select id="c-mode" class="swal2-input" style="margin:0;width:100%;"><option value="manual"'+(c.unlock_mode!=='auto'?' selected':'')+'>Manual — only partners I grant access</option><option value="auto"'+(c.unlock_mode==='auto'?' selected':'')+'>Automatic — every partner sees it</option></select>'
       +'<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-top:14px;font-size:13px;cursor:pointer;"><input type="checkbox" id="c-pub" style="width:auto;" '+(c.is_published?'checked':'')+'> Published (visible to partners)</label>'
+      +'<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-top:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="c-leadvis" style="width:auto;" '+(c.lead_visible?'checked':'')+'> 🚪 Show on Lead Portal <span style="color:#94a3b8;font-weight:400;">(visible to leads who haven\'t become partners yet)</span></label>'
       +'<div style="border-top:1px solid #e2e8f0;margin-top:14px;padding-top:10px;">'
       +'<label>📺 Auto-sync YouTube lives <span style="color:#94a3b8;font-weight:400;text-transform:none;">(optional)</span></label>'
       +'<input id="c-ytch" class="swal2-input" style="margin:0;width:100%;" placeholder="Channel URL, @handle, or channel ID (UC…)" value="'+esc(c.yt_channel_id||'')+'">'
@@ -211,7 +213,7 @@ window.editCourse=async function(id){
       +'</div>'
       +'</div>',
     showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
-    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,thumbnail_url:document.getElementById('c-thumb').value.trim(),unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked,yt_channel_id:document.getElementById('c-ytch').value.trim(),yt_sync_enabled:document.getElementById('c-ytsync').checked}; }
+    preConfirm:function(){ var t=document.getElementById('c-title').value.trim(); if(!t){ Swal.showValidationMessage('Title required'); return false; } return {title:t,description:document.getElementById('c-desc').value,thumbnail_url:document.getElementById('c-thumb').value.trim(),unlock_mode:document.getElementById('c-mode').value,is_published:document.getElementById('c-pub').checked,lead_visible:document.getElementById('c-leadvis').checked,yt_channel_id:document.getElementById('c-ytch').value.trim(),yt_sync_enabled:document.getElementById('c-ytsync').checked}; }
   });
   if(!res.isConfirmed) return;
   var r=await api(Object.assign({action:'save_course',id:id||undefined},res.value));
