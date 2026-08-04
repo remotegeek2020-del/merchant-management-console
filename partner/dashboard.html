@@ -228,6 +228,42 @@
             <div id="rankTopPct" style="font-size:12px;font-weight:700;color:var(--secondary);flex-shrink:0;"></div>
         </div>
 
+        <!-- PAYPROTEC JOURNEY (milestones) -->
+        <style>
+          .journey-card{background:linear-gradient(135deg,#001e3c 0%,#0f3460 55%,#0d9488 130%);border-radius:18px;padding:22px 24px;margin-bottom:24px;color:#fff;box-shadow:var(--shadow-sm);}
+          .journey-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+          .journey-head .jt{font-size:17px;font-weight:800;letter-spacing:-.2px;}
+          .journey-sub{font-size:12.5px;opacity:.85;margin-bottom:18px;}
+          .journey-prog{margin-left:auto;font-size:11px;font-weight:800;background:rgba(255,255,255,.15);padding:4px 11px;border-radius:99px;white-space:nowrap;}
+          .jtl{position:relative;padding-left:6px;}
+          .jstep{position:relative;display:flex;gap:14px;padding-bottom:18px;}
+          .jstep:last-child{padding-bottom:0;}
+          .jstep::before{content:'';position:absolute;left:16px;top:34px;bottom:-4px;width:2px;background:rgba(255,255,255,.18);}
+          .jstep:last-child::before{display:none;}
+          .jdot{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;z-index:1;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);}
+          .jdot .material-icons{font-size:18px;color:rgba(255,255,255,.75);}
+          .jstep.done .jdot{background:#fff;border-color:#fff;}
+          .jstep.done .jdot .material-icons{color:#0d9488;}
+          .jstep.now .jdot{border-color:#fbbf24;background:rgba(251,191,36,.18);}
+          .jstep.now .jdot .material-icons{color:#fbbf24;}
+          .jbody{padding-top:5px;min-width:0;}
+          .jbody .jn{font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+          .jbody .jd{font-size:12.5px;opacity:.82;margin-top:2px;line-height:1.45;}
+          .jpill{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;padding:2px 8px;border-radius:99px;}
+          .jpill.ok{background:rgba(255,255,255,.9);color:#0f766e;}
+          .jpill.next{background:rgba(251,191,36,.95);color:#3b2a00;}
+          .jstep.upcoming .jn,.jstep.upcoming .jd{opacity:.6;}
+        </style>
+        <div class="journey-card pp-animate" id="journeyCard" style="display:none;">
+          <div class="journey-head">
+            <span class="material-icons" style="font-size:22px;">emoji_events</span>
+            <span class="jt">Your PayProTec Journey</span>
+            <span class="journey-prog" id="journeyProg"></span>
+          </div>
+          <div class="journey-sub">From prospect to partner — and every milestone ahead. Here's your success story so far. 🚀</div>
+          <div class="jtl" id="journeyTimeline"></div>
+        </div>
+
         <!-- TREND CARDS -->
         <div class="section-label"><span class="material-icons" style="font-size:14px;">trending_up</span> Merchant Health</div>
         <div class="trend-grid pp-animate" style="animation-delay:0.1s;">
@@ -393,6 +429,9 @@ async function init() {
         document.getElementById('kpiPending').innerText = (d.pending || 0).toLocaleString();
         document.getElementById('kpi90D').innerText = fmt(d.vol90);
 
+        // ── PAYPROTEC JOURNEY (milestones) ──
+        renderJourney(d.approved || 0);
+
         // ── TRENDS ──
         const t = dash.trends;
         document.getElementById('trendGrowth').innerText = t.growth.toLocaleString();
@@ -437,6 +476,42 @@ async function init() {
     } catch (err) {
         console.error('Dashboard init error:', err);
     }
+}
+
+// Default PayProTec Journey milestones. (Future: these will be configurable
+// from Secret Dungeon; for now this is the built-in default set.)
+// `done(approved)` decides whether a milestone is achieved for this partner.
+const JOURNEY_MILESTONES = [
+    { icon:'explore',              title:'Discovered PayProTec',   desc:'You found the partner opportunity and joined as a prospect.',        done:()=>true },
+    { icon:'assignment_turned_in', title:'Completed Onboarding',   desc:'You shared your goals so we could tailor your path.',                done:()=>true },
+    { icon:'handshake',            title:'Met the Team',           desc:'You connected with a PayProTec rep on your become-a-partner call.',  done:()=>true },
+    { icon:'workspace_premium',    title:'Became a Partner',       desc:'Welcome to the PayProTec family — your Partner Portal is live!',     done:()=>true },
+    { icon:'storefront',           title:'First Merchant Approved', desc:'Your first approved merchant account is on the books.',              done:(a)=>a>=1 },
+    { icon:'trending_up',          title:'Building Your Portfolio', desc:'10+ approved merchants — momentum is building.',                     done:(a)=>a>=10 },
+    { icon:'rocket_launch',        title:'Scaling Up',              desc:'50+ approved merchants. You\'re a force. 🚀',                        done:(a)=>a>=50 },
+];
+
+function renderJourney(approved) {
+    const steps = JOURNEY_MILESTONES.map(m => ({ ...m, done: !!m.done(approved) }));
+    // The first not-yet-done milestone is the current focus ("now").
+    const nowIdx = steps.findIndex(s => !s.done);
+    const doneCount = steps.filter(s => s.done).length;
+    const html = steps.map((s, i) => {
+        const state = s.done ? 'done' : (i === nowIdx ? 'now' : 'upcoming');
+        const pill = s.done ? '<span class="jpill ok">Achieved</span>'
+            : (i === nowIdx ? '<span class="jpill next">Up next</span>' : '');
+        const icon = s.done ? 'check' : s.icon;
+        return `<div class="jstep ${state}">
+            <div class="jdot"><span class="material-icons">${icon}</span></div>
+            <div class="jbody">
+                <div class="jn">${s.title} ${pill}</div>
+                <div class="jd">${s.desc}</div>
+            </div>
+        </div>`;
+    }).join('');
+    document.getElementById('journeyTimeline').innerHTML = html;
+    document.getElementById('journeyProg').innerText = doneCount + ' of ' + steps.length + ' milestones';
+    document.getElementById('journeyCard').style.display = '';
 }
 
 async function loadRanking(personId) {
