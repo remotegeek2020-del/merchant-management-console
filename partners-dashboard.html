@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" href="/api/favicon" />
     <script src="js/access-guard.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,8 +20,7 @@
     <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
     <link rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <noscript><link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"></noscript>
-    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
-    <script src="js/tz.js" defer></script>
+<script src="js/tz.js" defer></script>
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
         body { background: #f1f5f9; padding: 14px; font-family: 'DM Sans', sans-serif; }
@@ -2167,8 +2167,6 @@ async function submitOnboarding() {
         }
     }
 
-
-
     async function downloadSingleIdExport(idString) {
         Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
         try {
@@ -2876,8 +2874,6 @@ window.quickAddId = async function(personId, name) {
     }
 };
 
-
-
     // --- LOAD PARTNERS WITH STATS ---
     async function loadPartners(initialQuery) {
         const loader = document.getElementById('loadingOverlay');
@@ -2974,7 +2970,6 @@ window.quickAddId = async function(personId, name) {
             if (loader) loader.style.display = 'none';
         }
     }
-
 
     // ── NEW ENROLLMENTS ───────────────────────────────────
     let currentEnrollPeriod = 'week';
@@ -3471,7 +3466,6 @@ window.quickAddId = async function(personId, name) {
         const el = document.getElementById('leaderboardExplainer');
         if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
     };
-
 
     window.openPartnerByPersonId = function(personId) {
         // Find the partner card/row and open their modal
@@ -4088,7 +4082,6 @@ function loadNotes(personId, hlContactId) {
         if (el) el.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center;">Error loading notes: ' + err.message + '</div>';
     });
 }
-
 
 // Load scorecard into the modal
 function loadScorecard(personId) {

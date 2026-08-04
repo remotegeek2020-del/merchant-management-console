@@ -109,16 +109,18 @@
         });
     }
 
-    // --- Favicon ---
+    // --- Favicon (CMS branding wins) ---
     if (cfg.favicon_url) {
-        let fav = document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-        if (!fav) {
-            fav = document.createElement('link');
-            fav.rel = 'icon';
-            fav.type = 'image/png';
+        // Point EVERY existing icon link at the CMS favicon so a static fallback
+        // (e.g. /images/favicon-*.png) can't override the branding one.
+        const favs = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]');
+        if (favs.length) {
+            favs.forEach(f => { f.href = cfg.favicon_url; f.removeAttribute('sizes'); });
+        } else {
+            const fav = document.createElement('link');
+            fav.rel = 'icon'; fav.type = 'image/png'; fav.href = cfg.favicon_url;
             document.head.appendChild(fav);
         }
-        fav.href = cfg.favicon_url;
     }
 
     // --- Brand colors — set ALL relevant CSS custom properties ---

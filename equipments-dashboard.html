@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" href="/api/favicon" />
     <script src="js/access-guard.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory Management | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
     <script src="js/tz.js"></script>
     <style>
@@ -490,7 +490,6 @@ function renderAgentReview(items) {
     }
 }
 
-
 async function handleAIFile(input) {
     if (!input.files || !input.files[0]) return;
 
@@ -547,7 +546,6 @@ async function handleAIFile(input) {
  * REVIEW TABLE & FINAL SYNC
  * Shows the AI data in a table before bulk uploading
  */
-
 
 /**
  * STAGE 1: Review Table
@@ -759,7 +757,6 @@ async function processFinalImport(itemsToCreate) {
         console.error(err);
     }
 }
-
 
     function printPDFReport() {
         const today = fmtDate(new Date());

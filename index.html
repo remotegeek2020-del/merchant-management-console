@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" href="/api/favicon" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PayProTec Portal</title>
@@ -8,9 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
-    
-    <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css">
     <script>
     (function(){
         try {
@@ -927,7 +926,6 @@
         </div>
     </div>
 
-
     <script src="js/script.js"></script>
 <div id="jarvis-sidebar" class="oracle-sidebar" style="display: none;">
     <div class="oracle-header">
@@ -1204,8 +1202,6 @@
         if (!d) return '—';
         return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
-
-
 
     function makeSection(title, icon, color, count, viewAllUrl, tableHtml) {
         return `
