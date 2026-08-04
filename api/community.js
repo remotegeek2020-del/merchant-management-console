@@ -666,7 +666,15 @@ export default async function handler(req, res) {
             Object.keys(mutual).sort((a, b) => mutual[b] - mutual[a]).forEach(id => { if (!seen.has(id)) { seen.add(id); ordered.push({ id, reason: mutual[id] + ' mutual peer' + (mutual[id] === 1 ? '' : 's') }); } });
             sameCo.forEach(id => { if (!seen.has(id)) { seen.add(id); ordered.push({ id, reason: myCompany }); } });
             recentIds.forEach(id => { if (!seen.has(id)) { seen.add(id); ordered.push({ id, reason: 'On the network' }); } });
-            const pick = ordered.slice(0, 12);
+            // "See all" → the full ranked list. Otherwise a random sample from the
+            // top of the ranking so each refresh shows a fresh (still relevant) set.
+            let pick;
+            if (req.body.all) { pick = ordered.slice(0, 40); }
+            else {
+                const pool = ordered.slice(0, 30);
+                for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+                pick = pool.slice(0, 12);
+            }
             const ids = pick.map(x => x.id);
             let profs = [];
             if (ids.length) { const { data } = await supabase.from('user_profiles').select('user_id, user_type, display_name, avatar_url, company, tagline').in('user_id', ids); profs = data || []; }

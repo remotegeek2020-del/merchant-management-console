@@ -157,48 +157,84 @@
     if (document.getElementById('peopleStrip')) renderSuggestions('peopleStrip');
   }
 
-  // ── "People you may know" strip ──
+  // Square rounded avatar (Facebook friends-box style).
+  function avatarSq(p) {
+    var base = 'width:100%;aspect-ratio:1;border-radius:10px;object-fit:cover;display:block;';
+    if (p && p.avatar_url) return '<img src="' + esc(p.avatar_url) + '" style="' + base + '">';
+    return '<div style="' + base + 'display:flex;align-items:center;justify-content:center;background:#2563eb;color:#fff;font-weight:800;font-size:22px;">' + esc(initials(p && p.display_name)) + '</div>';
+  }
+  // ── "People you may know" carousel ──
+  function sugCard(p) {
+    return '<div style="flex:0 0 150px;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center;background:#fff;">' +
+      '<div style="cursor:pointer;width:64px;margin:0 auto;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + avatarSq(p) + '</div>' +
+      '<div style="font-weight:700;font-size:12.5px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + esc(p.display_name || 'Member') + '</div>' +
+      '<div style="font-size:10.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">' + esc(p.reason || '') + '</div>' +
+      '<button class="pu-btn pu-primary" style="width:100%;margin-top:8px;" onclick="PeerUI.suggestAdd(this,\'' + esc(p.user_id) + '\',\'' + esc(p.user_type) + '\')">+ Add Peer</button>' +
+    '</div>';
+  }
   function renderSuggestions(containerId) {
     var box = document.getElementById(containerId); if (!box) return;
     CAPI({ action: 'suggested_people' }).then(function (r) {
       var list = (r && r.data) || [];
       if (!list.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
       box.style.display = '';
-      box.innerHTML = '<div style="font-weight:800;font-size:13px;margin:0 2px 8px;color:#334155;">People you may know</div>' +
-        '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;">' + list.map(function (p) {
-          return '<div style="flex:0 0 152px;border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center;background:#fff;">' +
-            '<div style="cursor:pointer;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + avatar(p, 56).replace('width:56px', 'width:56px;margin:0 auto') + '</div>' +
-            '<div style="font-weight:700;font-size:12.5px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + esc(p.display_name || 'Member') + '</div>' +
-            '<div style="font-size:10.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">' + esc(p.reason || '') + '</div>' +
-            '<button class="pu-btn pu-primary" style="width:100%;margin-top:8px;" onclick="PeerUI.suggestAdd(this,\'' + esc(p.user_id) + '\',\'' + esc(p.user_type) + '\')">+ Add Peer</button>' +
-          '</div>';
-        }).join('') + '</div>';
+      var sid = containerId + '-scroll';
+      box.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin:0 2px 8px;">' +
+          '<span style="font-weight:800;font-size:13px;color:#334155;">People you may know</span>' +
+          '<span><span title="Show different people" style="cursor:pointer;color:#64748b;font-size:14px;margin-right:12px;" onclick="PeerUI.renderSuggestions(\'' + containerId + '\')">🔄</span>' +
+          '<span style="font-size:11.5px;color:#2563eb;cursor:pointer;font-weight:700;" onclick="PeerUI.openSuggestions()">See all</span></span>' +
+        '</div>' +
+        '<div style="position:relative;">' +
+          '<button class="sug-arrow" style="left:-8px;" onclick="PeerUI.scrollStrip(\'' + sid + '\',-1)">‹</button>' +
+          '<div id="' + sid + '" style="display:flex;gap:10px;overflow-x:auto;scroll-behavior:smooth;padding:2px 4px;">' + list.map(sugCard).join('') + '</div>' +
+          '<button class="sug-arrow" style="right:-8px;" onclick="PeerUI.scrollStrip(\'' + sid + '\',1)">›</button>' +
+        '</div>';
     });
   }
+  function scrollStrip(sid, dir) { var el = document.getElementById(sid); if (el) el.scrollBy({ left: dir * 330, behavior: 'smooth' }); }
   function suggestAdd(btn, id, type) {
     CAPI({ action: 'send_peer_request', addressee_id: id, addressee_type: type }).then(function (r) {
       if (r && r.success) { btn.textContent = r.peer_status === 'peers' ? '✓ Peer' : 'Requested'; btn.disabled = true; btn.className = 'pu-btn pu-neutral'; refreshBadge(); }
     });
   }
-  // ── Peers list (Facebook-style friends list in the side rail) ──
+  function openSuggestions() {
+    Swal.fire({
+      title: 'People you may know', width: 560,
+      html: '<div id="sug-all" style="text-align:left;min-height:140px;max-height:60vh;overflow:auto;">Loading…</div>',
+      showConfirmButton: true, confirmButtonText: 'Close', confirmButtonColor: '#64748b',
+      didOpen: function () {
+        CAPI({ action: 'suggested_people', all: true }).then(function (r) {
+          var l = (r && r.data) || [], box = document.getElementById('sug-all');
+          box.innerHTML = l.length ? l.map(function (p) { return personRow(p, actionFor({ user_id: p.user_id, user_type: p.user_type, peer_status: 'none' })); }).join('') : '<div style="text-align:center;color:#94a3b8;padding:24px;">No suggestions right now.</div>';
+        });
+      }
+    });
+  }
+  // ── Peers "box" (Facebook-style friends grid) ──
   function renderPeersList(containerId) {
     var box = document.getElementById(containerId); if (!box) return;
     CAPI({ action: 'list_peers' }).then(function (r) {
       var list = (r && r.data) || [];
-      box.innerHTML = '<div style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;padding:8px 6px 4px;">Your Peers (' + list.length + ')</div>' +
-        (list.length ? list.map(function (p) {
-          return '<div class="peer-row" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + avatar(p, 32) +
-            '<div style="min-width:0;flex:1;"><div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(p.display_name || 'Member') + '</div>' +
-            (p.company ? '<div style="font-size:10.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(p.company) + '</div>' : '') + '</div></div>';
-        }).join('') : '<div style="color:#94a3b8;font-size:12px;padding:8px 6px;">No peers yet — use “Find People” to connect.</div>');
+      var tiles = list.slice(0, 9).map(function (p) {
+        return '<div style="cursor:pointer;min-width:0;" onclick="PeerUI.openProfile(\'' + esc(p.user_id) + '\')">' + avatarSq(p) +
+          '<div style="font-weight:600;font-size:11.5px;margin-top:5px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(p.display_name || 'Member') + '</div></div>';
+      }).join('');
+      box.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 2px 8px;">' +
+          '<span style="font-weight:800;font-size:13px;color:#334155;">Your Peers <span style="color:#94a3b8;">(' + list.length + ')</span></span>' +
+          (list.length ? '<span style="font-size:11.5px;color:#2563eb;cursor:pointer;font-weight:700;" onclick="PeerUI.openPeers(\'peers\')">See all</span>' : '') +
+        '</div>' +
+        (list.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:12px;">' + tiles + '</div>'
+          : '<div style="color:#94a3b8;font-size:12px;padding:6px 2px;">No peers yet — use “Find People” to connect.</div>');
     });
   }
 
-  window.PeerUI = { openProfile: openProfile, editProfile: editProfile, openPeers: openPeers, tab: setTab, send: send, respond: respond, remove: remove, refreshBadge: refreshBadge, renderSuggestions: renderSuggestions, suggestAdd: suggestAdd, renderPeersList: renderPeersList };
+  window.PeerUI = { openProfile: openProfile, editProfile: editProfile, openPeers: openPeers, tab: setTab, send: send, respond: respond, remove: remove, refreshBadge: refreshBadge, renderSuggestions: renderSuggestions, suggestAdd: suggestAdd, renderPeersList: renderPeersList, scrollStrip: scrollStrip, openSuggestions: openSuggestions };
 
   // Styles + auto-open from ?peers=1
   var css = document.createElement('style');
-  css.textContent = '.pu-btn{border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}.pu-primary{background:#2563eb;color:#fff;}.pu-neutral{background:#f1f5f9;color:#334155;}.pu-tab{border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;}.pu-tab.on{background:#2563eb;color:#fff;border-color:#2563eb;}.pu-lbl{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px;}.pu-in{margin:0!important;width:100%!important;box-sizing:border-box;}.peer-row{display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;cursor:pointer;}.peer-row:hover{background:#f1f5f9;}';
+  css.textContent = '.pu-btn{border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}.pu-primary{background:#2563eb;color:#fff;}.pu-neutral{background:#f1f5f9;color:#334155;}.pu-tab{border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;}.pu-tab.on{background:#2563eb;color:#fff;border-color:#2563eb;}.pu-lbl{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px;}.pu-in{margin:0!important;width:100%!important;box-sizing:border-box;}.peer-row{display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;cursor:pointer;}.peer-row:hover{background:#f1f5f9;}.sug-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:28px;height:28px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.12);cursor:pointer;font-size:16px;line-height:1;color:#334155;display:flex;align-items:center;justify-content:center;}.sug-arrow:hover{background:#f1f5f9;}';
   document.head.appendChild(css);
   document.addEventListener('DOMContentLoaded', function () {
     setTimeout(refreshBadge, 800);
