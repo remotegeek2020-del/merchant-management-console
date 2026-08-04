@@ -5,16 +5,22 @@
     var myId = localStorage.getItem('pp_partner_id');
     if (!token || !window.location.pathname.startsWith('/partner')) return;
 
-    // Shared session-expiry guard: any /api/ call returning 401 means the partner
-    // session expired — clear and send to re-login. (Previously each page handled
-    // this inconsistently, so an expired session looked like an app outage.)
+    // Shared session-expiry guard: a 401 from a PARTNER-authenticated endpoint
+    // means the partner session expired — clear and re-login. IMPORTANT: only
+    // partner-token endpoints count. Partner pages also fire harmless 401s from
+    // staff-context endpoints (e.g. the shared Messenger polling /api/chat, the
+    // notification bell hitting /api/merchants) — those must NOT log the partner
+    // out. (Mirrors the staff guard, which only logs out when its own token was
+    // actually rejected.)
     (function () {
+        var PARTNER_APIS = ['/api/partner-auth', '/api/partner-data', '/api/community', '/api/courses', '/api/pos'];
         var _fetch = window.fetch, redirected = false;
         window.fetch = function (u, opts) {
             return _fetch(u, opts).then(function (res) {
                 try {
                     var url = typeof u === 'string' ? u : (u && u.url) || '';
-                    if (res.status === 401 && url.indexOf('/api/') !== -1 && !redirected) {
+                    var isPartnerApi = PARTNER_APIS.some(function (p) { return url.indexOf(p) !== -1; });
+                    if (res.status === 401 && isPartnerApi && !redirected) {
                         redirected = true;
                         localStorage.clear();
                         window.location.href = '/partner';
