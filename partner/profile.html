@@ -191,10 +191,17 @@
                 <div class="card-section-title">My Agent IDs</div>
                 <div id="agentIdsContent"><div class="spinner"></div></div>
             </div>
+
+            <!-- Peers (friends box) -->
+            <div class="profile-card">
+                <div id="peersList"></div>
+            </div>
         </div>
 
         <!-- RIGHT: Feed -->
         <div>
+            <!-- People you may know -->
+            <div id="peopleStrip" style="margin-bottom:14px;display:none;"></div>
             <!-- Composer -->
             <div class="feed-composer">
                 <div class="composer-row">
@@ -632,6 +639,12 @@ function handleLogout() {
 
 window.onload = init;
 </script>
+<script>
+  window.CAPI = function(b){ return commfetch(b); };
+  window.CURRENT_UID = partnerId; window.CURRENT_TYPE = 'partner';
+</script>
+<script src="/js/community-peers.js"></script>
+<script>window.addEventListener('load', function(){ setTimeout(function(){ if(window.PeerUI){ PeerUI.renderPeersList('peersList'); PeerUI.renderSuggestions('peopleStrip'); } }, 700); });</script>
 <script src="/js/site-config.js"></script>
 <script src="/js/partner-nav.js"></script>
 </body>
