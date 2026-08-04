@@ -9,24 +9,43 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;}
-  .top{background:#001e3c;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:12px;}
+  .top{background:#001e3c;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:30;}
   .top img{height:24px;filter:brightness(0) invert(1);}
   .top .t{font-weight:800;font-size:15px;flex:1;}
   .top button{background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
-  .wrap{max-width:900px;margin:0 auto;padding:24px;}
+  .wrap{max-width:940px;margin:0 auto;padding:24px;}
   .hero{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:16px;padding:26px;margin-bottom:18px;}
-  .hero h1{margin:0 0 4px;font-size:24px;font-weight:800;}
-  .hero p{margin:0;opacity:.92;font-size:14px;}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;}
-  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;}
-  .card h3{margin:0 0 6px;font-size:15px;font-weight:800;display:flex;align-items:center;gap:7px;}
-  .card p{margin:0;color:#64748b;font-size:13px;line-height:1.5;}
-  .card .cta{margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:#0d9488;color:#fff;text-decoration:none;padding:9px 15px;border-radius:9px;font-size:13px;font-weight:700;}
+  .hero h1{margin:0 0 4px;font-size:24px;font-weight:800;}.hero p{margin:0;opacity:.92;font-size:14px;}
   .journey{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;margin-bottom:18px;}
   .steps{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
   .step{flex:1;min-width:150px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;}
   .step .n{width:24px;height:24px;border-radius:50%;background:#0d9488;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;}
   .step .st{font-weight:700;font-size:13px;}.step .sd{font-size:11.5px;color:#64748b;margin-top:2px;}
+  .sec{margin-bottom:22px;}
+  .sec h2{font-size:16px;font-weight:800;margin:0 0 10px;display:flex;align-items:center;gap:8px;}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;}
+  .ann{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:10px;}
+  .ann .h{display:flex;align-items:center;gap:9px;margin-bottom:6px;}
+  .ann .av{width:34px;height:34px;border-radius:50%;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;overflow:hidden;}
+  .ann .av img{width:100%;height:100%;object-fit:cover;}
+  .ann .body{font-size:13.5px;line-height:1.55;white-space:pre-wrap;}
+  .ann img.aimg{width:100%;max-height:320px;object-fit:contain;background:#f1f5f9;border-radius:10px;margin-top:10px;}
+  .ann .cta{display:inline-flex;align-items:center;gap:5px;margin-top:10px;background:#0d9488;color:#fff;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;}
+  .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+  .vcard{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;cursor:pointer;}
+  .vthumb{position:relative;aspect-ratio:16/9;background:#0f172a;display:flex;align-items:center;justify-content:center;}
+  .vthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .vthumb .material-icons{position:relative;z-index:1;color:#fff;font-size:38px;opacity:.9;}
+  .vcard .vt{padding:9px 11px;font-size:12.5px;font-weight:700;}
+  .vcard.locked{opacity:.7;cursor:default;}
+  .ctitle{font-weight:800;font-size:14px;margin:14px 0 8px;color:#334155;}
+  .book-embed{width:100%;height:680px;border:none;border-radius:12px;background:#fff;}
+  .muted{color:#94a3b8;}
+  .pv-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;}
+  .pv-card{width:100%;max-width:900px;}
+  .pv-frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;}
+  .pv-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  .pv-close{color:#fff;cursor:pointer;float:right;margin-bottom:8px;}
 </style>
 </head>
 <body>
@@ -36,7 +55,7 @@
   <button onclick="logout()">Sign out</button>
 </div>
 <div class="wrap">
-  <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Explore the resources below, and when you're ready, book your become-a-partner call.</p></div>
+  <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Learn from our webinars, keep up with announcements, and when you're ready — book your become-a-partner call.</p></div>
 
   <div class="journey">
     <div style="font-weight:800;font-size:14px;">Your journey to becoming a partner</div>
@@ -48,23 +67,67 @@
     </div>
   </div>
 
-  <div class="grid">
-    <div class="card"><h3><span class="material-icons" style="color:#0d9488;">event_available</span> Book your call</h3><p>Ready to become a partner? Book a call with our team.</p><a class="cta" id="bookBtn" href="#" onclick="book(event)"><span class="material-icons" style="font-size:16px;">calendar_month</span> Book a call</a></div>
-    <div class="card"><h3><span class="material-icons" style="color:#0d9488;">play_circle</span> Webinars & training</h3><p>On-demand sessions to help you succeed with PayProTec. <b>Coming to your portal.</b></p></div>
-    <div class="card"><h3><span class="material-icons" style="color:#0d9488;">campaign</span> Announcements</h3><p>Program news and event invites will appear here.</p></div>
-  </div>
+  <div class="sec" id="bookSec"><h2><span class="material-icons" style="color:#0d9488;">event_available</span> Book your call</h2><div id="bookBody"><div class="card muted">Loading…</div></div></div>
+  <div class="sec" id="annSec"><h2><span class="material-icons" style="color:#0d9488;">campaign</span> Announcements</h2><div id="annBody"><div class="card muted">Loading…</div></div></div>
+  <div class="sec" id="courseSec"><h2><span class="material-icons" style="color:#0d9488;">play_circle</span> Webinars & Courses</h2><div id="courseBody"><div class="card muted">Loading…</div></div></div>
 </div>
+
+<div class="pv-overlay" id="player" onclick="if(event.target===this)closePlayer()">
+  <div class="pv-card"><span class="material-icons pv-close" onclick="closePlayer()">close</span><div class="pv-frame" id="playerFrame"></div></div>
+</div>
+
 <script>
 var TOKEN=localStorage.getItem('pp_lead_token')||'';
 if(!TOKEN){ location.href='/lead/register'; }
 function api(b){ b.token=TOKEN; return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function logout(){ api({action:'lead_logout'}); localStorage.removeItem('pp_lead_token'); localStorage.removeItem('pp_lead_name'); location.href='/lead/register'; }
-function book(e){ e.preventDefault(); alert('Booking calendar coming next — this will open your rep’s HighLevel calendar.'); }
+function initials(n){ return String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).join('').toUpperCase().slice(0,2); }
+function ytId(url){ var m=String(url||'').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); return m?m[1]:''; }
+function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|youtube\.com/i.test(url)||provider==='youtube'){var id=ytId(url); if(id) return 'https://www.youtube.com/embed/'+id+'?rel=0';} if(/vimeo\.com/i.test(url)||provider==='vimeo'){m=url.match(/vimeo\.com\/(?:video\/)?(\d+)/); if(m) return 'https://player.vimeo.com/video/'+m[1];} if(/wistia|wi\.st/i.test(url)||provider==='wistia'){m=url.match(/(?:medias\/|wvideo=|wmediaid=|embed\/(?:iframe|medias)\/)([\w]+)/); if(m) return 'https://fast.wistia.net/embed/iframe/'+m[1];} if(/^https:\/\//i.test(url)) return url; return ''; }
+function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
+var VMAP={};
+window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSrc(v.provider,v.url); if(!src){ alert('This video can\'t be played.'); return; } document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>'; document.getElementById('player').style.display='flex'; };
+window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; };
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
+
+async function loadBook(){
+  var r=await api({action:'lead_home_config'});
+  var b=document.getElementById('bookBody');
+  if(r&&r.success&&r.calendar_url){ b.innerHTML='<iframe class="book-embed" src="'+esc(r.calendar_url)+'" scrolling="no"></iframe>'; }
+  else b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
+}
+async function loadAnn(){
+  var r=await api({action:'lead_announcements'});
+  var b=document.getElementById('annBody'); var list=(r&&r.announcements)||[];
+  if(!list.length){ b.innerHTML='<div class="card muted">No announcements yet.</div>'; return; }
+  b.innerHTML=list.map(function(a){
+    return '<div class="ann"><div class="h"><div class="av">'+(a.avatar?'<img src="'+esc(a.avatar)+'">':esc(initials(a.author)))+'</div><div><div style="font-weight:700;font-size:13px;">'+esc(a.author)+'</div><div class="muted" style="font-size:11px;">'+(a.created_at?new Date(a.created_at).toLocaleDateString():'')+'</div></div></div>'
+      +(a.body?'<div class="body">'+esc(a.body)+'</div>':'')
+      +(a.image_url?'<img class="aimg" src="'+esc(a.image_url)+'">':'')
+      +(a.cta_url?'<div><a class="cta" href="'+esc(a.cta_url)+'" target="_blank" rel="noopener"><span class="material-icons" style="font-size:16px;">ads_click</span> '+esc(a.cta_label||'Learn more')+'</a></div>':'')
+      +'</div>';
+  }).join('');
+}
+async function loadCourses(){
+  var r=await api({action:'lead_courses'});
+  var b=document.getElementById('courseBody'); var courses=(r&&r.courses)||[];
+  var withVids=courses.filter(function(c){return (c.videos||[]).length;});
+  if(!withVids.length){ b.innerHTML='<div class="card muted">No webinars available yet — check back soon.</div>'; return; }
+  b.innerHTML=withVids.map(function(c){
+    var vids=(c.videos||[]).map(function(v){ VMAP[v.id]={provider:v.provider,url:v.url};
+      if(!v.available){ return '<div class="vcard locked"><div class="vthumb">'+thumb(v)+'<span class="material-icons">lock</span></div><div class="vt">'+esc(v.title)+'<div class="muted" style="font-size:11px;font-weight:400;">🔒 Coming '+(v.unlock_at?new Date(v.unlock_at).toLocaleDateString():'soon')+'</div></div></div>'; }
+      return '<div class="vcard" onclick="play(\''+v.id+'\')"><div class="vthumb">'+thumb(v)+'<span class="material-icons">play_circle</span></div><div class="vt">'+esc(v.title)+'</div></div>';
+    }).join('');
+    return '<div class="ctitle">'+esc(c.title)+'</div><div class="vgrid">'+vids+'</div>';
+  }).join('');
+}
 (async function(){
   var r=await api({action:'lead_validate'});
   if(!r.success){ localStorage.removeItem('pp_lead_token'); location.href='/lead/register'; return; }
   if(!r.lead.onboarding_completed){ location.href='/lead/onboarding'; return; }
   document.getElementById('hi').textContent='Welcome, '+((r.lead.full_name||'').split(' ')[0]||'')+'!';
+  loadBook(); loadAnn(); loadCourses();
 })();
 </script>
 </body>

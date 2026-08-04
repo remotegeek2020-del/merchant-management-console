@@ -54,11 +54,38 @@ var tab='survey';
 
 function shell(){
   document.getElementById('wrap').innerHTML=
-    '<div class="tabs"><button class="tab" id="t-survey" onclick="setTab(\'survey\')">Onboarding Survey</button><button class="tab" id="t-leads" onclick="setTab(\'leads\')">Leads</button></div>'
+    '<div class="tabs"><button class="tab" id="t-survey" onclick="setTab(\'survey\')">Onboarding Survey</button><button class="tab" id="t-leads" onclick="setTab(\'leads\')">Leads</button><button class="tab" id="t-settings" onclick="setTab(\'settings\')">Settings</button></div>'
     +'<div id="panel"></div>';
   setTab(tab);
 }
-window.setTab=function(t){ tab=t; document.getElementById('t-survey').className='tab'+(t==='survey'?' on':''); document.getElementById('t-leads').className='tab'+(t==='leads'?' on':''); (t==='survey'?loadSurvey:loadLeads)(); };
+window.setTab=function(t){ tab=t; ['survey','leads','settings'].forEach(function(x){ var el=document.getElementById('t-'+x); if(el) el.className='tab'+(t===x?' on':''); }); (t==='survey'?loadSurvey:(t==='leads'?loadLeads:loadSettings))(); };
+
+async function loadSettings(){
+  var p=document.getElementById('panel'); p.innerHTML='<div class="empty">Loading…</div>';
+  var r=await api({action:'get_lead_settings'});
+  if(!r.success){ p.innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed')+'</div>'; return; }
+  if(!r.configured){ p.innerHTML='<div class="card"><b>Book-a-Call calendar</b><div class="muted" style="font-size:13px;margin-top:6px;">No HighLevel sub-account is configured (GHL_LOCATION_ID). Add it in Secret Dungeon → API Manager first.</div></div>'; return; }
+  var cals=r.calendars||[];
+  p.innerHTML='<div class="card" style="max-width:560px;">'
+    +'<b style="font-size:15px;">Book-a-Call calendar</b>'
+    +'<div class="muted" style="font-size:13px;margin:6px 0 14px;">Connected HighLevel sub-account: <b>'+esc(r.location_name||'PayProTec Partners')+'</b>. Choose the calendar leads use to book their become-a-partner call.</div>'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Calendar</label>'
+    +'<select id="cal-sel" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;margin-top:5px;">'
+      +'<option value="">— Select a calendar —</option>'
+      +cals.map(function(c){return '<option value="'+esc(c.id)+'"'+(r.calendar_id===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')
+    +'</select>'
+    +(cals.length?'':'<div class="muted" style="font-size:12px;margin-top:6px;">No calendars found in this sub-account.</div>')
+    +'<div style="margin-top:14px;"><button class="btn btn-p" onclick="saveCal(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button></div>'
+    +'</div>';
+}
+window.saveCal=async function(btn){
+  var sel=document.getElementById('cal-sel'); var cid=sel.value; var cname=cid?sel.options[sel.selectedIndex].text:'';
+  btn.disabled=true;
+  var r=await api({action:'save_lead_settings',calendar_id:cid,calendar_name:cname});
+  btn.disabled=false;
+  if(r&&r.success) Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false});
+  else Swal.fire('Error',(r&&r.message)||'Could not save','error');
+};
 
 // ── Onboarding survey builder ──
 async function loadSurvey(){

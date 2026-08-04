@@ -10,6 +10,8 @@ import crypto from 'crypto';
 import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal } from './_access.js';
 import { logActivity } from './_activity.js';
+import { getConfigValue } from './api-config.js';
+import { ghlListCalendars, ghlLocationNames } from './_ghl.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -111,6 +113,48 @@ export default async function handler(req, res) {
             await supabase.from('leads').update({ onboarding_completed: true }).eq('id', leadId);
             return ok(res, {});
         }
+        // Courses for leads: published, auto-unlock courses + their videos.
+        if (action === 'lead_courses') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const { data: courses } = await supabase.from('courses').select('id, title, description, thumbnail_url')
+                .eq('is_published', true).eq('unlock_mode', 'auto').order('sort_order').order('created_at');
+            const ids = (courses || []).map(c => c.id);
+            let vids = [];
+            if (ids.length) {
+                const { data } = await supabase.from('course_videos').select('id, course_id, title, description, provider, url, thumbnail_url, available_on')
+                    .in('course_id', ids).order('available_on', { ascending: false, nullsFirst: false }).order('sort_order').limit(50000);
+                vids = data || [];
+            }
+            const now = Date.now();
+            const byCourse = {};
+            vids.forEach(v => {
+                const avail = !v.available_on || new Date(v.available_on + 'T00:00:00').getTime() <= now;
+                (byCourse[v.course_id] = byCourse[v.course_id] || []).push({ id: v.id, title: v.title, description: v.description, provider: v.provider, url: avail ? v.url : null, available: avail, unlock_at: avail ? null : v.available_on, thumbnail_url: v.thumbnail_url });
+            });
+            return ok(res, { courses: (courses || []).map(c => ({ ...c, videos: byCourse[c.id] || [] })) });
+        }
+        // Announcements for leads (read-only) — from the community announcements channel.
+        if (action === 'lead_announcements') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const { data: posts } = await supabase.from('community_posts')
+                .select('id, body, image_url, cta_label, cta_url, created_at, author_id')
+                .eq('is_announcement', true).eq('is_deleted', false).order('created_at', { ascending: false }).limit(30);
+            const ids = [...new Set((posts || []).map(p => p.author_id))];
+            let profs = [];
+            if (ids.length) { const { data } = await supabase.from('user_profiles').select('user_id, display_name, avatar_url').in('user_id', ids); profs = data || []; }
+            const pmap = {}; profs.forEach(p => { pmap[p.user_id] = p; });
+            return ok(res, { announcements: (posts || []).map(p => ({ id: p.id, body: p.body, image_url: p.image_url, cta_label: p.cta_label, cta_url: p.cta_url, created_at: p.created_at, author: (pmap[p.author_id] || {}).display_name || 'PayProTec', avatar: (pmap[p.author_id] || {}).avatar_url || null })) });
+        }
+        // Book-a-call config for the lead home (the calendar staff picked).
+        if (action === 'lead_home_config') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id']);
+            const cid = ((s || []).find(r => r.key === 'lead_portal_calendar_id') || {}).value || '';
+            return ok(res, { calendar_url: cid ? ('https://api.leadconnectorhq.com/widget/booking/' + cid) : '' });
+        }
 
         // ══════════ STAFF (Lead Portal admin) actions ══════════
         const session = await validateSession(req);
@@ -171,6 +215,24 @@ export default async function handler(req, res) {
             const amap = {}; (ans || []).forEach(a => { amap[a.question_id] = a.answer; });
             const answers = (qs || []).map(q => ({ question: q.question, type: q.type, answer: amap[q.id] ?? null })).filter(a => a.answer != null);
             return ok(res, { lead, answers });
+        }
+
+        // Lead Portal settings: pick the HighLevel calendar (PayProTec Partners) for book-a-call.
+        if (action === 'get_lead_settings') {
+            const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+            let calendars = [], locName = '';
+            if (locationId) { try { calendars = await ghlListCalendars(locationId); const n = await ghlLocationNames([locationId]); locName = n[locationId] || ''; } catch (e) { /* ignore */ } }
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name']);
+            const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '' });
+        }
+        if (action === 'save_lead_settings') {
+            const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
+            const now = new Date().toISOString();
+            await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_id', value: cid, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_name', value: cname, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            log({ action: `${actorName(actor)} set the Lead Portal book-a-call calendar${cname ? ' → ' + cname : ''}`, target_type: 'lead_setting', target_id: 'lead_portal_calendar_id' });
+            return ok(res, {});
         }
 
         return bad(res, 'Unknown action');
