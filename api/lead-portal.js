@@ -134,18 +134,52 @@ export default async function handler(req, res) {
             });
             return ok(res, { courses: (courses || []).map(c => ({ ...c, videos: byCourse[c.id] || [] })) });
         }
-        // Announcements for leads (read-only) — from the community announcements channel.
+        // Announcement board for leads (read-only) — from Marketing → Campaigns
+        // that have "Show on Lead Portal" enabled and are currently active.
         if (action === 'lead_announcements') {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
-            const { data: posts } = await supabase.from('community_posts')
-                .select('id, body, image_url, cta_label, cta_url, created_at, author_id')
-                .eq('is_announcement', true).eq('is_deleted', false).order('created_at', { ascending: false }).limit(30);
-            const ids = [...new Set((posts || []).map(p => p.author_id))];
-            let profs = [];
-            if (ids.length) { const { data } = await supabase.from('user_profiles').select('user_id, display_name, avatar_url').in('user_id', ids); profs = data || []; }
-            const pmap = {}; profs.forEach(p => { pmap[p.user_id] = p; });
-            return ok(res, { announcements: (posts || []).map(p => ({ id: p.id, body: p.body, image_url: p.image_url, cta_label: p.cta_label, cta_url: p.cta_url, created_at: p.created_at, author: (pmap[p.author_id] || {}).display_name || 'PayProTec', avatar: (pmap[p.author_id] || {}).avatar_url || null })) });
+            const nowIso = new Date().toISOString();
+            const { data: camps } = await supabase.from('marketing_campaigns')
+                .select('id, title, body_text, image_url, cta_enabled, cta_label, cta_url, starts_at, ends_at, priority, created_at')
+                .eq('show_on_lead_portal', true).eq('is_active', true)
+                .order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(50);
+            const live = (camps || []).filter(c =>
+                (!c.starts_at || c.starts_at <= nowIso) && (!c.ends_at || c.ends_at >= nowIso));
+            return ok(res, {
+                announcements: live.map(c => ({
+                    id: c.id,
+                    title: c.title,
+                    body: c.body_text,
+                    image_url: c.image_url,
+                    cta_label: c.cta_enabled ? c.cta_label : null,
+                    cta_url: c.cta_enabled ? c.cta_url : null,
+                    created_at: c.created_at,
+                    author: 'PayProTec',
+                    avatar: null
+                }))
+            });
+        }
+        // Record a lead's view/click of a campaign announcement → marketing_events
+        // (so Marketing → Campaign Stats counts the Lead Portal channel).
+        if (action === 'lead_track') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const evt = body.event_type;
+            if (!body.campaign_id || !['impression', 'click'].includes(evt)) return ok(res, { logged: false });
+            // De-dupe impressions: one per lead per campaign per ~20h.
+            if (evt === 'impression') {
+                const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+                const { data: recent } = await supabase.from('marketing_events').select('id')
+                    .eq('campaign_id', body.campaign_id).eq('user_id', leadId).eq('event_type', 'impression')
+                    .gte('created_at', since).limit(1);
+                if (recent && recent.length) return ok(res, { logged: false });
+            }
+            await supabase.from('marketing_events').insert({
+                campaign_id: body.campaign_id, user_id: leadId, user_type: 'lead',
+                event_type: evt, target: evt === 'click' ? 'cta' : null
+            });
+            return ok(res, { logged: true });
         }
         // Book-a-call config for the lead home (the calendar staff picked).
         if (action === 'lead_home_config') {

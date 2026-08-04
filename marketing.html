@@ -400,6 +400,11 @@
       <div class="muted" style="font-size:11px;margin-top:4px;">🕓 Times are in your timezone: <b id="tzLabelCampaign">…</b></div>
 
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
+        <span class="switch"><input type="checkbox" id="f_show_lead_portal"><span class="slider"></span></span> Show on Lead Portal announcement board
+      </label>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Publishes this campaign's title, message, image &amp; CTA on the Lead Portal home for prospective partners. Views &amp; clicks there are counted under the <b>Lead Portal</b> channel in Stats.</div>
+
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
         <span class="switch"><input type="checkbox" id="f_show_embed" onchange="onShowEmbed()"><span class="slider"></span></span> Also show on external sites (Webflow / GoHighLevel) as a modal
       </label>
       <div class="muted" style="font-size:11px;margin-top:4px;">Uses the embed script + your registered site keys. Manage sites with the “Embed Sites” button on the main screen.</div>
@@ -949,6 +954,7 @@ function openEditor(type){
   document.getElementById('f_ab_split').value='50';
   ['f_b_title','f_b_body','f_b_cta_label','f_b_cta_url'].forEach(id=>document.getElementById(id).value='');
   currentImageUrlB=''; document.getElementById('uploadStateB').innerText=''; document.getElementById('bClearImg').style.display='none';
+  document.getElementById('f_show_lead_portal').checked=false;
   document.getElementById('f_show_embed').checked=false;
   document.getElementById('embedTarget').style.display='none';
   document.getElementById('f_embed_format').value='modal'; document.getElementById('f_embed_trigger').value='load'; document.getElementById('f_embed_delay').value='5'; onEmbedFormat();
@@ -1000,6 +1006,7 @@ async function editCampaign(id){
   document.getElementById('f_b_cta_label').value=vb.cta_label||'';
   document.getElementById('f_b_cta_url').value=vb.cta_url||'';
   currentImageUrlB=vb.image_url||''; document.getElementById('uploadStateB').innerText=currentImageUrlB?'B graphic loaded':''; document.getElementById('bClearImg').style.display=currentImageUrlB?'':'none';
+  document.getElementById('f_show_lead_portal').checked=!!c.show_on_lead_portal;
   document.getElementById('f_show_embed').checked=!!c.show_on_embed;
   document.getElementById('f_embed_format').value=c.embed_format||'modal';
   document.getElementById('f_embed_trigger').value=c.embed_trigger||'load';
@@ -1245,6 +1252,7 @@ async function saveCampaign(){
     target_type: document.getElementById('f_target_type').value,
     target_partner_ids: document.getElementById('f_target_type').value==='specific' ? selectedPartners.map(p=>p.id) : [],
     ab_enabled: document.getElementById('f_ab_enabled').checked,
+    show_on_lead_portal: document.getElementById('f_show_lead_portal').checked,
     show_on_embed: document.getElementById('f_show_embed').checked,
     embed_format: document.getElementById('f_embed_format').value,
     embed_trigger: document.getElementById('f_embed_trigger').value,

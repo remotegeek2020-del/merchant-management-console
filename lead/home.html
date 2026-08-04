@@ -39,8 +39,24 @@
   .vcard .vt{padding:9px 11px;font-size:12.5px;font-weight:700;}
   .vcard.locked{opacity:.7;cursor:default;}
   .ctitle{font-weight:800;font-size:14px;margin:14px 0 8px;color:#334155;}
-  .book-embed{width:100%;height:680px;border:none;border-radius:12px;background:#fff;}
+  .book-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:8px;overflow:hidden;}
+  .book-embed{width:100%;min-height:640px;border:none;border-radius:10px;background:#fff;display:block;}
   .muted{color:#94a3b8;}
+  /* Course accordion */
+  .cacc{background:#fff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:12px;overflow:hidden;}
+  .cacc-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;}
+  .cacc-head:hover{background:#f8fafc;}
+  .cacc-thumb{width:46px;height:46px;border-radius:10px;background:#0f172a;flex:none;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+  .cacc-thumb img{width:100%;height:100%;object-fit:cover;}
+  .cacc-thumb .material-icons{color:#475569;font-size:22px;}
+  .cacc-meta{flex:1;min-width:0;}
+  .cacc-meta .t{font-weight:800;font-size:14.5px;}
+  .cacc-meta .d{font-size:12px;color:#64748b;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .cacc-count{font-size:11.5px;font-weight:700;color:#0d9488;background:#f0fdfa;border:1px solid #99f6e4;border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .cacc-chev{color:#94a3b8;transition:transform .18s;}
+  .cacc.open .cacc-chev{transform:rotate(180deg);}
+  .cacc-body{display:none;padding:0 16px 16px;}
+  .cacc.open .cacc-body{display:block;}
   .pv-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;}
   .pv-card{width:100%;max-width:900px;}
   .pv-frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;}
@@ -91,35 +107,54 @@ window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSr
 window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; };
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
 
+function loadCalScript(){
+  if(document.getElementById('ghl-form-embed')) return;
+  var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true;
+  document.body.appendChild(s);
+}
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
   var b=document.getElementById('bookBody');
-  if(r&&r.success&&r.calendar_url){ b.innerHTML='<iframe class="book-embed" src="'+esc(r.calendar_url)+'" scrolling="no"></iframe>'; }
-  else b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
+  if(r&&r.success&&r.calendar_url){
+    b.innerHTML='<div class="book-card"><iframe class="book-embed" id="lead-cal" src="'+esc(r.calendar_url)+'" scrolling="no"></iframe></div>';
+    loadCalScript();
+  } else b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
 }
+window.annClick=function(id,url){ if(id) api({action:'lead_track',campaign_id:id,event_type:'click'}); if(url) window.open(url,'_blank','noopener'); };
 async function loadAnn(){
   var r=await api({action:'lead_announcements'});
   var b=document.getElementById('annBody'); var list=(r&&r.announcements)||[];
-  if(!list.length){ b.innerHTML='<div class="card muted">No announcements yet.</div>'; return; }
+  if(!list.length){ document.getElementById('annSec').style.display='none'; return; }
   b.innerHTML=list.map(function(a){
-    return '<div class="ann"><div class="h"><div class="av">'+(a.avatar?'<img src="'+esc(a.avatar)+'">':esc(initials(a.author)))+'</div><div><div style="font-weight:700;font-size:13px;">'+esc(a.author)+'</div><div class="muted" style="font-size:11px;">'+(a.created_at?new Date(a.created_at).toLocaleDateString():'')+'</div></div></div>'
+    return '<div class="ann"><div class="h"><div class="av">'+esc(initials(a.author))+'</div><div><div style="font-weight:700;font-size:13px;">'+esc(a.author)+'</div><div class="muted" style="font-size:11px;">'+(a.created_at?new Date(a.created_at).toLocaleDateString():'')+'</div></div></div>'
+      +(a.title?'<div style="font-weight:800;font-size:15px;margin-bottom:4px;">'+esc(a.title)+'</div>':'')
       +(a.body?'<div class="body">'+esc(a.body)+'</div>':'')
       +(a.image_url?'<img class="aimg" src="'+esc(a.image_url)+'">':'')
-      +(a.cta_url?'<div><a class="cta" href="'+esc(a.cta_url)+'" target="_blank" rel="noopener"><span class="material-icons" style="font-size:16px;">ads_click</span> '+esc(a.cta_label||'Learn more')+'</a></div>':'')
+      +(a.cta_url?'<div><a class="cta" href="'+esc(a.cta_url)+'" target="_blank" rel="noopener" onclick="annClick(\''+a.id+'\',\''+esc(a.cta_url)+'\');return false;"><span class="material-icons" style="font-size:16px;">ads_click</span> '+esc(a.cta_label||'Learn more')+'</a></div>':'')
       +'</div>';
   }).join('');
+  // Count a view of each announcement (de-duped server-side per lead per day).
+  list.forEach(function(a){ if(a.id) api({action:'lead_track',campaign_id:a.id,event_type:'impression'}); });
 }
+window.toggleCourse=function(el){ el.classList.toggle('open'); };
 async function loadCourses(){
   var r=await api({action:'lead_courses'});
   var b=document.getElementById('courseBody'); var courses=(r&&r.courses)||[];
   var withVids=courses.filter(function(c){return (c.videos||[]).length;});
   if(!withVids.length){ b.innerHTML='<div class="card muted">No webinars available yet — check back soon.</div>'; return; }
-  b.innerHTML=withVids.map(function(c){
+  b.innerHTML=withVids.map(function(c,ix){
     var vids=(c.videos||[]).map(function(v){ VMAP[v.id]={provider:v.provider,url:v.url};
       if(!v.available){ return '<div class="vcard locked"><div class="vthumb">'+thumb(v)+'<span class="material-icons">lock</span></div><div class="vt">'+esc(v.title)+'<div class="muted" style="font-size:11px;font-weight:400;">🔒 Coming '+(v.unlock_at?new Date(v.unlock_at).toLocaleDateString():'soon')+'</div></div></div>'; }
       return '<div class="vcard" onclick="play(\''+v.id+'\')"><div class="vthumb">'+thumb(v)+'<span class="material-icons">play_circle</span></div><div class="vt">'+esc(v.title)+'</div></div>';
     }).join('');
-    return '<div class="ctitle">'+esc(c.title)+'</div><div class="vgrid">'+vids+'</div>';
+    var n=(c.videos||[]).length;
+    var cth=c.thumbnail_url?'<img src="'+esc(c.thumbnail_url)+'" onerror="this.style.display=\'none\'">':'<span class="material-icons">play_lesson</span>';
+    return '<div class="cacc'+(ix===0?' open':'')+'"><div class="cacc-head" onclick="toggleCourse(this.parentNode)">'
+      +'<div class="cacc-thumb">'+cth+'</div>'
+      +'<div class="cacc-meta"><div class="t">'+esc(c.title)+'</div>'+(c.description?'<div class="d">'+esc(c.description)+'</div>':'')+'</div>'
+      +'<span class="cacc-count">'+n+' video'+(n===1?'':'s')+'</span>'
+      +'<span class="material-icons cacc-chev">expand_more</span></div>'
+      +'<div class="cacc-body"><div class="vgrid">'+vids+'</div></div></div>';
   }).join('');
 }
 (async function(){

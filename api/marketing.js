@@ -291,6 +291,7 @@ export default async function handler(req, res) {
                     ab_split: Number.isFinite(+b.ab_split) ? Math.min(100, Math.max(0, Math.round(+b.ab_split))) : 50,
                     variant_b: variantB,
                     show_on_embed: !!b.show_on_embed,
+                    show_on_lead_portal: !!b.show_on_lead_portal,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
                     // External-site capture format + trigger.
@@ -379,6 +380,7 @@ export default async function handler(req, res) {
                 // ── Resolve NAMES + CHANNEL for each person ──────────────────────
                 const staffIds = [...new Set(rows.filter(r => r.user_type === 'staff').map(r => r.user_id).filter(Boolean))];
                 const partnerIds = [...new Set(rows.filter(r => r.user_type === 'partner').map(r => r.user_id).filter(Boolean))];
+                const leadIds = [...new Set(rows.filter(r => r.user_type === 'lead').map(r => r.user_id).filter(Boolean))];
                 const siteIds = [...new Set(rows.filter(r => r.site_id).map(r => r.site_id))];
                 const ghlLocs = [...new Set(rows.filter(r => r.ghl_location).map(r => r.ghl_location))];
                 const nameMap = {};
@@ -392,6 +394,10 @@ export default async function handler(req, res) {
                     const { data: pp } = await supabase.from('persons').select('id, full_name').in('id', partnerIds);
                     (pp || []).forEach(p => { nameMap['partner:' + p.id] = p.full_name || 'Partner'; });
                 }
+                if (leadIds.length) {
+                    const { data: ld } = await supabase.from('leads').select('id, full_name, email').in('id', leadIds);
+                    (ld || []).forEach(l => { nameMap['lead:' + l.id] = l.full_name || l.email || 'Lead'; });
+                }
                 if (siteIds.length) {
                     const { data: sites } = await supabase.from('marketing_sites').select('id, name').in('id', siteIds);
                     (sites || []).forEach(s => { siteNames[s.id] = s.name || 'Site'; });
@@ -403,6 +409,7 @@ export default async function handler(req, res) {
                 const classify = (r) => {
                     if (r.user_type === 'staff') return { name: nameMap['staff:' + r.user_id] || 'Staff', channel: 'staff', source: 'Staff portal' };
                     if (r.user_type === 'partner') return { name: nameMap['partner:' + r.user_id] || 'Partner', channel: 'partner', source: 'Partner portal' };
+                    if (r.user_type === 'lead') return { name: nameMap['lead:' + r.user_id] || 'Lead', channel: 'lead', source: 'Lead Portal' };
                     // embed viewer (external site / GHL)
                     const email = String(r.user_id || '').indexOf('email:') === 0 ? String(r.user_id).slice(6) : '';
                     if (r.ghl_location) {
@@ -413,7 +420,7 @@ export default async function handler(req, res) {
                     return { name: email || 'Website visitor', channel: 'website', source: site };
                 };
 
-                const byAudience = { partner: 0, staff: 0, ghl: 0, website: 0 };
+                const byAudience = { partner: 0, staff: 0, lead: 0, ghl: 0, website: 0 };
                 rows.filter(r => r.event_type === 'click').forEach(r => { const ch = classify(r).channel; if (byAudience[ch] != null) byAudience[ch]++; });
 
                 // Aggregate a per-person list for a given event type (most recent first).
