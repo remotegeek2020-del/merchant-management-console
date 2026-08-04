@@ -12,7 +12,7 @@
     <style>
         .rl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
         .rl-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:15px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
-        .rl-kpi .v{font-size:1.35rem;font-weight:800;font-family:'DM Mono',monospace;color:#0a1628;}
+        .rl-kpi .v{font-size:1.25rem;font-weight:800;font-family:'DM Mono',monospace;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .rl-kpi .l{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;}
         .rl-search{width:100%;max-width:340px;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:12px;}
         table.rl{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;}
@@ -59,6 +59,8 @@
 <script>
     const AUTH = () => ({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') });
     const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n || 0);
+    // Compact currency for the KPI cards so big figures don't overflow.
+    const fmtC = n => { n = Number(n) || 0; const a = Math.abs(n); if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return '$' + Math.round(n / 1e3) + 'K'; return '$' + n.toFixed(0); };
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     let _data = null;
 
@@ -81,8 +83,8 @@
         document.getElementById('rl-note').textContent = 'All partner residuals as of ' + (d.date || '') + '. Net = 30-day volume × 3%; Agent Payout = Net × the ID’s rev-share%; PPT = the remainder. Prime49 IDs default to 50%. Change a rev-share on the Partners dashboard and this recomputes on refresh.';
         const kpis = [
             ['Partners', (d.partners || []).length], ['Agent IDs', t.id_count || 0], ['Merchants', t.merchant_count || 0],
-            ['30D Volume', fmt(t.volume_30d)], ['Net Residual', fmt(t.net_residual)],
-            ['PPT Residual', fmt(t.ppt_residual)], ['Agent Payouts', fmt(t.agent_residual)]
+            ['30D Volume', fmtC(t.volume_30d)], ['Net Residual', fmtC(t.net_residual)],
+            ['PPT Residual', fmtC(t.ppt_residual)], ['Agent Payouts', fmtC(t.agent_residual)]
         ];
         document.getElementById('rl-kpis').innerHTML = kpis.map(k =>
             `<div class="rl-kpi"><div class="v">${typeof k[1] === 'number' ? k[1].toLocaleString() : k[1]}</div><div class="l">${k[0]}</div></div>`).join('');

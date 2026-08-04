@@ -1185,24 +1185,17 @@ export default async function handler(req, res) {
             const { data: aggJson, error: aggErr } = await supabase.rpc('residuals_ledger_data', { statuses });
             if (aggErr) throw aggErr;
             const agg = Array.isArray(aggJson) ? aggJson : [];
-            const ids = [...new Set((agg || []).map(a => a.agent_id).filter(Boolean))];
-            const revMap = {};
-            for (let i = 0; i < ids.length; i += 1000) {
-                const batch = ids.slice(i, i + 1000);
-                const { data: ai } = await supabase.from('agent_identifiers').select('id_string, rev_share, prime49').in('id_string', batch).limit(10000);
-                (ai || []).forEach(x => { revMap[x.id_string] = { rev: x.rev_share, p49: !!x.prime49 }; });
-            }
             const partners = {};
-            const totals = { merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0, id_count: ids.length };
-            (agg || []).forEach(a => {
-                const info = revMap[a.agent_id] || {};
-                const hasRev = info.rev != null && String(info.rev).trim() !== '';
-                const revPct = hasRev ? (parseFloat(String(info.rev).replace(/%/g, '')) || 0) : (info.p49 ? 50 : 0);
+            const totals = { merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0, id_count: agg.length };
+            agg.forEach(a => {
+                const hasRev = a.rev_share != null && String(a.rev_share).trim() !== '';
+                const revPct = hasRev ? (parseFloat(String(a.rev_share).replace(/%/g, '')) || 0) : (a.prime49 ? 50 : 0);
                 const vol = Number(a.volume_30d) || 0;
                 const net = vol * 0.03;
                 const agent = net * (revPct / 100);
                 const ppt = net - agent;
                 const mc = Number(a.merchant_count) || 0;
+                const info = { p49: !!a.prime49 };
                 // Group by the PARTNER PERSON (so a partner with multiple companies
                 // stays one record); fall back to the name when no person resolves.
                 const pkey = a.partner_id ? ('id:' + a.partner_id) : ('name:' + (a.partner_name || 'Unassigned'));
