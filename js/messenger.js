@@ -903,6 +903,7 @@
 
     // Public hook: window.ppmOpen(id, name, 'staff'|'partner')
     window.ppmOpen = function (id, name, type, online) { openWindow('dm', String(id), name || 'Chat', type || 'staff', !!online); };
+    window.ppmToggle = function () { setList(!listOpen); };
 
     refreshLists();
     startTicking();

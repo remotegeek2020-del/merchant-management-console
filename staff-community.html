@@ -736,6 +736,8 @@ async function loadMembers() {
 var dmOtherId = null, dmOtherType = null, dmPollInterval = null;
 
 function toggleConvPanel() {
+    // Use the shared staff Messenger (same as the home page) when available.
+    if (window.ppmToggle) { window.ppmToggle(); return; }
     var panel = document.getElementById('convPanel');
     var isOpen = panel.classList.contains('open');
     closeDM();
@@ -769,6 +771,8 @@ async function loadConversations() {
 
 function openDM(otherId, otherName, otherType) {
     if (otherId === staffId) return;
+    // Use the shared staff Messenger (same chat as the home page) when available.
+    if (window.ppmOpen) { try { document.getElementById('convPanel').classList.remove('open'); } catch(e){} window.ppmOpen(String(otherId), otherName, otherType || 'staff'); return; }
     dmOtherId = otherId; dmOtherType = otherType || 'partner';
     document.getElementById('convPanel').classList.remove('open');
     document.getElementById('dmOtherName').textContent = otherName;
