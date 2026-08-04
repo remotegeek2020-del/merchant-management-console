@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Announcement Stats | Marketing</title>
+<title>Community Post Stats | Marketing</title>
 <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
 <body>
 <div class="top">
   <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
-  <h1>📣 Announcement Stats</h1>
+  <h1>📣 Community Post Stats</h1>
   <button onclick="load()" style="border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 13px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">refresh</span> Refresh</button>
 </div>
 <div class="wrap" id="wrap"><div class="empty">Loading…</div></div>
@@ -45,17 +45,28 @@ var TOKEN=localStorage.getItem('pp_session_token')||'', UID=localStorage.getItem
 function api(b){ return fetch('/api/community',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(Object.assign({staff_userid:UID},b))}).then(function(r){return r.json();}); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function excerpt(t){ t=String(t||'').replace(/\s+/g,' ').trim(); return t.length>90?t.slice(0,90)+'…':(t||'(photo announcement)'); }
+function pill(t){ return '<span class="pill '+(t==='staff'?'p-staff':'p-partner')+'">'+(t==='staff'?'Staff':'Partner')+'</span>'; }
+function peopleTable(list, cols, rowFn, emptyMsg){
+  if(!list.length) return '<div class="muted" style="padding:12px 16px;">'+emptyMsg+'</div>';
+  return '<table><thead><tr>'+cols.map(function(c){return '<th>'+c+'</th>';}).join('')+'</tr></thead><tbody>'+list.map(rowFn).join('')+'</tbody></table>';
+}
 async function load(){
   var w=document.getElementById('wrap'); w.innerHTML='<div class="empty">Loading…</div>';
   var r=await api({action:'announcement_stats'});
   if(!r||!r.success){ w.innerHTML='<div class="empty" style="color:#9a3412;">'+esc((r&&r.message)||'Failed to load')+'</div>'; return; }
   var posts=r.data||[];
-  if(!posts.length){ w.innerHTML='<div class="empty"><div style="font-size:40px;">📣</div><div style="font-weight:800;color:#334155;margin-top:8px;">No announcement posts with a call-to-action yet</div><div style="margin-top:4px;">Add a CTA button when posting in the Announcements channel — its clicks, likes &amp; comments show up here.</div></div>'; return; }
-  w.innerHTML=posts.map(function(p){
-    var ctr=p.clicks&&p.unique_clickers?'':'';
-    var rows=(p.clickers||[]).map(function(c){
-      return '<tr><td>'+esc(c.name)+' <span class="pill '+(c.user_type==='staff'?'p-staff':'p-partner')+'">'+(c.user_type==='staff'?'Staff':'Partner')+'</span></td><td>'+c.count+'</td><td class="muted">'+(c.last?new Date(c.last).toLocaleString():'—')+'</td></tr>';
-    }).join('')||'<tr><td colspan="3" class="muted" style="padding:12px 16px;">No clicks yet.</td></tr>';
+  var note='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:#1e3a8a;"><b>Applies to the Announcements channel only.</b> These detailed stats (who clicked, liked &amp; commented) are tracked exclusively for <b>Announcements</b> posts that have a call-to-action button. Other community channels are not tracked here.</div>';
+  if(!posts.length){ w.innerHTML=note+'<div class="empty"><div style="font-size:40px;">📣</div><div style="font-weight:800;color:#334155;margin-top:8px;">No announcement posts with a call-to-action yet</div><div style="margin-top:4px;">Add a CTA button when posting in the Announcements channel — its clicks, likes &amp; comments show up here.</div></div>'; return; }
+  w.innerHTML=note+posts.map(function(p){
+    var clickRows=peopleTable(p.clickers||[],['Person','Clicks','Last click'],function(c){
+      return '<tr><td>'+esc(c.name)+' '+pill(c.user_type)+'</td><td>'+c.count+'</td><td class="muted">'+(c.last?new Date(c.last).toLocaleString():'—')+'</td></tr>';
+    },'No clicks yet.');
+    var likeRows=peopleTable(p.likers||[],['Person','Reaction'],function(c){
+      return '<tr><td>'+esc(c.name)+' '+pill(c.user_type)+'</td><td style="font-size:15px;">'+esc(c.emoji||'❤️')+'</td></tr>';
+    },'No likes yet.');
+    var commentRows=peopleTable(p.commenters||[],['Person','Comments','Last comment'],function(c){
+      return '<tr><td>'+esc(c.name)+' '+pill(c.user_type)+'</td><td>'+c.count+'</td><td class="muted">'+(c.last?new Date(c.last).toLocaleString():'—')+'</td></tr>';
+    },'No comments yet.');
     var thumb=p.image_url?'<img class="thumb" src="'+esc(p.image_url)+'" onerror="this.style.display=\'none\'">':'<div class="thumb" style="display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="color:#cbd5e1;font-size:20px;">campaign</span></div>';
     return '<div class="card">'
       +'<div class="card-head">'+thumb+'<div style="flex:1;min-width:0;"><div class="ttl">'+esc(excerpt(p.body))+'</div>'
@@ -68,8 +79,9 @@ async function load(){
         +'<div class="stat"><div class="n" style="color:#dc2626;">'+p.likes+'</div><div class="l">Likes</div></div>'
         +'<div class="stat"><div class="n">'+p.comments+'</div><div class="l">Comments</div></div>'
       +'</div>'
-      +'<details class="who"><summary>👥 Who clicked ('+p.unique_clickers+')</summary>'
-      +'<table><thead><tr><th>Person</th><th>Clicks</th><th>Last click</th></tr></thead><tbody>'+rows+'</tbody></table></details>'
+      +'<details class="who"><summary>👥 Who clicked ('+p.unique_clickers+')</summary>'+clickRows+'</details>'
+      +'<details class="who"><summary>❤️ Who liked ('+p.likes+')</summary>'+likeRows+'</details>'
+      +'<details class="who"><summary>💬 Who commented ('+(p.commenters?p.commenters.length:0)+')</summary>'+commentRows+'</details>'
       +'</div>';
   }).join('');
 }

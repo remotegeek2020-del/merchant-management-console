@@ -194,30 +194,36 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false }).limit(200);
             const ids = (posts || []).map(p => p.id);
             const stats = {};
-            ids.forEach(id => { stats[id] = { clicks: 0, clickers: {}, likes: 0, comments: 0 }; });
+            ids.forEach(id => { stats[id] = { clickers: {}, likers: {}, commenters: {} }; });
             if (ids.length) {
                 const [{ data: clicks }, { data: reactions }, { data: comments }] = await Promise.all([
                     supabase.from('community_post_clicks').select('post_id, user_id, user_type, clicked_at').in('post_id', ids).limit(50000),
-                    supabase.from('community_reactions').select('post_id').in('post_id', ids).limit(50000),
-                    supabase.from('community_comments').select('post_id').in('post_id', ids).eq('is_deleted', false).limit(50000)
+                    supabase.from('community_reactions').select('post_id, user_id, emoji').in('post_id', ids).limit(50000),
+                    supabase.from('community_comments').select('post_id, author_id, author_type, created_at').in('post_id', ids).eq('is_deleted', false).limit(50000)
                 ]);
-                (clicks || []).forEach(c => { const s = stats[c.post_id]; if (!s) return; s.clicks++; const k = c.user_id; if (!s.clickers[k]) s.clickers[k] = { user_id: c.user_id, user_type: c.user_type, count: 0, last: null }; s.clickers[k].count++; if (!s.clickers[k].last || c.clicked_at > s.clickers[k].last) s.clickers[k].last = c.clicked_at; });
-                (reactions || []).forEach(r => { if (stats[r.post_id]) stats[r.post_id].likes++; });
-                (comments || []).forEach(c => { if (stats[c.post_id]) stats[c.post_id].comments++; });
+                (clicks || []).forEach(c => { const s = stats[c.post_id]; if (!s) return; const k = c.user_id; if (!s.clickers[k]) s.clickers[k] = { user_id: c.user_id, user_type: c.user_type, count: 0, last: null }; s.clickers[k].count++; if (!s.clickers[k].last || c.clicked_at > s.clickers[k].last) s.clickers[k].last = c.clicked_at; });
+                (reactions || []).forEach(r => { const s = stats[r.post_id]; if (!s) return; const k = r.user_id; if (!s.likers[k]) s.likers[k] = { user_id: r.user_id, emojis: [] }; if (r.emoji && s.likers[k].emojis.indexOf(r.emoji) === -1) s.likers[k].emojis.push(r.emoji); });
+                (comments || []).forEach(c => { const s = stats[c.post_id]; if (!s) return; const k = c.author_id; if (!s.commenters[k]) s.commenters[k] = { user_id: c.author_id, user_type: c.author_type, count: 0, last: null }; s.commenters[k].count++; if (!s.commenters[k].last || c.created_at > s.commenters[k].last) s.commenters[k].last = c.created_at; });
             }
-            // Resolve author + clicker names.
+            // Resolve every referenced user's name + type.
             const allUserIds = new Set();
             (posts || []).forEach(p => allUserIds.add(p.author_id));
-            Object.values(stats).forEach(s => Object.keys(s.clickers).forEach(k => allUserIds.add(k)));
+            Object.values(stats).forEach(s => { [s.clickers, s.likers, s.commenters].forEach(m => Object.keys(m).forEach(k => allUserIds.add(k))); });
             const { data: profs } = allUserIds.size ? await supabase.from('user_profiles').select('user_id, display_name, user_type').in('user_id', [...allUserIds]) : { data: [] };
-            const nameOf = {}; (profs || []).forEach(p => { nameOf[p.user_id] = p.display_name; });
+            const infoOf = {}; (profs || []).forEach(p => { infoOf[p.user_id] = { name: p.display_name, type: p.user_type }; });
+            const nm = (id, fallbackType) => (infoOf[id]?.name) || (fallbackType === 'staff' ? 'Staff' : (fallbackType === 'partner' ? 'Partner' : 'Member'));
+            const ty = (id, fallbackType) => (infoOf[id]?.type) || fallbackType || 'member';
             const out = (posts || []).map(p => {
                 const s = stats[p.id];
-                const clickers = Object.values(s.clickers).map(c => ({ name: nameOf[c.user_id] || (c.user_type === 'staff' ? 'Staff' : 'Partner'), user_type: c.user_type, count: c.count, last: c.last })).sort((a, b) => b.count - a.count);
+                const clickers = Object.values(s.clickers).map(c => ({ name: nm(c.user_id, c.user_type), user_type: ty(c.user_id, c.user_type), count: c.count, last: c.last })).sort((a, b) => b.count - a.count);
+                const likers = Object.values(s.likers).map(l => ({ name: nm(l.user_id), user_type: ty(l.user_id), emoji: l.emojis[0] || '❤️' }));
+                const commenters = Object.values(s.commenters).map(c => ({ name: nm(c.user_id, c.user_type), user_type: ty(c.user_id, c.user_type), count: c.count, last: c.last })).sort((a, b) => b.count - a.count);
                 return {
                     id: p.id, body: p.body, image_url: p.image_url, cta_label: p.cta_label, cta_url: p.cta_url,
-                    created_at: p.created_at, author: nameOf[p.author_id] || 'Staff',
-                    clicks: s.clicks, unique_clickers: clickers.length, likes: s.likes, comments: s.comments, clickers
+                    created_at: p.created_at, author: nm(p.author_id, 'staff'),
+                    clicks: clickers.reduce((n, c) => n + c.count, 0), unique_clickers: clickers.length,
+                    likes: likers.length, comments: commenters.reduce((n, c) => n + c.count, 0),
+                    clickers, likers, commenters
                 };
             });
             return res.status(200).json({ success: true, data: out });
