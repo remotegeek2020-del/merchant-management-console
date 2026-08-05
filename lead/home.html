@@ -94,22 +94,25 @@
   .rep-ms-d{font-size:11.5px;color:var(--secondary);margin-top:1px;}
   /* Fancy rep profile card */
   .profile-card{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-md);margin-bottom:20px;}
-  .pc-cover{height:92px;background:linear-gradient(135deg,#001e3c 0%,#0f3460 55%,#0d9488 130%);position:relative;}
+  .pc-cover{height:72px;background:linear-gradient(135deg,#001e3c 0%,#0f3460 55%,#0d9488 130%);position:relative;}
   .pc-cover .pc-tag{position:absolute;top:12px;right:14px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;padding:4px 11px;border-radius:99px;display:inline-flex;align-items:center;gap:5px;}
-  .pc-top{padding:0 24px;margin-top:-46px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;}
-  .pc-avatar,.pc-avatar-ph{width:92px;height:92px;border-radius:50%;border:4px solid #fff;box-shadow:var(--shadow-sm);flex:none;background:#e2e8f0;}
+  .pc-top{padding:0 24px;margin-top:-42px;}
+  .pc-avatar,.pc-avatar-ph{width:84px;height:84px;border-radius:50%;border:4px solid #fff;box-shadow:var(--shadow-sm);background:#e2e8f0;display:block;}
   .pc-avatar{object-fit:cover;}
-  .pc-avatar-ph{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;}
-  .pc-id{padding-bottom:6px;}
-  .pc-name{font-size:20px;font-weight:800;line-height:1.1;}
+  .pc-avatar-ph{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:28px;}
+  .pc-id{padding:10px 24px 0;}
+  .pc-name{font-size:20px;font-weight:800;line-height:1.15;color:var(--text);}
   .pc-level{display:inline-block;font-size:11.5px;font-weight:700;color:var(--teal-dark);background:var(--teal-bg);border:1px solid var(--teal-light);border-radius:99px;padding:3px 12px;margin-top:6px;}
   .pc-appt{display:flex;align-items:center;gap:13px;margin:16px 24px 0;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:13px;padding:14px 16px;}
+  .pc-appt.none{background:#f8fafc;border:1px solid var(--border);color:var(--secondary);}
   .pc-appt .ai{width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex:none;}
+  .pc-appt.none .ai{background:var(--teal-bg);color:var(--teal-dark);}
   .pc-appt .ai .material-icons{font-size:22px;}
   .pc-appt .a-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;opacity:.85;}
   .pc-appt .a-when{font-size:15.5px;font-weight:800;margin-top:1px;}
   .pc-appt .a-sub{font-size:12px;opacity:.9;margin-top:1px;}
   .pc-appt a{color:#fff;font-weight:700;font-size:12.5px;}
+  .pc-appt .a-book{background:var(--teal);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
   .pc-body{padding:16px 24px 22px;}
   .pc-sec-h{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin:0 0 8px;}
   .pc-bio{font-size:13.5px;color:var(--secondary);line-height:1.6;white-space:pre-wrap;margin-bottom:4px;}
@@ -343,13 +346,14 @@ async function loadApptRep(){
     var ph=rep.photo_url?'<img class="pc-avatar" src="'+esc(rep.photo_url)+'">':'<div class="pc-avatar-ph">'+esc(initials(rep.name))+'</div>';
     var apptBanner = (up && up.start)
       ? '<div class="pc-appt"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl">Your upcoming appointment</div><div class="a-when">'+esc(fmtWhen(up.start))+'</div><div class="a-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div>'+((up.meeting_url&&/^https?:/i.test(up.meeting_url))?'<div style="margin-top:4px;"><a href="'+esc(up.meeting_url)+'" target="_blank" rel="noopener">Join / details →</a></div>':'')+'</div></div>'
-      : '';
+      : '<div class="pc-appt none"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl" style="color:#94a3b8;">Appointment</div><div class="a-when" style="font-size:14px;color:var(--text);">No upcoming appointment</div></div><button class="a-book" onclick="showTab(\'book\')">Book a call</button></div>';
     var ms=(rep.milestones||[]).filter(function(m){return m&&m.label;});
     var msHtml=ms.length?'<div class="pc-divider"></div><div class="pc-sec-h">Milestones</div><div class="rep-ms">'+ms.map(function(m){return '<div class="rep-ms-item"><span class="rep-ms-dot"></span><div><div class="rep-ms-l">'+esc(m.label)+'</div>'+(m.detail?'<div class="rep-ms-d">'+esc(m.detail)+'</div>':'')+'</div></div>';}).join('')+'</div>':'';
     var bioHtml=rep.bio?'<div class="pc-sec-h">About</div><div class="pc-bio">'+esc(rep.bio)+'</div>':'';
     html='<div class="profile-card">'
       +'<div class="pc-cover"><span class="pc-tag"><span class="material-icons" style="font-size:12px;">support_agent</span> Your PayProTec rep</span></div>'
-      +'<div class="pc-top">'+ph+'<div class="pc-id"><div class="pc-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="pc-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
+      +'<div class="pc-top">'+ph+'</div>'
+      +'<div class="pc-id"><div class="pc-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="pc-level">'+esc(rep.job_level)+'</div>':'')+'</div>'
       +apptBanner
       +((bioHtml||msHtml)?'<div class="pc-body">'+bioHtml+msHtml+'</div>':'<div style="height:18px;"></div>')
       +'</div>';
