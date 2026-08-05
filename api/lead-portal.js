@@ -330,11 +330,17 @@ export default async function handler(req, res) {
             return ok(res, { watch_seconds: total });
         }
 
-        // ══════════ STAFF (Lead Portal admin) actions ══════════
+        // ══════════ STAFF actions ══════════
         const session = await validateSession(req);
         if (!session) return bad(res, 'Unauthorized', 401);
         const actor = await loadActor(session.userid);
-        if (!canLeadPortal(actor)) return bad(res, 'Access denied. Lead Portal access required.', 403);
+        if (!actor || actor.is_active === false) return bad(res, 'Unauthorized', 401);
+        const canLP = canLeadPortal(actor);
+        // Read-only lead viewing is open to any active staff (reps view leads on
+        // the Partner Network page). Everything else (survey/settings/import/
+        // assign) still requires Lead Portal access.
+        const READ_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps']);
+        if (!READ_ACTIONS.has(action) && !canLP) return bad(res, 'Access denied. Lead Portal access required.', 403);
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
 
         if (action === 'can_access') return ok(res, { can_access: true });
