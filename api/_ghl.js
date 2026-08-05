@@ -318,6 +318,48 @@ export function ghlContactLink(locationId, contactId) {
     return `https://${host}/v2/location/${encodeURIComponent(locationId)}/contacts/detail/${encodeURIComponent(contactId)}`;
 }
 
+// Custom field definitions in a sub-account (id + name + fieldKey).
+export async function ghlListCustomFields(locationId) {
+    if (!locationId) return [];
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return [];
+    try {
+        const r = await fetch(`${GHL_BASE}/locations/${encodeURIComponent(locationId)}/customFields`, {
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json' }
+        });
+        if (!r.ok) return [];
+        const d = await r.json().catch(() => ({}));
+        return (d?.customFields || []).map(f => ({ id: f.id, name: f.name || '', key: f.fieldKey || f.key || '' }));
+    } catch { return []; }
+}
+
+// Set a contact's custom fields by field NAME (resolves names → ids). Best-effort.
+export async function ghlSetContactCustomFieldsByName(locationId, contactId, nameValueMap) {
+    if (!locationId || !contactId || !nameValueMap) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    const defs = await ghlListCustomFields(locationId);
+    const byName = {}; defs.forEach(f => { byName[String(f.name).toLowerCase().trim()] = f; });
+    const customFields = [];
+    const missing = [];
+    Object.keys(nameValueMap).forEach(function (nm) {
+        const val = nameValueMap[nm];
+        if (val == null || val === '') return;
+        const def = byName[String(nm).toLowerCase().trim()];
+        if (def) customFields.push({ id: def.id, value: String(val) });
+        else missing.push(nm);
+    });
+    if (!customFields.length) return { ok: false, error: 'no matching custom fields', missing };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ customFields })
+        });
+        return { ok: r.ok, error: r.ok ? null : ('HTTP ' + r.status), missing };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
 export async function ghlGetContactAddress(contactId) {
     const key = await ghlKeys();
     if (!key || !contactId) return null;

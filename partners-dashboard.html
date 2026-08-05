@@ -1292,6 +1292,19 @@ async function submitOnboarding() {
             });
             // Refresh materialized view so new partner gets a rank badge immediately
             fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh_leaderboard' }) }).catch(() => {});
+            // Graduation finalize: write Rep Code / Prime49ID to HighLevel + mark converted.
+            if (window._graduateLeadId) {
+                var lid = window._graduateLeadId; window._graduateLeadId = null;
+                try {
+                    var gr = await lpApi({ action: 'graduate_lead', lead_id: lid, identifiers: pendingIds.map(function (i) { return { string: i.string, rev: i.rev, prime: i.prime }; }) });
+                    var note = (gr && gr.success)
+                        ? ('Prospect graduated to partner.' + (gr.rep_code ? '<br><span style="color:#64748b;font-size:12px;">Rep Code → HighLevel: ' + gr.rep_code + '</span>' : ''))
+                        : 'Partner created, but HighLevel sync had an issue.';
+                    await Swal.fire({ icon: 'success', title: 'Welcome aboard! 🎉', html: note, confirmButtonColor: '#0d9488' });
+                    closeWizard(); loadPartners();
+                    return;
+                } catch (e) { /* fall through to normal success */ }
+            }
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
             closeWizard();
             loadPartners();
@@ -4281,6 +4294,32 @@ function loadScorecard(personId) {
 
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'partners'})});})();</script>
+<script>
+// ── Prospect graduation → reuse the partner onboarding wizard, pre-filled ─────
+function lpApi(b){ return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+window.graduateFromProspect=function(lead){
+  try{ openOnboardingWizard(); }catch(e){}
+  selectedGHLContact = { id: lead.ghl_contact_id||null, name: (lead.full_name||''), email:(lead.email||'').toLowerCase(), phone: lead.phone||'', repCode:null };
+  var disp=document.getElementById('selectedContactDisplay');
+  if(disp){ disp.style.display='block'; disp.innerHTML='<strong>Graduating:</strong> '+(lead.full_name||'')+'<br><small>'+(lead.email||'')+'</small>'; }
+  var nb=document.getElementById('nextToStep2'); if(nb) nb.style.display='block';
+  var h=document.querySelector('#onboardingWizard h2'); if(h) h.textContent='Graduate Prospect → Partner';
+  window._graduateLeadId = lead.id;
+  try{ goToStep(2); }catch(e){}
+};
+(function(){
+  var gid; try{ gid=new URLSearchParams(location.search).get('graduate'); }catch(e){}
+  if(!gid) return;
+  function go(){
+    lpApi({action:'lead_detail',lead_id:gid}).then(function(r){
+      if(r&&r.success&&r.lead){ graduateFromProspect(r.lead); }
+      else if(window.Swal){ Swal.fire('Error',(r&&r.message)||'Could not load prospect','error'); }
+    }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(go,400); });
+  else setTimeout(go,400);
+})();
+</script>
 <script src="/js/site-config.js"></script>
 
 <!-- BULK ACTION BAR -->

@@ -139,6 +139,9 @@ window.viewProspect=async function(id){
   var repOpts='<option value="">— Unassigned —</option>'+REPS.map(function(rp){return '<option value="'+esc(rp.userid)+'"'+(l.assigned_rep===rp.userid?' selected':'')+'>'+esc(rp.name)+(rp.job_level?' · '+esc(rp.job_level):'')+'</option>';}).join('');
   var html='<div>'
     +'<div class="pv-hd"><div class="av" style="background:'+avColor(l.email||nm)+';">'+esc(initials(nm))+'</div><div style="min-width:0;"><div class="nm">'+esc(nm)+'</div><div class="pv-line muted" style="font-size:12.5px;">'+esc(l.email||'')+(l.phone?' · '+esc(l.phone):'')+'</div><div style="margin-top:5px;">'+statusPill(l)+'</div></div></div>'
+    +(l.status==='converted'
+        ? '<div style="text-align:left;margin-top:12px;"><span class="pill conv"><span class="material-icons" style="font-size:13px;">verified</span> Already a partner</span></div>'
+        : '<div style="margin-top:14px;"><button onclick="graduateProspect(\''+l.id+'\')" style="width:100%;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 16px rgba(13,148,136,.32);"><span class="material-icons" style="font-size:20px;">military_tech</span> Graduate — Become a Partner</button></div>')
     +(ghlLink?'<div style="text-align:left;margin-top:12px;"><a class="pv-hl" href="'+esc(ghlLink)+'" target="_blank" rel="noopener"><span class="material-icons" style="font-size:16px;">open_in_new</span> Open in HighLevel</a></div>':'')
     +'<div class="pv-sec">Assigned rep</div>'
     +'<select id="ld-rep" class="pv-sel" onchange="assignRep(\''+l.id+'\',this.value)">'+repOpts+'</select>'
@@ -150,6 +153,7 @@ window.viewProspect=async function(id){
     +'</div>';
   Swal.fire({html:html,width:560,showConfirmButton:true,confirmButtonText:'Close',confirmButtonColor:'#0f4c81'});
 };
+window.graduateProspect=function(id){ location.href='/partners-dashboard?graduate='+encodeURIComponent(id); };
 window.assignRep=async function(leadId,uid){
   var note=document.getElementById('ld-rep-note'); if(note) note.textContent='Saving…';
   var r=await lpApi({action:'set_lead_rep',lead_id:leadId,rep_userid:uid||null});

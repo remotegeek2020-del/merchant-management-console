@@ -11,7 +11,7 @@ import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal, canProspects } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
-import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers } from './_ghl.js';
+import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers, ghlSetContactCustomFieldsByName } from './_ghl.js';
 
 async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID || null; }
 // The assigned rep's public summary (name + job level + bio + photo) for a lead.
@@ -338,7 +338,7 @@ export default async function handler(req, res) {
         const canLP = canLeadPortal(actor);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
-        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep']);
+        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead']);
         if (STAFF_ACTIONS.has(action)) {
             if (!canProspects(actor)) return bad(res, 'Access denied. Prospects access required.', 403);
         } else if (!canLP) {
@@ -440,6 +440,38 @@ export default async function handler(req, res) {
             const { data: reps } = await supabase.from('app_users')
                 .select('userid, first_name, last_name, email, role, is_active, rep_job_level').eq('is_active', true).order('first_name');
             return ok(res, { reps: (reps || []).map(u => ({ userid: u.userid, name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email, role: u.role || '', job_level: u.rep_job_level || '' })) });
+        }
+        // Graduate a prospect → partner: write the agent IDs + rev share to the
+        // HighLevel contact's custom fields ("Rep Code" / "Prime49ID") and mark
+        // the lead converted. (The partner record itself is created by the normal
+        // partner-onboarding flow; this finalizes the HighLevel + status side.)
+        if (action === 'graduate_lead') {
+            if (!body.lead_id) return bad(res, 'lead_id required');
+            const { data: lead } = await supabase.from('leads').select('id, ghl_contact_id, email').eq('id', body.lead_id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            const ids = Array.isArray(body.identifiers) ? body.identifiers : [];
+            // "34893(50%) | 24387(70%)"
+            const repCode = ids.map(i => `${String(i.string || '').trim()}(${String(i.rev || '0%')})`).filter(function (s) { return s && s[0] !== '('; }).join(' | ');
+            const primeId = (ids.find(i => i.prime) || {}).string || '';
+            const locationId = await ghlLocId();
+            let contactId = lead.ghl_contact_id;
+            if (!contactId && locationId && lead.email) {
+                const f = await ghlFindContactByEmail(locationId, lead.email);
+                if (f && f.id) { contactId = f.id; await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', lead.id); }
+            }
+            let ghlResult = { ok: false, error: 'not attempted' };
+            if (locationId && contactId) {
+                const map = {};
+                if (repCode) map['Rep Code'] = repCode;
+                if (primeId) map['Prime49ID'] = primeId;
+                if (Object.keys(map).length) { try { ghlResult = await ghlSetContactCustomFieldsByName(locationId, contactId, map); } catch (e) { ghlResult = { ok: false, error: e.message }; } }
+            }
+            // Link the newly-created partner person (matched by hl_contact_id).
+            let personId = null;
+            if (contactId) { const { data: p } = await supabase.from('persons').select('id').eq('hl_contact_id', contactId).maybeSingle(); if (p) personId = p.id; }
+            await supabase.from('leads').update({ status: 'converted', converted_person_id: personId }).eq('id', lead.id);
+            log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
+            return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
         }
         // Assign / unassign a rep to a lead ("tunnel" the lead to a person).
         if (action === 'set_lead_rep') {
