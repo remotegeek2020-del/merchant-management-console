@@ -85,6 +85,30 @@
         </button>
     </div>
 
+    <!-- SALES REP PROFILE -->
+    <div class="settings-card">
+        <div class="settings-title"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px;">badge</span>Sales Rep Profile</div>
+        <div class="settings-sub">Shown to prospects on the Lead Portal when you're their assigned rep — a short summary, your job level, and a photo. This is separate from your community profile and messages.</div>
+        <div class="avatar-section">
+            <div class="avatar-big" id="repPhotoPreview">?</div>
+            <div>
+                <button class="pp-btn pp-btn-primary" onclick="document.getElementById('repPhotoInput').click()">
+                    <span class="material-icons" style="font-size:16px;">upload</span> Upload Photo
+                </button>
+                <button class="pp-btn pp-btn-secondary" style="margin-left:8px;" onclick="removeRepPhoto()">Remove</button>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Shown to prospects only · JPG, PNG or WebP</div>
+                <input type="file" id="repPhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleRepPhoto(this)">
+            </div>
+        </div>
+        <label class="field-label">Job Level / Title</label>
+        <input type="text" class="field-input" id="repJobLevel" placeholder="e.g. Senior Partnership Manager">
+        <label class="field-label">About you (summary prospects will see)</label>
+        <textarea class="field-input" id="repBio" placeholder="A short summary — your experience, how you help partners get started, what to expect on the call…"></textarea>
+        <button class="pp-btn pp-btn-primary" onclick="saveRepProfile()">
+            <span class="material-icons" style="font-size:16px;">save</span> Save Rep Profile
+        </button>
+    </div>
+
     <!-- CHANGE PASSWORD -->
     <div class="settings-card">
         <div class="settings-title">Change Password</div>
@@ -513,6 +537,61 @@ async function saveProfile() {
     else Swal.fire({ icon: 'error', title: 'Failed', text: res.message, confirmButtonColor: '#004990' });
 }
 
+// ── SALES REP PROFILE (bio / job level / photo) ───────────────────────────────
+let repPhotoUrl = '';
+function usersApi(body) {
+    return fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') }, body: JSON.stringify(body) }).then(r => r.json());
+}
+async function loadRepProfile() {
+    try {
+        const r = await usersApi({ action: 'get_rep_profile' });
+        if (!r.success || !r.profile) return;
+        const p = r.profile;
+        document.getElementById('repJobLevel').value = p.rep_job_level || '';
+        document.getElementById('repBio').value = p.rep_bio || '';
+        repPhotoUrl = p.rep_photo_url || '';
+        const el = document.getElementById('repPhotoPreview');
+        if (repPhotoUrl) el.innerHTML = `<img src="${repPhotoUrl}">`;
+        else el.textContent = (staffName || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    } catch (e) { /* ignore */ }
+}
+async function handleRepPhoto(input) {
+    const file = input.files && input.files[0]; if (!file) return;
+    Swal.fire({ title: 'Uploading photo…', didOpen: () => Swal.showLoading() });
+    try {
+        const urlRes = await communityApi({ action: 'get_avatar_upload_url', file_type: file.type });
+        if (!urlRes.success) throw new Error(urlRes.message || 'Could not get upload URL.');
+        const up = await fetch(urlRes.upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+        if (!up.ok) throw new Error('Storage upload failed (HTTP ' + up.status + ').');
+        repPhotoUrl = urlRes.public_url;
+        document.getElementById('repPhotoPreview').innerHTML = `<img src="${repPhotoUrl}">`;
+        await saveRepProfile(true);
+        Swal.fire({ icon: 'success', title: 'Photo updated!', timer: 1400, showConfirmButton: false });
+    } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Upload failed', text: err.message, confirmButtonColor: '#004990' });
+    }
+}
+async function removeRepPhoto() {
+    repPhotoUrl = '';
+    document.getElementById('repPhotoPreview').textContent = (staffName || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    await saveRepProfile(true);
+    Swal.fire({ icon: 'success', title: 'Photo removed', timer: 1200, showConfirmButton: false });
+}
+async function saveRepProfile(silent) {
+    const body = {
+        action: 'save_rep_profile',
+        rep_job_level: document.getElementById('repJobLevel').value.trim(),
+        rep_bio: document.getElementById('repBio').value.trim(),
+        rep_photo_url: repPhotoUrl
+    };
+    if (!silent) Swal.fire({ title: 'Saving…', didOpen: () => Swal.showLoading() });
+    const r = await usersApi(body);
+    if (!silent) {
+        if (r.success) Swal.fire({ icon: 'success', title: 'Rep profile saved!', timer: 1400, showConfirmButton: false });
+        else Swal.fire({ icon: 'error', title: 'Failed', text: r.message || '', confirmButtonColor: '#004990' });
+    }
+}
+
 // ── PASSWORD SHOW/HIDE TOGGLE ─────────────────────────────────────────────────
 function togglePass(fieldId, btn) {
     const input = document.getElementById(fieldId);
@@ -634,7 +713,7 @@ function initViewPicker() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-window.onload = async () => { await init(); await loadBusinessProfile(); initViewPicker(); };
+window.onload = async () => { await init(); await loadBusinessProfile(); loadRepProfile(); initViewPicker(); };
 </script>
 <script src="/js/site-config.js"></script>
 <script src="/bug-report.js"></script>

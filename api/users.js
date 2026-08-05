@@ -294,6 +294,51 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ success: true, message: `Temp password set. ${targetName} will be prompted to change it on next login.` });
             }
+
+            // ── Sales-rep profile (self) — description / job level / photo only ──
+            if (action === 'get_rep_profile') {
+                const uid = req.body.target_userid || session.userid;
+                const { data: u } = await supabase.from('app_users')
+                    .select('userid, first_name, last_name, role, rep_bio, rep_job_level, rep_photo_url').eq('userid', uid).maybeSingle();
+                return res.status(200).json({ success: true, profile: u || null });
+            }
+            if (action === 'save_rep_profile') {
+                // A staff member edits ONLY their own rep summary.
+                const upd = {
+                    rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
+                    rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
+                    rep_photo_url: (req.body.rep_photo_url ?? '').toString().slice(0, 1000)
+                };
+                const { error } = await supabase.from('app_users').update(upd).eq('userid', session.userid);
+                if (error) return res.status(500).json({ success: false, message: error.message });
+                return res.status(200).json({ success: true });
+            }
+            // ── Secret Dungeon bypass: super_admin sets ONLY description / job
+            //    level / photo for any user. Nothing else is touched. ──
+            if (action === 'admin_list_rep_profiles' || action === 'admin_set_rep_profile') {
+                const { data: perf } = await supabase.from('app_users').select('role, email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+                if ((perf?.role || '').toLowerCase() !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+                if (action === 'admin_list_rep_profiles') {
+                    const { data: rows } = await supabase.from('app_users')
+                        .select('userid, first_name, last_name, email, role, is_active, rep_bio, rep_job_level, rep_photo_url')
+                        .order('first_name');
+                    return res.status(200).json({ success: true, users: rows || [] });
+                }
+                const tid = req.body.target_userid;
+                if (!tid) return res.status(400).json({ success: false, message: 'target_userid required' });
+                const upd = {
+                    rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
+                    rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
+                    rep_photo_url: (req.body.rep_photo_url ?? '').toString().slice(0, 1000)
+                };
+                const { error } = await supabase.from('app_users').update(upd).eq('userid', tid);
+                if (error) return res.status(500).json({ success: false, message: error.message });
+                await supabase.from('activity_logs').insert([{
+                    email: perf.email, action: `Rep profile (bio/level/photo) set for ${tid} by ${(perf.first_name || '') + ' ' + (perf.last_name || '')}`.trim(),
+                    status: 'success', category: 'admin', severity: 'info', target_id: tid, target_type: 'app_user'
+                }]);
+                return res.status(200).json({ success: true });
+            }
         }
 
     } catch (err) {

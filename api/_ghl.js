@@ -195,6 +195,83 @@ export async function ghlContactInfo(locationId, contactId) {
     } catch { return { tags: [], page: '', source: '' }; }
 }
 
+// Find a contact in a sub-account by email (lead-gen lookup). Returns a
+// normalized contact or null. Uses the location token.
+export async function ghlFindContactByEmail(locationId, email) {
+    if (!locationId || !email) return null;
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return null;
+    const headers = { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json', 'Content-Type': 'application/json' };
+    try {
+        // Preferred: exact duplicate lookup by email.
+        let r = await fetch(`${GHL_BASE}/contacts/search/duplicate?locationId=${encodeURIComponent(locationId)}&email=${encodeURIComponent(email)}`, { headers });
+        let c = null;
+        if (r.ok) { const d = await r.json().catch(() => ({})); c = d?.contact || null; }
+        if (!c) {
+            // Fallback: query search.
+            r = await fetch(`${GHL_BASE}/contacts/?locationId=${encodeURIComponent(locationId)}&query=${encodeURIComponent(email)}&limit=1`, { headers });
+            if (r.ok) { const d = await r.json().catch(() => ({})); c = (d?.contacts || [])[0] || null; }
+        }
+        if (!c) return null;
+        const la = c.lastAttributionSource || {}, fa = c.attributionSource || {};
+        return {
+            id: c.id, email: c.email || email,
+            name: (`${c.firstName || ''} ${c.lastName || ''}`.trim()) || c.contactName || c.name || '',
+            phone: c.phone || '', tags: Array.isArray(c.tags) ? c.tags : [],
+            source: la.utmSource || la.sessionSource || fa.utmSource || c.source || '',
+            date_added: c.dateAdded || c.createdAt || null
+        };
+    } catch { return null; }
+}
+
+// A contact's appointments (upcoming + past), normalized + sorted (soonest first).
+export async function ghlContactAppointments(locationId, contactId) {
+    if (!locationId || !contactId) return [];
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return [];
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}/appointments`, {
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json' }
+        });
+        if (!r.ok) return [];
+        const d = await r.json().catch(() => ({}));
+        const events = d?.events || d?.appointments || [];
+        return events.map(x => ({
+            id: x.id, title: x.title || x.calendar?.name || 'Appointment',
+            start: x.startTime || x.startAt || null, end: x.endTime || x.endAt || null,
+            status: x.appointmentStatus || x.status || '',
+            calendar: x.calendar?.name || x.calendarName || '',
+            address: x.address || x.location || '', meeting_url: x.meetingUrl || x.address || ''
+        })).filter(a => a.start).sort((a, b) => new Date(a.start) - new Date(b.start));
+    } catch { return []; }
+}
+
+// Search contacts in a sub-account that carry a given tag (lead-gen import).
+export async function ghlSearchContactsByTag(locationId, tag, limit = 100) {
+    if (!locationId || !tag) return [];
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return [];
+    const headers = { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json', 'Content-Type': 'application/json' };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/search`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ locationId, page: 1, pageLimit: Math.min(100, limit), filters: [{ field: 'tags', operator: 'contains', value: String(tag).toLowerCase() }] })
+        });
+        if (!r.ok) return [];
+        const d = await r.json().catch(() => ({}));
+        return (d?.contacts || []).map(c => {
+            const la = c.lastAttributionSource || {}, fa = c.attributionSource || {};
+            return {
+                id: c.id, email: c.email || '',
+                name: (`${c.firstName || ''} ${c.lastName || ''}`.trim()) || c.contactName || '',
+                phone: c.phone || '',
+                source: la.utmSource || la.sessionSource || fa.utmSource || c.source || 'highlevel',
+                date_added: c.dateAdded || c.createdAt || null
+            };
+        });
+    } catch { return []; }
+}
+
 export async function ghlGetContactAddress(contactId) {
     const key = await ghlKeys();
     if (!key || !contactId) return null;
