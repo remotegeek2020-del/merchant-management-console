@@ -358,22 +358,6 @@ input[type=number] {
         </div>
     </div>
 </div>
-    <!-- PROSPECTS (Lead Portal) — read-only for reps -->
-    <div id="prospectsCard" style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="toggleProspects()">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="material-icons" style="font-size:17px;color:#0d9488;">person_search</span>
-          <span style="font-size:13px;font-weight:800;color:#002d5a;">Prospects (Lead Portal)</span>
-          <span id="prospectCount" style="font-size:11px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:99px;padding:2px 9px;"></span>
-        </div>
-        <span class="material-icons" id="prospectChev" style="color:#94a3b8;">expand_more</span>
-      </div>
-      <div id="prospectsBody" style="display:none;margin-top:12px;">
-        <input id="prospectSearch" placeholder="Search prospects by name or email…" oninput="renderProspects()" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;margin-bottom:10px;">
-        <div id="prospectList" style="font-size:13px;color:#94a3b8;">Loading…</div>
-      </div>
-    </div>
-
     <!-- LEADERBOARD + ENROLLMENTS SIDE BY SIDE -->
     <div id="dashboardPanels1" class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
 
@@ -4297,54 +4281,6 @@ function loadScorecard(personId) {
 
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'partners'})});})();</script>
-<script>
-// ── Prospects (Lead Portal) — read-only list for reps ─────────────────────────
-var PROSPECTS=[], PROSPECT_REPS={}, prospectsLoaded=false;
-function lpApi(b){ return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
-function lpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
-window.toggleProspects=function(){ var b=document.getElementById('prospectsBody'); var open=b.style.display!=='none'; b.style.display=open?'none':'block'; document.getElementById('prospectChev').textContent=open?'expand_more':'expand_less'; if(!open && !prospectsLoaded) loadProspects(); };
-async function loadProspects(){
-  prospectsLoaded=true;
-  try{ var rr=await lpApi({action:'list_reps'}); (rr.reps||[]).forEach(function(r){ PROSPECT_REPS[r.userid]=r.name; }); }catch(e){}
-  var r=await lpApi({action:'list_leads'});
-  if(!r.success){ document.getElementById('prospectList').innerHTML='<div style="color:#b45309;padding:8px;">'+lpEsc(r.message||'Failed to load')+'</div>'; return; }
-  PROSPECTS=r.leads||[];
-  document.getElementById('prospectCount').textContent=(r.stats&&r.stats.total)||PROSPECTS.length;
-  renderProspects();
-}
-window.renderProspects=function(){
-  var q=((document.getElementById('prospectSearch')||{}).value||'').toLowerCase();
-  var list=PROSPECTS.filter(function(l){ return !q||(l.full_name||'').toLowerCase().indexOf(q)>-1||(l.email||'').toLowerCase().indexOf(q)>-1; });
-  if(!list.length){ document.getElementById('prospectList').innerHTML='<div style="padding:14px;text-align:center;color:#94a3b8;">No prospects'+(q?' match your search':' yet')+'.</div>'; return; }
-  var th='style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0;white-space:nowrap;"';
-  document.getElementById('prospectList').innerHTML='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>'
-    +'<th '+th+'>Name</th><th '+th+'>Email</th><th '+th+'>Onboarding</th><th '+th+'>Assigned rep</th><th '+th+'>Signed up</th></tr></thead><tbody>'
-    +list.map(function(l){
-      var ob=l.status==='converted'?'<span style="background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;">Converted</span>':(l.onboarding_completed?'<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;">Onboarded</span>':'<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;">Pending</span>');
-      var rep=l.assigned_rep?lpEsc(PROSPECT_REPS[l.assigned_rep]||'Assigned'):'<span style="color:#94a3b8;">—</span>';
-      return '<tr style="cursor:pointer;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'" onclick="viewProspect(\''+l.id+'\')"><td style="padding:9px 10px;"><b>'+lpEsc(l.full_name||'—')+'</b></td><td style="padding:9px 10px;color:#64748b;">'+lpEsc(l.email||'')+'</td><td style="padding:9px 10px;">'+ob+'</td><td style="padding:9px 10px;">'+rep+'</td><td style="padding:9px 10px;color:#64748b;white-space:nowrap;">'+(l.created_at?new Date(l.created_at).toLocaleDateString():'')+'</td></tr>';
-    }).join('')+'</tbody></table></div>';
-};
-window.viewProspect=async function(id){
-  Swal.fire({title:'Loading…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
-  var r=await lpApi({action:'lead_detail',lead_id:id});
-  if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
-  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[], rep=r.rep, ghlLink=r.ghl_link||'';
-  function dt(s){ try{ return new Date(s).toLocaleString(); }catch(e){ return lpEsc(s||''); } }
-  function fmtA(a){ return Array.isArray(a.answer)?a.answer.map(lpEsc).join(', '):lpEsc(a.answer); }
-  var html='<div style="text-align:left;">'
-    +'<div style="color:#64748b;font-size:12.5px;">'+lpEsc(l.email||'')+(l.phone?' · '+lpEsc(l.phone):'')+'</div>'
-    +'<div style="margin-top:6px;font-size:12px;">Status: <b>'+lpEsc(l.status)+'</b> · Onboarding: <b>'+(l.onboarding_completed?'complete':'pending')+'</b></div>'
-    +(rep?'<div style="margin-top:6px;font-size:12.5px;">Assigned rep: <b>'+lpEsc(rep.name)+'</b>'+(rep.job_level?' · '+lpEsc(rep.job_level):'')+'</div>':'')
-    +(ghlLink?'<div style="margin-top:10px;"><a href="'+lpEsc(ghlLink)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:#0f172a;color:#fff;text-decoration:none;padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:700;"><span class="material-icons" style="font-size:16px;">open_in_new</span> Open in HighLevel</a></div>':'')
-    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Appointments</div>'
-    +(appts.length?appts.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div style="font-weight:700;">'+lpEsc(a.title||'Appointment')+(a.status?' <span style="color:#94a3b8;font-weight:400;">('+lpEsc(a.status)+')</span>':'')+'</div><div style="color:#94a3b8;font-size:11.5px;">'+dt(a.start)+(a.calendar?' · '+lpEsc(a.calendar):'')+'</div></div>';}).join(''):'<div style="color:#94a3b8;font-size:12.5px;">No appointments found.</div>')
-    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Onboarding answers</div>'
-    +(ans.length?ans.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div style="color:#94a3b8;font-size:11.5px;">'+lpEsc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div style="color:#94a3b8;font-size:12.5px;">No answers yet.</div>')
-    +'</div>';
-  Swal.fire({title:lpEsc(l.full_name||'Prospect'),width:600,html:html,confirmButtonText:'Close',confirmButtonColor:'#64748b'});
-};
-</script>
 <script src="/js/site-config.js"></script>
 
 <!-- BULK ACTION BAR -->

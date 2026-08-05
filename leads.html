@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prospects | PayProTec</title>
+<link rel="icon" href="/api/favicon" />
+<script src="js/access-guard.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  :root{--pp-blue:#0f4c81;--teal:#0d9488;--border:#e2e8f0;}
+  body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f0f4f8;color:#0a1628;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1120px;margin:0 auto;padding:16px;}
+  .modern-header{background:#fff;border-radius:14px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.05);flex-wrap:wrap;gap:10px;}
+  .h-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .backbtn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:800;color:#475569;cursor:pointer;font-family:inherit;text-decoration:none;}
+  h1{font-size:1.5rem;font-weight:800;color:#002d5a;margin:0;}
+  .cnt{display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#475569;}
+  .search-wrap{position:relative;min-width:240px;}
+  .search-wrap .material-icons{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:18px;}
+  .search-wrap input{width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;}
+  .search-wrap input:focus{border-color:var(--teal);}
+  .statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0;}
+  @media(max-width:640px){.statgrid{grid-template-columns:1fr 1fr;}}
+  .stat{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .stat .n{font-size:1.7rem;font-weight:800;line-height:1;}
+  .stat .l{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);overflow:hidden;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{background:#f8fafc;padding:11px 14px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody tr{border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .12s;}
+  tbody tr:hover{background:#f8fafc;}
+  tbody td{padding:11px 14px;vertical-align:middle;}
+  .pill{font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;}
+  .pill.done{background:#dcfce7;color:#166534;}.pill.pend{background:#fef3c7;color:#92400e;}.pill.conv{background:#ede9fe;color:#6d28d9;}
+  .muted{color:#94a3b8;}
+  .empty{padding:34px;text-align:center;color:#94a3b8;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="modern-header">
+    <div class="h-left">
+      <a class="backbtn" href="/partners-dashboard"><span class="material-icons" style="font-size:15px;">arrow_back</span> BACK</a>
+      <h1>Prospects</h1>
+      <span class="cnt"><span class="material-icons" style="font-size:13px;color:#94a3b8;">person_search</span> <span id="cnt">0</span> prospects</span>
+    </div>
+    <div class="search-wrap">
+      <span class="material-icons">search</span>
+      <input id="q" placeholder="Search by name or email…" oninput="renderProspects()">
+    </div>
+  </div>
+
+  <div class="statgrid">
+    <div class="stat"><div class="n" id="s-total">—</div><div class="l">Total prospects</div></div>
+    <div class="stat"><div class="n" id="s-onb" style="color:#16a34a;">—</div><div class="l">Onboarded</div></div>
+    <div class="stat"><div class="n" id="s-pend" style="color:#b45309;">—</div><div class="l">Pending onboarding</div></div>
+    <div class="stat"><div class="n" id="s-conv" style="color:#6d28d9;">—</div><div class="l">Converted</div></div>
+  </div>
+
+  <div class="card"><div id="list"><div class="empty"><span class="material-icons" style="animation:spin 1s linear infinite;">sync</span> Loading…</div></div></div>
+</div>
+
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+<script>window.NAV_SHORTCUT_PAGE='leads';</script>
+<script>
+var PROSPECTS=[], REPS=[], REPMAP={};
+function lpApi(b){ return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function repName(uid){ return REPMAP[uid]||''; }
+async function load(){
+  try{ var rr=await lpApi({action:'list_reps'}); REPS=(rr.reps||[]); REPS.forEach(function(r){ REPMAP[r.userid]=r.name; }); }catch(e){}
+  var r=await lpApi({action:'list_leads'});
+  if(!r.success){ document.getElementById('list').innerHTML='<div class="empty" style="color:#b45309;">'+esc(r.message||'Failed to load')+'</div>'; return; }
+  PROSPECTS=r.leads||[];
+  var s=r.stats||{};
+  document.getElementById('cnt').textContent=(s.total!=null?s.total:PROSPECTS.length);
+  document.getElementById('s-total').textContent=s.total!=null?s.total:PROSPECTS.length;
+  document.getElementById('s-onb').textContent=s.onboarded||0;
+  document.getElementById('s-pend').textContent=s.pending||0;
+  document.getElementById('s-conv').textContent=s.converted||0;
+  renderProspects();
+}
+window.renderProspects=function(){
+  var q=(document.getElementById('q').value||'').toLowerCase();
+  var list=PROSPECTS.filter(function(l){ return !q||(l.full_name||'').toLowerCase().indexOf(q)>-1||(l.email||'').toLowerCase().indexOf(q)>-1; });
+  if(!list.length){ document.getElementById('list').innerHTML='<div class="empty">No prospects'+(q?' match your search':' yet')+'.</div>'; return; }
+  document.getElementById('list').innerHTML='<div style="overflow-x:auto;"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Onboarding</th><th>Assigned rep</th><th>Signed up</th></tr></thead><tbody>'
+    +list.map(function(l){
+      var ob=l.status==='converted'?'<span class="pill conv">Converted</span>':(l.onboarding_completed?'<span class="pill done">Onboarded</span>':'<span class="pill pend">Pending</span>');
+      var rep=l.assigned_rep?esc(repName(l.assigned_rep)||'Assigned'):'<span class="muted">—</span>';
+      return '<tr onclick="viewProspect(\''+l.id+'\')"><td><b>'+esc(l.full_name||'—')+'</b></td><td class="muted">'+esc(l.email||'')+'</td><td class="muted">'+esc(l.phone||'')+'</td><td>'+ob+'</td><td>'+rep+'</td><td class="muted" style="white-space:nowrap;">'+(l.created_at?new Date(l.created_at).toLocaleDateString():'')+'</td></tr>';
+    }).join('')+'</tbody></table></div>';
+};
+window.viewProspect=async function(id){
+  Swal.fire({title:'Loading…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await lpApi({action:'lead_detail',lead_id:id});
+  if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
+  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[], rep=r.rep, ghlLink=r.ghl_link||'';
+  function dt(s){ try{ return new Date(s).toLocaleString(); }catch(e){ return esc(s||''); } }
+  function fmtA(a){ return Array.isArray(a.answer)?a.answer.map(esc).join(', '):esc(a.answer); }
+  var repOpts='<option value="">— Unassigned —</option>'+REPS.map(function(rp){return '<option value="'+esc(rp.userid)+'"'+(l.assigned_rep===rp.userid?' selected':'')+'>'+esc(rp.name)+(rp.job_level?' · '+esc(rp.job_level):'')+'</option>';}).join('');
+  var ghlBlock=ghl?('<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">HighLevel</div><div style="font-size:13px;">Contact: <b>'+esc(ghl.name||'—')+'</b>'+(ghl.source?' · source: '+esc(ghl.source):'')+'</div>'+((ghl.tags&&ghl.tags.length)?'<div class="muted" style="font-size:11.5px;margin-top:3px;">Tags: '+ghl.tags.map(esc).join(', ')+'</div>':'')):'';
+  var apptBlock='<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Appointments</div>'
+    +(appts.length?appts.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div style="font-weight:700;">'+esc(a.title||'Appointment')+(a.status?' <span class="muted" style="font-weight:400;">('+esc(a.status)+')</span>':'')+'</div><div class="muted" style="font-size:11.5px;">'+dt(a.start)+(a.calendar?' · '+esc(a.calendar):'')+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No appointments found.</div>');
+  var html='<div style="text-align:left;">'
+    +'<div class="muted" style="font-size:12.5px;">'+esc(l.email||'')+(l.phone?' · '+esc(l.phone):'')+'</div>'
+    +'<div style="margin-top:6px;font-size:12px;">Status: <b>'+esc(l.status)+'</b> · Onboarding: <b>'+(l.onboarding_completed?'complete':'pending')+'</b> · Signed up '+(l.created_at?new Date(l.created_at).toLocaleString():'')+'</div>'
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Assigned rep</div>'
+    +'<select id="ld-rep" onchange="assignRep(\''+l.id+'\',this.value)" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'+repOpts+'</select>'
+    +'<div id="ld-rep-note" class="muted" style="font-size:11.5px;margin-top:4px;"></div>'
+    +(ghlLink?'<div style="margin-top:12px;"><a href="'+esc(ghlLink)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:#0f172a;color:#fff;text-decoration:none;padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:700;"><span class="material-icons" style="font-size:16px;">open_in_new</span> Open in HighLevel</a></div>':'')
+    +ghlBlock
+    +apptBlock
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Onboarding answers</div>'
+    +(ans.length?ans.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div class="muted" style="font-size:11.5px;">'+esc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No answers yet.</div>')
+    +'</div>';
+  Swal.fire({title:esc(l.full_name||'Prospect'),width:600,html:html,confirmButtonText:'Close',confirmButtonColor:'#64748b'});
+};
+window.assignRep=async function(leadId,uid){
+  var note=document.getElementById('ld-rep-note'); if(note) note.textContent='Saving…';
+  var r=await lpApi({action:'set_lead_rep',lead_id:leadId,rep_userid:uid||null});
+  if(note) note.textContent=(r&&r.success)?'✓ Saved':'Could not save';
+  // reflect in the cached list
+  var p=PROSPECTS.find(function(x){return x.id===leadId;}); if(p){ p.assigned_rep=uid||null; renderProspects(); }
+};
+load();
+</script>
+<script src="/js/site-config.js"></script>
+<script src="/js/nav-shortcuts.js"></script>
+</body>
+</html>
