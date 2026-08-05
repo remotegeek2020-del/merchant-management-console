@@ -271,12 +271,20 @@ export default async function handler(req, res) {
                     const withAppt = [...contactIds].find(Boolean);
                     if (withAppt && withAppt !== lead.ghl_contact_id) await supabase.from('leads').update({ ghl_contact_id: withAppt }).eq('id', leadId);
                     diag.contactId = [...contactIds].join(','); diag.count = appts.length;
+                    // Format times in the business timezone so they read correctly
+                    // regardless of the viewer's browser timezone.
+                    const { data: bp } = await supabase.from('business_profile').select('timezone').eq('id', 1).maybeSingle();
+                    const tz = (bp && bp.timezone) || 'America/New_York';
+                    const label = iso => { try { return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz, timeZoneName: 'short' }).format(new Date(iso)); } catch (e) { return ''; } };
+                    appts.forEach(a => { a.when_label = label(a.start); });
                     const now = Date.now();
                     const cancelled = a => /cancel|no.?show|invalid|delete/i.test(a.status || '');
-                    // Upcoming = the next future, non-cancelled appointment.
-                    upcoming = appts.filter(a => !cancelled(a)).find(a => new Date(a.start).getTime() >= now) || null;
-                    // Past = anything already started OR cancelled (most recent first).
-                    past = appts.filter(a => (new Date(a.start).getTime() < now) || cancelled(a))
+                    const endMs = a => new Date(a.end || a.start).getTime();
+                    // Upcoming = next non-cancelled appointment whose END is still ahead
+                    // (so an in-progress / same-day meeting stays "upcoming").
+                    upcoming = appts.filter(a => !cancelled(a)).find(a => endMs(a) >= now) || null;
+                    // Past = cancelled, or already finished (most recent first).
+                    past = appts.filter(a => cancelled(a) || endMs(a) < now)
                         .sort((a, b) => new Date(b.start) - new Date(a.start));
                 } catch (e) { diag.err = e.message || 'error'; }
             }

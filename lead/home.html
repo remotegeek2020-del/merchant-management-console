@@ -345,7 +345,7 @@ async function loadApptRep(){
     // Fancy profile card with the appointment time built in.
     var ph=rep.photo_url?'<img class="pc-avatar" src="'+esc(rep.photo_url)+'">':'<div class="pc-avatar-ph">'+esc(initials(rep.name))+'</div>';
     var apptBanner = (up && up.start)
-      ? '<div class="pc-appt"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl">Your upcoming appointment</div><div class="a-when">'+esc(fmtWhen(up.start))+'</div><div class="a-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div>'+((up.meeting_url&&/^https?:/i.test(up.meeting_url))?'<div style="margin-top:4px;"><a href="'+esc(up.meeting_url)+'" target="_blank" rel="noopener">Join / details →</a></div>':'')+'</div></div>'
+      ? '<div class="pc-appt"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl">Your upcoming appointment</div><div class="a-when">'+esc(up.when_label||fmtWhen(up.start))+'</div><div class="a-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div>'+((up.meeting_url&&/^https?:/i.test(up.meeting_url))?'<div style="margin-top:4px;"><a href="'+esc(up.meeting_url)+'" target="_blank" rel="noopener">Join / details →</a></div>':'')+'</div></div>'
       : '<div class="pc-appt none"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl" style="color:#94a3b8;">Appointment</div><div class="a-when" style="font-size:14px;color:var(--text);">No upcoming appointment</div></div><button class="a-book" onclick="showTab(\'book\')">Book a call</button></div>';
     var ms=(rep.milestones||[]).filter(function(m){return m&&m.label;});
     var msHtml=ms.length?'<div class="pc-divider"></div><div class="pc-sec-h">Milestones</div><div class="rep-ms">'+ms.map(function(m){return '<div class="rep-ms-item"><span class="rep-ms-dot"></span><div><div class="rep-ms-l">'+esc(m.label)+'</div>'+(m.detail?'<div class="rep-ms-d">'+esc(m.detail)+'</div>':'')+'</div></div>';}).join('')+'</div>':'';
@@ -359,7 +359,7 @@ async function loadApptRep(){
       +'</div>';
   } else if(up && up.start){
     // No rep yet — still show the appointment on its own.
-    html='<div class="profile-card"><div class="pc-appt" style="margin:16px 24px;"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl">Your upcoming appointment</div><div class="a-when">'+esc(fmtWhen(up.start))+'</div><div class="a-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div></div></div></div>';
+    html='<div class="profile-card"><div class="pc-appt" style="margin:16px 24px;"><div class="ai"><span class="material-icons">event_available</span></div><div style="flex:1;min-width:0;"><div class="a-lbl">Your upcoming appointment</div><div class="a-when">'+esc(up.when_label||fmtWhen(up.start))+'</div><div class="a-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div></div></div></div>';
   }
   var row=document.getElementById('apptRepRow');
   if(html){ row.className=''; row.style.display='block'; row.innerHTML=html; }
@@ -373,7 +373,7 @@ async function loadApptRep(){
       return '<div class="ann" style="display:flex;align-items:center;gap:12px;">'
         +'<div style="width:40px;height:40px;border-radius:10px;background:#f1f5f9;color:#64748b;display:flex;align-items:center;justify-content:center;flex:none;"><span class="material-icons">event_busy</span></div>'
         +'<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:14px;">'+esc(a.title||'Appointment')+'</div>'
-        +'<div class="muted" style="font-size:12px;">'+esc(fmtWhen(a.start))+(a.calendar?' · '+esc(a.calendar):'')+'</div></div>'
+        +'<div class="muted" style="font-size:12px;">'+esc(a.when_label||fmtWhen(a.start))+(a.calendar?' · '+esc(a.calendar):'')+'</div></div>'
         +(a.status?'<span style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#64748b;background:#f1f5f9;border-radius:99px;padding:3px 9px;white-space:nowrap;">'+esc(a.status)+'</span>':'')
         +'</div>';
     }).join('');
