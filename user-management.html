@@ -335,6 +335,10 @@ function renderUsers(data) {
                         onclick="editPermissions('${user.userid}','${fullName.replace(/'/g,"\\'")}')">
                         <span class="material-icons" style="font-size:13px;">tune</span>
                     </button>
+                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:${(user.ghl_user_id||user.ghl_user_email)?'#dcfce7;border-color:#86efac;color:#166534':'#ede9fe;border-color:#c4b5fd;color:#6d28d9'};" title="${(user.ghl_user_id||user.ghl_user_email)?('Mapped to HighLevel: '+(user.ghl_user_email||user.ghl_user_id)):'Map to HighLevel user'}"
+                        onclick="mapGhl('${user.userid}','${fullName.replace(/'/g,"\\'")}','${(user.email||'').replace(/'/g,"\\'")}')">
+                        <span class="material-icons" style="font-size:13px;">${(user.ghl_user_id||user.ghl_user_email)?'link':'add_link'}</span>
+                    </button>
                     <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#fef9c3;border-color:#fbbf24;color:#92400e;" title="Set temporary password"
                         onclick="setTempPassword('${user.userid}','${fullName.replace(/'/g,"\\'")}')">
                         <span class="material-icons" style="font-size:13px;">key</span>
@@ -353,6 +357,44 @@ function renderUsers(data) {
             </td>
         </tr>`;
     }).join('');
+}
+
+// ── MAP TO HIGHLEVEL USER ─────────────────────────────────
+function escH(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+let GHL_USERS_CACHE = null;
+async function loadGhlUsers(force) {
+    if (GHL_USERS_CACHE && !force) return GHL_USERS_CACHE;
+    const r = await apiPost({ action: 'list_ghl_users' });
+    if (!r.success) throw new Error(r.message || 'Could not load HighLevel users');
+    GHL_USERS_CACHE = r.users || [];
+    return GHL_USERS_CACHE;
+}
+async function mapGhl(uid, name, email) {
+    Swal.fire({ title: 'Loading HighLevel users…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    let users;
+    try { users = await loadGhlUsers(); } catch (e) { Swal.fire('Error', e.message, 'error'); return; }
+    const user = allUsers.find(u => u.userid === uid) || {};
+    const current = user.ghl_user_id || '';
+    const emailLc = (email || '').toLowerCase();
+    const emailMatch = (users.find(u => u.email === emailLc) || {}).id || '';
+    const preselect = current || emailMatch;
+    const opts = '<option value="">— Not mapped —</option>' + users.map(u =>
+        '<option value="' + escH(u.id) + '"' + (preselect === u.id ? ' selected' : '') + '>' + escH(u.name || u.email) + (u.email ? ' · ' + escH(u.email) : '') + '</option>'
+    ).join('');
+    const note = (!current && emailMatch) ? '<div style="color:#16a34a;font-size:12px;margin-top:6px;">✓ Auto-matched by email — click Save to confirm.</div>'
+        : (!users.length ? '<div style="color:#b45309;font-size:12px;margin-top:6px;">No HighLevel users returned. Check GHL_LOCATION_ID / token scopes.</div>' : '');
+    const { value: sel, isConfirmed } = await Swal.fire({
+        title: 'Map to HighLevel',
+        html: '<div style="text-align:left;font-size:13px;">Map <b>' + escH(name) + '</b> (' + escH(email || '—') + ') to a HighLevel team member.'
+            + '<select id="ghl-sel" class="swal2-select" style="width:100%;margin-top:10px;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;">' + opts + '</select>' + note + '</div>',
+        showCancelButton: true, confirmButtonText: 'Save', confirmButtonColor: '#004990',
+        preConfirm: () => document.getElementById('ghl-sel').value
+    });
+    if (!isConfirmed) return;
+    const chosen = users.find(u => u.id === sel);
+    const r = await apiPost({ action: 'set_ghl_mapping', target_userid: uid, ghl_user_id: sel || '', ghl_user_email: chosen ? chosen.email : '' });
+    if (r.success) { Swal.fire({ icon: 'success', title: sel ? 'Mapped' : 'Mapping cleared', timer: 1200, showConfirmButton: false }); loadUsers(); }
+    else Swal.fire('Error', r.message || 'Save failed', 'error');
 }
 
 // ── PERMISSIONS MODAL ─────────────────────────────────────

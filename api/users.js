@@ -24,7 +24,7 @@ export default async function handler(req, res) {
             }
             // Only return non-sensitive fields
             const { data, error } = await supabase.from('app_users')
-                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type,access_marketing,access_marketing_settings,access_lead_portal,access_terminal_types,access_all_tasks,access_task_dashboard,access_pos_express,access_pos_settings,created_at')
+                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type,access_marketing,access_marketing_settings,access_lead_portal,access_terminal_types,access_all_tasks,access_task_dashboard,access_pos_express,access_pos_settings,ghl_user_id,ghl_user_email,created_at')
                 .order('first_name');
             if (error) throw error;
             return res.status(200).json({ success: true, data });
@@ -319,6 +319,28 @@ export default async function handler(req, res) {
                 if (error) return res.status(500).json({ success: false, message: error.message });
                 return res.status(200).json({ success: true });
             }
+            // ── Map an app user to a HighLevel team member (admin+) ──
+            if (action === 'list_ghl_users' || action === 'set_ghl_mapping') {
+                const { data: perf } = await supabase.from('app_users').select('role, email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+                const pr = (perf?.role || '').toLowerCase();
+                if (!(pr.includes('super') || pr.includes('admin'))) return res.status(403).json({ success: false, message: 'Admin only.' });
+                if (action === 'list_ghl_users') {
+                    const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+                    if (!locationId) return res.status(400).json({ success: false, message: 'GHL_LOCATION_ID is not configured.' });
+                    let users = [];
+                    try { users = await ghlListUsers(locationId); } catch (e) { return res.status(502).json({ success: false, message: 'HighLevel user lookup failed.' }); }
+                    return res.status(200).json({ success: true, users });
+                }
+                // set_ghl_mapping
+                const tid = req.body.target_userid;
+                if (!tid) return res.status(400).json({ success: false, message: 'target_userid required' });
+                const upd = { ghl_user_id: (req.body.ghl_user_id || '').toString().trim() || null, ghl_user_email: (req.body.ghl_user_email || '').toString().trim().toLowerCase() || null };
+                const { error } = await supabase.from('app_users').update(upd).eq('userid', tid);
+                if (error) return res.status(500).json({ success: false, message: error.message });
+                await supabase.from('activity_logs').insert([{ email: perf.email, action: `Mapped ${tid} to HighLevel user ${upd.ghl_user_email || upd.ghl_user_id || '(cleared)'}`, status: 'success', category: 'admin', severity: 'info', target_id: tid, target_type: 'app_user' }]);
+                return res.status(200).json({ success: true });
+            }
+
             // ── Secret Dungeon bypass: super_admin sets ONLY description / job
             //    level / photo for any user. Nothing else is touched. ──
             if (action === 'admin_list_rep_profiles' || action === 'admin_set_rep_profile' || action === 'admin_sync_reps_ghl') {
@@ -331,11 +353,12 @@ export default async function handler(req, res) {
                     if (!locationId) return res.status(400).json({ success: false, message: 'GHL_LOCATION_ID is not configured.' });
                     let hlUsers = [];
                     try { hlUsers = await ghlListUsers(locationId); } catch (e) { return res.status(502).json({ success: false, message: 'HighLevel user lookup failed.' }); }
-                    const byEmail = {}; hlUsers.forEach(u => { if (u.email) byEmail[u.email] = u; });
-                    const { data: staff } = await supabase.from('app_users').select('userid, email, rep_photo_url');
+                    const byEmail = {}, byId = {}; hlUsers.forEach(u => { if (u.email) byEmail[u.email] = u; if (u.id) byId[u.id] = u; });
+                    const { data: staff } = await supabase.from('app_users').select('userid, email, rep_photo_url, ghl_user_id');
                     let matched = 0, updated = 0;
                     for (const s of (staff || [])) {
-                        const hl = byEmail[String(s.email || '').toLowerCase()];
+                        // Prefer an explicit mapping; fall back to email match.
+                        const hl = (s.ghl_user_id && byId[s.ghl_user_id]) || byEmail[String(s.email || '').toLowerCase()];
                         if (!hl) continue;
                         matched++;
                         if (!s.rep_photo_url && hl.photo) { await supabase.from('app_users').update({ rep_photo_url: hl.photo }).eq('userid', s.userid); updated++; }
