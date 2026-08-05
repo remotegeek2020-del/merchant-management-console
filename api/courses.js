@@ -223,7 +223,8 @@ export default async function handler(req, res) {
                         id: c.id, title: c.title, description: c.description, thumbnail_url: c.thumbnail_url,
                         videos: c.videos.map(v => {
                             const av = videoAvailability(v, enrollDate);
-                            return { id: v.id, title: v.title, description: v.description, provider: v.provider, thumbnail_url: v.thumbnail_url, available: av.available, unlock_at: av.unlock_at, url: av.available ? v.url : null };
+                            const hasCta = av.available && v.ai_goal && v.ai_goal !== 'none';
+                            return { id: v.id, title: v.title, description: v.description, provider: v.provider, thumbnail_url: v.thumbnail_url, available: av.available, unlock_at: av.unlock_at, url: av.available ? v.url : null, cta_url: hasCta ? (v.ai_cta_link || null) : null, cta_label: v.ai_cta_label || (v.ai_goal === 'signup' ? 'Sign up' : 'Book an appointment') };
                         })
                     };
                 });

@@ -93,7 +93,7 @@
     <div class="content" id="content"><div class="empty">Loading…</div></div>
 </div>
 <div class="mm-overlay" id="player" onclick="if(event.target===this)closePlayer()">
-    <div class="mm-card"><span class="material-icons mm-close" onclick="closePlayer()">close</span><div class="mm-frame" id="playerFrame"></div></div>
+    <div class="mm-card"><span class="material-icons mm-close" onclick="closePlayer()">close</span><div class="mm-frame" id="playerFrame"></div><div id="playerCta" style="margin-top:12px;text-align:center;"></div></div>
 </div>
 <script>
 var TOKEN=localStorage.getItem('pp_partner_token')||'';
@@ -124,7 +124,7 @@ function vidCard(v){
     return '<div class="vidcard locked"><div class="vidthumb">'+thumbBg(v)+'<span class="prov">'+esc(v.provider)+'</span><span class="material-icons">lock</span></div>'
       +'<div class="vidmeta"><div class="t">'+esc(v.title)+'</div><div class="d">🔒 Unlocks '+esc(d)+'</div></div></div>';
   }
-  VMAP[v.id]={provider:v.provider,url:v.url,title:v.title};
+  VMAP[v.id]={provider:v.provider,url:v.url,title:v.title,cta_url:v.cta_url,cta_label:v.cta_label};
   return '<div class="vidcard" onclick="playVideo(\''+v.id+'\')"><div class="vidthumb">'+thumbBg(v)+'<span class="prov">'+esc(v.provider)+'</span><span class="material-icons">play_circle</span></div>'
     +'<div class="vidmeta"><div class="t">'+esc(v.title)+'</div>'+(v.description?'<div class="d">'+esc(v.description)+'</div>':'')+'</div></div>';
 }
@@ -133,11 +133,12 @@ window.playVideo=function(id){
   var src=embedSrc(v.provider,v.url);
   if(!src){ alert('This video link could not be played.'); return; }
   document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+  var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML = v.cta_url ? '<a href="'+esc(v.cta_url)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</a>' : '';
   document.getElementById('player').style.display='flex';
   // Log a portal view (best-effort; never blocks playback).
   try{ papi({action:'log_view',video_id:id}); }catch(e){}
 };
-window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; };
+window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML=''; };
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
 var COURSES=[], LOCKED=[];
 function courseCover(co,videos){

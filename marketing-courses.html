@@ -348,23 +348,33 @@ window.editVideo=async function(courseId,vid){
       +'<div class="row" style="margin-top:6px;"><div><label>Release on date</label><input id="v-avail" type="date" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.available_on||'')+'"></div>'
       +'<div><label>…or days after partner unlocks the course</label><input id="v-drip" type="number" min="0" class="swal2-input" style="margin:0;width:100%;" placeholder="0 = right away" value="'+((v.drip_days!=null&&v.drip_days>0)?v.drip_days:'')+'"></div></div>'
       +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Leave both blank for immediate access. If both are set, the later one wins.</div>'
-      // ── AI reply guidance ──
-      +'<div style="border-top:1px solid #e2e8f0;margin:14px 0 0;padding-top:10px;font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;">🤖 AI reply guidance (comments + live chat)</div>'
-      +'<div style="font-size:11.5px;color:#94a3b8;margin:4px 0 2px;">Grounds the AI so it won\'t make things up, and points it at your goal for this video.</div>'
-      +'<label>What should the AI know about this video? <span style="text-transform:none;color:#94a3b8;font-weight:400;">(facts only — the AI uses ONLY this)</span></label>'
-      +'<textarea id="v-aictx" class="swal2-textarea" style="margin:0;width:100%;" placeholder="e.g. This session covers X. We help merchants with Y. Pricing/details it can mention…">'+esc(v.ai_context||'')+'</textarea>'
-      +'<label>Goal for this video</label><select id="v-aigoal" class="swal2-input" style="margin:0;width:100%;"><option value="none">No goal — just answer helpfully</option><option value="appointment">Book an appointment (HighLevel calendar)</option><option value="signup">Sign up (HighLevel form)</option></select>'
+      // ── Video goal & call to action (ALL providers) ──
+      +'<div style="border-top:1px solid #e2e8f0;margin:14px 0 0;padding-top:10px;font-size:11px;font-weight:800;color:#2563eb;text-transform:uppercase;letter-spacing:.4px;">🎯 Video goal &amp; call to action</div>'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin:4px 0 2px;">What should this video drive viewers to? Used for the QR code, the button viewers see under the video, and (YouTube only) AI replies. Works for any provider — YouTube, Wistia, Vimeo…</div>'
+      +'<label>Goal for this video</label><select id="v-aigoal" class="swal2-input" style="margin:0;width:100%;"><option value="none">No goal — no call to action</option><option value="appointment">Book an appointment (HighLevel calendar)</option><option value="signup">Sign up (HighLevel form)</option></select>'
       +'<div id="v-aisrcwrap" style="display:none;"><label id="v-aisrclabel">HighLevel source</label><select id="v-aisrc" class="swal2-input" style="margin:0;width:100%;"><option value="">Loading…</option></select></div>'
       +'<label>Or auto-detect <span style="text-transform:none;color:#94a3b8;font-weight:400;">(paste a page URL, the embed code, or the calendar/form link)</span></label>'
       +'<div style="display:flex;gap:6px;"><input id="v-detecturl" class="swal2-input" style="margin:0;flex:1;" placeholder="https://site.com/join  ·  or paste <iframe…> embed code"><button type="button" id="v-detectbtn" style="border:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;background:#0f172a;color:#fff;">Detect</button></div>'
       +'<div style="font-size:11px;color:#94a3b8;margin-top:3px;">Some sites block automated reads or load the calendar via JavaScript — if a URL finds nothing, paste the embed code (from your site or HighLevel) instead.</div>'
       +'<div id="v-detectout" style="margin-top:6px;font-size:12.5px;"></div>'
-      +'<label>Link the AI shares <span style="text-transform:none;color:#94a3b8;font-weight:400;">(auto-filled from the pick above; editable)</span></label><input id="v-ailink" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…" value="'+esc(v.ai_cta_link||'')+'">'
-      +'<label>Invite wording <span style="text-transform:none;color:#94a3b8;font-weight:400;">(optional, e.g. "book a free demo")</span></label><input id="v-ailabel" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.ai_cta_label||'')+'">'
+      +'<label>Destination link <span style="text-transform:none;color:#94a3b8;font-weight:400;">(auto-filled from the pick above; editable)</span></label><input id="v-ailink" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…" value="'+esc(v.ai_cta_link||'')+'">'
+      +'<label>Button / invite wording <span style="text-transform:none;color:#94a3b8;font-weight:400;">(e.g. "Book a free demo")</span></label><input id="v-ailabel" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.ai_cta_label||'')+'">'
       +'<input type="hidden" id="v-airef" value="'+esc(v.ai_cta_ref||'')+'">'
+      // ── AI reply guidance (YouTube comments + live chat ONLY) ──
+      +'<div id="v-aiwrap">'
+      +'<div style="border-top:1px solid #e2e8f0;margin:14px 0 0;padding-top:10px;font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;">🤖 AI reply guidance <span style="text-transform:none;color:#94a3b8;font-weight:600;">(YouTube comments + live chat)</span></div>'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin:4px 0 2px;">Grounds the AI so it won\'t make things up when it replies to YouTube comments &amp; live chat, and points it at the goal above.</div>'
+      +'<label>What should the AI know about this video? <span style="text-transform:none;color:#94a3b8;font-weight:400;">(facts only — the AI uses ONLY this)</span></label>'
+      +'<textarea id="v-aictx" class="swal2-textarea" style="margin:0;width:100%;" placeholder="e.g. This session covers X. We help merchants with Y. Pricing/details it can mention…">'+esc(v.ai_context||'')+'</textarea>'
+      +'</div>'
       +'</div>',
     width:600,showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#2563eb',
     didOpen:function(){
+      // AI reply guidance only applies to YouTube (comments + live chat).
+      // Hide it for Wistia/Vimeo/other, but keep the goal + CTA for every provider.
+      var provSel=document.getElementById('v-prov');
+      function toggleAiWrap(){ document.getElementById('v-aiwrap').style.display=(provSel.value==='youtube')?'block':'none'; }
+      provSel.onchange=toggleAiWrap; toggleAiWrap();
       var goalSel=document.getElementById('v-aigoal'); goalSel.value=(v.ai_goal||'none');
       var wrap=document.getElementById('v-aisrcwrap'), srcSel=document.getElementById('v-aisrc'), lbl=document.getElementById('v-aisrclabel');
       var CTA={forms:[],calendars:[],loaded:false};

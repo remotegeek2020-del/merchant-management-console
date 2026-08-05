@@ -92,7 +92,7 @@
 </div>
 
 <div class="pv-overlay" id="player" onclick="if(event.target===this)closePlayer()">
-  <div class="pv-card"><span class="material-icons pv-close" onclick="closePlayer()">close</span><div class="pv-frame" id="playerFrame"></div></div>
+  <div class="pv-card"><span class="material-icons pv-close" onclick="closePlayer()">close</span><div class="pv-frame" id="playerFrame"></div><div id="playerCta" style="margin-top:12px;text-align:center;"></div></div>
 </div>
 
 <script>
@@ -106,8 +106,10 @@ function ytId(url){ var m=String(url||'').match(/(?:v=|youtu\.be\/|\/embed\/|\/s
 function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|youtube\.com/i.test(url)||provider==='youtube'){var id=ytId(url); if(id) return 'https://www.youtube.com/embed/'+id+'?rel=0';} if(/vimeo\.com/i.test(url)||provider==='vimeo'){m=url.match(/vimeo\.com\/(?:video\/)?(\d+)/); if(m) return 'https://player.vimeo.com/video/'+m[1];} if(/wistia|wi\.st/i.test(url)||provider==='wistia'){m=url.match(/(?:medias\/|wvideo=|wmediaid=|embed\/(?:iframe|medias)\/)([\w]+)/); if(m) return 'https://fast.wistia.net/embed/iframe/'+m[1];} if(/^https:\/\//i.test(url)) return url; return ''; }
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
 var VMAP={};
-window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSrc(v.provider,v.url); if(!src){ alert('This video can\'t be played.'); return; } document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>'; document.getElementById('player').style.display='flex'; try{ api({action:'lead_log_view',video_id:id}); }catch(e){} };
-window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; };
+window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSrc(v.provider,v.url); if(!src){ alert('This video can\'t be played.'); return; } document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+  var cta=document.getElementById('playerCta'); cta.innerHTML = v.cta_url ? '<a href="'+esc(v.cta_url)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</a>' : '';
+  document.getElementById('player').style.display='flex'; try{ api({action:'lead_log_view',video_id:id}); }catch(e){} };
+window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; document.getElementById('playerCta').innerHTML=''; };
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
 
 function loadCalScript(){
@@ -146,7 +148,7 @@ async function loadCourses(){
   var withVids=courses.filter(function(c){return (c.videos||[]).length;});
   if(!withVids.length){ b.innerHTML='<div class="card muted">No webinars available yet — check back soon.</div>'; return; }
   b.innerHTML=withVids.map(function(c,ix){
-    var vids=(c.videos||[]).map(function(v){ VMAP[v.id]={provider:v.provider,url:v.url};
+    var vids=(c.videos||[]).map(function(v){ VMAP[v.id]={provider:v.provider,url:v.url,cta_url:v.cta_url,cta_label:v.cta_label};
       if(!v.available){ return '<div class="vcard locked"><div class="vthumb">'+thumb(v)+'<span class="material-icons">lock</span></div><div class="vt">'+esc(v.title)+'<div class="muted" style="font-size:11px;font-weight:400;">🔒 Coming '+(v.unlock_at?new Date(v.unlock_at).toLocaleDateString():'soon')+'</div></div></div>'; }
       return '<div class="vcard" onclick="play(\''+v.id+'\')"><div class="vthumb">'+thumb(v)+'<span class="material-icons">play_circle</span></div><div class="vt">'+esc(v.title)+'</div></div>';
     }).join('');

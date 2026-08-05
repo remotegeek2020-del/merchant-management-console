@@ -122,7 +122,7 @@ export default async function handler(req, res) {
             const ids = (courses || []).map(c => c.id);
             let vids = [];
             if (ids.length) {
-                const { data } = await supabase.from('course_videos').select('id, course_id, title, description, provider, url, thumbnail_url, available_on')
+                const { data } = await supabase.from('course_videos').select('id, course_id, title, description, provider, url, thumbnail_url, available_on, ai_goal, ai_cta_link, ai_cta_label')
                     .in('course_id', ids).order('available_on', { ascending: false, nullsFirst: false }).order('sort_order').limit(50000);
                 vids = data || [];
             }
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
             const byCourse = {};
             vids.forEach(v => {
                 const avail = !v.available_on || new Date(v.available_on + 'T00:00:00').getTime() <= now;
-                (byCourse[v.course_id] = byCourse[v.course_id] || []).push({ id: v.id, title: v.title, description: v.description, provider: v.provider, url: avail ? v.url : null, available: avail, unlock_at: avail ? null : v.available_on, thumbnail_url: v.thumbnail_url });
+                (byCourse[v.course_id] = byCourse[v.course_id] || []).push({ id: v.id, title: v.title, description: v.description, provider: v.provider, url: avail ? v.url : null, available: avail, unlock_at: avail ? null : v.available_on, thumbnail_url: v.thumbnail_url, cta_url: (avail && v.ai_goal && v.ai_goal !== 'none') ? (v.ai_cta_link || null) : null, cta_label: v.ai_cta_label || (v.ai_goal === 'signup' ? 'Sign up' : 'Book an appointment') });
             });
             return ok(res, { courses: (courses || []).map(c => ({ ...c, videos: byCourse[c.id] || [] })) });
         }
