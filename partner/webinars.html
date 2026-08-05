@@ -63,6 +63,13 @@
         .mm-close{position:absolute;top:-38px;right:0;color:#fff;cursor:pointer;font-size:30px;}
         .mm-frame{aspect-ratio:16/9;width:100%;}
         .mm-frame iframe{width:100%;height:100%;border:none;display:block;}
+        .bk-overlay{position:fixed;inset:0;background:rgba(0,10,25,.8);display:none;align-items:center;justify-content:center;z-index:10000;padding:16px;}
+        .bk-card{background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+        .bk-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border);font-weight:800;font-size:15px;}
+        .bk-head .material-icons.x{cursor:pointer;color:#64748b;margin-left:auto;}
+        .bk-frame{width:100%;flex:1;min-height:600px;border:none;display:block;}
+        .bk-foot{padding:8px 16px;font-size:11.5px;text-align:center;border-top:1px solid #f1f5f9;color:#64748b;}
+        .bk-foot a{color:var(--teal);font-weight:700;}
         @media(max-width:820px){.sidebar{display:none;}.main{margin-left:0;}}
     </style>
 </head>
@@ -94,6 +101,14 @@
 </div>
 <div class="mm-overlay" id="player" onclick="if(event.target===this)closePlayer()">
     <div class="mm-card"><span class="material-icons mm-close" onclick="closePlayer()">close</span><div class="mm-frame" id="playerFrame"></div><div id="playerCta" style="margin-top:12px;text-align:center;"></div></div>
+</div>
+
+<div class="bk-overlay" id="bookModal" onclick="if(event.target===this)closeBooking()">
+  <div class="bk-card">
+    <div class="bk-head"><span class="material-icons" style="color:var(--teal);">event_available</span><span id="bkTitle">Book your appointment</span><span class="material-icons x" onclick="closeBooking()">close</span></div>
+    <iframe class="bk-frame" id="bkFrame" scrolling="no"></iframe>
+    <div class="bk-foot" id="bkFoot"></div>
+  </div>
 </div>
 <script>
 var TOKEN=localStorage.getItem('pp_partner_token')||'';
@@ -133,13 +148,16 @@ window.playVideo=function(id){
   var src=embedSrc(v.provider,v.url);
   if(!src){ alert('This video link could not be played.'); return; }
   document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
-  var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML = v.cta_url ? '<a href="'+esc(v.cta_url)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</a>' : '';
+  var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML = v.cta_url ? '<button onclick="openBooking(\''+encodeURIComponent(v.cta_url)+'\',\''+esc((v.cta_label||'Book an appointment').replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;border:none;cursor:pointer;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;font-family:inherit;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</button>' : '';
   document.getElementById('player').style.display='flex';
   // Log a portal view (best-effort; never blocks playback).
   try{ papi({action:'log_view',video_id:id}); }catch(e){}
 };
 window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML=''; };
-document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
+function loadCalScript(){ if(document.getElementById('ghl-form-embed')) return; var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true; document.body.appendChild(s); }
+window.openBooking=function(encUrl,label){ var url=decodeURIComponent(encUrl); document.getElementById('bkTitle').textContent=label||'Book your appointment'; document.getElementById('bkFrame').src=url; document.getElementById('bkFoot').innerHTML='Trouble loading? <a href="'+esc(url)+'" target="_blank" rel="noopener">Open in a new tab</a>'; document.getElementById('bookModal').style.display='flex'; loadCalScript(); };
+window.closeBooking=function(){ document.getElementById('bookModal').style.display='none'; document.getElementById('bkFrame').src='about:blank'; };
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); } });
 var COURSES=[], LOCKED=[];
 function courseCover(co,videos){
   var img=co.thumbnail_url||'';

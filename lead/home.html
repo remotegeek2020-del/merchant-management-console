@@ -65,6 +65,14 @@
   .pv-frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;}
   .pv-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
   .pv-close{color:#fff;cursor:pointer;float:right;margin-bottom:8px;}
+  /* In-app booking modal */
+  .bk-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
+  .bk-card{background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+  .bk-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:15px;}
+  .bk-head .material-icons{cursor:pointer;color:#64748b;margin-left:auto;}
+  .bk-frame{width:100%;flex:1;min-height:600px;border:none;display:block;}
+  .bk-foot{padding:8px 16px;font-size:11.5px;text-align:center;border-top:1px solid #f1f5f9;}
+  .bk-foot a{color:#0d9488;font-weight:700;}
 </style>
 </head>
 <body>
@@ -95,6 +103,14 @@
   <div class="pv-card"><span class="material-icons pv-close" onclick="closePlayer()">close</span><div class="pv-frame" id="playerFrame"></div><div id="playerCta" style="margin-top:12px;text-align:center;"></div></div>
 </div>
 
+<div class="bk-overlay" id="bookModal" onclick="if(event.target===this)closeBooking()">
+  <div class="bk-card">
+    <div class="bk-head"><span class="material-icons" style="color:#0d9488;">event_available</span><span id="bkTitle">Book your appointment</span><span class="material-icons" onclick="closeBooking()">close</span></div>
+    <iframe class="bk-frame" id="bkFrame" scrolling="no"></iframe>
+    <div class="bk-foot" id="bkFoot"></div>
+  </div>
+</div>
+
 <script>
 var TOKEN=localStorage.getItem('pp_lead_token')||'';
 if(!TOKEN){ location.href='/partner'; }
@@ -107,10 +123,12 @@ function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|yout
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
 var VMAP={};
 window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSrc(v.provider,v.url); if(!src){ alert('This video can\'t be played.'); return; } document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
-  var cta=document.getElementById('playerCta'); cta.innerHTML = v.cta_url ? '<a href="'+esc(v.cta_url)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</a>' : '';
+  var cta=document.getElementById('playerCta'); cta.innerHTML = v.cta_url ? '<button onclick="openBooking(\''+encodeURIComponent(v.cta_url)+'\',\''+esc((v.cta_label||'Book an appointment').replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;border:none;cursor:pointer;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;font-family:inherit;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</button>' : '';
   document.getElementById('player').style.display='flex'; try{ api({action:'lead_log_view',video_id:id}); }catch(e){} };
 window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; document.getElementById('playerCta').innerHTML=''; };
-document.addEventListener('keydown',function(e){ if(e.key==='Escape') closePlayer(); });
+window.openBooking=function(encUrl,label){ var url=decodeURIComponent(encUrl); document.getElementById('bkTitle').textContent=label||'Book your appointment'; document.getElementById('bkFrame').src=url; document.getElementById('bkFoot').innerHTML='Trouble loading? <a href="'+esc(url)+'" target="_blank" rel="noopener">Open in a new tab</a>'; document.getElementById('bookModal').style.display='flex'; loadCalScript(); };
+window.closeBooking=function(){ document.getElementById('bookModal').style.display='none'; document.getElementById('bkFrame').src='about:blank'; };
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); } });
 
 function loadCalScript(){
   if(document.getElementById('ghl-form-embed')) return;
