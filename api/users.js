@@ -6,6 +6,14 @@ import bcrypt from 'bcryptjs';
 import { ghlListUsers } from './_ghl.js';
 import { getConfigValue } from './api-config.js';
 
+// The single "actual photo" lives on the community profile (user_profiles.avatar_url).
+// Set it, creating the profile row if the staff member doesn't have one yet.
+async function setStaffAvatar(supabase, userid, url, displayName) {
+    const { data: existing } = await supabase.from('user_profiles').select('user_id').eq('user_id', userid).maybeSingle();
+    if (existing) { await supabase.from('user_profiles').update({ avatar_url: url || null }).eq('user_id', userid); }
+    else { await supabase.from('user_profiles').insert({ user_id: userid, user_type: 'staff', display_name: displayName || userid, avatar_url: url || null }); }
+}
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
@@ -312,7 +320,6 @@ export default async function handler(req, res) {
                 const upd = {
                     rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
                     rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
-                    rep_photo_url: (req.body.rep_photo_url ?? '').toString().slice(0, 1000),
                     rep_milestones: ms
                 };
                 const { error } = await supabase.from('app_users').update(upd).eq('userid', session.userid);
@@ -354,33 +361,45 @@ export default async function handler(req, res) {
                     let hlUsers = [];
                     try { hlUsers = await ghlListUsers(locationId); } catch (e) { return res.status(502).json({ success: false, message: 'HighLevel user lookup failed.' }); }
                     const byEmail = {}, byId = {}; hlUsers.forEach(u => { if (u.email) byEmail[u.email] = u; if (u.id) byId[u.id] = u; });
-                    const { data: staff } = await supabase.from('app_users').select('userid, email, rep_photo_url, ghl_user_id');
+                    const { data: staff } = await supabase.from('app_users').select('userid, email, first_name, last_name, ghl_user_id');
+                    // Existing community avatars (the single photo).
+                    const ids = (staff || []).map(s => s.userid);
+                    const avatars = {};
+                    if (ids.length) { const { data: profs } = await supabase.from('user_profiles').select('user_id, avatar_url').in('user_id', ids); (profs || []).forEach(p => { avatars[p.user_id] = p.avatar_url; }); }
                     let matched = 0, updated = 0;
                     for (const s of (staff || [])) {
                         // Prefer an explicit mapping; fall back to email match.
                         const hl = (s.ghl_user_id && byId[s.ghl_user_id]) || byEmail[String(s.email || '').toLowerCase()];
                         if (!hl) continue;
                         matched++;
-                        if (!s.rep_photo_url && hl.photo) { await supabase.from('app_users').update({ rep_photo_url: hl.photo }).eq('userid', s.userid); updated++; }
+                        if (!avatars[s.userid] && hl.photo) { await setStaffAvatar(supabase, s.userid, hl.photo, (`${s.first_name || ''} ${s.last_name || ''}`.trim())); updated++; }
                     }
                     await supabase.from('activity_logs').insert([{ email: perf.email, action: `Synced rep photos from HighLevel: ${updated} filled of ${matched} matched`, status: 'success', category: 'admin', severity: 'info' }]);
                     return res.status(200).json({ success: true, matched, updated, hl_users: hlUsers.length });
                 }
                 if (action === 'admin_list_rep_profiles') {
                     const { data: rows } = await supabase.from('app_users')
-                        .select('userid, first_name, last_name, email, role, is_active, rep_bio, rep_job_level, rep_photo_url')
+                        .select('userid, first_name, last_name, email, role, is_active, rep_bio, rep_job_level')
                         .order('first_name');
-                    return res.status(200).json({ success: true, users: rows || [] });
+                    // Attach the single "actual photo" (community avatar).
+                    const ids = (rows || []).map(r => r.userid);
+                    const avatars = {};
+                    if (ids.length) { const { data: profs } = await supabase.from('user_profiles').select('user_id, avatar_url').in('user_id', ids); (profs || []).forEach(p => { avatars[p.user_id] = p.avatar_url; }); }
+                    return res.status(200).json({ success: true, users: (rows || []).map(r => ({ ...r, rep_photo_url: avatars[r.userid] || '' })) });
                 }
                 const tid = req.body.target_userid;
                 if (!tid) return res.status(400).json({ success: false, message: 'target_userid required' });
                 const upd = {
                     rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
-                    rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
-                    rep_photo_url: (req.body.rep_photo_url ?? '').toString().slice(0, 1000)
+                    rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120)
                 };
                 const { error } = await supabase.from('app_users').update(upd).eq('userid', tid);
                 if (error) return res.status(500).json({ success: false, message: error.message });
+                // Photo → the single community avatar.
+                if (req.body.rep_photo_url !== undefined) {
+                    const nm = (req.body.rep_name || '').toString();
+                    await setStaffAvatar(supabase, tid, (req.body.rep_photo_url || '').toString().slice(0, 1000), nm);
+                }
                 await supabase.from('activity_logs').insert([{
                     email: perf.email, action: `Rep profile (bio/level/photo) set for ${tid} by ${(perf.first_name || '') + ' ' + (perf.last_name || '')}`.trim(),
                     status: 'success', category: 'admin', severity: 'info', target_id: tid, target_type: 'app_user'

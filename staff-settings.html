@@ -88,18 +88,7 @@
     <!-- USER PROFILE -->
     <div class="settings-card">
         <div class="settings-title"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px;">badge</span>User Profile</div>
-        <div class="settings-sub">Your professional profile — a photo, job level, background, and career milestones. Shown to prospects on the Lead Portal when you're their assigned rep. Separate from your community profile and messages.</div>
-        <div class="avatar-section">
-            <div class="avatar-big" id="repPhotoPreview">?</div>
-            <div>
-                <button class="pp-btn pp-btn-primary" onclick="document.getElementById('repPhotoInput').click()">
-                    <span class="material-icons" style="font-size:16px;">upload</span> Upload Photo
-                </button>
-                <button class="pp-btn pp-btn-secondary" style="margin-left:8px;" onclick="removeRepPhoto()">Remove</button>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">JPG, PNG or WebP</div>
-                <input type="file" id="repPhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleRepPhoto(this)">
-            </div>
-        </div>
+        <div class="settings-sub">Your professional profile — job level, background, and career milestones. Shown to prospects on the Lead Portal when you're their assigned rep. Uses your <b>Profile Photo</b> above.</div>
         <label class="field-label">Job Level / Title</label>
         <input type="text" class="field-input" id="repJobLevel" placeholder="e.g. Senior Partnership Manager">
         <label class="field-label">Background / About you</label>
@@ -569,10 +558,6 @@ async function loadRepProfile() {
         document.getElementById('repBio').value = p.rep_bio || '';
         document.getElementById('repMsList').innerHTML = '';
         (Array.isArray(p.rep_milestones) ? p.rep_milestones : []).forEach(m => repMsAdd(m.label, m.detail));
-        repPhotoUrl = p.rep_photo_url || '';
-        const el = document.getElementById('repPhotoPreview');
-        if (repPhotoUrl) el.innerHTML = `<img src="${repPhotoUrl}">`;
-        else el.textContent = (staffName || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     } catch (e) { /* ignore */ }
 }
 async function handleRepPhoto(input) {
@@ -606,7 +591,6 @@ async function saveRepProfile(silent) {
         action: 'save_rep_profile',
         rep_job_level: document.getElementById('repJobLevel').value.trim(),
         rep_bio: document.getElementById('repBio').value.trim(),
-        rep_photo_url: repPhotoUrl,
         rep_milestones: milestones
     };
     if (!silent) Swal.fire({ title: 'Saving…', didOpen: () => Swal.showLoading() });

@@ -20,9 +20,13 @@ async function repSummary(supabaseClient, userid) {
     const { data: u } = await supabaseClient.from('app_users')
         .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones').eq('userid', userid).maybeSingle();
     if (!u) return null;
+    // Single "actual photo" = the community profile avatar; fall back to the
+    // legacy rep photo for any older records.
+    const { data: prof } = await supabaseClient.from('user_profiles').select('avatar_url').eq('user_id', userid).maybeSingle();
     return {
         name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email || 'Your rep',
-        job_level: u.rep_job_level || '', bio: u.rep_bio || '', photo_url: u.rep_photo_url || '',
+        job_level: u.rep_job_level || '', bio: u.rep_bio || '',
+        photo_url: (prof && prof.avatar_url) || u.rep_photo_url || '',
         milestones: Array.isArray(u.rep_milestones) ? u.rep_milestones : []
     };
 }
