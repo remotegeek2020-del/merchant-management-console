@@ -309,13 +309,14 @@ window.openNav=function(){ document.getElementById('sidebar').classList.add('ope
 window.closeNav=function(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('scrim').classList.remove('open'); };
 
 // ── Become-a-partner milestones (default set) ──
-var WATCH_SECONDS=0, HAS_APPT=false;
+var WATCH_SECONDS=0, HAS_APPT=false, HAS_REP=false;
 var WATCH_GOAL=600; // ~10 minutes of any course videos
 var MILESTONES=[
   {icon:'how_to_reg',title:'Joined the Program',desc:'You registered as a prospect. Welcome aboard!',done:function(){return true;}},
   {icon:'assignment_turned_in',title:'Completed Onboarding',desc:'You told us about your goals so we can tailor your path.',done:function(){return true;}},
   {icon:'play_circle',title:'Explore & Learn',desc:'Watch about 10 minutes of the webinars in Courses & Videos.',done:function(){return WATCH_SECONDS>=WATCH_GOAL;}},
   {icon:'event_available',title:'Book Your Call',desc:'Meet a PayProTec rep to become a partner.',done:function(){return HAS_APPT;}},
+  {icon:'diversity_3',title:'Pair with PPT Specialist',desc:'You\'ve been paired with a dedicated PayProTec specialist.',done:function(){return HAS_REP;}},
   {icon:'workspace_premium',title:'Become a Partner',desc:'Get approved and unlock the full Partner Portal.',done:function(){return false;}}
 ];
 function msDone(m){ return typeof m.done==='function'?!!m.done():!!m.done; }
@@ -362,7 +363,7 @@ async function loadApptRep(){
   if(!r||!r.success) return;
   var up=r.upcoming, rep=r.rep, past=r.past||[], html='';
   UPCOMING=up||null; applyBookingGate(); renderBook();
-  HAS_APPT=!!r.has_appointment; WATCH_SECONDS=r.watch_seconds||0; renderJourney();
+  HAS_APPT=!!r.has_appointment; HAS_REP=!!rep; WATCH_SECONDS=r.watch_seconds||0; renderJourney();
   if(rep){
     // Fancy profile card with the appointment time built in.
     var ph=rep.photo_url?'<img class="pc-avatar" src="'+esc(rep.photo_url)+'">':'<div class="pc-avatar-ph">'+esc(initials(rep.name))+'</div>';
