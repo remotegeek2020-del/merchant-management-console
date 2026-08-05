@@ -219,12 +219,18 @@ export default async function handler(req, res) {
         if (action === 'lead_my_appointment') {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
-            const { data: lead } = await supabase.from('leads').select('ghl_contact_id, assigned_rep').eq('id', leadId).maybeSingle();
+            const { data: lead } = await supabase.from('leads').select('ghl_contact_id, email, assigned_rep').eq('id', leadId).maybeSingle();
             let upcoming = null, past = [];
-            if (lead && lead.ghl_contact_id) {
+            if (lead) {
                 try {
                     const locationId = await ghlLocId();
-                    const appts = await ghlContactAppointments(locationId, lead.ghl_contact_id); // sorted soonest-first
+                    let contactId = lead.ghl_contact_id;
+                    // Resolve (and backfill) the contact id by email if we don't have it.
+                    if (!contactId && locationId && lead.email) {
+                        const found = await ghlFindContactByEmail(locationId, lead.email);
+                        if (found && found.id) { contactId = found.id; await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', leadId); }
+                    }
+                    const appts = contactId ? await ghlContactAppointments(locationId, contactId) : []; // sorted soonest-first
                     const now = Date.now();
                     const cancelled = a => /cancel|no.?show|invalid/i.test(a.status || '');
                     // Upcoming = the next future, non-cancelled appointment.
