@@ -241,7 +241,9 @@ export async function ghlContactAppointments(locationId, contactId) {
             start: x.startTime || x.startAt || null, end: x.endTime || x.endAt || null,
             status: x.appointmentStatus || x.status || '',
             calendar: x.calendar?.name || x.calendarName || '',
-            address: x.address || x.location || '', meeting_url: x.meetingUrl || x.address || ''
+            address: x.address || x.location || '', meeting_url: x.meetingUrl || x.address || '',
+            // Who the appointment is booked with (for auto-assigning the rep).
+            assigned_user_id: x.assignedUserId || x.userId || (x.assignedUser && x.assignedUser.id) || (x.user && x.user.id) || ''
         })).filter(a => a.start).sort((a, b) => new Date(a.start) - new Date(b.start));
     } catch { return []; }
 }

@@ -11,7 +11,7 @@ import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
-import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink } from './_ghl.js';
+import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers } from './_ghl.js';
 
 async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID || null; }
 // The assigned rep's public summary (name + job level + bio + photo) for a lead.
@@ -263,8 +263,25 @@ export default async function handler(req, res) {
                     past = appts.filter(a => new Date(a.start).getTime() < now).sort((a, b) => new Date(b.start) - new Date(a.start));
                 } catch (e) { /* best-effort */ }
             }
+            // Resolve the rep: a manually-assigned rep wins; otherwise derive it
+            // from who the upcoming appointment is booked with (its HighLevel user
+            // → the app user mapped to that HighLevel user), and backfill.
+            let repUserid = lead && lead.assigned_rep;
+            if (!repUserid && upcoming && upcoming.assigned_user_id) {
+                const { data: mapped } = await supabase.from('app_users').select('userid').eq('ghl_user_id', upcoming.assigned_user_id).maybeSingle();
+                if (mapped) { repUserid = mapped.userid; await supabase.from('leads').update({ assigned_rep: repUserid }).eq('id', leadId); }
+            }
             // The rep profile only rides along while there's an upcoming appointment.
-            const rep = upcoming ? await repSummary(supabase, lead && lead.assigned_rep) : null;
+            let rep = upcoming ? await repSummary(supabase, repUserid) : null;
+            // Fallback: no app profile mapped yet — show at least who the
+            // appointment is with, straight from HighLevel (name + photo).
+            if (upcoming && !rep && upcoming.assigned_user_id) {
+                try {
+                    const hlUsers = await ghlListUsers(await ghlLocId());
+                    const hu = hlUsers.find(u => u.id === upcoming.assigned_user_id);
+                    if (hu) rep = { name: hu.name || 'Your rep', job_level: hu.role || '', bio: '', photo_url: hu.photo || '', milestones: [] };
+                } catch (e) { /* best-effort */ }
+            }
             return ok(res, { upcoming, past, rep });
         }
 
