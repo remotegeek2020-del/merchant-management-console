@@ -220,18 +220,22 @@ export default async function handler(req, res) {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
             const { data: lead } = await supabase.from('leads').select('ghl_contact_id, assigned_rep').eq('id', leadId).maybeSingle();
-            let appointment = null;
+            let upcoming = null, past = [];
             if (lead && lead.ghl_contact_id) {
                 try {
                     const locationId = await ghlLocId();
-                    const appts = await ghlContactAppointments(locationId, lead.ghl_contact_id);
+                    const appts = await ghlContactAppointments(locationId, lead.ghl_contact_id); // sorted soonest-first
                     const now = Date.now();
-                    // Prefer the next upcoming; else the most recent past.
-                    appointment = appts.find(a => new Date(a.start).getTime() >= now) || appts[appts.length - 1] || null;
+                    const cancelled = a => /cancel|no.?show|invalid/i.test(a.status || '');
+                    // Upcoming = the next future, non-cancelled appointment.
+                    upcoming = appts.find(a => new Date(a.start).getTime() >= now && !cancelled(a)) || null;
+                    // Past = anything already started (most recent first).
+                    past = appts.filter(a => new Date(a.start).getTime() < now).sort((a, b) => new Date(b.start) - new Date(a.start));
                 } catch (e) { /* best-effort */ }
             }
-            const rep = await repSummary(supabase, lead && lead.assigned_rep);
-            return ok(res, { appointment, rep });
+            // The rep profile only rides along while there's an upcoming appointment.
+            const rep = upcoming ? await repSummary(supabase, lead && lead.assigned_rep) : null;
+            return ok(res, { upcoming, past, rep });
         }
 
         // ══════════ STAFF (Lead Portal admin) actions ══════════

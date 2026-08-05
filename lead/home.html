@@ -176,6 +176,7 @@
     <button class="nav-item active" data-tab="home" onclick="showTab('home')"><span class="material-icons">dashboard</span> Home</button>
     <button class="nav-item" data-tab="ann" onclick="showTab('ann')"><span class="material-icons">campaign</span> Announcements</button>
     <button class="nav-item" data-tab="book" onclick="showTab('book')"><span class="material-icons">event_available</span> Book a Call</button>
+    <button class="nav-item" data-tab="past" id="nav-past" style="display:none;" onclick="showTab('past')"><span class="material-icons">history</span> Past Appointments</button>
     <button class="nav-item" data-tab="courses" onclick="showTab('courses')"><span class="material-icons">video_library</span> Courses & Videos</button>
     <div class="nav-divider"></div>
     <button class="nav-item" onclick="logout()"><span class="material-icons">logout</span> Sign Out</button>
@@ -221,6 +222,12 @@
       <div id="bookBody"><div class="card muted">Loading…</div></div>
     </div>
 
+    <!-- PAST APPOINTMENTS -->
+    <div class="tab" id="tab-past">
+      <h2 class="sec-h"><span class="material-icons">history</span> Past Appointments</h2>
+      <div id="pastBody"><div class="card muted">Loading…</div></div>
+    </div>
+
     <!-- COURSES -->
     <div class="tab" id="tab-courses">
       <h2 class="sec-h"><span class="material-icons">video_library</span> Courses & Videos</h2>
@@ -253,7 +260,7 @@ function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|yout
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
 
 // ── Nav / tabs ──
-var TAB_TITLES={home:'Home',ann:'Announcements',book:'Book a Call',courses:'Courses & Videos'};
+var TAB_TITLES={home:'Home',ann:'Announcements',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos'};
 window.showTab=function(name){
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('show'); });
   var el=document.getElementById('tab-'+name); if(el) el.classList.add('show');
@@ -297,28 +304,45 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBook
 
 function loadCalScript(){ if(document.getElementById('ghl-form-embed')) return; var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true; document.body.appendChild(s); }
 
+function fmtWhen(s){ try{ return new Date(s).toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return esc(s||''); } }
 async function loadApptRep(){
   var r=await api({action:'lead_my_appointment'});
   if(!r||!r.success) return;
-  var appt=r.appointment, rep=r.rep, cards='';
-  if(appt && appt.start){
-    var d=new Date(appt.start), now=Date.now();
-    var when=d.toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-    var label=(d.getTime()>=now)?'Your upcoming appointment':'Your last appointment';
-    cards+='<div class="ar-card appt"><div class="ar-h"><span class="material-icons" style="font-size:15px;">event_available</span> '+label+'</div>'
-      +'<div class="ar-when">'+esc(when)+'</div>'
-      +'<div class="ar-sub">'+esc(appt.title||'Appointment')+(appt.status?' · '+esc(appt.status):'')+'</div>'
-      +(appt.meeting_url&&/^https?:/i.test(appt.meeting_url)?'<div style="margin-top:10px;"><a href="'+esc(appt.meeting_url)+'" target="_blank" rel="noopener" style="color:#fff;font-weight:700;font-size:12.5px;">Join / details →</a></div>':'')
+  var up=r.upcoming, rep=r.rep, past=r.past||[], cards='';
+  // Home: upcoming appointment + rep — only while an appointment is still ahead.
+  if(up && up.start){
+    cards+='<div class="ar-card appt"><div class="ar-h"><span class="material-icons" style="font-size:15px;">event_available</span> Your upcoming appointment</div>'
+      +'<div class="ar-when">'+esc(fmtWhen(up.start))+'</div>'
+      +'<div class="ar-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div>'
+      +(up.meeting_url&&/^https?:/i.test(up.meeting_url)?'<div style="margin-top:10px;"><a href="'+esc(up.meeting_url)+'" target="_blank" rel="noopener" style="color:#fff;font-weight:700;font-size:12.5px;">Join / details →</a></div>':'')
       +'</div>';
+    if(rep){
+      var ph=rep.photo_url?'<img class="rep-photo" src="'+esc(rep.photo_url)+'">':'<div class="rep-ph-ph">'+esc(initials(rep.name))+'</div>';
+      cards+='<div class="ar-card"><div class="ar-h" style="color:#94a3b8;"><span class="material-icons" style="font-size:15px;">support_agent</span> Your PayProTec rep</div>'
+        +'<div class="rep-top">'+ph+'<div><div class="rep-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="rep-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
+        +(rep.bio?'<div class="rep-bio">'+esc(rep.bio)+'</div>':'')
+        +'</div>';
+    }
   }
-  if(rep){
-    var ph=rep.photo_url?'<img class="rep-photo" src="'+esc(rep.photo_url)+'">':'<div class="rep-ph-ph">'+esc(initials(rep.name))+'</div>';
-    cards+='<div class="ar-card"><div class="ar-h" style="color:#94a3b8;"><span class="material-icons" style="font-size:15px;">support_agent</span> Your PayProTec rep</div>'
-      +'<div class="rep-top">'+ph+'<div><div class="rep-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="rep-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
-      +(rep.bio?'<div class="rep-bio">'+esc(rep.bio)+'</div>':'')
-      +'</div>';
+  var row=document.getElementById('apptRepRow');
+  if(cards){ row.className='ar-row'; row.style.display='grid'; row.innerHTML=cards; }
+  else { row.style.display='none'; row.innerHTML=''; }
+  // Past Appointments tab.
+  var pb=document.getElementById('pastBody');
+  if(past.length){
+    document.getElementById('nav-past').style.display='';
+    pb.innerHTML=past.map(function(a){
+      return '<div class="ann" style="display:flex;align-items:center;gap:12px;">'
+        +'<div style="width:40px;height:40px;border-radius:10px;background:#f1f5f9;color:#64748b;display:flex;align-items:center;justify-content:center;flex:none;"><span class="material-icons">event_busy</span></div>'
+        +'<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:14px;">'+esc(a.title||'Appointment')+'</div>'
+        +'<div class="muted" style="font-size:12px;">'+esc(fmtWhen(a.start))+(a.calendar?' · '+esc(a.calendar):'')+'</div></div>'
+        +(a.status?'<span style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#64748b;background:#f1f5f9;border-radius:99px;padding:3px 9px;white-space:nowrap;">'+esc(a.status)+'</span>':'')
+        +'</div>';
+    }).join('');
+  } else {
+    document.getElementById('nav-past').style.display='none';
+    pb.innerHTML='<div class="card muted">No past appointments yet.</div>';
   }
-  if(cards){ var row=document.getElementById('apptRepRow'); row.className='ar-row'; row.style.display='grid'; row.innerHTML=cards; }
 }
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
