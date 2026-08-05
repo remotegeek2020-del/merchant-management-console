@@ -106,6 +106,21 @@
   .cacc.open .cacc-chev{transform:rotate(180deg);}
   .cacc-body{display:none;padding:0 16px 16px;}
   .cacc.open .cacc-body{display:block;}
+  /* Course tiles (grid → drill-in) */
+  .course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  .ctile{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;box-shadow:var(--shadow-sm);}
+  .ctile:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--teal-light);}
+  .ctile-cover{aspect-ratio:16/9;background:linear-gradient(135deg,#0f766e,#0d9488);display:flex;align-items:center;justify-content:center;color:#fff;position:relative;overflow:hidden;}
+  .ctile-cover img{width:100%;height:100%;object-fit:cover;}
+  .ctile-cover .material-icons{font-size:38px;opacity:.9;}
+  .ctile-body{padding:14px 16px;flex:1;display:flex;flex-direction:column;}
+  .ctile-body .t{font-weight:800;font-size:15px;}
+  .ctile-body .d{font-size:12px;color:var(--muted);margin-top:4px;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .ctile-body .n{font-size:11.5px;font-weight:700;color:var(--teal-dark);margin-top:10px;display:flex;align-items:center;gap:5px;}
+  .backbtn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--secondary);cursor:pointer;margin-bottom:14px;}
+  .backbtn:hover{color:var(--teal);}
+  .course-hero{border-radius:14px;overflow:hidden;margin-bottom:14px;line-height:0;}
+  .course-hero img{width:100%;max-height:240px;object-fit:cover;}
   /* Player + booking modals */
   .pv-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:150;display:none;align-items:center;justify-content:center;padding:20px;}
   .pv-card{width:100%;max-width:900px;}
@@ -287,26 +302,42 @@ async function loadAnn(){
   }).join('');
   list.forEach(function(a){ if(a.id) api({action:'lead_track',campaign_id:a.id,event_type:'impression'}); });
 }
-window.toggleCourse=function(el){ el.classList.toggle('open'); };
+var LEAD_COURSES=[];
+function courseCover(co){
+  var img=co.thumbnail_url||'';
+  if(!img && (co.videos||[]).length){ var v=co.videos[0]; if(v.thumbnail_url) img=v.thumbnail_url; else { var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } }
+  return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':'<span class="material-icons">video_library</span>';
+}
+function vidCard(v){ VMAP[v.id]={provider:v.provider,url:v.url,cta_url:v.cta_url,cta_label:v.cta_label};
+  if(!v.available){ return '<div class="vcard locked"><div class="vthumb">'+thumb(v)+'<span class="material-icons">lock</span></div><div class="vt">'+esc(v.title)+'<div class="muted" style="font-size:11px;font-weight:400;">🔒 Coming '+(v.unlock_at?new Date(v.unlock_at).toLocaleDateString():'soon')+'</div></div></div>'; }
+  return '<div class="vcard" onclick="play(\''+v.id+'\')"><div class="vthumb">'+thumb(v)+'<span class="material-icons">play_circle</span></div><div class="vt">'+esc(v.title)+'</div></div>';
+}
+function renderCourseList(){
+  var b=document.getElementById('courseBody');
+  if(!LEAD_COURSES.length){ b.innerHTML='<div class="card muted">No webinars available yet — check back soon.</div>'; return; }
+  b.innerHTML='<div class="course-grid">'+LEAD_COURSES.map(function(co){
+    var n=(co.videos||[]).length;
+    return '<div class="ctile" onclick="openLeadCourse(\''+co.id+'\')"><div class="ctile-cover">'+courseCover(co)+'</div>'
+      +'<div class="ctile-body"><div class="t">'+esc(co.title)+'</div><div class="d">'+esc(co.description||'')+'</div>'
+      +'<div class="n"><span class="material-icons" style="font-size:15px;">play_circle</span> '+n+' video'+(n===1?'':'s')+'</div></div></div>';
+  }).join('')+'</div>';
+}
+window.openLeadCourse=function(id){
+  var co=LEAD_COURSES.find(function(x){return x.id===id;}); if(!co) return;
+  var b=document.getElementById('courseBody');
+  var vids=(co.videos||[]).map(vidCard).join('')||'<div class="card muted">No videos in this course yet.</div>';
+  var hero=co.thumbnail_url?'<div class="course-hero"><img src="'+esc(co.thumbnail_url)+'" onerror="this.parentNode.style.display=\'none\'"></div>':'';
+  b.innerHTML='<div class="backbtn" onclick="renderCourseList()"><span class="material-icons" style="font-size:18px;">arrow_back</span> All courses</div>'
+    +hero+'<div style="font-weight:800;font-size:17px;margin-bottom:2px;">'+esc(co.title)+'</div>'
+    +(co.description?'<div class="muted" style="font-size:13px;margin-bottom:12px;">'+esc(co.description)+'</div>':'<div style="margin-bottom:12px;"></div>')
+    +'<div class="vgrid">'+vids+'</div>';
+  window.scrollTo(0,0);
+};
 async function loadCourses(){
   var r=await api({action:'lead_courses'});
-  var b=document.getElementById('courseBody'); var courses=(r&&r.courses)||[];
-  var withVids=courses.filter(function(c){return (c.videos||[]).length;});
-  if(!withVids.length){ b.innerHTML='<div class="card muted">No webinars available yet — check back soon.</div>'; return; }
-  b.innerHTML=withVids.map(function(c,ix){
-    var vids=(c.videos||[]).map(function(v){ VMAP[v.id]={provider:v.provider,url:v.url,cta_url:v.cta_url,cta_label:v.cta_label};
-      if(!v.available){ return '<div class="vcard locked"><div class="vthumb">'+thumb(v)+'<span class="material-icons">lock</span></div><div class="vt">'+esc(v.title)+'<div class="muted" style="font-size:11px;font-weight:400;">🔒 Coming '+(v.unlock_at?new Date(v.unlock_at).toLocaleDateString():'soon')+'</div></div></div>'; }
-      return '<div class="vcard" onclick="play(\''+v.id+'\')"><div class="vthumb">'+thumb(v)+'<span class="material-icons">play_circle</span></div><div class="vt">'+esc(v.title)+'</div></div>';
-    }).join('');
-    var n=(c.videos||[]).length;
-    var cth=c.thumbnail_url?'<img src="'+esc(c.thumbnail_url)+'" onerror="this.style.display=\'none\'">':'<span class="material-icons">play_lesson</span>';
-    return '<div class="cacc'+(ix===0?' open':'')+'"><div class="cacc-head" onclick="toggleCourse(this.parentNode)">'
-      +'<div class="cacc-thumb">'+cth+'</div>'
-      +'<div class="cacc-meta"><div class="t">'+esc(c.title)+'</div>'+(c.description?'<div class="d">'+esc(c.description)+'</div>':'')+'</div>'
-      +'<span class="cacc-count">'+n+' video'+(n===1?'':'s')+'</span>'
-      +'<span class="material-icons cacc-chev">expand_more</span></div>'
-      +'<div class="cacc-body"><div class="vgrid">'+vids+'</div></div></div>';
-  }).join('');
+  var courses=(r&&r.courses)||[];
+  LEAD_COURSES=courses.filter(function(c){return (c.videos||[]).length;});
+  renderCourseList();
 }
 (async function(){
   var r=await api({action:'lead_validate'});
