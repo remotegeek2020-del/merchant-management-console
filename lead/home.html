@@ -337,6 +337,7 @@ async function loadApptRep(){
   var row=document.getElementById('apptRepRow');
   if(cards){ row.className='ar-row'; row.style.display='grid'; row.innerHTML=cards; }
   else { row.style.display='none'; row.innerHTML=''; }
+  if(r._diag) try{ console.log('[lead appt diag]', r._diag); }catch(e){}
   // Past Appointments tab.
   var pb=document.getElementById('pastBody');
   if(past.length){

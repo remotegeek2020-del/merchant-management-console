@@ -245,23 +245,35 @@ export default async function handler(req, res) {
             if (!leadId) return bad(res, 'Session expired', 401);
             const { data: lead } = await supabase.from('leads').select('ghl_contact_id, email, assigned_rep').eq('id', leadId).maybeSingle();
             let upcoming = null, past = [];
+            const diag = { configured: false, contactId: '', count: 0, err: '' };
             if (lead) {
                 try {
                     const locationId = await ghlLocId();
+                    diag.configured = !!locationId;
                     let contactId = lead.ghl_contact_id;
                     // Resolve (and backfill) the contact id by email if we don't have it.
                     if (!contactId && locationId && lead.email) {
                         const found = await ghlFindContactByEmail(locationId, lead.email);
                         if (found && found.id) { contactId = found.id; await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', leadId); }
                     }
-                    const appts = contactId ? await ghlContactAppointments(locationId, contactId) : []; // sorted soonest-first
+                    let appts = contactId ? await ghlContactAppointments(locationId, contactId) : [];
+                    // If the stored contact has no appointments, the booking may have
+                    // attached to a different/duplicate contact — re-resolve by email.
+                    if ((!appts || !appts.length) && locationId && lead.email) {
+                        const found = await ghlFindContactByEmail(locationId, lead.email);
+                        if (found && found.id && found.id !== contactId) {
+                            const appts2 = await ghlContactAppointments(locationId, found.id);
+                            if (appts2 && appts2.length) { appts = appts2; contactId = found.id; await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', leadId); }
+                        }
+                    }
+                    diag.contactId = contactId || ''; diag.count = (appts || []).length;
                     const now = Date.now();
                     const cancelled = a => /cancel|no.?show|invalid/i.test(a.status || '');
                     // Upcoming = the next future, non-cancelled appointment.
-                    upcoming = appts.find(a => new Date(a.start).getTime() >= now && !cancelled(a)) || null;
+                    upcoming = (appts || []).find(a => new Date(a.start).getTime() >= now && !cancelled(a)) || null;
                     // Past = anything already started (most recent first).
-                    past = appts.filter(a => new Date(a.start).getTime() < now).sort((a, b) => new Date(b.start) - new Date(a.start));
-                } catch (e) { /* best-effort */ }
+                    past = (appts || []).filter(a => new Date(a.start).getTime() < now).sort((a, b) => new Date(b.start) - new Date(a.start));
+                } catch (e) { diag.err = e.message || 'error'; }
             }
             // Resolve the rep: a manually-assigned rep wins; otherwise derive it
             // from who the upcoming appointment is booked with (its HighLevel user
@@ -282,7 +294,7 @@ export default async function handler(req, res) {
                     if (hu) rep = { name: hu.name || 'Your rep', job_level: hu.role || '', bio: '', photo_url: hu.photo || '', milestones: [] };
                 } catch (e) { /* best-effort */ }
             }
-            return ok(res, { upcoming, past, rep });
+            return ok(res, { upcoming, past, rep, _diag: diag });
         }
 
         // ══════════ STAFF (Lead Portal admin) actions ══════════
