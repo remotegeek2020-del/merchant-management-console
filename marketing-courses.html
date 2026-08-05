@@ -350,14 +350,16 @@ window.editVideo=async function(courseId,vid){
       +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Leave both blank for immediate access. If both are set, the later one wins.</div>'
       // ── Video goal & call to action (ALL providers) ──
       +'<div style="border-top:1px solid #e2e8f0;margin:14px 0 0;padding-top:10px;font-size:11px;font-weight:800;color:#2563eb;text-transform:uppercase;letter-spacing:.4px;">🎯 Video goal &amp; call to action</div>'
-      +'<div style="font-size:11.5px;color:#94a3b8;margin:4px 0 2px;">What should this video drive viewers to? Used for the QR code, the button viewers see under the video, and (YouTube only) AI replies. Works for any provider — YouTube, Wistia, Vimeo…</div>'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin:4px 0 2px;">Pick a HighLevel calendar or form — it opens <b>inside the app</b> (no redirect) when a viewer clicks the button under the video. Also used for the QR code and (YouTube only) AI replies.</div>'
       +'<label>Goal for this video</label><select id="v-aigoal" class="swal2-input" style="margin:0;width:100%;"><option value="none">No goal — no call to action</option><option value="appointment">Book an appointment (HighLevel calendar)</option><option value="signup">Sign up (HighLevel form)</option></select>'
       +'<div id="v-aisrcwrap" style="display:none;"><label id="v-aisrclabel">HighLevel source</label><select id="v-aisrc" class="swal2-input" style="margin:0;width:100%;"><option value="">Loading…</option></select></div>'
+      +'<div id="v-extwrap">'
       +'<label>Or auto-detect <span style="text-transform:none;color:#94a3b8;font-weight:400;">(paste a page URL, the embed code, or the calendar/form link)</span></label>'
       +'<div style="display:flex;gap:6px;"><input id="v-detecturl" class="swal2-input" style="margin:0;flex:1;" placeholder="https://site.com/join  ·  or paste <iframe…> embed code"><button type="button" id="v-detectbtn" style="border:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;background:#0f172a;color:#fff;">Detect</button></div>'
       +'<div style="font-size:11px;color:#94a3b8;margin-top:3px;">Some sites block automated reads or load the calendar via JavaScript — if a URL finds nothing, paste the embed code (from your site or HighLevel) instead.</div>'
       +'<div id="v-detectout" style="margin-top:6px;font-size:12.5px;"></div>'
       +'<label>Destination link <span style="text-transform:none;color:#94a3b8;font-weight:400;">(auto-filled from the pick above; editable)</span></label><input id="v-ailink" class="swal2-input" style="margin:0;width:100%;" placeholder="https://…" value="'+esc(v.ai_cta_link||'')+'">'
+      +'</div>'
       +'<label>Button / invite wording <span style="text-transform:none;color:#94a3b8;font-weight:400;">(e.g. "Book a free demo")</span></label><input id="v-ailabel" class="swal2-input" style="margin:0;width:100%;" value="'+esc(v.ai_cta_label||'')+'">'
       +'<input type="hidden" id="v-airef" value="'+esc(v.ai_cta_ref||'')+'">'
       // ── AI reply guidance (YouTube comments + live chat ONLY) ──
@@ -373,8 +375,14 @@ window.editVideo=async function(courseId,vid){
       // AI reply guidance only applies to YouTube (comments + live chat).
       // Hide it for Wistia/Vimeo/other, but keep the goal + CTA for every provider.
       var provSel=document.getElementById('v-prov');
-      function toggleAiWrap(){ document.getElementById('v-aiwrap').style.display=(provSel.value==='youtube')?'block':'none'; }
-      provSel.onchange=toggleAiWrap; toggleAiWrap();
+      // Non-YouTube videos connect ONLY to a HighLevel calendar/form (embedded
+      // in-app) — no raw destination link or external auto-detect, no AI replies.
+      function toggleProvFields(){
+        var isYt=(provSel.value==='youtube');
+        document.getElementById('v-aiwrap').style.display=isYt?'block':'none';
+        document.getElementById('v-extwrap').style.display=isYt?'block':'none';
+      }
+      provSel.onchange=toggleProvFields; toggleProvFields();
       var goalSel=document.getElementById('v-aigoal'); goalSel.value=(v.ai_goal||'none');
       var wrap=document.getElementById('v-aisrcwrap'), srcSel=document.getElementById('v-aisrc'), lbl=document.getElementById('v-aisrclabel');
       var CTA={forms:[],calendars:[],loaded:false};
