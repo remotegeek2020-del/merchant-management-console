@@ -301,15 +301,30 @@ export default async function handler(req, res) {
             if (!body.video_id) return bad(res, 'video_id required');
             const { data: rows } = await supabase.rpc('course_video_viewers', { vid: body.video_id });
             const ids = [...new Set((rows || []).map(r => r.person_id).filter(Boolean))];
-            let pmap = {};
+            const leadIds = [...new Set((rows || []).map(r => r.lead_id).filter(Boolean))];
+            let pmap = {}, lmap = {};
             if (ids.length) {
                 const { data: persons } = await supabase.from('persons').select('id, full_name, email, phone_number, hl_contact_id').in('id', ids);
                 (persons || []).forEach(p => { pmap[p.id] = p; });
             }
+            if (leadIds.length) {
+                const { data: leads } = await supabase.from('leads').select('id, full_name, email, phone, ghl_contact_id').in('id', leadIds);
+                (leads || []).forEach(l => { lmap[l.id] = l; });
+            }
             const viewers = (rows || []).map(r => {
+                if (r.lead_id) {
+                    const l = lmap[r.lead_id] || {};
+                    return {
+                        person_id: null, lead_id: r.lead_id, viewer_type: 'prospect',
+                        name: (l.full_name || l.email || 'Prospect') + ' (Prospect)',
+                        email: l.email || '', phone: l.phone || '',
+                        hl_contact_id: l.ghl_contact_id || null,
+                        views: Number(r.views) || 0, first_viewed: r.first_viewed, last_viewed: r.last_viewed
+                    };
+                }
                 const p = pmap[r.person_id] || {};
                 return {
-                    person_id: r.person_id,
+                    person_id: r.person_id, lead_id: null, viewer_type: 'partner',
                     name: p.full_name || '—',
                     email: p.email || '',
                     phone: p.phone_number || '',

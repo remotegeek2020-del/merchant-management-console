@@ -134,6 +134,17 @@ export default async function handler(req, res) {
             });
             return ok(res, { courses: (courses || []).map(c => ({ ...c, videos: byCourse[c.id] || [] })) });
         }
+        // Record a prospect (lead) video view → course_video_views (feeds the
+        // same per-video portal-view stats staff see in Marketing → Courses).
+        if (action === 'lead_log_view') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            if (!body.video_id) return bad(res, 'video_id required');
+            const { data: vid } = await supabase.from('course_videos').select('id, course_id').eq('id', body.video_id).maybeSingle();
+            if (!vid) return bad(res, 'Video not found', 404);
+            await supabase.from('course_video_views').insert({ video_id: vid.id, course_id: vid.course_id, lead_id: leadId });
+            return ok(res, {});
+        }
         // Announcement board for leads (read-only) — from Marketing → Campaigns
         // that have "Show on Lead Portal" enabled and are currently active.
         if (action === 'lead_announcements') {
