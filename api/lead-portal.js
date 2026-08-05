@@ -311,7 +311,23 @@ export default async function handler(req, res) {
                     if (hu) rep = { name: hu.name || 'Your rep', job_level: hu.role || '', bio: '', email: hu.email || '', phone: hu.phone || '', photo_url: hu.photo || '', milestones: [] };
                 } catch (e) { /* best-effort */ }
             }
-            return ok(res, { upcoming, past, rep, _diag: diag });
+            // Journey progress signals for the home milestones.
+            const { data: lp } = await supabase.from('leads').select('video_watch_seconds').eq('id', leadId).maybeSingle();
+            const watch_seconds = (lp && lp.video_watch_seconds) || 0;
+            const has_appointment = !!(upcoming || (past && past.length));
+            return ok(res, { upcoming, past, rep, watch_seconds, has_appointment, _diag: diag });
+        }
+        // Accumulate a prospect's total video watch time (drives the
+        // "Explore & Learn" milestone; ~10 min = complete).
+        if (action === 'lead_add_watch') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            let inc = parseInt(body.seconds, 10); if (!Number.isFinite(inc) || inc < 0) inc = 0;
+            inc = Math.min(inc, 600); // guard against bogus large jumps per call
+            const { data: cur } = await supabase.from('leads').select('video_watch_seconds').eq('id', leadId).maybeSingle();
+            const total = ((cur && cur.video_watch_seconds) || 0) + inc;
+            await supabase.from('leads').update({ video_watch_seconds: total }).eq('id', leadId);
+            return ok(res, { watch_seconds: total });
         }
 
         // ══════════ STAFF (Lead Portal admin) actions ══════════

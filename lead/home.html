@@ -309,20 +309,24 @@ window.openNav=function(){ document.getElementById('sidebar').classList.add('ope
 window.closeNav=function(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('scrim').classList.remove('open'); };
 
 // ── Become-a-partner milestones (default set) ──
+var WATCH_SECONDS=0, HAS_APPT=false;
+var WATCH_GOAL=600; // ~10 minutes of any course videos
 var MILESTONES=[
-  {icon:'how_to_reg',title:'Joined the Program',desc:'You registered as a prospect. Welcome aboard!',done:true},
-  {icon:'assignment_turned_in',title:'Completed Onboarding',desc:'You told us about your goals so we can tailor your path.',done:true},
-  {icon:'play_circle',title:'Explore & Learn',desc:'Watch the webinars and training in Courses & Videos.',done:false},
-  {icon:'event_available',title:'Book Your Call',desc:'Meet a PayProTec rep to become a partner.',done:false},
-  {icon:'workspace_premium',title:'Become a Partner',desc:'Get approved and unlock the full Partner Portal.',done:false}
+  {icon:'how_to_reg',title:'Joined the Program',desc:'You registered as a prospect. Welcome aboard!',done:function(){return true;}},
+  {icon:'assignment_turned_in',title:'Completed Onboarding',desc:'You told us about your goals so we can tailor your path.',done:function(){return true;}},
+  {icon:'play_circle',title:'Explore & Learn',desc:'Watch about 10 minutes of the webinars in Courses & Videos.',done:function(){return WATCH_SECONDS>=WATCH_GOAL;}},
+  {icon:'event_available',title:'Book Your Call',desc:'Meet a PayProTec rep to become a partner.',done:function(){return HAS_APPT;}},
+  {icon:'workspace_premium',title:'Become a Partner',desc:'Get approved and unlock the full Partner Portal.',done:function(){return false;}}
 ];
+function msDone(m){ return typeof m.done==='function'?!!m.done():!!m.done; }
 function renderJourney(){
-  var nowIdx=MILESTONES.findIndex(function(m){return !m.done;});
-  var doneCount=MILESTONES.filter(function(m){return m.done;}).length;
+  var nowIdx=MILESTONES.findIndex(function(m){return !msDone(m);});
+  var doneCount=MILESTONES.filter(msDone).length;
   document.getElementById('journeyTimeline').innerHTML=MILESTONES.map(function(m,i){
-    var state=m.done?'done':(i===nowIdx?'now':'upcoming');
-    var pill=m.done?'<span class="jpill ok">Done</span>':(i===nowIdx?'<span class="jpill next">Up next</span>':'');
-    var icon=m.done?'check':m.icon;
+    var d=msDone(m);
+    var state=d?'done':(i===nowIdx?'now':'upcoming');
+    var pill=d?'<span class="jpill ok">Done</span>':(i===nowIdx?'<span class="jpill next">Up next</span>':'');
+    var icon=d?'check':m.icon;
     return '<div class="jstep '+state+'"><div class="jdot"><span class="material-icons">'+icon+'</span></div>'
       +'<div class="jbody"><div class="jn">'+esc(m.title)+' '+pill+'</div><div class="jd">'+esc(m.desc)+'</div></div></div>';
   }).join('');
@@ -333,8 +337,19 @@ function renderJourney(){
 var VMAP={};
 window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSrc(v.provider,v.url); if(!src){ alert('This video can\'t be played.'); return; } document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
   var cta=document.getElementById('playerCta'); cta.innerHTML = v.cta_url ? '<button onclick="openBooking(\''+encodeURIComponent(v.cta_url)+'\',\''+esc((v.cta_label||'Book an appointment').replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;border:none;cursor:pointer;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;font-family:inherit;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</button>' : '';
-  document.getElementById('player').style.display='flex'; try{ api({action:'lead_log_view',video_id:id}); }catch(e){} };
-window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; document.getElementById('playerCta').innerHTML=''; };
+  document.getElementById('player').style.display='flex'; try{ api({action:'lead_log_view',video_id:id}); }catch(e){} startWatch(); };
+window.closePlayer=function(){ stopWatch(); document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; document.getElementById('playerCta').innerHTML=''; };
+// Approx. watch-time tracking (counts while the player is open). Flushes every
+// 30s and on close; drives the "Explore & Learn" milestone (~10 min total).
+var _watchStart=0,_watchTimer=null;
+function flushWatch(){
+  if(!_watchStart) return;
+  var secs=Math.round((Date.now()-_watchStart)/1000); _watchStart=Date.now();
+  if(secs<=0) return;
+  api({action:'lead_add_watch',seconds:secs}).then(function(r){ if(r&&r.success){ WATCH_SECONDS=r.watch_seconds||WATCH_SECONDS; renderJourney(); } }).catch(function(){});
+}
+function startWatch(){ _watchStart=Date.now(); if(_watchTimer) clearInterval(_watchTimer); _watchTimer=setInterval(flushWatch,30000); }
+function stopWatch(){ flushWatch(); if(_watchTimer){ clearInterval(_watchTimer); _watchTimer=null; } _watchStart=0; }
 window.openBooking=function(encUrl,label){ var url=decodeURIComponent(encUrl); document.getElementById('bkTitle').textContent=label||'Book your appointment'; document.getElementById('bkFrame').src=url; document.getElementById('bkFoot').innerHTML='Trouble loading? <a href="'+esc(url)+'" target="_blank" rel="noopener">Open in a new tab</a>'; document.getElementById('bookModal').style.display='flex'; loadCalScript(); };
 window.closeBooking=function(){ document.getElementById('bookModal').style.display='none'; document.getElementById('bkFrame').src='about:blank'; };
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); closeNav(); } });
@@ -347,6 +362,7 @@ async function loadApptRep(){
   if(!r||!r.success) return;
   var up=r.upcoming, rep=r.rep, past=r.past||[], html='';
   UPCOMING=up||null; applyBookingGate(); renderBook();
+  HAS_APPT=!!r.has_appointment; WATCH_SECONDS=r.watch_seconds||0; renderJourney();
   if(rep){
     // Fancy profile card with the appointment time built in.
     var ph=rep.photo_url?'<img class="pc-avatar" src="'+esc(rep.photo_url)+'">':'<div class="pc-avatar-ph">'+esc(initials(rep.name))+'</div>';
