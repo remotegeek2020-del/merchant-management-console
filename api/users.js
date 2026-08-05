@@ -3,6 +3,8 @@ import { validateSession, sessionErrorResponse } from './_validate.js';
 import { ServerClient } from 'postmark';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { ghlListUsers } from './_ghl.js';
+import { getConfigValue } from './api-config.js';
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
@@ -315,9 +317,28 @@ export default async function handler(req, res) {
             }
             // ── Secret Dungeon bypass: super_admin sets ONLY description / job
             //    level / photo for any user. Nothing else is touched. ──
-            if (action === 'admin_list_rep_profiles' || action === 'admin_set_rep_profile') {
+            if (action === 'admin_list_rep_profiles' || action === 'admin_set_rep_profile' || action === 'admin_sync_reps_ghl') {
                 const { data: perf } = await supabase.from('app_users').select('role, email, first_name, last_name').eq('userid', session.userid).maybeSingle();
                 if ((perf?.role || '').toLowerCase() !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+                if (action === 'admin_sync_reps_ghl') {
+                    // Mirror staff from HighLevel team members by matching email.
+                    // Fill-only-empty: only sets a rep photo that is currently blank.
+                    const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+                    if (!locationId) return res.status(400).json({ success: false, message: 'GHL_LOCATION_ID is not configured.' });
+                    let hlUsers = [];
+                    try { hlUsers = await ghlListUsers(locationId); } catch (e) { return res.status(502).json({ success: false, message: 'HighLevel user lookup failed.' }); }
+                    const byEmail = {}; hlUsers.forEach(u => { if (u.email) byEmail[u.email] = u; });
+                    const { data: staff } = await supabase.from('app_users').select('userid, email, rep_photo_url');
+                    let matched = 0, updated = 0;
+                    for (const s of (staff || [])) {
+                        const hl = byEmail[String(s.email || '').toLowerCase()];
+                        if (!hl) continue;
+                        matched++;
+                        if (!s.rep_photo_url && hl.photo) { await supabase.from('app_users').update({ rep_photo_url: hl.photo }).eq('userid', s.userid); updated++; }
+                    }
+                    await supabase.from('activity_logs').insert([{ email: perf.email, action: `Synced rep photos from HighLevel: ${updated} filled of ${matched} matched`, status: 'success', category: 'admin', severity: 'info' }]);
+                    return res.status(200).json({ success: true, matched, updated, hl_users: hlUsers.length });
+                }
                 if (action === 'admin_list_rep_profiles') {
                     const { data: rows } = await supabase.from('app_users')
                         .select('userid, first_name, last_name, email, role, is_active, rep_bio, rep_job_level, rep_photo_url')

@@ -272,6 +272,34 @@ export async function ghlSearchContactsByTag(locationId, tag, limit = 100) {
     } catch { return []; }
 }
 
+// Team members (users) in a sub-account, for matching app staff by email.
+export async function ghlListUsers(locationId) {
+    if (!locationId) return [];
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return [];
+    try {
+        const r = await fetch(`${GHL_BASE}/users/?locationId=${encodeURIComponent(locationId)}`, {
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json' }
+        });
+        if (!r.ok) return [];
+        const d = await r.json().catch(() => ({}));
+        return (d?.users || []).map(u => ({
+            id: u.id, email: String(u.email || '').toLowerCase(),
+            name: (`${u.firstName || ''} ${u.lastName || ''}`.trim()) || u.name || '',
+            phone: u.phone || '', photo: u.profilePhoto || u.photo || u.avatar || '',
+            role: (u.roles && (u.roles.role || u.roles.type)) || u.role || ''
+        })).filter(u => u.email);
+    } catch { return []; }
+}
+
+// Whitelabel deep link to a contact in the sub-account (the "secure tunnel").
+// Staff must be signed into HighLevel; this just opens the right contact.
+export function ghlContactLink(locationId, contactId) {
+    if (!locationId || !contactId) return '';
+    const host = process.env.GHL_APP_HOST || 'app.mypayprotec.com';
+    return `https://${host}/v2/location/${encodeURIComponent(locationId)}/contacts/detail/${encodeURIComponent(contactId)}`;
+}
+
 export async function ghlGetContactAddress(contactId) {
     const key = await ghlKeys();
     if (!key || !contactId) return null;

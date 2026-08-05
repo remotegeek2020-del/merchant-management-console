@@ -176,7 +176,7 @@ window.importGhl=async function(btn){
   var r=await api({action:'import_ghl_leads'});
   btn.disabled=false; btn.innerHTML=orig;
   if(!r||!r.success){ Swal.fire('Sync note',(r&&r.message)||'Could not sync from HighLevel.','warning'); return; }
-  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new lead(s) imported'+(r.skipped?' · '+r.skipped+' already existed/skipped':'')+'<br><span style="color:#94a3b8;font-size:12px;">Tag: '+esc(r.tag||'')+'</span>',confirmButtonColor:'#2563eb'});
+  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new · <b>'+(r.updated||0)+'</b> enriched'+(r.skipped?' · '+r.skipped+' unchanged':'')+'<br><span style="color:#94a3b8;font-size:12px;">Tag: '+esc(r.tag||'')+'</span>',confirmButtonColor:'#2563eb'});
   loadLeads();
 };
 window.leadDetail=async function(id){
@@ -184,7 +184,7 @@ window.leadDetail=async function(id){
   await loadReps();
   var r=await api({action:'lead_detail',lead_id:id});
   if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
-  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[];
+  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[], ghlLink=r.ghl_link||'';
   function fmtA(a){ return Array.isArray(a.answer)?a.answer.map(esc).join(', '):esc(a.answer); }
   function fmtDt(s){ try{ return new Date(s).toLocaleString(); }catch(e){ return esc(s||''); } }
   // Assign-rep dropdown
@@ -201,6 +201,7 @@ window.leadDetail=async function(id){
   Swal.fire({title:esc(l.full_name||'Lead'),width:600,html:'<div style="text-align:left;">'
     +'<div class="muted" style="font-size:12.5px;">'+esc(l.email||'')+(l.phone?' · '+esc(l.phone):'')+'</div>'
     +'<div style="margin-top:6px;font-size:12px;">Status: <b>'+esc(l.status)+'</b> · Onboarding: <b>'+(l.onboarding_completed?'complete':'pending')+'</b> · Signed up '+(l.created_at?new Date(l.created_at).toLocaleString():'')+'</div>'
+    +(ghlLink?'<div style="margin-top:10px;"><a href="'+esc(ghlLink)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:#0f172a;color:#fff;text-decoration:none;padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:700;"><span class="material-icons" style="font-size:16px;">open_in_new</span> Open in HighLevel (PayProTec Partners)</a></div>':'')
     +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Assigned rep</div>'
     +'<select id="ld-rep" onchange="assignRep(\''+l.id+'\',this.value)" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'+repOpts+'</select>'
     +'<div id="ld-rep-note" class="muted" style="font-size:11.5px;margin-top:4px;"></div>'
