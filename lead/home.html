@@ -96,11 +96,11 @@
   .profile-card{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-md);margin-bottom:20px;}
   .pc-cover{height:60px;background:linear-gradient(135deg,#001e3c 0%,#0f3460 55%,#0d9488 130%);position:relative;}
   .pc-cover .pc-tag{position:absolute;top:12px;right:14px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;padding:4px 11px;border-radius:99px;display:inline-flex;align-items:center;gap:5px;}
-  .pc-head{display:flex;align-items:flex-end;gap:16px;padding:0 24px;margin-top:-38px;}
-  .pc-avatar,.pc-avatar-ph{width:80px;height:80px;border-radius:50%;border:4px solid #fff;box-shadow:var(--shadow-sm);background:#e2e8f0;flex:none;}
+  .pc-head{padding:0 24px;margin-top:-40px;}
+  .pc-avatar,.pc-avatar-ph{width:80px;height:80px;border-radius:50%;border:4px solid #fff;box-shadow:var(--shadow-sm);background:#e2e8f0;}
   .pc-avatar{object-fit:cover;display:block;}
   .pc-avatar-ph{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;}
-  .pc-txt{padding-bottom:3px;min-width:0;}
+  .pc-txt{padding:10px 24px 0;min-width:0;}
   .pc-name{font-size:19px;font-weight:800;line-height:1.15;color:var(--text);}
   .pc-level{display:inline-block;font-size:11.5px;font-weight:700;color:var(--teal-dark);background:var(--teal-bg);border:1px solid var(--teal-light);border-radius:99px;padding:3px 12px;margin-top:5px;}
   .pc-intro{padding:10px 24px 0;font-size:13px;color:var(--secondary);font-style:italic;}
@@ -363,7 +363,8 @@ async function loadApptRep(){
       : '';
     html='<div class="profile-card">'
       +'<div class="pc-cover"><span class="pc-tag"><span class="material-icons" style="font-size:12px;">support_agent</span> Your PayProTec rep</span></div>'
-      +'<div class="pc-head">'+ph+'<div class="pc-txt"><div class="pc-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="pc-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
+      +'<div class="pc-head">'+ph+'</div>'
+      +'<div class="pc-txt"><div class="pc-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="pc-level">'+esc(rep.job_level)+'</div>':'')+'</div>'
       +'<div class="pc-intro">Here\'s your dedicated partner at PayProTec.</div>'
       +contact
       +apptBanner
