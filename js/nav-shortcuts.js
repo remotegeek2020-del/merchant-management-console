@@ -7,7 +7,7 @@
     { key: 'returns',     label: 'Returns',        url: '/returns-dashboard',      icon: 'assignment_return',   color: '#d97706', bg: '#fef3c7', access: 'pp_access_returns' },
     { key: 'merchants',   label: 'Merchants',      url: '/merchants-dashboard',    icon: 'storefront',          color: '#166534', bg: '#dcfce7', access: 'pp_access_merchants' },
     { key: 'partners',    label: 'Partners',       url: '/partners-dashboard',     icon: 'handshake',           color: '#004990', bg: '#dbeafe', access: 'pp_access_partners' },
-    { key: 'leads',       label: 'Prospects',      url: '/leads',                  icon: 'person_search',       color: '#0d9488', bg: '#ccfbf1', access: null },
+    { key: 'leads',       label: 'Prospects',      url: '/leads',                  icon: 'person_search',       color: '#0d9488', bg: '#ccfbf1', access: null, highlight: true },
     { key: 'tickets',     label: 'Tickets',        url: '/tickets-dashboard',      icon: 'confirmation_number', color: '#0d9488', bg: '#ccfbf1', access: null },
     { key: 'tasks',       label: 'Tasks',          url: '/tasks-dashboard',        icon: 'assignment',          color: '#92400e', bg: '#fef3c7', access: null },
   ];
@@ -48,6 +48,22 @@
     visible.forEach(function (mod) {
       var a = document.createElement('a');
       a.href = mod.url;
+      if (mod.highlight) {
+        // A filled, slightly larger pill so it stands out from the rest.
+        a.style.cssText = [
+          'display:inline-flex', 'align-items:center', 'gap:5px',
+          'padding:4px 13px', 'background:' + mod.color, 'color:#fff',
+          'border:1px solid ' + mod.color, 'border-radius:20px',
+          'font-size:11.5px', 'font-weight:800', 'text-decoration:none',
+          'box-shadow:0 2px 8px ' + mod.color + '55',
+          'transition:transform .15s,box-shadow .15s', 'white-space:nowrap',
+        ].join(';');
+        a.innerHTML = '<span class="material-icons" style="font-size:13px;">' + mod.icon + '</span>' + mod.label;
+        a.addEventListener('mouseenter', function () { this.style.transform = 'translateY(-1px)'; this.style.boxShadow = '0 4px 12px ' + mod.color + '77'; });
+        a.addEventListener('mouseleave', function () { this.style.transform = ''; this.style.boxShadow = '0 2px 8px ' + mod.color + '55'; });
+        strip.appendChild(a);
+        return;
+      }
       a.style.cssText = [
         'display:inline-flex',
         'align-items:center',
