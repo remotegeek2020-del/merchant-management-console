@@ -62,6 +62,30 @@
   .pv-ans{text-align:left;border-bottom:1px solid #f1f5f9;padding:8px 0;font-size:13px;}
   .pv-sel{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:11px;font-size:13.5px;font-family:inherit;background:#fff;}
   .pv-hl{display:inline-flex;align-items:center;gap:6px;background:#0f172a;color:#fff;text-decoration:none;padding:9px 15px;border-radius:10px;font-size:12.5px;font-weight:700;}
+  /* Graduation modal */
+  .grad-overlay{position:fixed;inset:0;background:rgba(2,10,25,.6);backdrop-filter:blur(2px);z-index:1000;display:none;align-items:center;justify-content:center;padding:18px;}
+  .grad-card{background:#fff;border-radius:18px;width:100%;max-width:560px;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.3);}
+  .grad-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 22px;background:linear-gradient(135deg,#001e3c,#0f3460 60%,#0d9488 150%);color:#fff;}
+  .grad-title{font-size:16px;font-weight:800;}
+  .grad-head .muted{color:rgba(255,255,255,.85)!important;}
+  .grad-body{padding:18px 22px;overflow-y:auto;}
+  .grad-foot{display:flex;gap:10px;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--border);}
+  .gl{display:block;font-size:11px;font-weight:800;color:var(--secondary);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 5px;}
+  .gl:first-child{margin-top:0;}
+  .gi{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:13.5px;font-family:inherit;outline:none;}
+  .gi:focus{border-color:var(--teal);}
+  .gchk{display:flex;align-items:center;gap:9px;cursor:pointer;margin-top:14px;padding:10px 13px;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;font-size:13px;font-weight:700;color:#004990;}
+  .grad-sugg{position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--border);border-radius:10px;z-index:20;max-height:210px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);margin-top:3px;}
+  .grad-sugg .row{padding:10px 13px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .grad-sugg .row:hover{background:#f6fbfa;}
+  .grad-sec{font-size:11px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 8px;}
+  .gbtn{background:var(--blue);color:#fff;border:none;border-radius:9px;padding:0 16px;height:42px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .grad-idlist{margin-top:12px;display:flex;flex-direction:column;gap:6px;min-height:56px;padding:10px;background:#fff;border:1px dashed #cbd5e1;border-radius:10px;}
+  .gidrow{display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;}
+  .gidrow .rm{margin-left:auto;color:#dc2626;cursor:pointer;font-size:18px;}
+  .gbtn-ghost{background:#fff;border:1px solid var(--border);color:var(--secondary);border-radius:10px;padding:11px 18px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;}
+  .gbtn-go{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit;}
+  .grad-rep{background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:9px 12px;font-size:12.5px;color:var(--teal-dark);margin-top:10px;font-family:'DM Mono',ui-monospace,monospace;word-break:break-all;}
 </style>
 </head>
 <body>
@@ -87,6 +111,46 @@
   <div class="card">
     <div class="card-h"><span class="material-icons" style="font-size:16px;color:var(--teal);">person_search</span> All prospects <span id="cnt" class="muted" style="font-weight:700;"></span></div>
     <div id="list"><div class="empty"><span class="material-icons" style="animation:spin 1s linear infinite;">sync</span> Loading…</div></div>
+  </div>
+</div>
+
+<!-- Graduation modal (reverse onboarding, on this screen) -->
+<div class="grad-overlay" id="gradModal" onclick="if(event.target===this)closeGraduate()">
+  <div class="grad-card">
+    <div class="grad-head">
+      <div><div class="grad-title">🎓 Graduate → Partner</div><div class="muted" id="gWho" style="font-size:12.5px;"></div></div>
+      <span class="material-icons" style="cursor:pointer;" onclick="closeGraduate()">close</span>
+    </div>
+    <div class="grad-body">
+      <label class="gl">Partner Activation Date</label>
+      <input type="date" id="gActivation" class="gi">
+      <label class="gl">Company / Firm</label>
+      <div style="position:relative;">
+        <input type="text" id="gCompany" class="gi" placeholder="Search a company, type to create, or leave blank for Independent" autocomplete="off" oninput="gCompanyInput()" onfocus="gCompanyInput()" onblur="setTimeout(function(){var b=document.getElementById('gCompanyBox');if(b)b.style.display='none';},180)">
+        <div id="gCompanyBox" class="grad-sugg" style="display:none;"></div>
+      </div>
+      <div id="gCompanySel" style="display:none;margin-top:7px;font-size:12.5px;font-weight:700;color:var(--teal-dark);"></div>
+      <label class="gchk"><input type="checkbox" id="gBranded" style="width:16px;height:16px;accent-color:#004990;"> 🏷️ Branded Partner</label>
+
+      <div class="grad-sec">Partner IDs</div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px;">
+        <div style="position:relative;">
+          <input type="text" id="gIdInput" class="gi" placeholder="Search unassigned IDs or enter a new ID…" autocomplete="off" oninput="gIdSearch()">
+          <div id="gIdResults" class="grad-sugg" style="display:none;"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+          <input type="number" id="gRev" class="gi" placeholder="Rev share (number only)" style="flex:1;" inputmode="numeric">
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:800;color:#64748b;white-space:nowrap;"><input type="checkbox" id="gPrime" onchange="if(this.checked&&!document.getElementById('gRev').value)document.getElementById('gRev').value='50';"> PRIME ⭐</label>
+          <button class="gbtn" onclick="gAddId()">ADD</button>
+        </div>
+      </div>
+      <div id="gIdList" class="grad-idlist"><div class="muted" style="font-size:11.5px;text-align:center;padding:14px 0;">No IDs added yet</div></div>
+      <div id="gRepPreview"></div>
+    </div>
+    <div class="grad-foot">
+      <button class="gbtn-ghost" onclick="closeGraduate()">Cancel</button>
+      <button class="gbtn-go" id="gSubmit" onclick="submitGraduation()"><span class="material-icons" style="font-size:18px;">military_tech</span> Complete Graduation</button>
+    </div>
   </div>
 </div>
 
@@ -153,7 +217,101 @@ window.viewProspect=async function(id){
     +'</div>';
   Swal.fire({html:html,width:560,showConfirmButton:true,confirmButtonText:'Close',confirmButtonColor:'#0f4c81'});
 };
-window.graduateProspect=function(id){ location.href='/partners-dashboard?graduate='+encodeURIComponent(id); };
+// ── Graduation (reverse onboarding, on this screen) ──────────────────────────
+var G_LEAD=null, G_COMPANIES=null, G_COID=null, G_CONAME=null, G_INDEP=false, G_IDS=[];
+function partnersApi(b){ return fetch('/api/partners',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+window.graduateProspect=async function(id){
+  var l=PROSPECTS.find(function(x){return x.id===id;});
+  if(!l){ var r=await lpApi({action:'lead_detail',lead_id:id}); l=r&&r.lead; }
+  if(!l) return;
+  Swal.close();
+  G_LEAD=l; G_COID=null; G_CONAME=null; G_INDEP=false; G_IDS=[];
+  document.getElementById('gWho').textContent=(l.full_name||'')+(l.email?' · '+l.email:'');
+  document.getElementById('gActivation').value=new Date().toISOString().slice(0,10);
+  document.getElementById('gCompany').value=''; document.getElementById('gCompanySel').style.display='none';
+  document.getElementById('gBranded').checked=false;
+  document.getElementById('gIdInput').value=''; document.getElementById('gRev').value=''; document.getElementById('gPrime').checked=false;
+  renderGIds();
+  document.getElementById('gradModal').style.display='flex';
+  if(!G_COMPANIES){ try{ var pr=await partnersApi({action:'get_partners_list'}); G_COMPANIES=(pr&&pr.data&&pr.data.companies)||[]; }catch(e){ G_COMPANIES=[]; } }
+};
+window.closeGraduate=function(){ document.getElementById('gradModal').style.display='none'; G_LEAD=null; };
+window.gCompanyInput=function(){
+  var t=(document.getElementById('gCompany').value||'').trim().toLowerCase();
+  // typing = clear a prior selection (they're choosing/creating)
+  G_COID=null; G_INDEP=false; document.getElementById('gCompanySel').style.display='none';
+  var box=document.getElementById('gCompanyBox');
+  var list=(G_COMPANIES||[]).filter(function(c){ return !t || (c.company_name||'').toLowerCase().indexOf(t)>-1; }).slice(0,30);
+  var html='';
+  html+='<div class="row" onmousedown="pickIndependent()"><span class="material-icons" style="font-size:16px;color:#94a3b8;">person</span> Independent (no company)</div>';
+  list.forEach(function(c){ html+='<div class="row" onmousedown="pickGCompany(\''+c.id+'\',\''+esc((c.company_name||'').replace(/\x27/g,"")) +'\')"><span class="material-icons" style="font-size:16px;color:var(--blue);">business</span> '+esc(c.company_name||'')+'</div>'; });
+  var exact=(G_COMPANIES||[]).some(function(c){return (c.company_name||'').toLowerCase()===t;});
+  if(t && !exact){ html+='<div class="row" onmousedown="createGCompany()"><span class="material-icons" style="font-size:16px;color:#16a34a;">add_circle</span> Create new: <b style="margin-left:3px;">'+esc(document.getElementById('gCompany').value.trim())+'</b></div>'; }
+  box.innerHTML=html; box.style.display='block';
+};
+window.pickGCompany=function(id,name){ G_COID=id; G_CONAME=name; G_INDEP=false; document.getElementById('gCompany').value=name; document.getElementById('gCompanyBox').style.display='none'; var s=document.getElementById('gCompanySel'); s.style.display='block'; s.innerHTML='<span class="material-icons" style="font-size:14px;vertical-align:-2px;">business</span> '+esc(name); };
+window.createGCompany=function(){ G_COID=null; G_INDEP=false; G_CONAME=document.getElementById('gCompany').value.trim(); document.getElementById('gCompanyBox').style.display='none'; var s=document.getElementById('gCompanySel'); s.style.display='block'; s.innerHTML='<span class="material-icons" style="font-size:14px;vertical-align:-2px;color:#16a34a;">add_circle</span> New company: '+esc(G_CONAME); };
+window.pickIndependent=function(){ G_INDEP=true; G_COID=null; G_CONAME=null; document.getElementById('gCompany').value='Independent'; document.getElementById('gCompanyBox').style.display='none'; var s=document.getElementById('gCompanySel'); s.style.display='block'; s.innerHTML='<span class="material-icons" style="font-size:14px;vertical-align:-2px;color:#94a3b8;">person</span> Independent (no company)'; };
+window.gIdSearch=async function(){
+  var term=(document.getElementById('gIdInput').value||'').trim(); var box=document.getElementById('gIdResults');
+  if(term.length<1){ box.style.display='none'; return; }
+  try{
+    var r=await partnersApi({action:'get_orphan_ids',query:term,placeholder_uuid:'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be'});
+    var d=(r&&r.data)||[];
+    box.style.display='block';
+    box.innerHTML=d.length? d.map(function(it){return '<div class="row" onmousedown="gPickId(\''+esc(it.id_string)+'\')"><b>'+esc(it.id_string)+'</b> <span class="muted" style="font-size:11px;">(Unassigned)</span></div>';}).join('')
+      : '<div class="row muted" style="font-size:12px;" onmousedown="document.getElementById(\'gIdResults\').style.display=\'none\'">No unassigned ID — enter manually</div>';
+  }catch(e){}
+};
+window.gPickId=function(s){ document.getElementById('gIdInput').value=s; document.getElementById('gIdResults').style.display='none'; };
+window.gAddId=function(){
+  var idStr=(document.getElementById('gIdInput').value||'').trim();
+  var revNum=(document.getElementById('gRev').value||'').trim();
+  var isPrime=document.getElementById('gPrime').checked;
+  if(!idStr) return;
+  var eff=(!revNum&&isPrime)?'50':revNum;
+  var rev=eff?(String(eff).replace(/%+$/,'')+'%'):'0%';
+  if(G_IDS.some(function(x){return x.string===idStr;})){ Swal.fire('Duplicate','That ID is already added.','warning'); return; }
+  G_IDS.push({string:idStr,rev:rev,prime:isPrime});
+  document.getElementById('gIdInput').value=''; document.getElementById('gRev').value=''; document.getElementById('gPrime').checked=false;
+  renderGIds();
+};
+window.gRemoveId=function(i){ G_IDS.splice(i,1); renderGIds(); };
+function renderGIds(){
+  var el=document.getElementById('gIdList');
+  if(!G_IDS.length){ el.innerHTML='<div class="muted" style="font-size:11.5px;text-align:center;padding:14px 0;">No IDs added yet</div>'; document.getElementById('gRepPreview').innerHTML=''; return; }
+  el.innerHTML=G_IDS.map(function(x,i){return '<div class="gidrow"><b>'+esc(x.string)+'</b> <span class="muted">'+esc(x.rev)+'</span>'+(x.prime?' <span style="color:#b45309;font-weight:800;font-size:11px;">PRIME ⭐</span>':'')+'<span class="material-icons rm" onclick="gRemoveId('+i+')">close</span></div>';}).join('');
+  var rep=G_IDS.map(function(x){return x.string+'('+x.rev+')';}).join(' | ');
+  var prime=(G_IDS.find(function(x){return x.prime;})||{}).string||'';
+  document.getElementById('gRepPreview').innerHTML='<div class="grad-rep"><b>Rep Code → HighLevel:</b> '+esc(rep)+(prime?'<br><b>Prime49ID:</b> '+esc(prime):'')+'</div>';
+}
+window.submitGraduation=async function(){
+  if(!G_LEAD) return;
+  if(!G_IDS.length){ Swal.fire('Add at least one ID','A partner needs at least one agent ID.','warning'); return; }
+  var btn=document.getElementById('gSubmit'); btn.disabled=true; var orig=btn.innerHTML; btn.innerHTML='Processing…';
+  var ad=document.getElementById('gActivation').value;
+  var payload={
+    action:'create',
+    person:{ name:G_LEAD.full_name||'', email:(G_LEAD.email||'').toLowerCase(), phone:G_LEAD.phone||'', hl_id:G_LEAD.ghl_contact_id||null,
+      enrolled_at: ad?new Date(ad+'T12:00:00').toISOString():new Date().toISOString(),
+      is_branded: document.getElementById('gBranded').checked },
+    company: G_INDEP?{id:null,name:null,isIndependent:true}:(G_COID?{id:G_COID,name:null,isIndependent:false}:(G_CONAME?{id:null,name:G_CONAME,isIndependent:false}:{id:null,name:null,isIndependent:true})),
+    identifiers: G_IDS.map(function(x){return {string:x.string,rev:x.rev,prime:x.prime};})
+  };
+  try{
+    var cr=await partnersApi(payload);
+    if(!cr.success) throw new Error(cr.message||'Could not create partner');
+    var gr=await lpApi({action:'graduate_lead',lead_id:G_LEAD.id,identifiers:payload.identifiers});
+    partnersApi({action:'refresh_leaderboard'}).catch(function(){});
+    var note='<b>'+esc(G_LEAD.full_name||'Prospect')+'</b> is now a partner.';
+    if(gr&&gr.success&&gr.rep_code) note+='<br><span style="color:#64748b;font-size:12px;">Rep Code → HighLevel: '+esc(gr.rep_code)+'</span>';
+    closeGraduate();
+    await Swal.fire({icon:'success',title:'Welcome aboard! 🎉',html:note,confirmButtonColor:'#0d9488'});
+    load();
+  }catch(e){ Swal.fire('Error',e.message||'Failed','error'); }
+  btn.disabled=false; btn.innerHTML=orig;
+};
+
 window.assignRep=async function(leadId,uid){
   var note=document.getElementById('ld-rep-note'); if(note) note.textContent='Saving…';
   var r=await lpApi({action:'set_lead_rep',lead_id:leadId,rep_userid:uid||null});
