@@ -370,9 +370,15 @@ async function loadGhlUsers(force) {
     return GHL_USERS_CACHE;
 }
 async function mapGhl(uid, name, email) {
-    Swal.fire({ title: 'Loading HighLevel users…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
     let users;
-    try { users = await loadGhlUsers(); } catch (e) { Swal.fire('Error', e.message, 'error'); return; }
+    if (GHL_USERS_CACHE) {
+        users = GHL_USERS_CACHE;
+    } else {
+        // Only show the spinner when we actually have to fetch — otherwise the
+        // spinner Swal and the picker Swal fire in the same tick and it hangs.
+        Swal.fire({ title: 'Loading HighLevel users…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        try { users = await loadGhlUsers(); } catch (e) { Swal.fire('Error', e.message, 'error'); return; }
+    }
     const user = allUsers.find(u => u.userid === uid) || {};
     const current = user.ghl_user_id || '';
     const emailLc = (email || '').toLowerCase();
