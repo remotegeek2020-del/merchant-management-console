@@ -227,7 +227,7 @@
       <button class="hamburger" onclick="openNav()"><span class="material-icons">menu</span></button>
       <h1 class="topbar-title" id="pageTitle">Home</h1>
     </div>
-    <button class="btn btn-teal" onclick="showTab('book')"><span class="material-icons" style="font-size:16px;">event_available</span> Book a Call</button>
+    <button class="btn btn-teal" id="topBookBtn" onclick="showTab('book')"><span class="material-icons" style="font-size:16px;">event_available</span> Book a Call</button>
   </div>
 
   <div class="content">
@@ -237,7 +237,7 @@
       <div id="apptRepRow" style="display:none;"></div>
       <div class="quick">
         <button class="qcard" onclick="showTab('ann')"><div class="qic"><span class="material-icons">campaign</span></div><div class="qt">Announcements</div><div class="qd">Latest program news & updates</div></button>
-        <button class="qcard" onclick="showTab('book')"><div class="qic"><span class="material-icons">event_available</span></div><div class="qt">Book a Call</div><div class="qd">Meet a rep to become a partner</div></button>
+        <button class="qcard" id="qcardBook" onclick="showTab('book')"><div class="qic"><span class="material-icons">event_available</span></div><div class="qt">Book a Call</div><div class="qd">Meet a rep to become a partner</div></button>
         <button class="qcard" onclick="showTab('courses')"><div class="qic"><span class="material-icons">video_library</span></div><div class="qt">Courses & Videos</div><div class="qd">Watch webinars & training</div></button>
       </div>
       <div class="journey-card">
@@ -346,6 +346,7 @@ async function loadApptRep(){
   var r=await api({action:'lead_my_appointment'});
   if(!r||!r.success) return;
   var up=r.upcoming, rep=r.rep, past=r.past||[], html='';
+  UPCOMING=up||null; applyBookingGate(); renderBook();
   if(rep){
     // Fancy profile card with the appointment time built in.
     var ph=rep.photo_url?'<img class="pc-avatar" src="'+esc(rep.photo_url)+'">':'<div class="pc-avatar-ph">'+esc(initials(rep.name))+'</div>';
@@ -394,11 +395,39 @@ async function loadApptRep(){
     pb.innerHTML='<div class="card muted">No past appointments yet.</div>';
   }
 }
+var CAL_URL=null, BOOK_LOADED=false, UPCOMING=null;
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
+  CAL_URL=(r&&r.success&&r.calendar_url)?r.calendar_url:'';
+  BOOK_LOADED=true;
+  renderBook();
+}
+function renderBook(){
+  if(!BOOK_LOADED) return;
   var b=document.getElementById('bookBody');
-  if(r&&r.success&&r.calendar_url){ b.innerHTML='<div class="book-card"><iframe class="book-embed" id="lead-cal" src="'+esc(r.calendar_url)+'" scrolling="no"></iframe></div>'; loadCalScript(); }
-  else b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
+  if(UPCOMING){
+    b.innerHTML='<div class="card" style="text-align:center;padding:30px 20px;">'
+      +'<span class="material-icons" style="font-size:42px;color:#0d9488;">event_available</span>'
+      +'<div style="font-weight:800;font-size:16px;margin-top:10px;">You already have an upcoming appointment</div>'
+      +'<div style="font-weight:700;color:var(--teal-dark);margin-top:4px;">'+esc(UPCOMING.when_label||fmtWhen(UPCOMING.start))+'</div>'
+      +'<div class="muted" style="font-size:12.5px;margin-top:12px;max-width:420px;margin-left:auto;margin-right:auto;">Booking is disabled until your current appointment is completed or cancelled. Need to change it? Contact your rep.</div>'
+      +'</div>';
+  } else if(CAL_URL){
+    b.innerHTML='<div class="book-card"><iframe class="book-embed" id="lead-cal" src="'+esc(CAL_URL)+'" scrolling="no"></iframe></div>'; loadCalScript();
+  } else {
+    b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
+  }
+}
+// Disable the Book-a-Call buttons while an appointment is still upcoming.
+function applyBookingGate(){
+  var disabled=!!UPCOMING;
+  ['topBookBtn','qcardBook'].forEach(function(id){
+    var el=document.getElementById(id); if(!el) return;
+    el.disabled=disabled;
+    el.style.opacity=disabled?'.5':'';
+    el.style.pointerEvents=disabled?'none':'';
+    el.title=disabled?'You already have an upcoming appointment':'';
+  });
 }
 window.annClick=function(id,url){ if(id) api({action:'lead_track',campaign_id:id,event_type:'click'}); if(url) window.open(url,'_blank','noopener'); };
 async function loadAnn(){
