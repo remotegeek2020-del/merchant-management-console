@@ -316,23 +316,24 @@ async function loadApptRep(){
   var r=await api({action:'lead_my_appointment'});
   if(!r||!r.success) return;
   var up=r.upcoming, rep=r.rep, past=r.past||[], cards='';
-  // Home: upcoming appointment + rep — only while an appointment is still ahead.
+  // Upcoming appointment card (only while an appointment is still ahead).
   if(up && up.start){
     cards+='<div class="ar-card appt"><div class="ar-h"><span class="material-icons" style="font-size:15px;">event_available</span> Your upcoming appointment</div>'
       +'<div class="ar-when">'+esc(fmtWhen(up.start))+'</div>'
       +'<div class="ar-sub">'+esc(up.title||'Appointment')+(up.status?' · '+esc(up.status):'')+'</div>'
       +(up.meeting_url&&/^https?:/i.test(up.meeting_url)?'<div style="margin-top:10px;"><a href="'+esc(up.meeting_url)+'" target="_blank" rel="noopener" style="color:#fff;font-weight:700;font-size:12.5px;">Join / details →</a></div>':'')
       +'</div>';
-    if(rep){
-      var ph=rep.photo_url?'<img class="rep-photo" src="'+esc(rep.photo_url)+'">':'<div class="rep-ph-ph">'+esc(initials(rep.name))+'</div>';
-      var ms=(rep.milestones||[]).filter(function(m){return m&&m.label;});
-      var msHtml=ms.length?'<div class="rep-ms">'+ms.map(function(m){return '<div class="rep-ms-item"><span class="rep-ms-dot"></span><div><div class="rep-ms-l">'+esc(m.label)+'</div>'+(m.detail?'<div class="rep-ms-d">'+esc(m.detail)+'</div>':'')+'</div></div>';}).join('')+'</div>':'';
-      cards+='<div class="ar-card"><div class="ar-h" style="color:#94a3b8;"><span class="material-icons" style="font-size:15px;">support_agent</span> Your PayProTec rep</div>'
-        +'<div class="rep-top">'+ph+'<div><div class="rep-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="rep-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
-        +(rep.bio?'<div class="rep-bio">'+esc(rep.bio)+'</div>':'')
-        +(msHtml?'<div class="rep-ms-h">Milestones</div>'+msHtml:'')
-        +'</div>';
-    }
+  }
+  // Assigned rep card — shown whenever a rep is assigned (independent of appt).
+  if(rep){
+    var ph=rep.photo_url?'<img class="rep-photo" src="'+esc(rep.photo_url)+'">':'<div class="rep-ph-ph">'+esc(initials(rep.name))+'</div>';
+    var ms=(rep.milestones||[]).filter(function(m){return m&&m.label;});
+    var msHtml=ms.length?'<div class="rep-ms">'+ms.map(function(m){return '<div class="rep-ms-item"><span class="rep-ms-dot"></span><div><div class="rep-ms-l">'+esc(m.label)+'</div>'+(m.detail?'<div class="rep-ms-d">'+esc(m.detail)+'</div>':'')+'</div></div>';}).join('')+'</div>':'';
+    cards+='<div class="ar-card"><div class="ar-h" style="color:#94a3b8;"><span class="material-icons" style="font-size:15px;">support_agent</span> Your PayProTec rep</div>'
+      +'<div class="rep-top">'+ph+'<div><div class="rep-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="rep-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
+      +(rep.bio?'<div class="rep-bio">'+esc(rep.bio)+'</div>':'')
+      +(msHtml?'<div class="rep-ms-h">Milestones</div>'+msHtml:'')
+      +'</div>';
   }
   var row=document.getElementById('apptRepRow');
   if(cards){ row.className='ar-row'; row.style.display='grid'; row.innerHTML=cards; }

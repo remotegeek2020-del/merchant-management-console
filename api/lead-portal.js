@@ -280,22 +280,25 @@ export default async function handler(req, res) {
                         .sort((a, b) => new Date(b.start) - new Date(a.start));
                 } catch (e) { diag.err = e.message || 'error'; }
             }
-            // Resolve the rep: a manually-assigned rep wins; otherwise derive it
-            // from who the upcoming appointment is booked with (its HighLevel user
-            // → the app user mapped to that HighLevel user), and backfill.
+            // Resolve the assigned rep. A manually-assigned rep wins; otherwise
+            // derive it from who an appointment is booked with (its HighLevel user
+            // → the app user mapped in User Management), preferring the upcoming
+            // one, else the most recent appointment. Backfill onto the lead so the
+            // lead list shows it too. The rep shows regardless of whether the
+            // appointment is upcoming or already done.
             let repUserid = lead && lead.assigned_rep;
-            if (!repUserid && upcoming && upcoming.assigned_user_id) {
-                const { data: mapped } = await supabase.from('app_users').select('userid').eq('ghl_user_id', upcoming.assigned_user_id).maybeSingle();
+            const apptForRep = upcoming || past[0] || null;
+            if (!repUserid && apptForRep && apptForRep.assigned_user_id) {
+                const { data: mapped } = await supabase.from('app_users').select('userid').eq('ghl_user_id', apptForRep.assigned_user_id).maybeSingle();
                 if (mapped) { repUserid = mapped.userid; await supabase.from('leads').update({ assigned_rep: repUserid }).eq('id', leadId); }
             }
-            // The rep profile only rides along while there's an upcoming appointment.
-            let rep = upcoming ? await repSummary(supabase, repUserid) : null;
-            // Fallback: no app profile mapped yet — show at least who the
-            // appointment is with, straight from HighLevel (name + photo).
-            if (upcoming && !rep && upcoming.assigned_user_id) {
+            let rep = await repSummary(supabase, repUserid);
+            // Fallback: HighLevel user isn't mapped to an app profile yet — show at
+            // least who the appointment is with (name + photo) from HighLevel.
+            if (!rep && apptForRep && apptForRep.assigned_user_id) {
                 try {
                     const hlUsers = await ghlListUsers(await ghlLocId());
-                    const hu = hlUsers.find(u => u.id === upcoming.assigned_user_id);
+                    const hu = hlUsers.find(u => u.id === apptForRep.assigned_user_id);
                     if (hu) rep = { name: hu.name || 'Your rep', job_level: hu.role || '', bio: '', photo_url: hu.photo || '', milestones: [] };
                 } catch (e) { /* best-effort */ }
             }
@@ -385,7 +388,17 @@ export default async function handler(req, res) {
                     }
                 }
             } catch (e) { /* best-effort */ }
-            const rep = await repSummary(supabase, lead.assigned_rep);
+            // Auto-resolve the assigned rep from the appointment's HighLevel user
+            // via the User Management mapping, and backfill (same as the lead home).
+            let repUid = lead.assigned_rep;
+            if (!repUid) {
+                const src = (appointments || []).find(a => a.assigned_user_id) || null;
+                if (src) {
+                    const { data: mapped } = await supabase.from('app_users').select('userid').eq('ghl_user_id', src.assigned_user_id).maybeSingle();
+                    if (mapped) { repUid = mapped.userid; await supabase.from('leads').update({ assigned_rep: repUid }).eq('id', lead.id); lead.assigned_rep = repUid; }
+                }
+            }
+            const rep = await repSummary(supabase, repUid);
             return ok(res, { lead, answers, ghl, appointments, rep, ghl_link: ghlLink });
         }
         // Staff list for the "assign rep" picker.
