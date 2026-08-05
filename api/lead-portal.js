@@ -18,11 +18,12 @@ async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || 
 async function repSummary(supabaseClient, userid) {
     if (!userid) return null;
     const { data: u } = await supabaseClient.from('app_users')
-        .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url').eq('userid', userid).maybeSingle();
+        .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones').eq('userid', userid).maybeSingle();
     if (!u) return null;
     return {
         name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email || 'Your rep',
-        job_level: u.rep_job_level || '', bio: u.rep_bio || '', photo_url: u.rep_photo_url || ''
+        job_level: u.rep_job_level || '', bio: u.rep_bio || '', photo_url: u.rep_photo_url || '',
+        milestones: Array.isArray(u.rep_milestones) ? u.rep_milestones : []
     };
 }
 
@@ -211,7 +212,26 @@ export default async function handler(req, res) {
             if (!leadId) return bad(res, 'Session expired', 401);
             const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id']);
             const cid = ((s || []).find(r => r.key === 'lead_portal_calendar_id') || {}).value || '';
-            return ok(res, { calendar_url: cid ? ('https://api.leadconnectorhq.com/widget/booking/' + cid) : '' });
+            let calendarUrl = '';
+            if (cid) {
+                calendarUrl = 'https://api.leadconnectorhq.com/widget/booking/' + cid;
+                // Prefill the booking form from the signed-in prospect's record
+                // (their contact is already tunneled to HighLevel).
+                const { data: lead } = await supabase.from('leads').select('full_name, email, phone').eq('id', leadId).maybeSingle();
+                if (lead) {
+                    const parts = String(lead.full_name || '').trim().split(/\s+/);
+                    const first = parts.shift() || '';
+                    const last = parts.join(' ');
+                    const q = new URLSearchParams();
+                    if (first) q.set('first_name', first);
+                    if (last) q.set('last_name', last);
+                    if (lead.email) q.set('email', lead.email);
+                    if (lead.phone) q.set('phone', lead.phone);
+                    const qs = q.toString();
+                    if (qs) calendarUrl += '?' + qs;
+                }
+            }
+            return ok(res, { calendar_url: calendarUrl });
         }
 
         // Lead home extras: their upcoming appointment (from HighLevel) + the

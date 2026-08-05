@@ -85,6 +85,13 @@
   .rep-name{font-weight:800;font-size:15px;}
   .rep-level{font-size:12px;color:var(--teal-dark);font-weight:700;}
   .rep-bio{font-size:12.5px;color:var(--secondary);line-height:1.5;margin-top:10px;white-space:pre-wrap;}
+  .rep-ms-h{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin:12px 0 8px;}
+  .rep-ms-item{display:flex;gap:10px;padding-bottom:10px;position:relative;}
+  .rep-ms-item:last-child{padding-bottom:0;}
+  .rep-ms-dot{width:9px;height:9px;border-radius:50%;background:var(--teal);flex:none;margin-top:4px;position:relative;}
+  .rep-ms-item:not(:last-child) .rep-ms-dot::after{content:'';position:absolute;left:3px;top:11px;width:2px;height:calc(100% + 6px);background:var(--border);}
+  .rep-ms-l{font-size:12.5px;font-weight:700;color:var(--text);}
+  .rep-ms-d{font-size:11.5px;color:var(--secondary);margin-top:1px;}
   /* Announcements */
   .ann{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm);}
   .ann .h{display:flex;align-items:center;gap:9px;margin-bottom:8px;}
@@ -318,9 +325,12 @@ async function loadApptRep(){
       +'</div>';
     if(rep){
       var ph=rep.photo_url?'<img class="rep-photo" src="'+esc(rep.photo_url)+'">':'<div class="rep-ph-ph">'+esc(initials(rep.name))+'</div>';
+      var ms=(rep.milestones||[]).filter(function(m){return m&&m.label;});
+      var msHtml=ms.length?'<div class="rep-ms">'+ms.map(function(m){return '<div class="rep-ms-item"><span class="rep-ms-dot"></span><div><div class="rep-ms-l">'+esc(m.label)+'</div>'+(m.detail?'<div class="rep-ms-d">'+esc(m.detail)+'</div>':'')+'</div></div>';}).join('')+'</div>':'';
       cards+='<div class="ar-card"><div class="ar-h" style="color:#94a3b8;"><span class="material-icons" style="font-size:15px;">support_agent</span> Your PayProTec rep</div>'
         +'<div class="rep-top">'+ph+'<div><div class="rep-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="rep-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
         +(rep.bio?'<div class="rep-bio">'+esc(rep.bio)+'</div>':'')
+        +(msHtml?'<div class="rep-ms-h">Milestones</div>'+msHtml:'')
         +'</div>';
     }
   }

@@ -301,15 +301,19 @@ export default async function handler(req, res) {
             if (action === 'get_rep_profile') {
                 const uid = req.body.target_userid || session.userid;
                 const { data: u } = await supabase.from('app_users')
-                    .select('userid, first_name, last_name, role, rep_bio, rep_job_level, rep_photo_url').eq('userid', uid).maybeSingle();
+                    .select('userid, first_name, last_name, role, rep_bio, rep_job_level, rep_photo_url, rep_milestones').eq('userid', uid).maybeSingle();
                 return res.status(200).json({ success: true, profile: u || null });
             }
             if (action === 'save_rep_profile') {
-                // A staff member edits ONLY their own rep summary.
+                // A staff member edits ONLY their own user profile.
+                const ms = Array.isArray(req.body.rep_milestones) ? req.body.rep_milestones
+                    .map(m => ({ label: String(m.label || '').slice(0, 160), detail: String(m.detail || '').slice(0, 400) }))
+                    .filter(m => m.label).slice(0, 40) : [];
                 const upd = {
                     rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
                     rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
-                    rep_photo_url: (req.body.rep_photo_url ?? '').toString().slice(0, 1000)
+                    rep_photo_url: (req.body.rep_photo_url ?? '').toString().slice(0, 1000),
+                    rep_milestones: ms
                 };
                 const { error } = await supabase.from('app_users').update(upd).eq('userid', session.userid);
                 if (error) return res.status(500).json({ success: false, message: error.message });

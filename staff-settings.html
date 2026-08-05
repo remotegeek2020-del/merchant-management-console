@@ -85,10 +85,10 @@
         </button>
     </div>
 
-    <!-- SALES REP PROFILE -->
+    <!-- USER PROFILE -->
     <div class="settings-card">
-        <div class="settings-title"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px;">badge</span>Sales Rep Profile</div>
-        <div class="settings-sub">Shown to prospects on the Lead Portal when you're their assigned rep — a short summary, your job level, and a photo. This is separate from your community profile and messages.</div>
+        <div class="settings-title"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px;">badge</span>User Profile</div>
+        <div class="settings-sub">Your professional profile — a photo, job level, background, and career milestones. Shown to prospects on the Lead Portal when you're their assigned rep. Separate from your community profile and messages.</div>
         <div class="avatar-section">
             <div class="avatar-big" id="repPhotoPreview">?</div>
             <div>
@@ -96,17 +96,25 @@
                     <span class="material-icons" style="font-size:16px;">upload</span> Upload Photo
                 </button>
                 <button class="pp-btn pp-btn-secondary" style="margin-left:8px;" onclick="removeRepPhoto()">Remove</button>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Shown to prospects only · JPG, PNG or WebP</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">JPG, PNG or WebP</div>
                 <input type="file" id="repPhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleRepPhoto(this)">
             </div>
         </div>
         <label class="field-label">Job Level / Title</label>
         <input type="text" class="field-input" id="repJobLevel" placeholder="e.g. Senior Partnership Manager">
-        <label class="field-label">About you (summary prospects will see)</label>
-        <textarea class="field-input" id="repBio" placeholder="A short summary — your experience, how you help partners get started, what to expect on the call…"></textarea>
-        <button class="pp-btn pp-btn-primary" onclick="saveRepProfile()">
-            <span class="material-icons" style="font-size:16px;">save</span> Save Rep Profile
+        <label class="field-label">Background / About you</label>
+        <textarea class="field-input" id="repBio" placeholder="A short background — your experience, how you help partners get started, what to expect on the call…"></textarea>
+        <label class="field-label" style="margin-top:14px;">Milestones</label>
+        <div style="font-size:11px;color:var(--text-muted);margin:-4px 0 8px;">Career highlights or achievements (e.g. "2019 · Joined PayProTec", "500+ partners onboarded").</div>
+        <div id="repMsList"></div>
+        <button type="button" class="pp-btn pp-btn-secondary" onclick="repMsAdd()" style="margin-top:2px;">
+            <span class="material-icons" style="font-size:16px;">add</span> Add milestone
         </button>
+        <div style="margin-top:14px;">
+            <button class="pp-btn pp-btn-primary" onclick="saveRepProfile()">
+                <span class="material-icons" style="font-size:16px;">save</span> Save Profile
+            </button>
+        </div>
     </div>
 
     <!-- CHANGE PASSWORD -->
@@ -542,6 +550,16 @@ let repPhotoUrl = '';
 function usersApi(body) {
     return fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') }, body: JSON.stringify(body) }).then(r => r.json());
 }
+function repMsEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function repMsAdd(label, detail) {
+    const list = document.getElementById('repMsList');
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+    row.innerHTML = '<input class="field-input rep-ms-label" style="flex:1;margin:0;" placeholder="Milestone (e.g. 2019 · Joined PayProTec)" value="'+repMsEsc(label||'')+'">'
+        + '<input class="field-input rep-ms-detail" style="flex:1;margin:0;" placeholder="Detail (optional)" value="'+repMsEsc(detail||'')+'">'
+        + '<button type="button" class="material-icons" title="Remove" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:20px;" onclick="this.parentNode.remove()">close</button>';
+    list.appendChild(row);
+}
 async function loadRepProfile() {
     try {
         const r = await usersApi({ action: 'get_rep_profile' });
@@ -549,6 +567,8 @@ async function loadRepProfile() {
         const p = r.profile;
         document.getElementById('repJobLevel').value = p.rep_job_level || '';
         document.getElementById('repBio').value = p.rep_bio || '';
+        document.getElementById('repMsList').innerHTML = '';
+        (Array.isArray(p.rep_milestones) ? p.rep_milestones : []).forEach(m => repMsAdd(m.label, m.detail));
         repPhotoUrl = p.rep_photo_url || '';
         const el = document.getElementById('repPhotoPreview');
         if (repPhotoUrl) el.innerHTML = `<img src="${repPhotoUrl}">`;
@@ -578,11 +598,16 @@ async function removeRepPhoto() {
     Swal.fire({ icon: 'success', title: 'Photo removed', timer: 1200, showConfirmButton: false });
 }
 async function saveRepProfile(silent) {
+    const rows = Array.prototype.slice.call(document.querySelectorAll('#repMsList > div'));
+    const milestones = rows.map(function(row){
+        return { label: (row.querySelector('.rep-ms-label').value || '').trim(), detail: (row.querySelector('.rep-ms-detail').value || '').trim() };
+    }).filter(function(m){ return m.label; });
     const body = {
         action: 'save_rep_profile',
         rep_job_level: document.getElementById('repJobLevel').value.trim(),
         rep_bio: document.getElementById('repBio').value.trim(),
-        rep_photo_url: repPhotoUrl
+        rep_photo_url: repPhotoUrl,
+        rep_milestones: milestones
     };
     if (!silent) Swal.fire({ title: 'Saving…', didOpen: () => Swal.showLoading() });
     const r = await usersApi(body);
