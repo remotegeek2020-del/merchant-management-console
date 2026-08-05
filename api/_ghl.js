@@ -224,6 +224,22 @@ export async function ghlFindContactByEmail(locationId, email) {
     } catch { return null; }
 }
 
+// ALL contacts in a sub-account matching an email (handles duplicates).
+export async function ghlFindContactsByEmail(locationId, email) {
+    if (!locationId || !email) return [];
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return [];
+    const em = String(email).toLowerCase();
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/?locationId=${encodeURIComponent(locationId)}&query=${encodeURIComponent(email)}&limit=20`, {
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json' }
+        });
+        if (!r.ok) return [];
+        const d = await r.json().catch(() => ({}));
+        return (d?.contacts || []).filter(c => String(c.email || '').toLowerCase() === em).map(c => ({ id: c.id }));
+    } catch { return []; }
+}
+
 // A contact's appointments (upcoming + past), normalized + sorted (soonest first).
 export async function ghlContactAppointments(locationId, contactId) {
     if (!locationId || !contactId) return [];

@@ -11,7 +11,7 @@ import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
-import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers } from './_ghl.js';
+import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers } from './_ghl.js';
 
 async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID || null; }
 // The assigned rep's public summary (name + job level + bio + photo) for a lead.
@@ -250,29 +250,34 @@ export default async function handler(req, res) {
                 try {
                     const locationId = await ghlLocId();
                     diag.configured = !!locationId;
-                    let contactId = lead.ghl_contact_id;
-                    // Resolve (and backfill) the contact id by email if we don't have it.
-                    if (!contactId && locationId && lead.email) {
-                        const found = await ghlFindContactByEmail(locationId, lead.email);
-                        if (found && found.id) { contactId = found.id; await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', leadId); }
+                    // Gather every HighLevel contact for this email (bookings can
+                    // land on a duplicate contact), plus the stored id, then merge
+                    // all their appointments and de-dupe.
+                    const contactIds = new Set();
+                    if (lead.ghl_contact_id) contactIds.add(lead.ghl_contact_id);
+                    if (locationId && lead.email) {
+                        const matches = await ghlFindContactsByEmail(locationId, lead.email);
+                        matches.forEach(m => { if (m.id) contactIds.add(m.id); });
                     }
-                    let appts = contactId ? await ghlContactAppointments(locationId, contactId) : [];
-                    // If the stored contact has no appointments, the booking may have
-                    // attached to a different/duplicate contact — re-resolve by email.
-                    if ((!appts || !appts.length) && locationId && lead.email) {
-                        const found = await ghlFindContactByEmail(locationId, lead.email);
-                        if (found && found.id && found.id !== contactId) {
-                            const appts2 = await ghlContactAppointments(locationId, found.id);
-                            if (appts2 && appts2.length) { appts = appts2; contactId = found.id; await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', leadId); }
-                        }
+                    let appts = [];
+                    for (const cid of contactIds) {
+                        const a = await ghlContactAppointments(locationId, cid);
+                        if (a && a.length) appts.push(...a);
                     }
-                    diag.contactId = contactId || ''; diag.count = (appts || []).length;
+                    // De-dupe by appointment id.
+                    const seen = new Set();
+                    appts = appts.filter(a => a && a.id && !seen.has(a.id) && seen.add(a.id));
+                    // Keep the lead's stored contact pointed at one that has bookings.
+                    const withAppt = [...contactIds].find(Boolean);
+                    if (withAppt && withAppt !== lead.ghl_contact_id) await supabase.from('leads').update({ ghl_contact_id: withAppt }).eq('id', leadId);
+                    diag.contactId = [...contactIds].join(','); diag.count = appts.length;
                     const now = Date.now();
-                    const cancelled = a => /cancel|no.?show|invalid/i.test(a.status || '');
+                    const cancelled = a => /cancel|no.?show|invalid|delete/i.test(a.status || '');
                     // Upcoming = the next future, non-cancelled appointment.
-                    upcoming = (appts || []).find(a => new Date(a.start).getTime() >= now && !cancelled(a)) || null;
-                    // Past = anything already started (most recent first).
-                    past = (appts || []).filter(a => new Date(a.start).getTime() < now).sort((a, b) => new Date(b.start) - new Date(a.start));
+                    upcoming = appts.filter(a => !cancelled(a)).find(a => new Date(a.start).getTime() >= now) || null;
+                    // Past = anything already started OR cancelled (most recent first).
+                    past = appts.filter(a => (new Date(a.start).getTime() < now) || cancelled(a))
+                        .sort((a, b) => new Date(b.start) - new Date(a.start));
                 } catch (e) { diag.err = e.message || 'error'; }
             }
             // Resolve the rep: a manually-assigned rep wins; otherwise derive it
