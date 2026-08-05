@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { validateSession } from './_validate.js';
-import { loadActor, actorName, canLeadPortal } from './_access.js';
+import { loadActor, actorName, canLeadPortal, canProspects } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
 import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers } from './_ghl.js';
@@ -336,11 +336,14 @@ export default async function handler(req, res) {
         const actor = await loadActor(session.userid);
         if (!actor || actor.is_active === false) return bad(res, 'Unauthorized', 401);
         const canLP = canLeadPortal(actor);
-        // Lead viewing + rep assignment is open to any active staff (reps work
-        // leads on the Prospects page). Survey/settings/import still require
-        // Lead Portal access.
+        // Prospects page (view + assign) requires the Prospects permission (or
+        // Lead Portal / admin). Survey/settings/import still require Lead Portal.
         const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep']);
-        if (!STAFF_ACTIONS.has(action) && !canLP) return bad(res, 'Access denied. Lead Portal access required.', 403);
+        if (STAFF_ACTIONS.has(action)) {
+            if (!canProspects(actor)) return bad(res, 'Access denied. Prospects access required.', 403);
+        } else if (!canLP) {
+            return bad(res, 'Access denied. Lead Portal access required.', 403);
+        }
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
 
         if (action === 'can_access') return ok(res, { can_access: true });

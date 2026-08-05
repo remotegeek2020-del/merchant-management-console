@@ -7,7 +7,7 @@
     { key: 'returns',     label: 'Returns',        url: '/returns-dashboard',      icon: 'assignment_return',   color: '#d97706', bg: '#fef3c7', access: 'pp_access_returns' },
     { key: 'merchants',   label: 'Merchants',      url: '/merchants-dashboard',    icon: 'storefront',          color: '#166534', bg: '#dcfce7', access: 'pp_access_merchants' },
     { key: 'partners',    label: 'Partners',       url: '/partners-dashboard',     icon: 'handshake',           color: '#004990', bg: '#dbeafe', access: 'pp_access_partners' },
-    { key: 'leads',       label: 'Prospects',      url: '/leads',                  icon: 'person_search',       color: '#0d9488', bg: '#ccfbf1', access: null, highlight: true },
+    { key: 'leads',       label: 'Prospects',      url: '/leads',                  icon: 'person_search',       color: '#0d9488', bg: '#ccfbf1', access: 'pp_access_prospects', highlight: true },
     { key: 'tickets',     label: 'Tickets',        url: '/tickets-dashboard',      icon: 'confirmation_number', color: '#0d9488', bg: '#ccfbf1', access: null },
     { key: 'tasks',       label: 'Tasks',          url: '/tasks-dashboard',        icon: 'assignment',          color: '#92400e', bg: '#fef3c7', access: null },
   ];

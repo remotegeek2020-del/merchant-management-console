@@ -244,6 +244,8 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_admin_dashboard',   parseBool(user.access_admin_dashboard)   ? 'true' : 'false');
         localStorage.setItem('pp_access_sending_reports',   parseBool(user.access_sending_reports)   ? 'true' : 'false');
         localStorage.setItem('pp_access_marketing',         parseBool(user.access_marketing)         ? 'true' : 'false');
+        localStorage.setItem('pp_access_prospects',         parseBool(user.access_prospects)         ? 'true' : 'false');
+        localStorage.setItem('pp_access_lead_portal',       parseBool(user.access_lead_portal)       ? 'true' : 'false');
         localStorage.setItem('pp_access_terminal_types',    parseBool(user.access_terminal_types)    ? 'true' : 'false');
         localStorage.setItem('pp_access_all_tasks',         parseBool(user.access_all_tasks)         ? 'true' : 'false');
         localStorage.setItem('pp_access_task_dashboard',    parseBool(user.access_task_dashboard)    ? 'true' : 'false');

@@ -254,6 +254,7 @@ export default async function handler(req, res) {
                 access_marketing: user.access_marketing,
                 access_marketing_settings: user.access_marketing_settings,
                 access_lead_portal: user.access_lead_portal,
+                access_prospects: user.access_prospects,
                 access_terminal_types: user.access_terminal_types,
                 access_all_tasks: user.access_all_tasks,
                 access_task_dashboard: user.access_task_dashboard,

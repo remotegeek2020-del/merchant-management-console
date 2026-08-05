@@ -7,7 +7,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export async function loadActor(userid) {
     if (!userid) return null;
     const { data } = await supabase.from('app_users')
-        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal')
+        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects')
         .eq('userid', userid).maybeSingle();
     return data || null;
 }
@@ -35,4 +35,10 @@ export function canMarketingSettings(a) {
 // Granular Lead Portal admin access.
 export function canLeadPortal(a) {
     return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_lead_portal === true);
+}
+
+// Prospects page on the Partner dashboard (reps). Lead Portal (marketing) access
+// also grants it, so those users see prospects in both places.
+export function canProspects(a) {
+    return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_prospects === true || a.access_lead_portal === true);
 }

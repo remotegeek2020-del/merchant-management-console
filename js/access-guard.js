@@ -13,6 +13,12 @@
         if (role.indexOf('super') !== -1 || role === 'admin' || role === 'operations admin') return;
 
         var page = (location.pathname.split('/').pop() || '').toLowerCase();
+        // Prospects page: allow with either the Prospects or Lead Portal flag.
+        if (page === 'leads.html' || page === 'leads') {
+            var okP = localStorage.getItem('pp_access_prospects') === 'true' || localStorage.getItem('pp_access_lead_portal') === 'true';
+            if (!okP) location.href = '/?reason=denied';
+            return;
+        }
         var MAP = {
             'merchants-dashboard.html': 'pp_access_merchants',
             'deployments-dashboard.html': 'pp_access_deployments',
