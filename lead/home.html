@@ -8,95 +8,194 @@
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f0f4f8;color:#0f172a;}
-  .top{background:#001e3c;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:30;}
-  .top img{height:24px;filter:brightness(0) invert(1);}
-  .top .t{font-weight:800;font-size:15px;flex:1;}
-  .top button{background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
-  .wrap{max-width:940px;margin:0 auto;padding:24px;}
-  .hero{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:16px;padding:26px;margin-bottom:18px;}
-  .hero h1{margin:0 0 4px;font-size:24px;font-weight:800;}.hero p{margin:0;opacity:.92;font-size:14px;}
-  .journey{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;margin-bottom:18px;}
-  .steps{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
-  .step{flex:1;min-width:150px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;}
-  .step .n{width:24px;height:24px;border-radius:50%;background:#0d9488;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;}
-  .step .st{font-weight:700;font-size:13px;}.step .sd{font-size:11.5px;color:#64748b;margin-top:2px;}
-  .sec{margin-bottom:22px;}
-  .sec h2{font-size:16px;font-weight:800;margin:0 0 10px;display:flex;align-items:center;gap:8px;}
-  .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;}
-  .ann{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:10px;}
-  .ann .h{display:flex;align-items:center;gap:9px;margin-bottom:6px;}
-  .ann .av{width:34px;height:34px;border-radius:50%;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;overflow:hidden;}
-  .ann .av img{width:100%;height:100%;object-fit:cover;}
+  *,*::before,*::after{box-sizing:border-box;}
+  :root{--teal:#0d9488;--teal-dark:#0f766e;--teal-light:#ccfbf1;--teal-bg:#f0fdfa;--navy:#001e3c;--border:#e2e8f0;--surface:#f0f4f8;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--shadow-sm:0 1px 3px rgba(0,0,0,.06);--shadow-md:0 4px 16px rgba(0,0,0,.07);}
+  body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+  /* Sidebar */
+  .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,.15);transition:transform .25s;}
+  .sidebar-header{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,.08);}
+  .sidebar-logo{height:26px;filter:brightness(0) invert(1);display:block;margin-bottom:16px;}
+  .sidebar-partner{display:flex;align-items:center;gap:10px;}
+  .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;}
+  .sidebar-name{font-size:13px;font-weight:700;color:#fff;line-height:1.3;}
+  .sidebar-tag{font-size:10px;color:rgba(255,255,255,.4);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px;}
+  .nav-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,.6);text-decoration:none;cursor:pointer;transition:all .2s;border:none;background:none;width:100%;font-family:inherit;text-align:left;}
+  .nav-item:hover{background:rgba(255,255,255,.08);color:#fff;}
+  .nav-item.active{background:var(--teal);color:#fff;}
+  .nav-item .material-icons{font-size:20px;flex-shrink:0;}
+  .nav-divider{height:1px;background:rgba(255,255,255,.08);margin:8px 0;}
+  /* Main */
+  .main{margin-left:240px;min-height:100vh;}
+  .topbar{background:#fff;padding:16px 28px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;gap:12px;flex-wrap:wrap;}
+  .topbar-title{font-size:1.2rem;font-weight:800;margin:0;}
+  .hamburger{display:none;background:none;border:none;cursor:pointer;color:var(--text);}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;border:none;text-decoration:none;transition:all .2s;}
+  .btn-teal{background:var(--teal);color:#fff;}.btn-teal:hover{background:var(--teal-dark);}
+  .content{padding:24px 28px;max-width:1080px;}
+  .tab{display:none;}.tab.show{display:block;animation:fade .3s ease both;}
+  @keyframes fade{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  .sec-h{font-size:18px;font-weight:800;margin:0 0 14px;display:flex;align-items:center;gap:9px;}
+  .sec-h .material-icons{color:var(--teal);}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);}
+  .muted{color:var(--muted);}
+  /* Home hero + journey */
+  .hero{background:linear-gradient(135deg,#001e3c 0%,#0f3460 55%,#0d9488 130%);color:#fff;border-radius:16px;padding:24px 26px;margin-bottom:18px;box-shadow:var(--shadow-sm);}
+  .hero h1{margin:0 0 4px;font-size:22px;font-weight:800;}.hero p{margin:0;opacity:.9;font-size:13.5px;}
+  .quick{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+  .qcard{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow-sm);cursor:pointer;transition:all .18s;text-align:left;}
+  .qcard:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--teal-light);}
+  .qic{width:44px;height:44px;border-radius:12px;background:var(--teal-bg);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+  .qcard .qt{font-weight:800;font-size:14.5px;}.qcard .qd{font-size:12px;color:var(--muted);margin-top:2px;}
+  /* Journey timeline */
+  .journey-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px 22px;box-shadow:var(--shadow-sm);}
+  .journey-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+  .journey-head .jt{font-size:16px;font-weight:800;}
+  .journey-prog{margin-left:auto;font-size:11px;font-weight:800;background:var(--teal-bg);color:var(--teal-dark);padding:4px 11px;border-radius:99px;white-space:nowrap;}
+  .journey-sub{font-size:12.5px;color:var(--muted);margin-bottom:16px;}
+  .jstep{position:relative;display:flex;gap:14px;padding-bottom:18px;}
+  .jstep:last-child{padding-bottom:0;}
+  .jstep::before{content:'';position:absolute;left:16px;top:34px;bottom:-4px;width:2px;background:var(--border);}
+  .jstep:last-child::before{display:none;}
+  .jdot{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;z-index:1;border:2px solid var(--border);background:#f8fafc;}
+  .jdot .material-icons{font-size:18px;color:var(--muted);}
+  .jstep.done .jdot{background:var(--teal);border-color:var(--teal);}
+  .jstep.done .jdot .material-icons{color:#fff;}
+  .jstep.now .jdot{border-color:#f59e0b;background:#fef3c7;}
+  .jstep.now .jdot .material-icons{color:#b45309;}
+  .jbody{padding-top:5px;min-width:0;}
+  .jbody .jn{font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .jbody .jd{font-size:12.5px;color:var(--secondary);margin-top:2px;line-height:1.45;}
+  .jpill{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;padding:2px 8px;border-radius:99px;}
+  .jpill.ok{background:var(--teal-bg);color:var(--teal-dark);}
+  .jpill.next{background:#fef3c7;color:#92400e;}
+  .jstep.upcoming .jn,.jstep.upcoming .jd{opacity:.6;}
+  /* Announcements */
+  .ann{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm);}
+  .ann .h{display:flex;align-items:center;gap:9px;margin-bottom:8px;}
+  .ann .av{width:34px;height:34px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;}
   .ann .body{font-size:13.5px;line-height:1.55;word-wrap:break-word;overflow-wrap:break-word;}
   .ann .body p{margin:0 0 8px;}.ann .body p:last-child{margin-bottom:0;}
   .ann .body img{max-width:100%;height:auto;border-radius:8px;}
-  .ann .body a{color:#0d9488;}
-  .ann img.aimg{width:100%;max-height:320px;object-fit:contain;background:#f1f5f9;border-radius:10px;margin-top:10px;}
-  .ann .cta{display:inline-flex;align-items:center;gap:5px;margin-top:10px;background:#0d9488;color:#fff;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;}
+  .ann .body a{color:var(--teal);}
+  .ann img.aimg{width:100%;max-height:340px;object-fit:contain;background:#f1f5f9;border-radius:10px;margin-top:10px;}
+  .ann .cta{display:inline-flex;align-items:center;gap:5px;margin-top:10px;background:var(--teal);color:#fff;text-decoration:none;padding:9px 15px;border-radius:9px;font-size:13px;font-weight:700;}
+  /* Book */
+  .book-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:8px;overflow:hidden;box-shadow:var(--shadow-sm);}
+  .book-embed{width:100%;min-height:640px;border:none;border-radius:10px;background:#fff;display:block;}
+  /* Courses */
   .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
-  .vcard{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;cursor:pointer;}
+  .vcard{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:box-shadow .15s;}
+  .vcard:hover{box-shadow:var(--shadow-md);}
   .vthumb{position:relative;aspect-ratio:16/9;background:#0f172a;display:flex;align-items:center;justify-content:center;}
   .vthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
   .vthumb .material-icons{position:relative;z-index:1;color:#fff;font-size:38px;opacity:.9;}
   .vcard .vt{padding:9px 11px;font-size:12.5px;font-weight:700;}
   .vcard.locked{opacity:.7;cursor:default;}
-  .ctitle{font-weight:800;font-size:14px;margin:14px 0 8px;color:#334155;}
-  .book-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:8px;overflow:hidden;}
-  .book-embed{width:100%;min-height:640px;border:none;border-radius:10px;background:#fff;display:block;}
-  .muted{color:#94a3b8;}
-  /* Course accordion */
-  .cacc{background:#fff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:12px;overflow:hidden;}
+  .cacc{background:#fff;border:1px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow-sm);}
   .cacc-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;}
   .cacc-head:hover{background:#f8fafc;}
   .cacc-thumb{width:46px;height:46px;border-radius:10px;background:#0f172a;flex:none;overflow:hidden;display:flex;align-items:center;justify-content:center;}
   .cacc-thumb img{width:100%;height:100%;object-fit:cover;}
-  .cacc-thumb .material-icons{color:#475569;font-size:22px;}
+  .cacc-thumb .material-icons{color:#94a3b8;font-size:22px;}
   .cacc-meta{flex:1;min-width:0;}
   .cacc-meta .t{font-weight:800;font-size:14.5px;}
-  .cacc-meta .d{font-size:12px;color:#64748b;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .cacc-count{font-size:11.5px;font-weight:700;color:#0d9488;background:#f0fdfa;border:1px solid #99f6e4;border-radius:999px;padding:3px 9px;white-space:nowrap;}
-  .cacc-chev{color:#94a3b8;transition:transform .18s;}
+  .cacc-meta .d{font-size:12px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .cacc-count{font-size:11.5px;font-weight:700;color:var(--teal-dark);background:var(--teal-bg);border:1px solid var(--teal-light);border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .cacc-chev{color:var(--muted);transition:transform .18s;}
   .cacc.open .cacc-chev{transform:rotate(180deg);}
   .cacc-body{display:none;padding:0 16px 16px;}
   .cacc.open .cacc-body{display:block;}
-  .pv-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;}
+  /* Player + booking modals */
+  .pv-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:150;display:none;align-items:center;justify-content:center;padding:20px;}
   .pv-card{width:100%;max-width:900px;}
   .pv-frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;}
   .pv-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
   .pv-close{color:#fff;cursor:pointer;float:right;margin-bottom:8px;}
-  /* In-app booking modal */
   .bk-overlay{position:fixed;inset:0;background:rgba(2,6,23,.85);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
   .bk-card{background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
-  .bk-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:15px;}
-  .bk-head .material-icons{cursor:pointer;color:#64748b;margin-left:auto;}
+  .bk-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--border);font-weight:800;font-size:15px;}
+  .bk-head .material-icons.x{cursor:pointer;color:#64748b;margin-left:auto;}
   .bk-frame{width:100%;flex:1;min-height:600px;border:none;display:block;}
-  .bk-foot{padding:8px 16px;font-size:11.5px;text-align:center;border-top:1px solid #f1f5f9;}
-  .bk-foot a{color:#0d9488;font-weight:700;}
+  .bk-foot{padding:8px 16px;font-size:11.5px;text-align:center;border-top:1px solid #f1f5f9;color:var(--muted);}
+  .bk-foot a{color:var(--teal);font-weight:700;}
+  .scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:90;}
+  @media(max-width:860px){.quick{grid-template-columns:1fr;}}
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%);}
+    .sidebar.open{transform:translateX(0);}
+    .main{margin-left:0;}
+    .content{padding:16px;}
+    .hamburger{display:inline-flex;}
+    .scrim.open{display:block;}
+  }
 </style>
 </head>
 <body>
-<div class="top">
-  <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProTec">
-  <span class="t">Partner Program</span>
-  <button onclick="logout()">Sign out</button>
-</div>
-<div class="wrap">
-  <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Learn from our webinars, keep up with announcements, and when you're ready — book your become-a-partner call.</p></div>
 
-  <div class="journey">
-    <div style="font-weight:800;font-size:14px;">Your journey to becoming a partner</div>
-    <div class="steps">
-      <div class="step"><div class="n">1</div><div class="st">You're in ✓</div><div class="sd">Registered for the Partner Program.</div></div>
-      <div class="step"><div class="n">2</div><div class="st">Learn</div><div class="sd">Watch webinars & program updates.</div></div>
-      <div class="step"><div class="n">3</div><div class="st">Book a call</div><div class="sd">Meet a rep to become a partner.</div></div>
-      <div class="step"><div class="n">4</div><div class="st">Graduate</div><div class="sd">Get approved → full Partner Portal.</div></div>
+<div class="scrim" id="scrim" onclick="closeNav()"></div>
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo" alt="PayProTec">
+    <div class="sidebar-partner">
+      <div class="sidebar-avatar" id="sbAvatar">?</div>
+      <div><div class="sidebar-name" id="sbName">Welcome</div><div class="sidebar-tag">Prospect</div></div>
     </div>
   </div>
+  <nav class="sidebar-nav">
+    <button class="nav-item active" data-tab="home" onclick="showTab('home')"><span class="material-icons">dashboard</span> Home</button>
+    <button class="nav-item" data-tab="ann" onclick="showTab('ann')"><span class="material-icons">campaign</span> Announcements</button>
+    <button class="nav-item" data-tab="book" onclick="showTab('book')"><span class="material-icons">event_available</span> Book a Call</button>
+    <button class="nav-item" data-tab="courses" onclick="showTab('courses')"><span class="material-icons">video_library</span> Courses & Videos</button>
+    <div class="nav-divider"></div>
+    <button class="nav-item" onclick="logout()"><span class="material-icons">logout</span> Sign Out</button>
+  </nav>
+  <div style="padding:16px;font-size:10px;color:rgba(255,255,255,.25);text-align:center;">PayProTec Partner Program</div>
+</div>
 
-  <div class="sec" id="bookSec"><h2><span class="material-icons" style="color:#0d9488;">event_available</span> Book your call</h2><div id="bookBody"><div class="card muted">Loading…</div></div></div>
-  <div class="sec" id="annSec"><h2><span class="material-icons" style="color:#0d9488;">campaign</span> Announcements</h2><div id="annBody"><div class="card muted">Loading…</div></div></div>
-  <div class="sec" id="courseSec"><h2><span class="material-icons" style="color:#0d9488;">play_circle</span> Webinars & Courses</h2><div id="courseBody"><div class="card muted">Loading…</div></div></div>
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="hamburger" onclick="openNav()"><span class="material-icons">menu</span></button>
+      <h1 class="topbar-title" id="pageTitle">Home</h1>
+    </div>
+    <button class="btn btn-teal" onclick="showTab('book')"><span class="material-icons" style="font-size:16px;">event_available</span> Book a Call</button>
+  </div>
+
+  <div class="content">
+    <!-- HOME -->
+    <div class="tab show" id="tab-home">
+      <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Learn from our webinars, keep up with announcements, and when you're ready — book your become-a-partner call.</p></div>
+      <div class="quick">
+        <button class="qcard" onclick="showTab('ann')"><div class="qic"><span class="material-icons">campaign</span></div><div class="qt">Announcements</div><div class="qd">Latest program news & updates</div></button>
+        <button class="qcard" onclick="showTab('book')"><div class="qic"><span class="material-icons">event_available</span></div><div class="qt">Book a Call</div><div class="qd">Meet a rep to become a partner</div></button>
+        <button class="qcard" onclick="showTab('courses')"><div class="qic"><span class="material-icons">video_library</span></div><div class="qt">Courses & Videos</div><div class="qd">Watch webinars & training</div></button>
+      </div>
+      <div class="journey-card">
+        <div class="journey-head"><span class="material-icons" style="color:var(--teal);">emoji_events</span><span class="jt">Your journey to becoming a partner</span><span class="journey-prog" id="journeyProg"></span></div>
+        <div class="journey-sub">Follow these milestones from prospect to partner. Here's where you are. 🚀</div>
+        <div id="journeyTimeline"></div>
+      </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS -->
+    <div class="tab" id="tab-ann">
+      <h2 class="sec-h"><span class="material-icons">campaign</span> Announcements</h2>
+      <div id="annBody"><div class="card muted">Loading…</div></div>
+    </div>
+
+    <!-- BOOK -->
+    <div class="tab" id="tab-book">
+      <h2 class="sec-h"><span class="material-icons">event_available</span> Book your call</h2>
+      <div id="bookBody"><div class="card muted">Loading…</div></div>
+    </div>
+
+    <!-- COURSES -->
+    <div class="tab" id="tab-courses">
+      <h2 class="sec-h"><span class="material-icons">video_library</span> Courses & Videos</h2>
+      <div id="courseBody"><div class="card muted">Loading…</div></div>
+    </div>
+  </div>
 </div>
 
 <div class="pv-overlay" id="player" onclick="if(event.target===this)closePlayer()">
@@ -105,7 +204,7 @@
 
 <div class="bk-overlay" id="bookModal" onclick="if(event.target===this)closeBooking()">
   <div class="bk-card">
-    <div class="bk-head"><span class="material-icons" style="color:#0d9488;">event_available</span><span id="bkTitle">Book your appointment</span><span class="material-icons" onclick="closeBooking()">close</span></div>
+    <div class="bk-head"><span class="material-icons" style="color:var(--teal);">event_available</span><span id="bkTitle">Book your appointment</span><span class="material-icons x" onclick="closeBooking()">close</span></div>
     <iframe class="bk-frame" id="bkFrame" scrolling="no"></iframe>
     <div class="bk-foot" id="bkFoot"></div>
   </div>
@@ -121,6 +220,41 @@ function initials(n){ return String(n||'?').trim().split(/\s+/).map(function(w){
 function ytId(url){ var m=String(url||'').match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,})/); return m?m[1]:''; }
 function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|youtube\.com/i.test(url)||provider==='youtube'){var id=ytId(url); if(id) return 'https://www.youtube.com/embed/'+id+'?rel=0';} if(/vimeo\.com/i.test(url)||provider==='vimeo'){m=url.match(/vimeo\.com\/(?:video\/)?(\d+)/); if(m) return 'https://player.vimeo.com/video/'+m[1];} if(/wistia|wi\.st/i.test(url)||provider==='wistia'){m=url.match(/(?:medias\/|wvideo=|wmediaid=|embed\/(?:iframe|medias)\/)([\w]+)/); if(m) return 'https://fast.wistia.net/embed/iframe/'+m[1];} if(/^https:\/\//i.test(url)) return url; return ''; }
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
+
+// ── Nav / tabs ──
+var TAB_TITLES={home:'Home',ann:'Announcements',book:'Book a Call',courses:'Courses & Videos'};
+window.showTab=function(name){
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('show'); });
+  var el=document.getElementById('tab-'+name); if(el) el.classList.add('show');
+  document.querySelectorAll('.nav-item[data-tab]').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-tab')===name); });
+  document.getElementById('pageTitle').textContent=TAB_TITLES[name]||'';
+  closeNav(); window.scrollTo(0,0);
+};
+window.openNav=function(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('scrim').classList.add('open'); };
+window.closeNav=function(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('scrim').classList.remove('open'); };
+
+// ── Become-a-partner milestones (default set) ──
+var MILESTONES=[
+  {icon:'how_to_reg',title:'Joined the Program',desc:'You registered as a prospect. Welcome aboard!',done:true},
+  {icon:'assignment_turned_in',title:'Completed Onboarding',desc:'You told us about your goals so we can tailor your path.',done:true},
+  {icon:'play_circle',title:'Explore & Learn',desc:'Watch the webinars and training in Courses & Videos.',done:false},
+  {icon:'event_available',title:'Book Your Call',desc:'Meet a PayProTec rep to become a partner.',done:false},
+  {icon:'workspace_premium',title:'Become a Partner',desc:'Get approved and unlock the full Partner Portal.',done:false}
+];
+function renderJourney(){
+  var nowIdx=MILESTONES.findIndex(function(m){return !m.done;});
+  var doneCount=MILESTONES.filter(function(m){return m.done;}).length;
+  document.getElementById('journeyTimeline').innerHTML=MILESTONES.map(function(m,i){
+    var state=m.done?'done':(i===nowIdx?'now':'upcoming');
+    var pill=m.done?'<span class="jpill ok">Done</span>':(i===nowIdx?'<span class="jpill next">Up next</span>':'');
+    var icon=m.done?'check':m.icon;
+    return '<div class="jstep '+state+'"><div class="jdot"><span class="material-icons">'+icon+'</span></div>'
+      +'<div class="jbody"><div class="jn">'+esc(m.title)+' '+pill+'</div><div class="jd">'+esc(m.desc)+'</div></div></div>';
+  }).join('');
+  document.getElementById('journeyProg').textContent=doneCount+' of '+MILESTONES.length+' milestones';
+}
+
+// ── Video player + in-app booking ──
 var VMAP={};
 window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSrc(v.provider,v.url); if(!src){ alert('This video can\'t be played.'); return; } document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
   var cta=document.getElementById('playerCta'); cta.innerHTML = v.cta_url ? '<button onclick="openBooking(\''+encodeURIComponent(v.cta_url)+'\',\''+esc((v.cta_label||'Book an appointment').replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;border:none;cursor:pointer;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;font-family:inherit;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</button>' : '';
@@ -128,26 +262,21 @@ window.play=function(id){ var v=VMAP[id]; if(!v||!v.url) return; var src=embedSr
 window.closePlayer=function(){ document.getElementById('player').style.display='none'; document.getElementById('playerFrame').innerHTML=''; document.getElementById('playerCta').innerHTML=''; };
 window.openBooking=function(encUrl,label){ var url=decodeURIComponent(encUrl); document.getElementById('bkTitle').textContent=label||'Book your appointment'; document.getElementById('bkFrame').src=url; document.getElementById('bkFoot').innerHTML='Trouble loading? <a href="'+esc(url)+'" target="_blank" rel="noopener">Open in a new tab</a>'; document.getElementById('bookModal').style.display='flex'; loadCalScript(); };
 window.closeBooking=function(){ document.getElementById('bookModal').style.display='none'; document.getElementById('bkFrame').src='about:blank'; };
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); closeNav(); } });
 
-function loadCalScript(){
-  if(document.getElementById('ghl-form-embed')) return;
-  var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true;
-  document.body.appendChild(s);
-}
+function loadCalScript(){ if(document.getElementById('ghl-form-embed')) return; var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true; document.body.appendChild(s); }
+
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
   var b=document.getElementById('bookBody');
-  if(r&&r.success&&r.calendar_url){
-    b.innerHTML='<div class="book-card"><iframe class="book-embed" id="lead-cal" src="'+esc(r.calendar_url)+'" scrolling="no"></iframe></div>';
-    loadCalScript();
-  } else b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
+  if(r&&r.success&&r.calendar_url){ b.innerHTML='<div class="book-card"><iframe class="book-embed" id="lead-cal" src="'+esc(r.calendar_url)+'" scrolling="no"></iframe></div>'; loadCalScript(); }
+  else b.innerHTML='<div class="card muted">Booking will be available here soon.</div>';
 }
 window.annClick=function(id,url){ if(id) api({action:'lead_track',campaign_id:id,event_type:'click'}); if(url) window.open(url,'_blank','noopener'); };
 async function loadAnn(){
   var r=await api({action:'lead_announcements'});
   var b=document.getElementById('annBody'); var list=(r&&r.announcements)||[];
-  if(!list.length){ document.getElementById('annSec').style.display='none'; return; }
+  if(!list.length){ b.innerHTML='<div class="card muted">No announcements yet — check back soon.</div>'; return; }
   b.innerHTML=list.map(function(a){
     return '<div class="ann"><div class="h"><div class="av">'+esc(initials(a.author))+'</div><div><div style="font-weight:700;font-size:13px;">'+esc(a.author)+'</div><div class="muted" style="font-size:11px;">'+(a.created_at?new Date(a.created_at).toLocaleDateString():'')+'</div></div></div>'
       +(a.title?'<div style="font-weight:800;font-size:15px;margin-bottom:4px;">'+esc(a.title)+'</div>':'')
@@ -156,7 +285,6 @@ async function loadAnn(){
       +(a.cta_url?'<div><a class="cta" href="'+esc(a.cta_url)+'" target="_blank" rel="noopener" onclick="annClick(\''+a.id+'\',\''+esc(a.cta_url)+'\');return false;"><span class="material-icons" style="font-size:16px;">ads_click</span> '+esc(a.cta_label||'Learn more')+'</a></div>':'')
       +'</div>';
   }).join('');
-  // Count a view of each announcement (de-duped server-side per lead per day).
   list.forEach(function(a){ if(a.id) api({action:'lead_track',campaign_id:a.id,event_type:'impression'}); });
 }
 window.toggleCourse=function(el){ el.classList.toggle('open'); };
@@ -184,7 +312,11 @@ async function loadCourses(){
   var r=await api({action:'lead_validate'});
   if(!r.success){ localStorage.removeItem('pp_lead_token'); location.href='/partner'; return; }
   if(!r.lead.onboarding_completed){ location.href='/lead/onboarding'; return; }
-  document.getElementById('hi').textContent='Welcome, '+((r.lead.full_name||'').split(' ')[0]||'')+'!';
+  var first=(r.lead.full_name||'').split(' ')[0]||'';
+  document.getElementById('hi').textContent='Welcome, '+first+'!';
+  document.getElementById('sbName').textContent=r.lead.full_name||'Prospect';
+  document.getElementById('sbAvatar').textContent=initials(r.lead.full_name);
+  renderJourney();
   loadBook(); loadAnn(); loadCourses();
 })();
 </script>
