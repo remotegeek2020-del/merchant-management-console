@@ -75,13 +75,19 @@ async function loadSettings(){
       +cals.map(function(c){return '<option value="'+esc(c.id)+'"'+(r.calendar_id===c.id?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')
     +'</select>'
     +(cals.length?'':'<div class="muted" style="font-size:12px;margin-top:6px;">No calendars found in this sub-account.</div>')
+    +'<div style="border-top:1px solid var(--border);margin:16px 0;"></div>'
+    +'<b style="font-size:15px;">Import from HighLevel</b>'
+    +'<div class="muted" style="font-size:13px;margin:6px 0 10px;">Contacts in HighLevel that carry this <b>tag</b> (e.g. from your Facebook / LinkedIn / Google ad forms) can be imported as prospect accounts from the Leads tab.</div>'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Lead-gen tag</label>'
+    +'<input id="imp-tag" value="'+esc(r.import_tag||'')+'" placeholder="e.g. lead portal" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;margin-top:5px;">'
     +'<div style="margin-top:14px;"><button class="btn btn-p" onclick="saveCal(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button></div>'
     +'</div>';
 }
 window.saveCal=async function(btn){
   var sel=document.getElementById('cal-sel'); var cid=sel.value; var cname=cid?sel.options[sel.selectedIndex].text:'';
+  var tagEl=document.getElementById('imp-tag'); var tag=tagEl?tagEl.value.trim():undefined;
   btn.disabled=true;
-  var r=await api({action:'save_lead_settings',calendar_id:cid,calendar_name:cname});
+  var r=await api({action:'save_lead_settings',calendar_id:cid,calendar_name:cname,import_tag:tag});
   btn.disabled=false;
   if(r&&r.success) Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false});
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');
@@ -142,35 +148,72 @@ window.delQ=async function(id){ var c=await Swal.fire({icon:'warning',title:'Del
 window.moveQ=async function(i,dir){ var qs=window._qs||[]; var j=i+dir; if(j<0||j>=qs.length) return; var ids=qs.map(function(q){return q.id;}); var tmp=ids[i]; ids[i]=ids[j]; ids[j]=tmp; await api({action:'reorder_questions',ids:ids}); loadSurvey(); };
 
 // ── Leads ──
+var REPS=[];
+function repName(uid){ var r=REPS.find(function(x){return x.userid===uid;}); return r?r.name:''; }
+async function loadReps(){ if(REPS.length) return; try{ var r=await api({action:'list_reps'}); REPS=(r&&r.reps)||[]; }catch(e){} }
 async function loadLeads(){
   var p=document.getElementById('panel'); p.innerHTML='<div class="empty">Loading…</div>';
+  await loadReps();
   var r=await api({action:'list_leads'});
   if(!r.success){ p.innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed')+'</div>'; return; }
   var s=r.stats||{}, leads=r.leads||[];
   var rows=leads.length?leads.map(function(l){
     var ob=l.status==='converted'?'<span class="pill conv">Converted</span>':(l.onboarding_completed?'<span class="pill done">Onboarded</span>':'<span class="pill pend">Pending</span>');
-    return '<tr class="lead-row" onclick="leadDetail(\''+l.id+'\')"><td><b>'+esc(l.full_name||'—')+'</b></td><td class="muted">'+esc(l.email||'')+'</td><td class="muted">'+esc(l.phone||'')+'</td><td>'+ob+'</td><td class="muted">'+esc(l.source||'')+'</td><td class="muted" style="white-space:nowrap;">'+(l.created_at?new Date(l.created_at).toLocaleDateString():'')+'</td></tr>';
-  }).join(''):'<tr><td colspan="6" class="empty">No leads have signed up yet.</td></tr>';
-  p.innerHTML='<div class="statgrid">'
+    var rep=l.assigned_rep?esc(repName(l.assigned_rep)||'Assigned'):'<span class="muted">—</span>';
+    return '<tr class="lead-row" onclick="leadDetail(\''+l.id+'\')"><td><b>'+esc(l.full_name||'—')+'</b></td><td class="muted">'+esc(l.email||'')+'</td><td class="muted">'+esc(l.phone||'')+'</td><td>'+ob+'</td><td>'+rep+'</td><td class="muted">'+esc(l.source||'')+'</td><td class="muted" style="white-space:nowrap;">'+(l.created_at?new Date(l.created_at).toLocaleDateString():'')+'</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="empty">No leads have signed up yet.</td></tr>';
+  p.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><button class="btn btn-p" onclick="importGhl(this)"><span class="material-icons" style="font-size:16px;">cloud_download</span> Sync from HighLevel</button></div>'
+    +'<div class="statgrid">'
     +'<div class="stat"><div class="n">'+(s.total||0)+'</div><div class="l">Total leads</div></div>'
     +'<div class="stat"><div class="n" style="color:var(--green);">'+(s.onboarded||0)+'</div><div class="l">Onboarded</div></div>'
     +'<div class="stat"><div class="n" style="color:#b45309;">'+(s.pending||0)+'</div><div class="l">Pending onboarding</div></div>'
     +'<div class="stat"><div class="n" style="color:var(--pri);">'+(s.converted||0)+'</div><div class="l">Converted to partner</div></div>'
     +'</div>'
-    +'<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Onboarding</th><th>Source</th><th>Signed up</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    +'<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Onboarding</th><th>Assigned rep</th><th>Source</th><th>Signed up</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
+window.importGhl=async function(btn){
+  btn.disabled=true; var orig=btn.innerHTML; btn.innerHTML='<span class="material-icons" style="font-size:16px;">sync</span> Syncing…';
+  var r=await api({action:'import_ghl_leads'});
+  btn.disabled=false; btn.innerHTML=orig;
+  if(!r||!r.success){ Swal.fire('Sync note',(r&&r.message)||'Could not sync from HighLevel.','warning'); return; }
+  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new lead(s) imported'+(r.skipped?' · '+r.skipped+' already existed/skipped':'')+'<br><span style="color:#94a3b8;font-size:12px;">Tag: '+esc(r.tag||'')+'</span>',confirmButtonColor:'#2563eb'});
+  loadLeads();
+};
 window.leadDetail=async function(id){
   Swal.fire({title:'Loading…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  await loadReps();
   var r=await api({action:'lead_detail',lead_id:id});
   if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
-  var l=r.lead, ans=r.answers||[];
+  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[];
   function fmtA(a){ return Array.isArray(a.answer)?a.answer.map(esc).join(', '):esc(a.answer); }
+  function fmtDt(s){ try{ return new Date(s).toLocaleString(); }catch(e){ return esc(s||''); } }
+  // Assign-rep dropdown
+  var repOpts='<option value="">— Unassigned —</option>'+REPS.map(function(rp){return '<option value="'+esc(rp.userid)+'"'+(l.assigned_rep===rp.userid?' selected':'')+'>'+esc(rp.name)+(rp.job_level?' · '+esc(rp.job_level):'')+'</option>';}).join('');
+  // HighLevel block
+  var ghlBlock='';
+  if(ghl){ ghlBlock='<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">HighLevel</div>'
+    +'<div style="font-size:13px;">Contact: <b>'+esc(ghl.name||'—')+'</b>'+(ghl.source?' · source: '+esc(ghl.source):'')+'</div>'
+    +((ghl.tags&&ghl.tags.length)?'<div class="muted" style="font-size:11.5px;margin-top:3px;">Tags: '+ghl.tags.map(esc).join(', ')+'</div>':''); }
+  else { ghlBlock='<div class="muted" style="font-size:12px;margin-top:12px;">No matching HighLevel contact found by email.</div>'; }
+  // Appointments
+  var apptBlock='<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Appointments</div>'
+    +(appts.length?appts.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div style="font-weight:700;">'+esc(a.title||'Appointment')+(a.status?' <span class="muted" style="font-weight:400;">('+esc(a.status)+')</span>':'')+'</div><div class="muted" style="font-size:11.5px;">'+fmtDt(a.start)+(a.calendar?' · '+esc(a.calendar):'')+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No appointments found in HighLevel.</div>');
   Swal.fire({title:esc(l.full_name||'Lead'),width:600,html:'<div style="text-align:left;">'
     +'<div class="muted" style="font-size:12.5px;">'+esc(l.email||'')+(l.phone?' · '+esc(l.phone):'')+'</div>'
     +'<div style="margin-top:6px;font-size:12px;">Status: <b>'+esc(l.status)+'</b> · Onboarding: <b>'+(l.onboarding_completed?'complete':'pending')+'</b> · Signed up '+(l.created_at?new Date(l.created_at).toLocaleString():'')+'</div>'
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Assigned rep</div>'
+    +'<select id="ld-rep" onchange="assignRep(\''+l.id+'\',this.value)" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;">'+repOpts+'</select>'
+    +'<div id="ld-rep-note" class="muted" style="font-size:11.5px;margin-top:4px;"></div>'
+    +ghlBlock
+    +apptBlock
     +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Onboarding answers</div>'
     +(ans.length?ans.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div class="muted" style="font-size:11.5px;">'+esc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No answers yet.</div>')
     +'</div>',confirmButtonText:'Close',confirmButtonColor:'#64748b'});
+};
+window.assignRep=async function(leadId,uid){
+  var note=document.getElementById('ld-rep-note'); if(note) note.textContent='Saving…';
+  var r=await api({action:'set_lead_rep',lead_id:leadId,rep_userid:uid||null});
+  if(note) note.textContent=(r&&r.success)?'✓ Saved':'Could not save';
 };
 
 (async function(){

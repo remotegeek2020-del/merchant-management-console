@@ -70,6 +70,21 @@
   .jpill.ok{background:var(--teal-bg);color:var(--teal-dark);}
   .jpill.next{background:#fef3c7;color:#92400e;}
   .jstep.upcoming .jn,.jstep.upcoming .jd{opacity:.6;}
+  /* Appointment + rep cards */
+  .ar-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+  @media(max-width:860px){.ar-row{grid-template-columns:1fr;}}
+  .ar-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);}
+  .ar-card.appt{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-color:transparent;}
+  .ar-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;opacity:.85;display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .ar-card.appt .ar-h{color:rgba(255,255,255,.8);}
+  .ar-when{font-size:17px;font-weight:800;}
+  .ar-sub{font-size:12.5px;opacity:.9;margin-top:3px;}
+  .rep-top{display:flex;align-items:center;gap:12px;}
+  .rep-photo{width:52px;height:52px;border-radius:50%;object-fit:cover;flex:none;background:#e2e8f0;}
+  .rep-ph-ph{width:52px;height:52px;border-radius:50%;flex:none;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;}
+  .rep-name{font-weight:800;font-size:15px;}
+  .rep-level{font-size:12px;color:var(--teal-dark);font-weight:700;}
+  .rep-bio{font-size:12.5px;color:var(--secondary);line-height:1.5;margin-top:10px;white-space:pre-wrap;}
   /* Announcements */
   .ann{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm);}
   .ann .h{display:flex;align-items:center;gap:9px;margin-bottom:8px;}
@@ -181,6 +196,7 @@
     <!-- HOME -->
     <div class="tab show" id="tab-home">
       <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Learn from our webinars, keep up with announcements, and when you're ready — book your become-a-partner call.</p></div>
+      <div id="apptRepRow" style="display:none;"></div>
       <div class="quick">
         <button class="qcard" onclick="showTab('ann')"><div class="qic"><span class="material-icons">campaign</span></div><div class="qt">Announcements</div><div class="qd">Latest program news & updates</div></button>
         <button class="qcard" onclick="showTab('book')"><div class="qic"><span class="material-icons">event_available</span></div><div class="qt">Book a Call</div><div class="qd">Meet a rep to become a partner</div></button>
@@ -281,6 +297,29 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBook
 
 function loadCalScript(){ if(document.getElementById('ghl-form-embed')) return; var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true; document.body.appendChild(s); }
 
+async function loadApptRep(){
+  var r=await api({action:'lead_my_appointment'});
+  if(!r||!r.success) return;
+  var appt=r.appointment, rep=r.rep, cards='';
+  if(appt && appt.start){
+    var d=new Date(appt.start), now=Date.now();
+    var when=d.toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    var label=(d.getTime()>=now)?'Your upcoming appointment':'Your last appointment';
+    cards+='<div class="ar-card appt"><div class="ar-h"><span class="material-icons" style="font-size:15px;">event_available</span> '+label+'</div>'
+      +'<div class="ar-when">'+esc(when)+'</div>'
+      +'<div class="ar-sub">'+esc(appt.title||'Appointment')+(appt.status?' · '+esc(appt.status):'')+'</div>'
+      +(appt.meeting_url&&/^https?:/i.test(appt.meeting_url)?'<div style="margin-top:10px;"><a href="'+esc(appt.meeting_url)+'" target="_blank" rel="noopener" style="color:#fff;font-weight:700;font-size:12.5px;">Join / details →</a></div>':'')
+      +'</div>';
+  }
+  if(rep){
+    var ph=rep.photo_url?'<img class="rep-photo" src="'+esc(rep.photo_url)+'">':'<div class="rep-ph-ph">'+esc(initials(rep.name))+'</div>';
+    cards+='<div class="ar-card"><div class="ar-h" style="color:#94a3b8;"><span class="material-icons" style="font-size:15px;">support_agent</span> Your PayProTec rep</div>'
+      +'<div class="rep-top">'+ph+'<div><div class="rep-name">'+esc(rep.name)+'</div>'+(rep.job_level?'<div class="rep-level">'+esc(rep.job_level)+'</div>':'')+'</div></div>'
+      +(rep.bio?'<div class="rep-bio">'+esc(rep.bio)+'</div>':'')
+      +'</div>';
+  }
+  if(cards){ var row=document.getElementById('apptRepRow'); row.className='ar-row'; row.style.display='grid'; row.innerHTML=cards; }
+}
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
   var b=document.getElementById('bookBody');
@@ -348,7 +387,7 @@ async function loadCourses(){
   document.getElementById('sbName').textContent=r.lead.full_name||'Prospect';
   document.getElementById('sbAvatar').textContent=initials(r.lead.full_name);
   renderJourney();
-  loadBook(); loadAnn(); loadCourses();
+  loadApptRep(); loadBook(); loadAnn(); loadCourses();
 })();
 </script>
 </body>

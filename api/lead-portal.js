@@ -11,7 +11,20 @@ import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
-import { ghlListCalendars, ghlLocationNames } from './_ghl.js';
+import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlContactAppointments, ghlSearchContactsByTag } from './_ghl.js';
+
+async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID || null; }
+// The assigned rep's public summary (name + job level + bio + photo) for a lead.
+async function repSummary(supabaseClient, userid) {
+    if (!userid) return null;
+    const { data: u } = await supabaseClient.from('app_users')
+        .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url').eq('userid', userid).maybeSingle();
+    if (!u) return null;
+    return {
+        name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email || 'Your rep',
+        job_level: u.rep_job_level || '', bio: u.rep_bio || '', photo_url: u.rep_photo_url || ''
+    };
+}
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -201,6 +214,26 @@ export default async function handler(req, res) {
             return ok(res, { calendar_url: cid ? ('https://api.leadconnectorhq.com/widget/booking/' + cid) : '' });
         }
 
+        // Lead home extras: their upcoming appointment (from HighLevel) + the
+        // assigned rep's profile summary.
+        if (action === 'lead_my_appointment') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const { data: lead } = await supabase.from('leads').select('ghl_contact_id, assigned_rep').eq('id', leadId).maybeSingle();
+            let appointment = null;
+            if (lead && lead.ghl_contact_id) {
+                try {
+                    const locationId = await ghlLocId();
+                    const appts = await ghlContactAppointments(locationId, lead.ghl_contact_id);
+                    const now = Date.now();
+                    // Prefer the next upcoming; else the most recent past.
+                    appointment = appts.find(a => new Date(a.start).getTime() >= now) || appts[appts.length - 1] || null;
+                } catch (e) { /* best-effort */ }
+            }
+            const rep = await repSummary(supabase, lead && lead.assigned_rep);
+            return ok(res, { appointment, rep });
+        }
+
         // ══════════ STAFF (Lead Portal admin) actions ══════════
         const session = await validateSession(req);
         if (!session) return bad(res, 'Unauthorized', 401);
@@ -259,7 +292,60 @@ export default async function handler(req, res) {
             const { data: ans } = await supabase.from('lead_onboarding_answers').select('question_id, answer').eq('lead_id', body.lead_id);
             const amap = {}; (ans || []).forEach(a => { amap[a.question_id] = a.answer; });
             const answers = (qs || []).map(q => ({ question: q.question, type: q.type, answer: amap[q.id] ?? null })).filter(a => a.answer != null);
-            return ok(res, { lead, answers });
+            // ── HighLevel lookup by contact id or email + appointments ──
+            let ghl = null, appointments = [];
+            try {
+                const locationId = await ghlLocId();
+                if (locationId) {
+                    let contactId = lead.ghl_contact_id;
+                    if (!contactId && lead.email) {
+                        const found = await ghlFindContactByEmail(locationId, lead.email);
+                        if (found) { contactId = found.id; ghl = found; if (contactId) await supabase.from('leads').update({ ghl_contact_id: contactId }).eq('id', lead.id); }
+                    } else if (contactId && lead.email) {
+                        ghl = await ghlFindContactByEmail(locationId, lead.email);
+                    }
+                    if (contactId) appointments = await ghlContactAppointments(locationId, contactId);
+                }
+            } catch (e) { /* best-effort */ }
+            const rep = await repSummary(supabase, lead.assigned_rep);
+            return ok(res, { lead, answers, ghl, appointments, rep });
+        }
+        // Staff list for the "assign rep" picker.
+        if (action === 'list_reps') {
+            const { data: reps } = await supabase.from('app_users')
+                .select('userid, first_name, last_name, email, role, is_active, rep_job_level').eq('is_active', true).order('first_name');
+            return ok(res, { reps: (reps || []).map(u => ({ userid: u.userid, name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email, role: u.role || '', job_level: u.rep_job_level || '' })) });
+        }
+        // Assign / unassign a rep to a lead ("tunnel" the lead to a person).
+        if (action === 'set_lead_rep') {
+            if (!body.lead_id) return bad(res, 'lead_id required');
+            await supabase.from('leads').update({ assigned_rep: body.rep_userid || null }).eq('id', body.lead_id);
+            log({ action: `${actorName(actor)} assigned a rep to a lead`, target_type: 'lead', target_id: body.lead_id });
+            return ok(res, { rep: await repSummary(supabase, body.rep_userid) });
+        }
+        // Import HighLevel lead-gen contacts (by tag) as prospect accounts.
+        if (action === 'import_ghl_leads') {
+            const locationId = await ghlLocId();
+            if (!locationId) return bad(res, 'GHL_LOCATION_ID is not configured.');
+            const { data: s } = await supabase.from('app_settings').select('value').eq('key', 'lead_import_tag').maybeSingle();
+            const tag = String((body.tag || s?.value || '').trim());
+            if (!tag) return bad(res, 'Set an import tag first (Lead Portal → Settings).');
+            let contacts = [];
+            try { contacts = await ghlSearchContactsByTag(locationId, tag, 100); } catch (e) { return bad(res, 'HighLevel lookup failed: ' + (e.message || 'error')); }
+            let created = 0, skipped = 0;
+            for (const c of contacts) {
+                const email = String(c.email || '').toLowerCase().trim();
+                if (!email) { skipped++; continue; }
+                const { data: existing } = await supabase.from('leads').select('id').eq('email', email).maybeSingle();
+                if (existing) { skipped++; continue; }
+                const { error } = await supabase.from('leads').insert({
+                    email, full_name: c.name || email, phone: c.phone || '',
+                    ghl_contact_id: c.id || null, source: 'highlevel:' + tag, status: 'new', onboarding_completed: false
+                });
+                if (error) { skipped++; } else { created++; }
+            }
+            log({ action: `${actorName(actor)} imported ${created} lead(s) from HighLevel (tag "${tag}")`, target_type: 'lead', target_id: 'import' });
+            return ok(res, { created, skipped, total: contacts.length, tag });
         }
 
         // Lead Portal settings: pick the HighLevel calendar (PayProTec Partners) for book-a-call.
@@ -267,16 +353,17 @@ export default async function handler(req, res) {
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             let calendars = [], locName = '';
             if (locationId) { try { calendars = await ghlListCalendars(locationId); const n = await ghlLocationNames([locationId]); locName = n[locationId] || ''; } catch (e) { /* ignore */ } }
-            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name']);
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag']);
             const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
-            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '' });
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '' });
         }
         if (action === 'save_lead_settings') {
             const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
             const now = new Date().toISOString();
             await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_id', value: cid, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_name', value: cname, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
-            log({ action: `${actorName(actor)} set the Lead Portal book-a-call calendar${cname ? ' → ' + cname : ''}`, target_type: 'lead_setting', target_id: 'lead_portal_calendar_id' });
+            if (body.import_tag !== undefined) await supabase.from('app_settings').upsert({ key: 'lead_import_tag', value: String(body.import_tag || '').trim(), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            log({ action: `${actorName(actor)} updated Lead Portal settings`, target_type: 'lead_setting', target_id: 'lead_portal_calendar_id' });
             return ok(res, {});
         }
 
