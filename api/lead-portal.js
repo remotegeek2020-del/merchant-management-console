@@ -18,7 +18,7 @@ async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || 
 async function repSummary(supabaseClient, userid) {
     if (!userid) return null;
     const { data: u } = await supabaseClient.from('app_users')
-        .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones').eq('userid', userid).maybeSingle();
+        .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones, rep_phone').eq('userid', userid).maybeSingle();
     if (!u) return null;
     // Single "actual photo" = the community profile avatar; fall back to the
     // legacy rep photo for any older records.
@@ -26,6 +26,7 @@ async function repSummary(supabaseClient, userid) {
     return {
         name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email || 'Your rep',
         job_level: u.rep_job_level || '', bio: u.rep_bio || '',
+        email: u.email || '', phone: u.rep_phone || '',
         photo_url: (prof && prof.avatar_url) || u.rep_photo_url || '',
         milestones: Array.isArray(u.rep_milestones) ? u.rep_milestones : []
     };
@@ -307,7 +308,7 @@ export default async function handler(req, res) {
                 try {
                     const hlUsers = await ghlListUsers(await ghlLocId());
                     const hu = hlUsers.find(u => u.id === apptForRep.assigned_user_id);
-                    if (hu) rep = { name: hu.name || 'Your rep', job_level: hu.role || '', bio: '', photo_url: hu.photo || '', milestones: [] };
+                    if (hu) rep = { name: hu.name || 'Your rep', job_level: hu.role || '', bio: '', email: hu.email || '', phone: hu.phone || '', photo_url: hu.photo || '', milestones: [] };
                 } catch (e) { /* best-effort */ }
             }
             return ok(res, { upcoming, past, rep, _diag: diag });

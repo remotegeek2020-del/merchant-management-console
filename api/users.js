@@ -309,7 +309,7 @@ export default async function handler(req, res) {
             if (action === 'get_rep_profile') {
                 const uid = req.body.target_userid || session.userid;
                 const { data: u } = await supabase.from('app_users')
-                    .select('userid, first_name, last_name, role, rep_bio, rep_job_level, rep_photo_url, rep_milestones').eq('userid', uid).maybeSingle();
+                    .select('userid, first_name, last_name, role, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones, rep_phone').eq('userid', uid).maybeSingle();
                 return res.status(200).json({ success: true, profile: u || null });
             }
             if (action === 'save_rep_profile') {
@@ -320,6 +320,7 @@ export default async function handler(req, res) {
                 const upd = {
                     rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
                     rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
+                    rep_phone: (req.body.rep_phone ?? '').toString().slice(0, 60),
                     rep_milestones: ms
                 };
                 const { error } = await supabase.from('app_users').update(upd).eq('userid', session.userid);
@@ -361,7 +362,7 @@ export default async function handler(req, res) {
                     let hlUsers = [];
                     try { hlUsers = await ghlListUsers(locationId); } catch (e) { return res.status(502).json({ success: false, message: 'HighLevel user lookup failed.' }); }
                     const byEmail = {}, byId = {}; hlUsers.forEach(u => { if (u.email) byEmail[u.email] = u; if (u.id) byId[u.id] = u; });
-                    const { data: staff } = await supabase.from('app_users').select('userid, email, first_name, last_name, ghl_user_id');
+                    const { data: staff } = await supabase.from('app_users').select('userid, email, first_name, last_name, ghl_user_id, rep_phone');
                     // Existing community avatars (the single photo).
                     const ids = (staff || []).map(s => s.userid);
                     const avatars = {};
@@ -373,6 +374,7 @@ export default async function handler(req, res) {
                         if (!hl) continue;
                         matched++;
                         if (!avatars[s.userid] && hl.photo) { await setStaffAvatar(supabase, s.userid, hl.photo, (`${s.first_name || ''} ${s.last_name || ''}`.trim())); updated++; }
+                        if (!s.rep_phone && hl.phone) { await supabase.from('app_users').update({ rep_phone: hl.phone }).eq('userid', s.userid); }
                     }
                     await supabase.from('activity_logs').insert([{ email: perf.email, action: `Synced rep photos from HighLevel: ${updated} filled of ${matched} matched`, status: 'success', category: 'admin', severity: 'info' }]);
                     return res.status(200).json({ success: true, matched, updated, hl_users: hlUsers.length });

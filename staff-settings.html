@@ -91,6 +91,8 @@
         <div class="settings-sub">Your professional profile — job level, background, and career milestones. Shown to prospects on the Lead Portal when you're their assigned rep. Uses your <b>Profile Photo</b> above.</div>
         <label class="field-label">Job Level / Title</label>
         <input type="text" class="field-input" id="repJobLevel" placeholder="e.g. Senior Partnership Manager">
+        <label class="field-label">Contact Phone <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(shown to prospects)</span></label>
+        <input type="text" class="field-input" id="repPhone" placeholder="e.g. (555) 555-5555">
         <label class="field-label">Background / About you</label>
         <textarea class="field-input" id="repBio" placeholder="A short background — your experience, how you help partners get started, what to expect on the call…"></textarea>
         <label class="field-label" style="margin-top:14px;">Milestones</label>
@@ -555,6 +557,7 @@ async function loadRepProfile() {
         if (!r.success || !r.profile) return;
         const p = r.profile;
         document.getElementById('repJobLevel').value = p.rep_job_level || '';
+        document.getElementById('repPhone').value = p.rep_phone || '';
         document.getElementById('repBio').value = p.rep_bio || '';
         document.getElementById('repMsList').innerHTML = '';
         (Array.isArray(p.rep_milestones) ? p.rep_milestones : []).forEach(m => repMsAdd(m.label, m.detail));
@@ -590,6 +593,7 @@ async function saveRepProfile(silent) {
     const body = {
         action: 'save_rep_profile',
         rep_job_level: document.getElementById('repJobLevel').value.trim(),
+        rep_phone: document.getElementById('repPhone').value.trim(),
         rep_bio: document.getElementById('repBio').value.trim(),
         rep_milestones: milestones
     };
