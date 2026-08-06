@@ -81,6 +81,45 @@
   .jstep.now .jdot{animation:jPulse 2.2s ease-out infinite;}
   .jprog{height:7px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin:2px 0 18px;}
   .jprog-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#0d9488,#34d399);transition:width 1.1s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 8px rgba(13,148,136,.5);}
+  /* Smart nudge */
+  .nudge{display:flex;align-items:center;gap:13px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border-radius:14px;padding:15px 18px;margin-bottom:18px;box-shadow:var(--shadow-sm);animation:jRise .5s ease both;}
+  .nudge .ni{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex:none;}
+  .nudge .nt{font-weight:800;font-size:14.5px;}.nudge .ns{font-size:12.5px;opacity:.9;margin-top:1px;}
+  .nudge button{margin-left:auto;background:#fff;color:var(--teal-dark);border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  /* Income estimator */
+  .est-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:center;}
+  @media(max-width:720px){.est-grid{grid-template-columns:1fr;}}
+  .est-l{display:block;font-size:12px;font-weight:700;color:var(--secondary);margin-bottom:6px;}
+  .est input[type=range]{width:78%;vertical-align:middle;accent-color:var(--teal);}
+  .est-v{font-weight:800;color:var(--teal-dark);font-size:13px;margin-left:6px;}
+  .est-out{background:linear-gradient(135deg,#001e3c,#0f766e);color:#fff;border-radius:14px;padding:18px 20px;text-align:center;}
+  .est-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85;}
+  .est-big{font-size:2.1rem;font-weight:800;line-height:1;margin-top:4px;}
+  .est-year{font-size:1.25rem;font-weight:800;opacity:.95;}
+  /* Unlock grid */
+  .unlock-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:720px){.unlock-grid{grid-template-columns:1fr;}}
+  .unlock{background:#fff;border:1px solid var(--border);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow-sm);display:flex;gap:12px;align-items:flex-start;}
+  .unlock .ui{width:40px;height:40px;border-radius:11px;background:var(--teal-bg);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex:none;}
+  .unlock .ut{font-weight:800;font-size:13.5px;}.unlock .ud{font-size:12px;color:var(--secondary);margin-top:2px;line-height:1.45;}
+  /* Testimonials carousel */
+  .testi-row{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory;}
+  .testi{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:var(--shadow-sm);min-width:290px;max-width:320px;scroll-snap-align:start;flex:none;}
+  .testi .q{font-size:13.5px;line-height:1.6;color:var(--text);}
+  .testi .q::before{content:'“';font-size:34px;color:var(--teal-light);line-height:0;vertical-align:-14px;margin-right:2px;}
+  .testi .who{display:flex;align-items:center;gap:10px;margin-top:14px;}
+  .testi .av{width:38px;height:38px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none;}
+  .testi .nm{font-weight:800;font-size:13px;}.testi .co{font-size:11.5px;color:var(--muted);}
+  /* FAQ */
+  .faq{background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;box-shadow:var(--shadow-sm);overflow:hidden;}
+  .faq summary{list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:8px;}
+  .faq summary::-webkit-details-marker{display:none;}
+  .faq summary .material-icons{margin-left:auto;color:var(--muted);transition:transform .2s;}
+  .faq[open] summary .material-icons{transform:rotate(180deg);}
+  .faq .fa{padding:0 16px 14px;font-size:13px;color:var(--secondary);line-height:1.55;}
+  /* Prep checklist */
+  .prep{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--secondary);padding:6px 0;}
+  .prep .material-icons{color:var(--teal);font-size:18px;flex:none;}
   /* Appointment + rep cards */
   .ar-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
   @media(max-width:860px){.ar-row{grid-template-columns:1fr;}}
@@ -223,6 +262,7 @@
   <nav class="sidebar-nav">
     <button class="nav-item active" data-tab="home" onclick="showTab('home')"><span class="material-icons">dashboard</span> Home</button>
     <button class="nav-item" data-tab="ann" onclick="showTab('ann')"><span class="material-icons">campaign</span> Announcements</button>
+    <button class="nav-item" data-tab="why" onclick="showTab('why')"><span class="material-icons">workspace_premium</span> Why Partner?</button>
     <button class="nav-item" data-tab="book" onclick="showTab('book')"><span class="material-icons">event_available</span> Book a Call</button>
     <button class="nav-item" data-tab="past" id="nav-past" style="display:none;" onclick="showTab('past')"><span class="material-icons">history</span> Past Appointments</button>
     <button class="nav-item" data-tab="courses" onclick="showTab('courses')"><span class="material-icons">video_library</span> Courses & Videos</button>
@@ -245,6 +285,7 @@
     <!-- HOME -->
     <div class="tab show" id="tab-home">
       <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Learn from our webinars, keep up with announcements, and when you're ready — book your become-a-partner call.</p></div>
+      <div id="homeNudge"></div>
       <div id="apptRepRow" style="display:none;"></div>
       <div class="quick">
         <button class="qcard" onclick="showTab('ann')"><div class="qic"><span class="material-icons">campaign</span></div><div class="qt">Announcements</div><div class="qd">Latest program news & updates</div></button>
@@ -265,9 +306,45 @@
       <div id="annBody"><div class="card muted">Loading…</div></div>
     </div>
 
+    <!-- WHY PARTNER -->
+    <div class="tab" id="tab-why">
+      <h2 class="sec-h"><span class="material-icons">savings</span> Your income potential</h2>
+      <div class="card est">
+        <div class="est-grid">
+          <div>
+            <label class="est-l">How many merchants do you expect to sign?</label>
+            <input type="range" id="est-m" min="1" max="200" value="20" oninput="calcEst()"> <span class="est-v" id="est-mv">20</span>
+            <label class="est-l" style="margin-top:14px;">Average monthly processing per merchant</label>
+            <input type="range" id="est-v" min="5000" max="200000" step="5000" value="40000" oninput="calcEst()"> <span class="est-v" id="est-vv">$40,000</span>
+          </div>
+          <div class="est-out">
+            <div class="est-lbl">Estimated monthly residual</div>
+            <div class="est-big" id="est-month">$0</div>
+            <div class="est-lbl" style="margin-top:12px;">Estimated yearly</div>
+            <div class="est-year" id="est-year">$0</div>
+            <button class="btn btn-teal" style="margin-top:14px;width:100%;justify-content:center;" onclick="showTab('book')"><span class="material-icons" style="font-size:16px;">event_available</span> Book a call to learn more</button>
+          </div>
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:12px;">📊 <b>Illustrative estimate only</b> — actual residuals depend on your rev-share, processing rates, and merchant mix. Your rep will walk you through real numbers on the call.</div>
+      </div>
+
+      <h2 class="sec-h" style="margin-top:24px;"><span class="material-icons">workspace_premium</span> What you unlock as a partner</h2>
+      <div class="unlock-grid" id="unlockGrid"></div>
+
+      <h2 class="sec-h" style="margin-top:24px;"><span class="material-icons">forum</span> Partner success stories</h2>
+      <div id="testiWrap"><div class="card muted">Loading…</div></div>
+
+      <h2 class="sec-h" style="margin-top:24px;"><span class="material-icons">quiz</span> Frequently asked questions</h2>
+      <div id="faqWrap"></div>
+    </div>
+
     <!-- BOOK -->
     <div class="tab" id="tab-book">
       <h2 class="sec-h"><span class="material-icons">event_available</span> Book your call</h2>
+      <div class="card" style="margin-bottom:14px;background:#f0fdfa;border-color:#99f6e4;">
+        <div style="font-weight:800;font-size:14px;color:var(--teal-dark);margin-bottom:8px;display:flex;align-items:center;gap:7px;"><span class="material-icons" style="font-size:18px;">checklist</span> How to prepare for your call</div>
+        <div id="prepList"></div>
+      </div>
       <div id="bookBody"><div class="card muted">Loading…</div></div>
     </div>
 
@@ -309,7 +386,7 @@ function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|yout
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
 
 // ── Nav / tabs ──
-var TAB_TITLES={home:'Home',ann:'Announcements',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos'};
+var TAB_TITLES={home:'Home',ann:'Announcements',why:'Why Partner?',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos'};
 window.showTab=function(name){
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('show'); });
   var el=document.getElementById('tab-'+name); if(el) el.classList.add('show');
@@ -410,6 +487,7 @@ async function loadApptRep(){
   if(html){ row.className=''; row.style.display='block'; row.innerHTML=html; }
   else { row.style.display='none'; row.innerHTML=''; }
   if(r._diag) try{ console.log('[lead appt diag]', r._diag); }catch(e){}
+  renderNudge();
   // Past Appointments tab.
   var pb=document.getElementById('pastBody');
   if(past.length){
@@ -427,12 +505,59 @@ async function loadApptRep(){
     pb.innerHTML='<div class="card muted">No past appointments yet.</div>';
   }
 }
-var CAL_URL=null, BOOK_LOADED=false, UPCOMING=null;
+var CAL_URL=null, BOOK_LOADED=false, UPCOMING=null, EST_RATE=0.004;
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
   CAL_URL=(r&&r.success&&r.calendar_url)?r.calendar_url:'';
+  if(r&&r.estimator_rate) EST_RATE=r.estimator_rate;
+  renderTestimonials((r&&r.testimonials)||[]);
+  calcEst();
   BOOK_LOADED=true;
   renderBook();
+}
+// ── Why Partner? content ─────────────────────────────────────────────────────
+function fmtMoney(n){ return '$'+Math.round(n).toLocaleString(); }
+window.calcEst=function(){
+  var mEl=document.getElementById('est-m'), vEl=document.getElementById('est-v'); if(!mEl||!vEl) return;
+  var m=+mEl.value, v=+vEl.value;
+  document.getElementById('est-mv').textContent=m;
+  document.getElementById('est-vv').textContent=fmtMoney(v);
+  var monthly=m*v*EST_RATE;
+  document.getElementById('est-month').textContent=fmtMoney(monthly);
+  document.getElementById('est-year').textContent=fmtMoney(monthly*12);
+};
+var UNLOCK=[
+  {icon:'payments',t:'Residual income',d:'Earn an ongoing monthly residual on every merchant you sign — for as long as they process.'},
+  {icon:'dashboard',t:'Full Partner Portal',d:'Track your merchants, volumes, and residuals live in your own dashboard.'},
+  {icon:'support_agent',t:'Dedicated specialist',d:'A PayProTec rep and priority support in your corner.'},
+  {icon:'inventory_2',t:'Hardware & deployment',d:'Order terminals and track deployments right from the portal.'},
+  {icon:'school',t:'Advanced training',d:'Unlock partner-only webinars, playbooks, and enablement.'},
+  {icon:'groups',t:'Partner community',d:'Network with other partners and the PayProTec team.'}
+];
+function renderUnlock(){ var el=document.getElementById('unlockGrid'); if(el) el.innerHTML=UNLOCK.map(function(u){return '<div class="unlock"><div class="ui"><span class="material-icons">'+u.icon+'</span></div><div><div class="ut">'+esc(u.t)+'</div><div class="ud">'+esc(u.d)+'</div></div></div>';}).join(''); }
+var FAQ=[
+  {q:'How do I earn as a partner?',a:'You earn a monthly residual — a share of the processing revenue — on every merchant you sign, for as long as they keep processing.'},
+  {q:'What does it cost to join?',a:'Nothing. Becoming a PayProTec partner is free. You grow your income as you grow your merchant portfolio.'},
+  {q:'Do I need payments experience?',a:'No. We provide the training, tools, and a dedicated specialist to help you get started and succeed.'},
+  {q:'How do I become a partner?',a:'Watch a few of the webinars here, then book your become-a-partner call. Your rep gets you fully set up.'},
+  {q:'When and how do I get paid?',a:'Residuals are paid monthly once your merchants are processing. Your rep will walk you through the exact schedule on the call.'}
+];
+function renderFaq(){ var el=document.getElementById('faqWrap'); if(el) el.innerHTML=FAQ.map(function(f){return '<details class="faq"><summary>'+esc(f.q)+'<span class="material-icons">expand_more</span></summary><div class="fa">'+esc(f.a)+'</div></details>';}).join(''); }
+function renderTestimonials(list){
+  var w=document.getElementById('testiWrap'); if(!w) return;
+  list=(list||[]).filter(function(t){return t&&t.quote;});
+  if(!list.length){ w.innerHTML='<div class="card muted">Partner success stories are coming soon.</div>'; return; }
+  w.innerHTML='<div class="testi-row">'+list.map(function(t){var nm=t.name||'PayProTec Partner';return '<div class="testi"><div class="q">'+esc(t.quote)+'</div><div class="who"><div class="av">'+esc(initials(nm))+'</div><div><div class="nm">'+esc(nm)+'</div>'+(t.company?'<div class="co">'+esc(t.company)+'</div>':'')+'</div></div></div>';}).join('')+'</div>';
+}
+var PREP=['Your goals — how much you\'d like to earn and by when.','Any current merchants or business relationships you have.','Questions about residuals, rates, and support.','Just 15 focused minutes — that\'s all it takes.'];
+function renderPrep(){ var el=document.getElementById('prepList'); if(el) el.innerHTML=PREP.map(function(p){return '<div class="prep"><span class="material-icons">check_circle</span><span>'+esc(p)+'</span></div>';}).join(''); }
+function renderNudge(){
+  var el=document.getElementById('homeNudge'); if(!el) return;
+  var n;
+  if(UPCOMING){ n={i:'event_available',t:'Your call is booked 🎉',s:'Open Book a Call to see how to prepare and make it count.',b:'Prepare',tab:'book'}; }
+  else if(WATCH_SECONDS>=WATCH_GOAL){ n={i:'rocket_launch',t:'You\'re ready to talk!',s:'You\'ve explored the program — book your become-a-partner call.',b:'Book a call',tab:'book'}; }
+  else { n={i:'savings',t:'See what you could earn',s:'Estimate your income potential as a PayProTec partner.',b:'Estimate',tab:'why'}; }
+  el.innerHTML='<div class="nudge"><div class="ni"><span class="material-icons">'+n.i+'</span></div><div style="flex:1;min-width:0;"><div class="nt">'+esc(n.t)+'</div><div class="ns">'+esc(n.s)+'</div></div><button onclick="showTab(\''+n.tab+'\')">'+esc(n.b)+'</button></div>';
 }
 function renderBook(){
   if(!BOOK_LOADED) return;
@@ -521,7 +646,7 @@ async function loadCourses(){
   document.getElementById('hi').textContent='Welcome, '+first+'!';
   document.getElementById('sbName').textContent=r.lead.full_name||'Prospect';
   document.getElementById('sbAvatar').textContent=initials(r.lead.full_name);
-  renderJourney();
+  renderJourney(); renderUnlock(); renderFaq(); renderPrep(); renderNudge();
   loadApptRep(); loadBook(); loadAnn(); loadCourses();
 })();
 </script>

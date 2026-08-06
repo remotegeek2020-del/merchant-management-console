@@ -98,9 +98,38 @@ async function loadSettings(){
     +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Create prospect + send setup invite</label>'
     +'<div style="display:flex;gap:6px;margin:5px 0 6px;"><input id="wh2" readonly value="'+esc(location.origin)+'/api/lead-webhook?secret=YOUR_SECRET&invite=true" style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:monospace;background:#f8fafc;" onclick="this.select()"><button class="btn btn-n" onclick="copyVal(\'wh2\',this)">Copy</button></div>'
     +'<div class="muted" style="font-size:11.5px;margin-top:8px;">In the HighLevel webhook action set method <b>POST</b>. The contact\'s email is required; name &amp; phone are pulled if present. Already-active accounts are never re-invited.</div>'
+    +'</div>'
+    // ── Lead Portal content card (testimonials + estimator rate) ──
+    +'<div class="card" style="max-width:640px;margin-top:16px;">'
+    +'<b style="font-size:15px;">Lead Portal content</b>'
+    +'<div class="muted" style="font-size:13px;margin:6px 0 12px;">Shown to prospects on the <b>Why Partner?</b> tab.</div>'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Income estimator rate</label>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-top:5px;"><input id="est-rate" type="number" step="0.01" value="'+((Number(r.estimator_rate||0.004)*100).toFixed(2))+'" style="width:120px;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;"> <span class="muted" style="font-size:12.5px;">% of monthly processing volume (illustrative). e.g. 0.40</span></div>'
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:16px 0 6px;">Testimonials</div>'
+    +'<div id="testi-list"></div>'
+    +'<button type="button" class="btn btn-n" onclick="testiAdd()" style="margin-top:4px;"><span class="material-icons" style="font-size:15px;">add</span> Add testimonial</button>'
+    +'<div style="margin-top:14px;"><button class="btn btn-p" onclick="saveContent(this)"><span class="material-icons" style="font-size:16px;">save</span> Save content</button></div>'
     +'</div>';
+  (r.testimonials||[]).forEach(function(t){ testiAdd(t.quote,t.name,t.company); });
 }
 window.copyVal=function(id,btn){ var el=document.getElementById(id); el.select(); try{ navigator.clipboard.writeText(el.value); }catch(e){ document.execCommand('copy'); } var t=btn.textContent; btn.textContent='Copied'; setTimeout(function(){btn.textContent=t;},1200); };
+window.testiAdd=function(quote,name,company){
+  var l=document.getElementById('testi-list'); if(!l) return;
+  var d=document.createElement('div'); d.style.cssText='border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;';
+  d.innerHTML='<textarea class="t-quote" placeholder="Quote…" style="width:100%;min-height:52px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:13px;">'+esc(quote||'')+'</textarea>'
+    +'<div style="display:flex;gap:6px;margin-top:6px;"><input class="t-name" placeholder="Name" value="'+esc(name||'')+'" style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;"><input class="t-company" placeholder="Company (optional)" value="'+esc(company||'')+'" style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;"><button type="button" class="material-icons" title="Remove" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="this.closest(\'div\').parentNode.removeChild(this.closest(\'div\'))">close</button></div>';
+  l.appendChild(d);
+};
+window.saveContent=async function(btn){
+  var rows=Array.prototype.slice.call(document.querySelectorAll('#testi-list > div'));
+  var testimonials=rows.map(function(row){ return {quote:(row.querySelector('.t-quote').value||'').trim(),name:(row.querySelector('.t-name').value||'').trim(),company:(row.querySelector('.t-company').value||'').trim()}; }).filter(function(t){return t.quote;});
+  var rate=parseFloat(document.getElementById('est-rate').value)/100;
+  btn.disabled=true;
+  var r=await api({action:'save_lead_settings',testimonials:testimonials,estimator_rate:rate});
+  btn.disabled=false;
+  if(r&&r.success) Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false});
+  else Swal.fire('Error',(r&&r.message)||'Could not save','error');
+};
 window.saveCal=async function(btn){
   var sel=document.getElementById('cal-sel'); var cid=sel.value; var cname=cid?sel.options[sel.selectedIndex].text:'';
   var tagEl=document.getElementById('imp-tag'); var tag=tagEl?tagEl.value.trim():undefined;

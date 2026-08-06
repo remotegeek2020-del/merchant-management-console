@@ -239,8 +239,12 @@ export default async function handler(req, res) {
         if (action === 'lead_home_config') {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
-            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id']);
-            const cid = ((s || []).find(r => r.key === 'lead_portal_calendar_id') || {}).value || '';
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_testimonials', 'lead_estimator_rate']);
+            const smap = {}; (s || []).forEach(r => { smap[r.key] = r.value; });
+            const cid = smap.lead_portal_calendar_id || '';
+            let testimonials = [];
+            try { testimonials = JSON.parse(smap.lead_testimonials || '[]'); if (!Array.isArray(testimonials)) testimonials = []; } catch (e) { testimonials = []; }
+            const estimatorRate = Number(smap.lead_estimator_rate) || 0.004; // illustrative % of processed volume
             let calendarUrl = '';
             if (cid) {
                 calendarUrl = 'https://api.leadconnectorhq.com/widget/booking/' + cid;
@@ -260,7 +264,7 @@ export default async function handler(req, res) {
                     if (qs) calendarUrl += '?' + qs;
                 }
             }
-            return ok(res, { calendar_url: calendarUrl });
+            return ok(res, { calendar_url: calendarUrl, testimonials, estimator_rate: estimatorRate });
         }
 
         // Lead home extras: their upcoming appointment (from HighLevel) + the
@@ -621,9 +625,11 @@ export default async function handler(req, res) {
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             let calendars = [], locName = '';
             if (locationId) { try { calendars = await ghlListCalendars(locationId); const n = await ghlLocationNames([locationId]); locName = n[locationId] || ''; } catch (e) { /* ignore */ } }
-            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite']);
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite', 'lead_testimonials', 'lead_estimator_rate']);
             const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
-            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET });
+            let testimonials = [];
+            try { testimonials = JSON.parse(map.lead_testimonials || '[]'); if (!Array.isArray(testimonials)) testimonials = []; } catch (e) { testimonials = []; }
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET, testimonials, estimator_rate: Number(map.lead_estimator_rate) || 0.004 });
         }
         if (action === 'save_lead_settings') {
             const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
@@ -632,6 +638,16 @@ export default async function handler(req, res) {
             await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_name', value: cname, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             if (body.import_tag !== undefined) await supabase.from('app_settings').upsert({ key: 'lead_import_tag', value: String(body.import_tag || '').trim(), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             if (body.auto_invite !== undefined) await supabase.from('app_settings').upsert({ key: 'lead_import_auto_invite', value: body.auto_invite ? 'true' : 'false', updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            if (body.testimonials !== undefined) {
+                const clean = (Array.isArray(body.testimonials) ? body.testimonials : [])
+                    .map(t => ({ quote: String(t.quote || '').slice(0, 600), name: String(t.name || '').slice(0, 120), company: String(t.company || '').slice(0, 160) }))
+                    .filter(t => t.quote).slice(0, 30);
+                await supabase.from('app_settings').upsert({ key: 'lead_testimonials', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            }
+            if (body.estimator_rate !== undefined) {
+                let rt = Number(body.estimator_rate); if (!Number.isFinite(rt) || rt <= 0) rt = 0.004; rt = Math.min(0.05, rt);
+                await supabase.from('app_settings').upsert({ key: 'lead_estimator_rate', value: String(rt), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            }
             log({ action: `${actorName(actor)} updated Lead Portal settings`, target_type: 'lead_setting', target_id: 'lead_portal_calendar_id' });
             return ok(res, {});
         }
