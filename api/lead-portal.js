@@ -336,6 +336,7 @@ export default async function handler(req, res) {
         const actor = await loadActor(session.userid);
         if (!actor || actor.is_active === false) return bad(res, 'Unauthorized', 401);
         const canLP = canLeadPortal(actor);
+        const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
         const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead']);
@@ -361,7 +362,6 @@ export default async function handler(req, res) {
             log({ action: `${actorName(actor)} deleted prospect "${lead.full_name || lead.email || lead.id}" and revoked portal access`, severity: 'warning', target_type: 'lead', target_id: lead.id });
             return ok(res, { deleted: true });
         }
-        const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
 
         if (action === 'can_access') return ok(res, { can_access: true });
 
