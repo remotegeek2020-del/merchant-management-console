@@ -132,11 +132,21 @@ async function loadSettings(){
     +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">❓ FAQ</div>'
     +'<div id="faq-list"></div>'
     +'<button type="button" class="btn btn-n" onclick="faqAdd()"><span class="material-icons" style="font-size:15px;">add</span> Add question</button>'
+    // Social proof stats
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">📊 Social proof stats (Home banner)</div>'
+    +'<div id="stat-list"></div>'
+    +'<button type="button" class="btn btn-n" onclick="statAdd()"><span class="material-icons" style="font-size:15px;">add</span> Add stat</button>'
+    // Resources
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">📁 Resources (downloads / links)</div>'
+    +'<div id="res-list"></div>'
+    +'<button type="button" class="btn btn-n" onclick="resAdd()"><span class="material-icons" style="font-size:15px;">add</span> Add resource</button>'
     +'<div style="margin-top:16px;"><button class="btn btn-p" onclick="saveContent(this)"><span class="material-icons" style="font-size:16px;">save</span> Save content</button></div>'
     +'</div>';
   (r.unlock||[]).forEach(function(u){ unlockAdd(u.icon,u.title,u.desc); });
   (r.testimonials||[]).forEach(function(t){ testiAdd(t); });
   (r.faq||[]).forEach(function(f){ faqAdd(f.q,f.a); });
+  (r.stats||[]).forEach(function(s2){ statAdd(s2.value,s2.label); });
+  (r.resources||[]).forEach(function(rr){ resAdd(rr.title,rr.description,rr.url,rr.icon); });
 }
 window.copyVal=function(id,btn){ var el=document.getElementById(id); el.select(); try{ navigator.clipboard.writeText(el.value); }catch(e){ document.execCommand('copy'); } var t=btn.textContent; btn.textContent='Copied'; setTimeout(function(){btn.textContent=t;},1200); };
 function rmRow(btn){ var d=btn.closest('.cms-row'); if(d) d.parentNode.removeChild(d); }
@@ -148,6 +158,18 @@ window.unlockAdd=function(icon,title,desc){
 window.faqAdd=function(q,a){
   var l=document.getElementById('faq-list'); if(!l) return; var d=document.createElement('div'); d.className='cms-row'; d.style.cssText='border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;';
   d.innerHTML='<div style="display:flex;gap:6px;align-items:center;"><input class="f-q ci" style="flex:1;margin:0;" placeholder="Question" value="'+esc(q||'')+'"><button type="button" class="material-icons" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="rmRow(this)">close</button></div><textarea class="f-a ci" style="min-height:52px;margin-top:6px;" placeholder="Answer">'+esc(a||'')+'</textarea>';
+  l.appendChild(d);
+};
+window.statAdd=function(value,label){
+  var l=document.getElementById('stat-list'); if(!l) return; var d=document.createElement('div'); d.className='cms-row'; d.style.cssText='display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  d.innerHTML='<input class="st-v ci" style="width:150px;margin:0;" placeholder="Value e.g. 800+" value="'+esc(value||'')+'"><input class="st-l ci" style="flex:1;margin:0;" placeholder="Label e.g. Active partners" value="'+esc(label||'')+'"><button type="button" class="material-icons" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="rmRow(this)">close</button>';
+  l.appendChild(d);
+};
+window.resAdd=function(title,description,url,icon){
+  var l=document.getElementById('res-list'); if(!l) return; var d=document.createElement('div'); d.className='cms-row'; d.style.cssText='border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;';
+  d.innerHTML='<div style="display:flex;gap:6px;align-items:center;"><input class="rs-icon ci" style="width:130px;margin:0;" placeholder="icon (e.g. picture_as_pdf)" value="'+esc(icon||'')+'"><input class="rs-title ci" style="flex:1;margin:0;" placeholder="Title" value="'+esc(title||'')+'"><button type="button" class="material-icons" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="rmRow(this)">close</button></div>'
+    +'<input class="rs-url ci" style="margin-top:6px;" placeholder="Link URL (https://…)" value="'+esc(url||'')+'">'
+    +'<input class="rs-desc ci" style="margin-top:6px;" placeholder="Short description (optional)" value="'+esc(description||'')+'">';
   l.appendChild(d);
 };
 window.testiAdd=function(t){
@@ -188,8 +210,10 @@ window.saveContent=async function(btn){
   var unlock=Array.prototype.slice.call(document.querySelectorAll('#unlock-list .cms-row')).map(function(r){return {icon:r.querySelector('.u-icon').value.trim(),title:r.querySelector('.u-title').value.trim(),desc:r.querySelector('.u-desc').value.trim()};}).filter(function(u){return u.title;});
   var faq=Array.prototype.slice.call(document.querySelectorAll('#faq-list .cms-row')).map(function(r){return {q:r.querySelector('.f-q').value.trim(),a:r.querySelector('.f-a').value.trim()};}).filter(function(f){return f.q;});
   var testimonials=Array.prototype.slice.call(document.querySelectorAll('#testi-list .cms-row')).map(function(r){return {photo_url:r.querySelector('.t-photo').value.trim(),name:r.querySelector('.t-name').value.trim(),company:r.querySelector('.t-company').value.trim(),earnings:r.querySelector('.t-earn').value.trim(),description:r.querySelector('.t-desc').value.trim(),quote:r.querySelector('.t-quote').value.trim(),story:r.querySelector('.t-story').value.trim()};}).filter(function(t){return t.name||t.quote||t.story;});
+  var stats=Array.prototype.slice.call(document.querySelectorAll('#stat-list .cms-row')).map(function(r){return {value:r.querySelector('.st-v').value.trim(),label:r.querySelector('.st-l').value.trim()};}).filter(function(s){return s.value;});
+  var resources=Array.prototype.slice.call(document.querySelectorAll('#res-list .cms-row')).map(function(r){return {icon:r.querySelector('.rs-icon').value.trim(),title:r.querySelector('.rs-title').value.trim(),url:r.querySelector('.rs-url').value.trim(),description:r.querySelector('.rs-desc').value.trim()};}).filter(function(x){return x.title&&x.url;});
   btn.disabled=true;
-  var r=await api({action:'save_lead_settings',estimator:estimator,unlock:unlock,faq:faq,testimonials:testimonials});
+  var r=await api({action:'save_lead_settings',estimator:estimator,unlock:unlock,faq:faq,testimonials:testimonials,stats:stats,resources:resources});
   btn.disabled=false;
   if(r&&r.success) Swal.fire({icon:'success',title:'Content saved',timer:1200,showConfirmButton:false});
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');

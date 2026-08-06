@@ -44,13 +44,13 @@ const DEFAULT_ESTIMATOR = {
 };
 async function getLeadContent(supabaseClient) {
     const { data } = await supabaseClient.from('app_settings').select('key, value')
-        .in('key', ['lead_estimator', 'lead_estimator_rate', 'lead_unlock', 'lead_faq', 'lead_testimonials']);
+        .in('key', ['lead_estimator', 'lead_estimator_rate', 'lead_unlock', 'lead_faq', 'lead_testimonials', 'lead_stats', 'lead_resources']);
     const m = {}; (data || []).forEach(r => { m[r.key] = r.value; });
     let est = {}; try { est = JSON.parse(m.lead_estimator || '{}') || {}; } catch (e) { est = {}; }
     const estimator = Object.assign({}, DEFAULT_ESTIMATOR, est);
     if (!est.rate && m.lead_estimator_rate) estimator.rate = Number(m.lead_estimator_rate) || estimator.rate;
     const arr = (k) => { try { const a = JSON.parse(m[k] || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
-    return { estimator, unlock: arr('lead_unlock'), faq: arr('lead_faq'), testimonials: arr('lead_testimonials') };
+    return { estimator, unlock: arr('lead_unlock'), faq: arr('lead_faq'), testimonials: arr('lead_testimonials'), stats: arr('lead_stats'), resources: arr('lead_resources') };
 }
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
@@ -281,7 +281,7 @@ export default async function handler(req, res) {
                     if (qs) calendarUrl += '?' + qs;
                 }
             }
-            return ok(res, { calendar_url: calendarUrl, estimator: content.estimator, unlock: content.unlock, faq: content.faq, testimonials: content.testimonials });
+            return ok(res, { calendar_url: calendarUrl, estimator: content.estimator, unlock: content.unlock, faq: content.faq, testimonials: content.testimonials, stats: content.stats, resources: content.resources });
         }
 
         // Lead home extras: their upcoming appointment (from HighLevel) + the
@@ -657,7 +657,7 @@ export default async function handler(req, res) {
             const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite']);
             const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
             const content = await getLeadContent(supabase);
-            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET, estimator: content.estimator, unlock: content.unlock, faq: content.faq, testimonials: content.testimonials });
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET, estimator: content.estimator, unlock: content.unlock, faq: content.faq, testimonials: content.testimonials, stats: content.stats, resources: content.resources });
         }
         if (action === 'save_lead_settings') {
             const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
@@ -691,6 +691,18 @@ export default async function handler(req, res) {
                     .map(f => ({ q: String(f.q || '').slice(0, 240), a: String(f.a || '').slice(0, 2000) }))
                     .filter(f => f.q).slice(0, 40);
                 await supabase.from('app_settings').upsert({ key: 'lead_faq', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            }
+            if (body.stats !== undefined) {
+                const clean = (Array.isArray(body.stats) ? body.stats : [])
+                    .map(s2 => ({ value: String(s2.value || '').slice(0, 40), label: String(s2.label || '').slice(0, 80) }))
+                    .filter(s2 => s2.value).slice(0, 8);
+                await supabase.from('app_settings').upsert({ key: 'lead_stats', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            }
+            if (body.resources !== undefined) {
+                const clean = (Array.isArray(body.resources) ? body.resources : [])
+                    .map(rr => ({ title: String(rr.title || '').slice(0, 160), description: String(rr.description || '').slice(0, 300), url: String(rr.url || '').slice(0, 1000), icon: String(rr.icon || 'description').slice(0, 40) }))
+                    .filter(rr => rr.title && rr.url).slice(0, 40);
+                await supabase.from('app_settings').upsert({ key: 'lead_resources', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             }
             if (body.estimator !== undefined && typeof body.estimator === 'object') {
                 const e = body.estimator;

@@ -132,6 +132,17 @@
   /* Prep checklist */
   .prep{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--secondary);padding:6px 0;}
   .prep .material-icons{color:var(--teal);font-size:18px;flex:none;}
+  /* Social proof stat banner */
+  .statban{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;}
+  .statban .s{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 12px;text-align:center;box-shadow:var(--shadow-sm);animation:jRise .5s ease both;}
+  .statban .sv{font-size:1.7rem;font-weight:800;color:var(--teal-dark);line-height:1;letter-spacing:-.5px;}
+  .statban .sl{font-size:11px;color:var(--muted);font-weight:700;margin-top:6px;text-transform:uppercase;letter-spacing:.4px;}
+  /* Resources */
+  .res{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid var(--border);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow-sm);text-decoration:none;color:inherit;margin-bottom:10px;transition:all .15s;}
+  .res:hover{box-shadow:var(--shadow-md);border-color:var(--teal-light);transform:translateY(-1px);}
+  .res .ri{width:44px;height:44px;border-radius:12px;background:var(--teal-bg);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex:none;}
+  .res .rt{font-weight:800;font-size:14px;}.res .rd{font-size:12px;color:var(--muted);margin-top:2px;}
+  .res .rgo{margin-left:auto;color:var(--muted);}
   /* Appointment + rep cards */
   .ar-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
   @media(max-width:860px){.ar-row{grid-template-columns:1fr;}}
@@ -278,6 +289,7 @@
     <button class="nav-item" data-tab="book" onclick="showTab('book')"><span class="material-icons">event_available</span> Book a Call</button>
     <button class="nav-item" data-tab="past" id="nav-past" style="display:none;" onclick="showTab('past')"><span class="material-icons">history</span> Past Appointments</button>
     <button class="nav-item" data-tab="courses" onclick="showTab('courses')"><span class="material-icons">video_library</span> Courses & Videos</button>
+    <button class="nav-item" data-tab="resources" onclick="showTab('resources')"><span class="material-icons">folder_open</span> Resources</button>
     <div class="nav-divider"></div>
     <button class="nav-item" onclick="logout()"><span class="material-icons">logout</span> Sign Out</button>
   </nav>
@@ -298,6 +310,7 @@
     <div class="tab show" id="tab-home">
       <div class="hero"><h1 id="hi">Welcome!</h1><p>You're in the PayProTec Partner Program. Learn from our webinars, keep up with announcements, and when you're ready — book your become-a-partner call.</p></div>
       <div id="homeNudge"></div>
+      <div id="statBanner"></div>
       <div id="apptRepRow" style="display:none;"></div>
       <div class="quick">
         <button class="qcard" onclick="showTab('ann')"><div class="qic"><span class="material-icons">campaign</span></div><div class="qt">Announcements</div><div class="qd">Latest program news & updates</div></button>
@@ -369,6 +382,12 @@
       <div id="pastBody"><div class="card muted">Loading…</div></div>
     </div>
 
+    <!-- RESOURCES -->
+    <div class="tab" id="tab-resources">
+      <h2 class="sec-h"><span class="material-icons">folder_open</span> Resources</h2>
+      <div id="resourcesBody"><div class="card muted">Loading…</div></div>
+    </div>
+
     <!-- COURSES -->
     <div class="tab" id="tab-courses">
       <h2 class="sec-h"><span class="material-icons">video_library</span> Courses & Videos</h2>
@@ -408,7 +427,7 @@ function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|yout
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
 
 // ── Nav / tabs ──
-var TAB_TITLES={home:'Home',ann:'Announcements',why:'Why Partner?',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos'};
+var TAB_TITLES={home:'Home',ann:'Announcements',why:'Why Partner?',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos',resources:'Resources'};
 window.showTab=function(name){
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('show'); });
   var el=document.getElementById('tab-'+name); if(el) el.classList.add('show');
@@ -535,8 +554,26 @@ async function loadBook(){
   renderUnlock((r&&r.unlock)||[]);
   renderFaq((r&&r.faq)||[]);
   renderTestimonials((r&&r.testimonials)||[]);
+  renderStats((r&&r.stats)||[]);
+  renderResources((r&&r.resources)||[]);
   BOOK_LOADED=true;
   renderBook();
+}
+function renderStats(list){
+  var el=document.getElementById('statBanner'); if(!el) return;
+  list=(list||[]).filter(function(s){return s&&s.value;});
+  if(!list.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML='<div class="statban">'+list.map(function(s){return '<div class="s"><div class="sv">'+esc(s.value)+'</div><div class="sl">'+esc(s.label||'')+'</div></div>';}).join('')+'</div>';
+}
+function renderResources(list){
+  var el=document.getElementById('resourcesBody'); if(!el) return;
+  list=(list||[]).filter(function(r2){return r2&&r2.title&&r2.url;});
+  if(!list.length){ el.innerHTML='<div class="card muted">No resources yet — check back soon.</div>'; return; }
+  el.innerHTML=list.map(function(r2){
+    var url=/^https?:\/\//i.test(r2.url)?r2.url:('https://'+r2.url);
+    return '<a class="res" href="'+esc(url)+'" target="_blank" rel="noopener"><div class="ri"><span class="material-icons">'+esc(r2.icon||'description')+'</span></div><div style="flex:1;min-width:0;"><div class="rt">'+esc(r2.title)+'</div>'+(r2.description?'<div class="rd">'+esc(r2.description)+'</div>':'')+'</div><span class="material-icons rgo">open_in_new</span></a>';
+  }).join('');
 }
 // ── Why Partner? content ─────────────────────────────────────────────────────
 function fmtMoney(n){ return '$'+Math.round(n).toLocaleString(); }
