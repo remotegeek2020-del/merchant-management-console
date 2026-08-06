@@ -312,9 +312,9 @@
       <div class="card est">
         <div class="est-grid">
           <div>
-            <label class="est-l">How many merchants do you expect to sign?</label>
+            <label class="est-l" id="est-lm">How many merchants do you expect to sign?</label>
             <input type="range" id="est-m" min="1" max="200" value="20" oninput="calcEst()"> <span class="est-v" id="est-mv">20</span>
-            <label class="est-l" style="margin-top:14px;">Average monthly processing per merchant</label>
+            <label class="est-l" id="est-lv" style="margin-top:14px;">Average monthly processing per merchant</label>
             <input type="range" id="est-v" min="5000" max="200000" step="5000" value="40000" oninput="calcEst()"> <span class="est-v" id="est-vv">$40,000</span>
           </div>
           <div class="est-out">
@@ -325,7 +325,10 @@
             <button class="btn btn-teal" style="margin-top:14px;width:100%;justify-content:center;" onclick="showTab('book')"><span class="material-icons" style="font-size:16px;">event_available</span> Book a call to learn more</button>
           </div>
         </div>
-        <div class="muted" style="font-size:11.5px;margin-top:12px;">📊 <b>Illustrative estimate only</b> — actual residuals depend on your rev-share, processing rates, and merchant mix. Your rep will walk you through real numbers on the call.</div>
+        <details class="faq" style="margin-top:14px;box-shadow:none;border-color:var(--teal-light);background:var(--teal-bg);">
+          <summary style="color:var(--teal-dark);">How is this calculated?<span class="material-icons">expand_more</span></summary>
+          <div class="fa" id="est-explain"></div>
+        </details>
       </div>
 
       <h2 class="sec-h" style="margin-top:24px;"><span class="material-icons">workspace_premium</span> What you unlock as a partner</h2>
@@ -364,6 +367,13 @@
 
 <div class="pv-overlay" id="player" onclick="if(event.target===this)closePlayer()">
   <div class="pv-card"><span class="material-icons pv-close" onclick="closePlayer()">close</span><div class="pv-frame" id="playerFrame"></div><div id="playerCta" style="margin-top:12px;text-align:center;"></div></div>
+</div>
+
+<div class="bk-overlay" id="storyModal" onclick="if(event.target===this)closeStory()">
+  <div class="bk-card" style="max-width:560px;">
+    <div class="bk-head"><span class="material-icons" style="color:var(--teal);">auto_stories</span><span>Partner story</span><span class="material-icons x" onclick="closeStory()" style="cursor:pointer;color:#64748b;margin-left:auto;">close</span></div>
+    <div id="storyBody" style="padding:18px 20px;overflow-y:auto;"></div>
+  </div>
 </div>
 
 <div class="bk-overlay" id="bookModal" onclick="if(event.target===this)closeBooking()">
@@ -445,7 +455,7 @@ function startWatch(){ _watchStart=Date.now(); if(_watchTimer) clearInterval(_wa
 function stopWatch(){ flushWatch(); if(_watchTimer){ clearInterval(_watchTimer); _watchTimer=null; } _watchStart=0; }
 window.openBooking=function(encUrl,label){ var url=decodeURIComponent(encUrl); document.getElementById('bkTitle').textContent=label||'Book your appointment'; document.getElementById('bkFrame').src=url; document.getElementById('bkFoot').innerHTML='Trouble loading? <a href="'+esc(url)+'" target="_blank" rel="noopener">Open in a new tab</a>'; document.getElementById('bookModal').style.display='flex'; loadCalScript(); };
 window.closeBooking=function(){ document.getElementById('bookModal').style.display='none'; document.getElementById('bkFrame').src='about:blank'; };
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); closeNav(); } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeBooking(); closePlayer(); closeNav(); closeStory(); } });
 
 function loadCalScript(){ if(document.getElementById('ghl-form-embed')) return; var s=document.createElement('script'); s.id='ghl-form-embed'; s.src='https://link.msgsndr.com/js/form_embed.js'; s.async=true; document.body.appendChild(s); }
 
@@ -505,18 +515,29 @@ async function loadApptRep(){
     pb.innerHTML='<div class="card muted">No past appointments yet.</div>';
   }
 }
-var CAL_URL=null, BOOK_LOADED=false, UPCOMING=null, EST_RATE=0.004;
+var CAL_URL=null, BOOK_LOADED=false, UPCOMING=null, EST_RATE=0.004, EST={};
 async function loadBook(){
   var r=await api({action:'lead_home_config'});
   CAL_URL=(r&&r.success&&r.calendar_url)?r.calendar_url:'';
-  if(r&&r.estimator_rate) EST_RATE=r.estimator_rate;
+  renderEstimator(r&&r.estimator);
+  renderUnlock((r&&r.unlock)||[]);
+  renderFaq((r&&r.faq)||[]);
   renderTestimonials((r&&r.testimonials)||[]);
-  calcEst();
   BOOK_LOADED=true;
   renderBook();
 }
 // ── Why Partner? content ─────────────────────────────────────────────────────
 function fmtMoney(n){ return '$'+Math.round(n).toLocaleString(); }
+function renderEstimator(est){
+  EST=est||{}; EST_RATE=EST.rate||0.004;
+  var m=document.getElementById('est-m'), v=document.getElementById('est-v'); if(!m||!v) return;
+  if(EST.label_merchants) document.getElementById('est-lm').textContent=EST.label_merchants;
+  if(EST.label_volume) document.getElementById('est-lv').textContent=EST.label_volume;
+  if(EST.m_max) m.max=EST.m_max; if(EST.m_default) m.value=Math.min(EST.m_default,+m.max);
+  if(EST.v_max) v.max=EST.v_max; if(EST.v_step) v.step=EST.v_step; if(EST.v_default) v.value=Math.min(EST.v_default,+v.max);
+  var ex=document.getElementById('est-explain'); if(ex) ex.textContent=EST.explanation||'';
+  calcEst();
+}
 window.calcEst=function(){
   var mEl=document.getElementById('est-m'), vEl=document.getElementById('est-v'); if(!mEl||!vEl) return;
   var m=+mEl.value, v=+vEl.value;
@@ -526,7 +547,7 @@ window.calcEst=function(){
   document.getElementById('est-month').textContent=fmtMoney(monthly);
   document.getElementById('est-year').textContent=fmtMoney(monthly*12);
 };
-var UNLOCK=[
+var UNLOCK_DEFAULT=[
   {icon:'payments',t:'Residual income',d:'Earn an ongoing monthly residual on every merchant you sign — for as long as they process.'},
   {icon:'dashboard',t:'Full Partner Portal',d:'Track your merchants, volumes, and residuals live in your own dashboard.'},
   {icon:'support_agent',t:'Dedicated specialist',d:'A PayProTec rep and priority support in your corner.'},
@@ -534,21 +555,46 @@ var UNLOCK=[
   {icon:'school',t:'Advanced training',d:'Unlock partner-only webinars, playbooks, and enablement.'},
   {icon:'groups',t:'Partner community',d:'Network with other partners and the PayProTec team.'}
 ];
-function renderUnlock(){ var el=document.getElementById('unlockGrid'); if(el) el.innerHTML=UNLOCK.map(function(u){return '<div class="unlock"><div class="ui"><span class="material-icons">'+u.icon+'</span></div><div><div class="ut">'+esc(u.t)+'</div><div class="ud">'+esc(u.d)+'</div></div></div>';}).join(''); }
-var FAQ=[
+function renderUnlock(list){
+  list=(list&&list.length)?list.map(function(u){return {icon:u.icon||'check_circle',t:u.title,d:u.desc};}):UNLOCK_DEFAULT;
+  var el=document.getElementById('unlockGrid'); if(el) el.innerHTML=list.map(function(u){return '<div class="unlock"><div class="ui"><span class="material-icons">'+esc(u.icon)+'</span></div><div><div class="ut">'+esc(u.t)+'</div><div class="ud">'+esc(u.d||'')+'</div></div></div>';}).join('');
+}
+var FAQ_DEFAULT=[
   {q:'How do I earn as a partner?',a:'You earn a monthly residual — a share of the processing revenue — on every merchant you sign, for as long as they keep processing.'},
   {q:'What does it cost to join?',a:'Nothing. Becoming a PayProTec partner is free. You grow your income as you grow your merchant portfolio.'},
   {q:'Do I need payments experience?',a:'No. We provide the training, tools, and a dedicated specialist to help you get started and succeed.'},
   {q:'How do I become a partner?',a:'Watch a few of the webinars here, then book your become-a-partner call. Your rep gets you fully set up.'},
   {q:'When and how do I get paid?',a:'Residuals are paid monthly once your merchants are processing. Your rep will walk you through the exact schedule on the call.'}
 ];
-function renderFaq(){ var el=document.getElementById('faqWrap'); if(el) el.innerHTML=FAQ.map(function(f){return '<details class="faq"><summary>'+esc(f.q)+'<span class="material-icons">expand_more</span></summary><div class="fa">'+esc(f.a)+'</div></details>';}).join(''); }
+function renderFaq(list){
+  list=(list&&list.length)?list:FAQ_DEFAULT;
+  var el=document.getElementById('faqWrap'); if(el) el.innerHTML=list.map(function(f){return '<details class="faq"><summary>'+esc(f.q)+'<span class="material-icons">expand_more</span></summary><div class="fa">'+esc(f.a||'')+'</div></details>';}).join('');
+}
+var _TESTI=[];
 function renderTestimonials(list){
   var w=document.getElementById('testiWrap'); if(!w) return;
-  list=(list||[]).filter(function(t){return t&&t.quote;});
-  if(!list.length){ w.innerHTML='<div class="card muted">Partner success stories are coming soon.</div>'; return; }
-  w.innerHTML='<div class="testi-row">'+list.map(function(t){var nm=t.name||'PayProTec Partner';return '<div class="testi"><div class="q">'+esc(t.quote)+'</div><div class="who"><div class="av">'+esc(initials(nm))+'</div><div><div class="nm">'+esc(nm)+'</div>'+(t.company?'<div class="co">'+esc(t.company)+'</div>':'')+'</div></div></div>';}).join('')+'</div>';
+  _TESTI=(list||[]).filter(function(t){return t&&(t.quote||t.story||t.name);});
+  if(!_TESTI.length){ w.innerHTML='<div class="card muted">Partner success stories are coming soon.</div>'; return; }
+  w.innerHTML='<div class="testi-row">'+_TESTI.map(function(t,i){
+    var nm=t.name||'PayProTec Partner';
+    var av=t.photo_url?'<img class="av" style="object-fit:cover;" src="'+esc(t.photo_url)+'">':'<div class="av">'+esc(initials(nm))+'</div>';
+    return '<div class="testi">'
+      +(t.earnings?'<div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-bottom:10px;"><span class="material-icons" style="font-size:13px;">trending_up</span>'+esc(t.earnings)+'</div>':'')
+      +(t.quote?'<div class="q">'+esc(t.quote)+'</div>':(t.description?'<div class="q" style="font-style:normal;">'+esc(t.description)+'</div>':''))
+      +'<div class="who">'+av+'<div><div class="nm">'+esc(nm)+'</div>'+(t.company?'<div class="co">'+esc(t.company)+'</div>':'')+'</div></div>'
+      +(t.story?'<button onclick="openStory('+i+')" style="margin-top:12px;background:none;border:none;color:var(--teal-dark);font-weight:700;font-size:12.5px;cursor:pointer;padding:0;font-family:inherit;">Read their story →</button>':'')
+      +'</div>';
+  }).join('')+'</div>';
 }
+window.openStory=function(i){
+  var t=_TESTI[i]; if(!t) return;
+  var av=t.photo_url?'<img src="'+esc(t.photo_url)+'" style="width:64px;height:64px;border-radius:50%;object-fit:cover;flex:none;">':'<div style="width:64px;height:64px;border-radius:50%;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;flex:none;">'+esc(initials(t.name||'?'))+'</div>';
+  document.getElementById('storyBody').innerHTML='<div style="display:flex;align-items:center;gap:12px;">'+av+'<div><div style="font-weight:800;font-size:16px;">'+esc(t.name||'PayProTec Partner')+'</div>'+(t.company?'<div style="color:#94a3b8;font-size:12.5px;">'+esc(t.company)+'</div>':'')+(t.earnings?'<div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-top:5px;"><span class="material-icons" style="font-size:13px;">trending_up</span>'+esc(t.earnings)+'</div>':'')+'</div></div>'
+    +(t.quote?'<div style="font-style:italic;color:#334155;margin-top:14px;font-size:14px;">“'+esc(t.quote)+'”</div>':'')
+    +'<div style="margin-top:12px;font-size:13.5px;color:var(--secondary);line-height:1.6;white-space:pre-wrap;">'+esc(t.story||'')+'</div>';
+  document.getElementById('storyModal').style.display='flex';
+};
+window.closeStory=function(){ document.getElementById('storyModal').style.display='none'; };
 var PREP=['Your goals — how much you\'d like to earn and by when.','Any current merchants or business relationships you have.','Questions about residuals, rates, and support.','Just 15 focused minutes — that\'s all it takes.'];
 function renderPrep(){ var el=document.getElementById('prepList'); if(el) el.innerHTML=PREP.map(function(p){return '<div class="prep"><span class="material-icons">check_circle</span><span>'+esc(p)+'</span></div>';}).join(''); }
 function renderNudge(){

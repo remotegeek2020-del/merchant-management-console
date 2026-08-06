@@ -37,6 +37,10 @@
   tr.lead-row{cursor:pointer;}tr.lead-row:hover{background:#f8fafc;}
   .pill{font-size:10px;font-weight:800;border-radius:20px;padding:2px 8px;}
   .pill.done{background:#dcfce7;color:#166534;}.pill.pend{background:#fef3c7;color:#b45309;}.pill.conv{background:#dbeafe;color:#1d4ed8;}
+  .cl{display:block;font-size:11px;font-weight:700;color:#475569;margin:8px 0 4px;}
+  .ci{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;}
+  .ci:focus{border-color:var(--pri);}
+  @keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -65,7 +69,7 @@ async function loadSettings(){
   var r=await api({action:'get_lead_settings'});
   if(!r.success){ p.innerHTML='<div class="empty" style="color:#9a3412;">'+esc(r.message||'Failed')+'</div>'; return; }
   if(!r.configured){ p.innerHTML='<div class="card"><b>Book-a-Call calendar</b><div class="muted" style="font-size:13px;margin-top:6px;">No HighLevel sub-account is configured (GHL_LOCATION_ID). Add it in Secret Dungeon → API Manager first.</div></div>'; return; }
-  var cals=r.calendars||[];
+  var cals=r.calendars||[]; var EST=r.estimator||{};
   p.innerHTML='<div class="card" style="max-width:560px;">'
     +'<b style="font-size:15px;">Book-a-Call calendar</b>'
     +'<div class="muted" style="font-size:13px;margin:6px 0 14px;">Connected HighLevel sub-account: <b>'+esc(r.location_name||'PayProTec Partners')+'</b>. Choose the calendar leads use to book their become-a-partner call.</div>'
@@ -99,35 +103,95 @@ async function loadSettings(){
     +'<div style="display:flex;gap:6px;margin:5px 0 6px;"><input id="wh2" readonly value="'+esc(location.origin)+'/api/lead-webhook?secret=YOUR_SECRET&invite=true" style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:monospace;background:#f8fafc;" onclick="this.select()"><button class="btn btn-n" onclick="copyVal(\'wh2\',this)">Copy</button></div>'
     +'<div class="muted" style="font-size:11.5px;margin-top:8px;">In the HighLevel webhook action set method <b>POST</b>. The contact\'s email is required; name &amp; phone are pulled if present. Already-active accounts are never re-invited.</div>'
     +'</div>'
-    // ── Lead Portal content card (testimonials + estimator rate) ──
-    +'<div class="card" style="max-width:640px;margin-top:16px;">'
-    +'<b style="font-size:15px;">Lead Portal content</b>'
-    +'<div class="muted" style="font-size:13px;margin:6px 0 12px;">Shown to prospects on the <b>Why Partner?</b> tab.</div>'
-    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Income estimator rate</label>'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-top:5px;"><input id="est-rate" type="number" step="0.01" value="'+((Number(r.estimator_rate||0.004)*100).toFixed(2))+'" style="width:120px;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;"> <span class="muted" style="font-size:12.5px;">% of monthly processing volume (illustrative). e.g. 0.40</span></div>'
-    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:16px 0 6px;">Testimonials</div>'
+    // ── Lead Portal content CMS (Why Partner? tab) ──
+    +'<div class="card" style="max-width:680px;margin-top:16px;">'
+    +'<b style="font-size:15px;">Lead Portal content — "Why Partner?" tab</b>'
+    +'<div class="muted" style="font-size:13px;margin:6px 0 14px;">Everything a prospect sees on the Why Partner? tab.</div>'
+    // Estimator
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:4px 0 8px;">💰 Income estimator</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+      +'<div><label class="cl">Residual rate (% of volume)</label><input id="est-rate" type="number" step="0.01" value="'+((Number(EST.rate||0.004)*100).toFixed(2))+'" class="ci"></div>'
+      +'<div><label class="cl">Volume step ($)</label><input id="est-vstep" type="number" value="'+(EST.v_step||5000)+'" class="ci"></div>'
+      +'<div><label class="cl">Merchants — default</label><input id="est-mdef" type="number" value="'+(EST.m_default||20)+'" class="ci"></div>'
+      +'<div><label class="cl">Merchants — max</label><input id="est-mmax" type="number" value="'+(EST.m_max||200)+'" class="ci"></div>'
+      +'<div><label class="cl">Volume/merchant — default ($)</label><input id="est-vdef" type="number" value="'+(EST.v_default||40000)+'" class="ci"></div>'
+      +'<div><label class="cl">Volume/merchant — max ($)</label><input id="est-vmax" type="number" value="'+(EST.v_max||200000)+'" class="ci"></div>'
+    +'</div>'
+    +'<label class="cl" style="margin-top:8px;">Merchants slider label</label><input id="est-lm" class="ci" value="'+esc(EST.label_merchants||"")+'">'
+    +'<label class="cl">Volume slider label</label><input id="est-lv" class="ci" value="'+esc(EST.label_volume||"")+'">'
+    +'<label class="cl">"How this is calculated" explanation (shown to prospects)</label><textarea id="est-explain" class="ci" style="min-height:70px;">'+esc(EST.explanation||"")+'</textarea>'
+    // Unlock
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">🏆 What you unlock</div>'
+    +'<div id="unlock-list"></div>'
+    +'<button type="button" class="btn btn-n" onclick="unlockAdd()"><span class="material-icons" style="font-size:15px;">add</span> Add item</button>'
+    // Testimonials
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">💬 Partner success stories</div>'
     +'<div id="testi-list"></div>'
-    +'<button type="button" class="btn btn-n" onclick="testiAdd()" style="margin-top:4px;"><span class="material-icons" style="font-size:15px;">add</span> Add testimonial</button>'
-    +'<div style="margin-top:14px;"><button class="btn btn-p" onclick="saveContent(this)"><span class="material-icons" style="font-size:16px;">save</span> Save content</button></div>'
+    +'<button type="button" class="btn btn-n" onclick="testiAdd()"><span class="material-icons" style="font-size:15px;">add</span> Add story</button>'
+    // FAQ
+    +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">❓ FAQ</div>'
+    +'<div id="faq-list"></div>'
+    +'<button type="button" class="btn btn-n" onclick="faqAdd()"><span class="material-icons" style="font-size:15px;">add</span> Add question</button>'
+    +'<div style="margin-top:16px;"><button class="btn btn-p" onclick="saveContent(this)"><span class="material-icons" style="font-size:16px;">save</span> Save content</button></div>'
     +'</div>';
-  (r.testimonials||[]).forEach(function(t){ testiAdd(t.quote,t.name,t.company); });
+  (r.unlock||[]).forEach(function(u){ unlockAdd(u.icon,u.title,u.desc); });
+  (r.testimonials||[]).forEach(function(t){ testiAdd(t); });
+  (r.faq||[]).forEach(function(f){ faqAdd(f.q,f.a); });
 }
 window.copyVal=function(id,btn){ var el=document.getElementById(id); el.select(); try{ navigator.clipboard.writeText(el.value); }catch(e){ document.execCommand('copy'); } var t=btn.textContent; btn.textContent='Copied'; setTimeout(function(){btn.textContent=t;},1200); };
-window.testiAdd=function(quote,name,company){
-  var l=document.getElementById('testi-list'); if(!l) return;
-  var d=document.createElement('div'); d.style.cssText='border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;';
-  d.innerHTML='<textarea class="t-quote" placeholder="Quote…" style="width:100%;min-height:52px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:13px;">'+esc(quote||'')+'</textarea>'
-    +'<div style="display:flex;gap:6px;margin-top:6px;"><input class="t-name" placeholder="Name" value="'+esc(name||'')+'" style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;"><input class="t-company" placeholder="Company (optional)" value="'+esc(company||'')+'" style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;"><button type="button" class="material-icons" title="Remove" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="this.closest(\'div\').parentNode.removeChild(this.closest(\'div\'))">close</button></div>';
+function rmRow(btn){ var d=btn.closest('.cms-row'); if(d) d.parentNode.removeChild(d); }
+window.unlockAdd=function(icon,title,desc){
+  var l=document.getElementById('unlock-list'); if(!l) return; var d=document.createElement('div'); d.className='cms-row'; d.style.cssText='display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  d.innerHTML='<input class="u-icon ci" style="width:150px;margin:0;" placeholder="material icon (e.g. payments)" value="'+esc(icon||'')+'"><input class="u-title ci" style="flex:1;margin:0;" placeholder="Title" value="'+esc(title||'')+'"><input class="u-desc ci" style="flex:2;margin:0;" placeholder="Description" value="'+esc(desc||'')+'"><button type="button" class="material-icons" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="rmRow(this)">close</button>';
   l.appendChild(d);
 };
+window.faqAdd=function(q,a){
+  var l=document.getElementById('faq-list'); if(!l) return; var d=document.createElement('div'); d.className='cms-row'; d.style.cssText='border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;';
+  d.innerHTML='<div style="display:flex;gap:6px;align-items:center;"><input class="f-q ci" style="flex:1;margin:0;" placeholder="Question" value="'+esc(q||'')+'"><button type="button" class="material-icons" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="rmRow(this)">close</button></div><textarea class="f-a ci" style="min-height:52px;margin-top:6px;" placeholder="Answer">'+esc(a||'')+'</textarea>';
+  l.appendChild(d);
+};
+window.testiAdd=function(t){
+  t=t||{}; var l=document.getElementById('testi-list'); if(!l) return; var d=document.createElement('div'); d.className='cms-row'; d.style.cssText='border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:10px;';
+  var pid='tp'+Math.floor(Math.random()*1e6);
+  d.innerHTML='<div style="display:flex;gap:12px;">'
+    +'<div style="text-align:center;flex:none;"><div class="t-preview" style="width:60px;height:60px;border-radius:50%;background:#e2e8f0;overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(t.photo_url?'<img src="'+esc(t.photo_url)+'" style="width:100%;height:100%;object-fit:cover;">':'<span class="material-icons" style="color:#94a3b8;">person</span>')+'</div><input type="file" accept="image/*" id="'+pid+'" style="display:none;" onchange="testiUpload(this)"><button type="button" class="btn btn-n" style="margin-top:5px;padding:4px 8px;font-size:11px;" onclick="document.getElementById(\''+pid+'\').click()">Photo</button><input type="hidden" class="t-photo" value="'+esc(t.photo_url||'')+'"></div>'
+    +'<div style="flex:1;">'
+      +'<div style="display:flex;gap:6px;"><input class="t-name ci" style="flex:1;margin:0;" placeholder="Partner name" value="'+esc(t.name||'')+'"><input class="t-company ci" style="flex:1;margin:0;" placeholder="Company" value="'+esc(t.company||'')+'"><input class="t-earn ci" style="width:120px;margin:0;" placeholder="Earnings e.g. $8k/mo" value="'+esc(t.earnings||'')+'"><button type="button" class="material-icons" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:18px;" onclick="rmRow(this)">close</button></div>'
+      +'<input class="t-desc ci" style="margin-top:6px;" placeholder="Short description (card subtitle)" value="'+esc(t.description||'')+'">'
+      +'<input class="t-quote ci" style="margin-top:6px;" placeholder="Headline quote" value="'+esc(t.quote||'')+'">'
+      +'<textarea class="t-story ci" style="min-height:60px;margin-top:6px;" placeholder="Full story (shown when they click Read their story)">'+esc(t.story||'')+'</textarea>'
+    +'</div></div>';
+  l.appendChild(d);
+};
+window.testiUpload=async function(input){
+  var f=input.files&&input.files[0]; if(!f) return;
+  var row=input.closest('.cms-row'); var prev=row.querySelector('.t-preview'); prev.innerHTML='<span class="material-icons" style="animation:spin 1s linear infinite;color:#94a3b8;">sync</span>';
+  try{
+    var u=await api({action:'content_upload_url',file_type:f.type});
+    if(!u.success) throw new Error(u.message||'upload url failed');
+    var put=await fetch(u.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}});
+    if(!put.ok) throw new Error('upload failed');
+    row.querySelector('.t-photo').value=u.public_url;
+    prev.innerHTML='<img src="'+esc(u.public_url)+'" style="width:100%;height:100%;object-fit:cover;">';
+  }catch(e){ prev.innerHTML='<span class="material-icons" style="color:#dc2626;">error</span>'; Swal.fire('Upload failed',e.message||'','error'); }
+};
 window.saveContent=async function(btn){
-  var rows=Array.prototype.slice.call(document.querySelectorAll('#testi-list > div'));
-  var testimonials=rows.map(function(row){ return {quote:(row.querySelector('.t-quote').value||'').trim(),name:(row.querySelector('.t-name').value||'').trim(),company:(row.querySelector('.t-company').value||'').trim()}; }).filter(function(t){return t.quote;});
-  var rate=parseFloat(document.getElementById('est-rate').value)/100;
+  var estimator={
+    rate:parseFloat(document.getElementById('est-rate').value)/100,
+    v_step:+document.getElementById('est-vstep').value,
+    m_default:+document.getElementById('est-mdef').value, m_max:+document.getElementById('est-mmax').value,
+    v_default:+document.getElementById('est-vdef').value, v_max:+document.getElementById('est-vmax').value,
+    label_merchants:document.getElementById('est-lm').value.trim(),
+    label_volume:document.getElementById('est-lv').value.trim(),
+    explanation:document.getElementById('est-explain').value.trim()
+  };
+  var unlock=Array.prototype.slice.call(document.querySelectorAll('#unlock-list .cms-row')).map(function(r){return {icon:r.querySelector('.u-icon').value.trim(),title:r.querySelector('.u-title').value.trim(),desc:r.querySelector('.u-desc').value.trim()};}).filter(function(u){return u.title;});
+  var faq=Array.prototype.slice.call(document.querySelectorAll('#faq-list .cms-row')).map(function(r){return {q:r.querySelector('.f-q').value.trim(),a:r.querySelector('.f-a').value.trim()};}).filter(function(f){return f.q;});
+  var testimonials=Array.prototype.slice.call(document.querySelectorAll('#testi-list .cms-row')).map(function(r){return {photo_url:r.querySelector('.t-photo').value.trim(),name:r.querySelector('.t-name').value.trim(),company:r.querySelector('.t-company').value.trim(),earnings:r.querySelector('.t-earn').value.trim(),description:r.querySelector('.t-desc').value.trim(),quote:r.querySelector('.t-quote').value.trim(),story:r.querySelector('.t-story').value.trim()};}).filter(function(t){return t.name||t.quote||t.story;});
   btn.disabled=true;
-  var r=await api({action:'save_lead_settings',testimonials:testimonials,estimator_rate:rate});
+  var r=await api({action:'save_lead_settings',estimator:estimator,unlock:unlock,faq:faq,testimonials:testimonials});
   btn.disabled=false;
-  if(r&&r.success) Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false});
+  if(r&&r.success) Swal.fire({icon:'success',title:'Content saved',timer:1200,showConfirmButton:false});
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');
 };
 window.saveCal=async function(btn){

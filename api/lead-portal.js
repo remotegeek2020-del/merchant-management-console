@@ -33,6 +33,26 @@ async function repSummary(supabaseClient, userid) {
     };
 }
 
+// ── "Why Partner?" CMS content (estimator / unlock / FAQ / testimonials) ──────
+const DEFAULT_ESTIMATOR = {
+    rate: 0.004,
+    label_merchants: 'How many merchants do you expect to sign?',
+    label_volume: 'Average monthly processing per merchant',
+    m_default: 20, m_max: 200,
+    v_default: 40000, v_max: 200000, v_step: 5000,
+    explanation: 'We estimate your monthly residual as: number of merchants × their average monthly processing volume × your residual rate. This is an illustration only — your actual rate depends on your rev-share and each merchant’s pricing, which your rep reviews on the call.'
+};
+async function getLeadContent(supabaseClient) {
+    const { data } = await supabaseClient.from('app_settings').select('key, value')
+        .in('key', ['lead_estimator', 'lead_estimator_rate', 'lead_unlock', 'lead_faq', 'lead_testimonials']);
+    const m = {}; (data || []).forEach(r => { m[r.key] = r.value; });
+    let est = {}; try { est = JSON.parse(m.lead_estimator || '{}') || {}; } catch (e) { est = {}; }
+    const estimator = Object.assign({}, DEFAULT_ESTIMATOR, est);
+    if (!est.rate && m.lead_estimator_rate) estimator.rate = Number(m.lead_estimator_rate) || estimator.rate;
+    const arr = (k) => { try { const a = JSON.parse(m[k] || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    return { estimator, unlock: arr('lead_unlock'), faq: arr('lead_faq'), testimonials: arr('lead_testimonials') };
+}
+
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -239,12 +259,9 @@ export default async function handler(req, res) {
         if (action === 'lead_home_config') {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
-            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_testimonials', 'lead_estimator_rate']);
-            const smap = {}; (s || []).forEach(r => { smap[r.key] = r.value; });
-            const cid = smap.lead_portal_calendar_id || '';
-            let testimonials = [];
-            try { testimonials = JSON.parse(smap.lead_testimonials || '[]'); if (!Array.isArray(testimonials)) testimonials = []; } catch (e) { testimonials = []; }
-            const estimatorRate = Number(smap.lead_estimator_rate) || 0.004; // illustrative % of processed volume
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id']);
+            const cid = ((s || []).find(r => r.key === 'lead_portal_calendar_id') || {}).value || '';
+            const content = await getLeadContent(supabase);
             let calendarUrl = '';
             if (cid) {
                 calendarUrl = 'https://api.leadconnectorhq.com/widget/booking/' + cid;
@@ -264,7 +281,7 @@ export default async function handler(req, res) {
                     if (qs) calendarUrl += '?' + qs;
                 }
             }
-            return ok(res, { calendar_url: calendarUrl, testimonials, estimator_rate: estimatorRate });
+            return ok(res, { calendar_url: calendarUrl, estimator: content.estimator, unlock: content.unlock, faq: content.faq, testimonials: content.testimonials });
         }
 
         // Lead home extras: their upcoming appointment (from HighLevel) + the
@@ -367,7 +384,7 @@ export default async function handler(req, res) {
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
-        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl', 'ghl_contact_search']);
+        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl', 'ghl_contact_search', 'content_upload_url']);
         if (action === 'delete_lead') {
             if (!canDeleteLeads(actor)) return bad(res, 'Access denied. Delete Leads access required.', 403);
         } else if (STAFF_ACTIONS.has(action)) {
@@ -519,6 +536,18 @@ export default async function handler(req, res) {
             log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
         }
+        // Signed upload URL for testimonial/content photos (Supabase 'marketing' bucket).
+        if (action === 'content_upload_url') {
+            const ft = String(body.file_type || '');
+            const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+            const ext = EXT[ft];
+            if (!ext) return bad(res, 'Only PNG, JPG, WEBP or GIF images are allowed.');
+            const path = `lead-content/${Date.now()}_${Math.floor(Math.random() * 1e6)}.${ext}`;
+            const { data, error } = await supabase.storage.from('marketing').createSignedUploadUrl(path);
+            if (error) return bad(res, error.message, 500);
+            const public_url = `${process.env.SUPABASE_URL}/storage/v1/object/public/marketing/${path}`;
+            return ok(res, { upload_url: data.signedUrl, public_url, path });
+        }
         // Typeahead search of HighLevel contacts (name / email / phone / company / id).
         if (action === 'ghl_contact_search') {
             const q = String(body.query || '').trim();
@@ -625,11 +654,10 @@ export default async function handler(req, res) {
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             let calendars = [], locName = '';
             if (locationId) { try { calendars = await ghlListCalendars(locationId); const n = await ghlLocationNames([locationId]); locName = n[locationId] || ''; } catch (e) { /* ignore */ } }
-            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite', 'lead_testimonials', 'lead_estimator_rate']);
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite']);
             const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
-            let testimonials = [];
-            try { testimonials = JSON.parse(map.lead_testimonials || '[]'); if (!Array.isArray(testimonials)) testimonials = []; } catch (e) { testimonials = []; }
-            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET, testimonials, estimator_rate: Number(map.lead_estimator_rate) || 0.004 });
+            const content = await getLeadContent(supabase);
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET, estimator: content.estimator, unlock: content.unlock, faq: content.faq, testimonials: content.testimonials });
         }
         if (action === 'save_lead_settings') {
             const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
@@ -640,13 +668,45 @@ export default async function handler(req, res) {
             if (body.auto_invite !== undefined) await supabase.from('app_settings').upsert({ key: 'lead_import_auto_invite', value: body.auto_invite ? 'true' : 'false', updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             if (body.testimonials !== undefined) {
                 const clean = (Array.isArray(body.testimonials) ? body.testimonials : [])
-                    .map(t => ({ quote: String(t.quote || '').slice(0, 600), name: String(t.name || '').slice(0, 120), company: String(t.company || '').slice(0, 160) }))
-                    .filter(t => t.quote).slice(0, 30);
+                    .map(t => ({
+                        photo_url: String(t.photo_url || '').slice(0, 1000),
+                        name: String(t.name || '').slice(0, 120),
+                        company: String(t.company || '').slice(0, 160),
+                        earnings: String(t.earnings || '').slice(0, 60),
+                        description: String(t.description || '').slice(0, 200),
+                        quote: String(t.quote || '').slice(0, 600),
+                        story: String(t.story || '').slice(0, 4000)
+                    }))
+                    .filter(t => t.quote || t.story || t.name).slice(0, 60);
                 await supabase.from('app_settings').upsert({ key: 'lead_testimonials', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             }
-            if (body.estimator_rate !== undefined) {
-                let rt = Number(body.estimator_rate); if (!Number.isFinite(rt) || rt <= 0) rt = 0.004; rt = Math.min(0.05, rt);
-                await supabase.from('app_settings').upsert({ key: 'lead_estimator_rate', value: String(rt), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            if (body.unlock !== undefined) {
+                const clean = (Array.isArray(body.unlock) ? body.unlock : [])
+                    .map(u => ({ icon: String(u.icon || 'check_circle').slice(0, 40), title: String(u.title || '').slice(0, 120), desc: String(u.desc || '').slice(0, 300) }))
+                    .filter(u => u.title).slice(0, 30);
+                await supabase.from('app_settings').upsert({ key: 'lead_unlock', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            }
+            if (body.faq !== undefined) {
+                const clean = (Array.isArray(body.faq) ? body.faq : [])
+                    .map(f => ({ q: String(f.q || '').slice(0, 240), a: String(f.a || '').slice(0, 2000) }))
+                    .filter(f => f.q).slice(0, 40);
+                await supabase.from('app_settings').upsert({ key: 'lead_faq', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            }
+            if (body.estimator !== undefined && typeof body.estimator === 'object') {
+                const e = body.estimator;
+                let rt = Number(e.rate); if (!Number.isFinite(rt) || rt <= 0) rt = 0.004; rt = Math.min(0.05, rt);
+                const clean = {
+                    rate: rt,
+                    label_merchants: String(e.label_merchants || DEFAULT_ESTIMATOR.label_merchants).slice(0, 160),
+                    label_volume: String(e.label_volume || DEFAULT_ESTIMATOR.label_volume).slice(0, 160),
+                    m_default: Math.max(1, Math.min(100000, Math.round(Number(e.m_default) || 20))),
+                    m_max: Math.max(1, Math.min(100000, Math.round(Number(e.m_max) || 200))),
+                    v_default: Math.max(0, Math.round(Number(e.v_default) || 40000)),
+                    v_max: Math.max(1000, Math.round(Number(e.v_max) || 200000)),
+                    v_step: Math.max(100, Math.round(Number(e.v_step) || 5000)),
+                    explanation: String(e.explanation || DEFAULT_ESTIMATOR.explanation).slice(0, 2000)
+                };
+                await supabase.from('app_settings').upsert({ key: 'lead_estimator', value: JSON.stringify(clean), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             }
             log({ action: `${actorName(actor)} updated Lead Portal settings`, target_type: 'lead_setting', target_id: 'lead_portal_calendar_id' });
             return ok(res, {});
