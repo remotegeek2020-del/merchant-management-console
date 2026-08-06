@@ -137,8 +137,9 @@ export default async function handler(req, res) {
             const password = String(body.password || '');
             if (!t) return bad(res, 'Invalid link', 400);
             if (password.length < 6) return bad(res, 'Password must be at least 6 characters.');
-            const { data: lead } = await supabase.from('leads').select('id, full_name, email, onboarding_completed, status').eq('invite_token', t).maybeSingle();
+            const { data: lead } = await supabase.from('leads').select('id, full_name, email, onboarding_completed, status, password_hash').eq('invite_token', t).maybeSingle();
             if (!lead) return bad(res, 'This setup link is invalid or has already been used.', 404);
+            if (lead.password_hash) { await supabase.from('leads').update({ invite_token: null }).eq('id', lead.id); return bad(res, 'This account is already set up — please sign in.', 409); }
             const password_hash = await bcrypt.hash(password, 12);
             await supabase.from('leads').update({ password_hash, invite_token: null, last_login: new Date().toISOString() }).eq('id', lead.id);
             const st = token();
@@ -461,6 +462,7 @@ export default async function handler(req, res) {
         if (action === 'lead_detail') {
             const { data: lead } = await supabase.from('leads').select('*').eq('id', body.lead_id).maybeSingle();
             if (!lead) return bad(res, 'Lead not found', 404);
+            const activated = !!lead.password_hash;   // has set a password = active portal account
             delete lead.password_hash;
             const { data: qs } = await supabase.from('lead_onboarding_questions').select('id, question, type').order('sort_order');
             const { data: ans } = await supabase.from('lead_onboarding_answers').select('question_id, answer').eq('lead_id', body.lead_id);
@@ -502,7 +504,7 @@ export default async function handler(req, res) {
                 }
             }
             const rep = await repSummary(supabase, repUid);
-            return ok(res, { lead, answers, ghl, appointments, rep, ghl_link: ghlLink });
+            return ok(res, { lead, answers, ghl, appointments, rep, ghl_link: ghlLink, activated });
         }
         // Staff list for the "assign rep" picker.
         if (action === 'list_reps') {
@@ -545,9 +547,10 @@ export default async function handler(req, res) {
         // Manually send a prospect their account-setup invite email.
         if (action === 'send_lead_invite') {
             if (!body.lead_id) return bad(res, 'lead_id required');
-            const { data: lead } = await supabase.from('leads').select('id, full_name, email').eq('id', body.lead_id).maybeSingle();
+            const { data: lead } = await supabase.from('leads').select('id, full_name, email, password_hash').eq('id', body.lead_id).maybeSingle();
             if (!lead) return bad(res, 'Lead not found', 404);
             if (!lead.email) return bad(res, 'This prospect has no email.');
+            if (lead.password_hash) return bad(res, 'This prospect already has an active account — no setup invite needed.');
             const sent = await sendLeadInvite(lead, req.headers.host);
             log({ action: `${actorName(actor)} sent a setup invite to prospect ${lead.email}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { sent });

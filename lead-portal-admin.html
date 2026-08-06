@@ -197,7 +197,7 @@ window.leadDetail=async function(id){
   await loadReps();
   var r=await api({action:'lead_detail',lead_id:id});
   if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
-  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[], ghlLink=r.ghl_link||'';
+  var l=r.lead, ans=r.answers||[], ghl=r.ghl, appts=r.appointments||[], ghlLink=r.ghl_link||'', activated=!!r.activated;
   function fmtA(a){ return Array.isArray(a.answer)?a.answer.map(esc).join(', '):esc(a.answer); }
   function fmtDt(s){ try{ return new Date(s).toLocaleString(); }catch(e){ return esc(s||''); } }
   // Assign-rep dropdown
@@ -222,8 +222,10 @@ window.leadDetail=async function(id){
     +apptBlock
     +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Onboarding answers</div>'
     +(ans.length?ans.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div class="muted" style="font-size:11.5px;">'+esc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No answers yet.</div>')
-    +'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;">'
-      +'<button onclick="sendInvite(\''+l.id+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">mail</span> Send account-setup invite</button>'
+    +'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+      +(activated
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#166534;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;"><span class="material-icons" style="font-size:16px;">verified_user</span> Active portal account</span>'
+          : '<button onclick="sendInvite(\''+l.id+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">mail</span> Send account-setup invite</button>')
       +(canDeleteLead()?'<button onclick="deleteLead(\''+l.id+'\',\''+esc((l.full_name||l.email||"this prospect").replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">person_remove</span> Delete & revoke access</button>':'')
     +'</div>'
     +'</div>',confirmButtonText:'Close',confirmButtonColor:'#64748b'});
