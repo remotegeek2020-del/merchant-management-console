@@ -103,7 +103,19 @@
   .unlock .ui{width:40px;height:40px;border-radius:11px;background:var(--teal-bg);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex:none;}
   .unlock .ut{font-weight:800;font-size:13.5px;}.unlock .ud{font-size:12px;color:var(--secondary);margin-top:2px;line-height:1.45;}
   /* Testimonials carousel */
-  .testi-row{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory;}
+  .testi-carousel{position:relative;}
+  .tc-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:38px;height:38px;border-radius:50%;background:#fff;border:1px solid var(--border);box-shadow:var(--shadow-md);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--teal-dark);}
+  .tc-arrow.prev{left:-6px;}.tc-arrow.next{right:-6px;}
+  .tc-arrow:hover{background:var(--teal-bg);}
+  @media(max-width:640px){.tc-arrow{display:none;}}
+  .testi-more{text-align:center;margin-top:14px;}
+  .testi-more button{background:#fff;border:1px solid var(--teal-light);color:var(--teal-dark);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .story-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:560px){.story-grid{grid-template-columns:1fr;}}
+  .story-mini{border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .15s;}
+  .story-mini:hover{border-color:var(--teal-light);box-shadow:var(--shadow-md);}
+  .story-cta{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:18px;}
+  .testi-row{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory;scroll-behavior:smooth;}
   .testi{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:var(--shadow-sm);min-width:290px;max-width:320px;scroll-snap-align:start;flex:none;}
   .testi .q{font-size:13.5px;line-height:1.6;color:var(--text);}
   .testi .q::before{content:'“';font-size:34px;color:var(--teal-light);line-height:0;vertical-align:-14px;margin-right:2px;}
@@ -571,27 +583,44 @@ function renderFaq(list){
   var el=document.getElementById('faqWrap'); if(el) el.innerHTML=list.map(function(f){return '<details class="faq"><summary>'+esc(f.q)+'<span class="material-icons">expand_more</span></summary><div class="fa">'+esc(f.a||'')+'</div></details>';}).join('');
 }
 var _TESTI=[];
+function testiCard(t,i){
+  var nm=t.name||'PayProTec Partner';
+  var av=t.photo_url?'<img class="av" style="object-fit:cover;" src="'+esc(t.photo_url)+'">':'<div class="av">'+esc(initials(nm))+'</div>';
+  return '<div class="testi">'
+    +(t.earnings?'<div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-bottom:10px;"><span class="material-icons" style="font-size:13px;">trending_up</span>'+esc(t.earnings)+'</div>':'')
+    +(t.quote?'<div class="q">'+esc(t.quote)+'</div>':(t.description?'<div class="q" style="font-style:normal;">'+esc(t.description)+'</div>':''))
+    +'<div class="who">'+av+'<div><div class="nm">'+esc(nm)+'</div>'+(t.company?'<div class="co">'+esc(t.company)+'</div>':'')+'</div></div>'
+    +(t.story?'<button onclick="openStory('+i+')" style="margin-top:12px;background:none;border:none;color:var(--teal-dark);font-weight:700;font-size:12.5px;cursor:pointer;padding:0;font-family:inherit;">Read their story →</button>':'')
+    +'</div>';
+}
 function renderTestimonials(list){
   var w=document.getElementById('testiWrap'); if(!w) return;
   _TESTI=(list||[]).filter(function(t){return t&&(t.quote||t.story||t.name);});
+  // Randomize the order each visit.
+  for(var j=_TESTI.length-1;j>0;j--){ var k=Math.floor(Math.random()*(j+1)); var tmp=_TESTI[j]; _TESTI[j]=_TESTI[k]; _TESTI[k]=tmp; }
   if(!_TESTI.length){ w.innerHTML='<div class="card muted">Partner success stories are coming soon.</div>'; return; }
-  w.innerHTML='<div class="testi-row">'+_TESTI.map(function(t,i){
-    var nm=t.name||'PayProTec Partner';
-    var av=t.photo_url?'<img class="av" style="object-fit:cover;" src="'+esc(t.photo_url)+'">':'<div class="av">'+esc(initials(nm))+'</div>';
-    return '<div class="testi">'
-      +(t.earnings?'<div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-bottom:10px;"><span class="material-icons" style="font-size:13px;">trending_up</span>'+esc(t.earnings)+'</div>':'')
-      +(t.quote?'<div class="q">'+esc(t.quote)+'</div>':(t.description?'<div class="q" style="font-style:normal;">'+esc(t.description)+'</div>':''))
-      +'<div class="who">'+av+'<div><div class="nm">'+esc(nm)+'</div>'+(t.company?'<div class="co">'+esc(t.company)+'</div>':'')+'</div></div>'
-      +(t.story?'<button onclick="openStory('+i+')" style="margin-top:12px;background:none;border:none;color:var(--teal-dark);font-weight:700;font-size:12.5px;cursor:pointer;padding:0;font-family:inherit;">Read their story →</button>':'')
-      +'</div>';
-  }).join('')+'</div>';
+  var arrows=(_TESTI.length>1)?'<button class="tc-arrow prev" onclick="testiScroll(-1)"><span class="material-icons">chevron_left</span></button><button class="tc-arrow next" onclick="testiScroll(1)"><span class="material-icons">chevron_right</span></button>':'';
+  w.innerHTML='<div class="testi-carousel">'+arrows+'<div class="testi-row" id="testiRow">'+_TESTI.map(testiCard).join('')+'</div></div>'
+    +((_TESTI.length>3)?'<div class="testi-more"><button onclick="openAllStories()">See all '+_TESTI.length+' stories</button></div>':'');
 }
-window.openStory=function(i){
+window.testiScroll=function(dir){ var row=document.getElementById('testiRow'); if(row) row.scrollBy({left:dir*320,behavior:'smooth'}); };
+window.openAllStories=function(){
+  var body=document.getElementById('storyBody');
+  body.innerHTML='<div style="font-weight:800;font-size:15px;margin-bottom:12px;">All partner stories</div><div class="story-grid">'
+    +_TESTI.map(function(t,i){ var nm=t.name||'PayProTec Partner'; var av=t.photo_url?'<img src="'+esc(t.photo_url)+'" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">':'<div style="width:40px;height:40px;border-radius:50%;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;">'+esc(initials(nm))+'</div>';
+      return '<div class="story-mini" onclick="openStory('+i+',true)"><div style="display:flex;align-items:center;gap:9px;">'+av+'<div style="min-width:0;"><div style="font-weight:800;font-size:13px;">'+esc(nm)+'</div>'+(t.company?'<div class="muted" style="font-size:11px;">'+esc(t.company)+'</div>':'')+'</div></div>'+(t.earnings?'<div style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#166534;font-size:10.5px;font-weight:800;border-radius:99px;padding:2px 9px;margin-top:8px;"><span class="material-icons" style="font-size:12px;">trending_up</span>'+esc(t.earnings)+'</div>':'')+(t.quote?'<div class="muted" style="font-size:12px;margin-top:8px;line-height:1.4;">“'+esc(t.quote)+'”</div>':'')+'</div>';
+    }).join('')+'</div>';
+  document.getElementById('storyModal').style.display='flex';
+};
+window.openStory=function(i,fromAll){
   var t=_TESTI[i]; if(!t) return;
   var av=t.photo_url?'<img src="'+esc(t.photo_url)+'" style="width:64px;height:64px;border-radius:50%;object-fit:cover;flex:none;">':'<div style="width:64px;height:64px;border-radius:50%;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;flex:none;">'+esc(initials(t.name||'?'))+'</div>';
-  document.getElementById('storyBody').innerHTML='<div style="display:flex;align-items:center;gap:12px;">'+av+'<div><div style="font-weight:800;font-size:16px;">'+esc(t.name||'PayProTec Partner')+'</div>'+(t.company?'<div style="color:#94a3b8;font-size:12.5px;">'+esc(t.company)+'</div>':'')+(t.earnings?'<div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-top:5px;"><span class="material-icons" style="font-size:13px;">trending_up</span>'+esc(t.earnings)+'</div>':'')+'</div></div>'
+  document.getElementById('storyBody').innerHTML=''
+    +(fromAll?'<button onclick="openAllStories()" style="background:none;border:none;color:var(--teal-dark);font-weight:700;font-size:12.5px;cursor:pointer;padding:0 0 10px;font-family:inherit;display:inline-flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:16px;">arrow_back</span> All stories</button>':'')
+    +'<div style="display:flex;align-items:center;gap:12px;">'+av+'<div><div style="font-weight:800;font-size:16px;">'+esc(t.name||'PayProTec Partner')+'</div>'+(t.company?'<div style="color:#94a3b8;font-size:12.5px;">'+esc(t.company)+'</div>':'')+(t.earnings?'<div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;margin-top:5px;"><span class="material-icons" style="font-size:13px;">trending_up</span>'+esc(t.earnings)+'</div>':'')+'</div></div>'
     +(t.quote?'<div style="font-style:italic;color:#334155;margin-top:14px;font-size:14px;">“'+esc(t.quote)+'”</div>':'')
-    +'<div style="margin-top:12px;font-size:13.5px;color:var(--secondary);line-height:1.6;white-space:pre-wrap;">'+esc(t.story||'')+'</div>';
+    +'<div style="margin-top:12px;font-size:13.5px;color:var(--secondary);line-height:1.6;white-space:pre-wrap;">'+esc(t.story||'')+'</div>'
+    +'<div style="text-align:center;"><button class="story-cta" onclick="closeStory();showTab(\'book\');"><span class="material-icons" style="font-size:18px;">event_available</span> Book a call</button></div>';
   document.getElementById('storyModal').style.display='flex';
 };
 window.closeStory=function(){ document.getElementById('storyModal').style.display='none'; };
