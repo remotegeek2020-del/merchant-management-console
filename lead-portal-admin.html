@@ -176,7 +176,15 @@ window.importGhl=async function(btn){
   var r=await api({action:'import_ghl_leads'});
   btn.disabled=false; btn.innerHTML=orig;
   if(!r||!r.success){ Swal.fire('Sync note',(r&&r.message)||'Could not sync from HighLevel.','warning'); return; }
-  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new · <b>'+(r.updated||0)+'</b> enriched'+(r.skipped?' · '+r.skipped+' unchanged':'')+'<br><span style="color:#94a3b8;font-size:12px;">Tag: '+esc(r.tag||'')+'</span>',confirmButtonColor:'#2563eb'});
+  var d=r.diag||{};
+  var foundNone=((r.created||0)+(r.updated||0)+(r.skipped||0))===0;
+  var diagLine='<div style="color:#94a3b8;font-size:12px;margin-top:6px;">Tag: <b>'+esc(r.tag||'')+'</b> · matched '+(r.total||0)+' contact(s) · method: '+esc(d.method||'—')+' · scanned '+(d.scanned||0)+(d.error?' · <span style="color:#b45309;">'+esc(d.error)+'</span>':'')+'</div>';
+  if(foundNone){
+    await Swal.fire({icon:'info',title:'No contacts matched',html:'No HighLevel contacts were found with the tag <b>'+esc(r.tag||'')+'</b>.'
+      +'<div style="text-align:left;font-size:12.5px;color:#475569;margin-top:10px;line-height:1.6;">Check that:<br>• the tag is spelled exactly as in HighLevel (case doesn\'t matter)<br>• the contact actually has that tag in the <b>PayProTec Partners</b> sub-account (GHL_LOCATION_ID)<br>• the API token has Contacts read permission</div>'+diagLine,confirmButtonColor:'#2563eb'});
+    return;
+  }
+  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new · <b>'+(r.updated||0)+'</b> enriched'+(r.skipped?' · '+r.skipped+' unchanged':'')+diagLine,confirmButtonColor:'#2563eb'});
   loadLeads();
 };
 window.leadDetail=async function(id){

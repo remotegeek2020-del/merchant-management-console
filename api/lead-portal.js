@@ -487,8 +487,8 @@ export default async function handler(req, res) {
             const { data: s } = await supabase.from('app_settings').select('value').eq('key', 'lead_import_tag').maybeSingle();
             const tag = String((body.tag || s?.value || '').trim());
             if (!tag) return bad(res, 'Set an import tag first (Lead Portal → Settings).');
-            let contacts = [];
-            try { contacts = await ghlSearchContactsByTag(locationId, tag, 100); } catch (e) { return bad(res, 'HighLevel lookup failed: ' + (e.message || 'error')); }
+            let contacts = [], diag = { method: '', scanned: 0, error: '' };
+            try { const rr = await ghlSearchContactsByTag(locationId, tag, 200); contacts = rr.contacts || []; diag = { method: rr.method, scanned: rr.scanned, error: rr.error || '' }; } catch (e) { return bad(res, 'HighLevel lookup failed: ' + (e.message || 'error')); }
             let created = 0, updated = 0, skipped = 0;
             for (const c of contacts) {
                 const email = String(c.email || '').toLowerCase().trim();
@@ -510,7 +510,7 @@ export default async function handler(req, res) {
                 if (error) { skipped++; } else { created++; }
             }
             log({ action: `${actorName(actor)} synced HighLevel leads (tag "${tag}"): ${created} new, ${updated} enriched`, target_type: 'lead', target_id: 'import' });
-            return ok(res, { created, updated, skipped, total: contacts.length, tag });
+            return ok(res, { created, updated, skipped, total: contacts.length, tag, diag });
         }
 
         // Lead Portal settings: pick the HighLevel calendar (PayProTec Partners) for book-a-call.

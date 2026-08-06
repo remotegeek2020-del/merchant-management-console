@@ -264,30 +264,61 @@ export async function ghlContactAppointments(locationId, contactId) {
     } catch { return []; }
 }
 
-// Search contacts in a sub-account that carry a given tag (lead-gen import).
-export async function ghlSearchContactsByTag(locationId, tag, limit = 100) {
-    if (!locationId || !tag) return [];
+function normalizeContact(c) {
+    const la = c.lastAttributionSource || {}, fa = c.attributionSource || {};
+    return {
+        id: c.id, email: c.email || '',
+        name: (`${c.firstName || ''} ${c.lastName || ''}`.trim()) || c.contactName || '',
+        phone: c.phone || '',
+        tags: Array.isArray(c.tags) ? c.tags.map(t => String(t).toLowerCase()) : [],
+        source: la.utmSource || la.sessionSource || fa.utmSource || c.source || 'highlevel',
+        date_added: c.dateAdded || c.createdAt || null
+    };
+}
+
+// Contacts in a sub-account carrying a given tag (lead-gen import).
+// Returns { contacts, method, scanned, error } so the caller can diagnose.
+// Method 1: POST /contacts/search with a tags filter.
+// Fallback: page through GET /contacts/ and match the tag client-side (handles
+// API variants / permission quirks where the search filter returns nothing).
+export async function ghlSearchContactsByTag(locationId, tag, limit = 200) {
+    if (!locationId || !tag) return { contacts: [], method: 'none', scanned: 0, error: 'missing locationId/tag' };
     const lt = await ghlLocationToken(locationId);
-    if (!lt) return [];
+    if (!lt) return { contacts: [], method: 'none', scanned: 0, error: 'no location token (check GHL keys/scopes)' };
     const headers = { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json', 'Content-Type': 'application/json' };
+    const want = String(tag).toLowerCase().trim();
+    let searchErr = '';
+    // ── Method 1: advanced search ──
     try {
         const r = await fetch(`${GHL_BASE}/contacts/search`, {
             method: 'POST', headers,
-            body: JSON.stringify({ locationId, page: 1, pageLimit: Math.min(100, limit), filters: [{ field: 'tags', operator: 'contains', value: String(tag).toLowerCase() }] })
+            body: JSON.stringify({ locationId, page: 1, pageLimit: Math.min(100, limit), filters: [{ field: 'tags', operator: 'contains', value: want }] })
         });
-        if (!r.ok) return [];
-        const d = await r.json().catch(() => ({}));
-        return (d?.contacts || []).map(c => {
-            const la = c.lastAttributionSource || {}, fa = c.attributionSource || {};
-            return {
-                id: c.id, email: c.email || '',
-                name: (`${c.firstName || ''} ${c.lastName || ''}`.trim()) || c.contactName || '',
-                phone: c.phone || '',
-                source: la.utmSource || la.sessionSource || fa.utmSource || c.source || 'highlevel',
-                date_added: c.dateAdded || c.createdAt || null
-            };
-        });
-    } catch { return []; }
+        if (r.ok) {
+            const d = await r.json().catch(() => ({}));
+            const list = (d?.contacts || []).map(normalizeContact);
+            if (list.length) return { contacts: list, method: 'search', scanned: list.length, error: '' };
+        } else {
+            searchErr = 'search HTTP ' + r.status;
+        }
+    } catch (e) { searchErr = 'search: ' + e.message; }
+    // ── Fallback: page the contacts list and filter by tag ──
+    const out = []; let scanned = 0; let listErr = '';
+    try {
+        let url = `${GHL_BASE}/contacts/?locationId=${encodeURIComponent(locationId)}&limit=100`;
+        for (let page = 0; page < 10 && url; page++) {
+            const r = await fetch(url, { headers });
+            if (!r.ok) { listErr = 'list HTTP ' + r.status; break; }
+            const d = await r.json().catch(() => ({}));
+            const contacts = d?.contacts || [];
+            scanned += contacts.length;
+            contacts.forEach(c => { const n = normalizeContact(c); if (n.tags.indexOf(want) > -1) out.push(n); });
+            const next = d?.meta && (d.meta.nextPageUrl || d.meta.next_page_url);
+            if (next) url = next; else break;
+            if (out.length >= limit) break;
+        }
+    } catch (e) { listErr = 'list: ' + e.message; }
+    return { contacts: out, method: 'list-filter', scanned, error: [searchErr, listErr].filter(Boolean).join(' | ') };
 }
 
 // Team members (users) in a sub-account, for matching app staff by email.
