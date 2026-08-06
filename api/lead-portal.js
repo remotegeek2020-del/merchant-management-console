@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { validateSession } from './_validate.js';
-import { loadActor, actorName, canLeadPortal, canProspects } from './_access.js';
+import { loadActor, actorName, canLeadPortal, canProspects, canDeleteLeads } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
 import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers, ghlSetContactCustomFieldsByName } from './_ghl.js';
@@ -339,10 +339,27 @@ export default async function handler(req, res) {
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
         const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead']);
-        if (STAFF_ACTIONS.has(action)) {
+        if (action === 'delete_lead') {
+            if (!canDeleteLeads(actor)) return bad(res, 'Access denied. Delete Leads access required.', 403);
+        } else if (STAFF_ACTIONS.has(action)) {
             if (!canProspects(actor)) return bad(res, 'Access denied. Prospects access required.', 403);
         } else if (!canLP) {
             return bad(res, 'Access denied. Lead Portal access required.', 403);
+        }
+
+        // Delete a prospect and revoke their Lead Portal access (kills sessions).
+        if (action === 'delete_lead') {
+            if (!body.lead_id) return bad(res, 'lead_id required');
+            const { data: lead } = await supabase.from('leads').select('id, full_name, email').eq('id', body.lead_id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            // Revoke access + clear dependent rows, then delete the lead.
+            await supabase.from('lead_sessions').delete().eq('lead_id', lead.id);
+            await supabase.from('lead_onboarding_answers').delete().eq('lead_id', lead.id);
+            try { await supabase.from('course_video_views').delete().eq('lead_id', lead.id); } catch (e) { /* cascade may handle it */ }
+            const { error } = await supabase.from('leads').delete().eq('id', lead.id);
+            if (error) return bad(res, error.message);
+            log({ action: `${actorName(actor)} deleted prospect "${lead.full_name || lead.email || lead.id}" and revoked portal access`, severity: 'warning', target_type: 'lead', target_id: lead.id });
+            return ok(res, { deleted: true });
         }
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
 

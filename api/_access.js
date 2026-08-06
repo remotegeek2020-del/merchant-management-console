@@ -7,7 +7,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export async function loadActor(userid) {
     if (!userid) return null;
     const { data } = await supabase.from('app_users')
-        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects')
+        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects, access_delete_leads')
         .eq('userid', userid).maybeSingle();
     return data || null;
 }
@@ -41,4 +41,9 @@ export function canLeadPortal(a) {
 // also grants it, so those users see prospects in both places.
 export function canProspects(a) {
     return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_prospects === true || a.access_lead_portal === true);
+}
+
+// Deleting a prospect + revoking their Lead Portal access (destructive).
+export function canDeleteLeads(a) {
+    return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_delete_leads === true);
 }
