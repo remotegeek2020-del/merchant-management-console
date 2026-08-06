@@ -541,7 +541,7 @@ export default async function handler(req, res) {
         // partner-onboarding flow; this finalizes the HighLevel + status side.)
         if (action === 'graduate_lead') {
             if (!body.lead_id) return bad(res, 'lead_id required');
-            const { data: lead } = await supabase.from('leads').select('id, ghl_contact_id, email').eq('id', body.lead_id).maybeSingle();
+            const { data: lead } = await supabase.from('leads').select('id, ghl_contact_id, email, full_name, photo_url').eq('id', body.lead_id).maybeSingle();
             if (!lead) return bad(res, 'Lead not found', 404);
             const ids = Array.isArray(body.identifiers) ? body.identifiers : [];
             // "34893(50%) | 24387(70%)"
@@ -561,8 +561,21 @@ export default async function handler(req, res) {
                 if (Object.keys(map).length) { try { ghlResult = await ghlSetContactCustomFieldsByName(locationId, contactId, map); } catch (e) { ghlResult = { ok: false, error: e.message }; } }
             }
             // Link the newly-created partner person (matched by hl_contact_id).
-            let personId = null;
-            if (contactId) { const { data: p } = await supabase.from('persons').select('id').eq('hl_contact_id', contactId).maybeSingle(); if (p) personId = p.id; }
+            let personId = null, personName = null;
+            if (contactId) { const { data: p } = await supabase.from('persons').select('id, full_name').eq('hl_contact_id', contactId).maybeSingle(); if (p) { personId = p.id; personName = p.full_name; } }
+            // Carry the prospect's profile photo over to the partner side (community/partner
+            // portal reads user_profiles.avatar_url, not leads.photo_url). Fill-only-empty:
+            // never clobber an avatar the partner may already have set.
+            if (personId && lead.photo_url) {
+                try {
+                    const { data: prof } = await supabase.from('user_profiles').select('avatar_url').eq('user_id', personId).maybeSingle();
+                    if (!prof || !prof.avatar_url) {
+                        await supabase.from('user_profiles').upsert(
+                            { user_id: personId, user_type: 'partner', display_name: personName || lead.full_name || '', avatar_url: lead.photo_url },
+                            { onConflict: 'user_id' });
+                    }
+                } catch (e) { /* best-effort — graduation must still succeed */ }
+            }
             await supabase.from('leads').update({ status: 'converted', converted_person_id: personId }).eq('id', lead.id);
             log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
