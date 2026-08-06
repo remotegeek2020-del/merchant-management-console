@@ -143,6 +143,7 @@ if (!token) window.location.href = '/partner';
 let CERTS = [], CERT = null;
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function coName(c){ var n=String((c&&c.company_name)||'').trim(); return /^independent$/i.test(n) ? '' : n; }
 function initials(name){ return (String(name||'').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2)||'?').toUpperCase(); }
 
 async function init(){
@@ -178,7 +179,8 @@ function renderPicker(){
     if (CERTS.length < 2) { p.style.display = 'none'; return; }
     p.style.display = 'flex';
     p.innerHTML = CERTS.map(function(c,i){
-        var label = esc(c.type_name||'Certificate') + (c.company_name ? ' — '+esc(c.company_name) : '');
+        var co = coName(c);
+        var label = esc(c.type_name||'Certificate') + (co ? ' — '+esc(co) : '');
         return '<button class="cert-pill'+(i===0?' active':'')+'" data-i="'+i+'" onclick="select('+i+')">'+label+'</button>';
     }).join('');
 }
@@ -192,7 +194,8 @@ function select(i){
 function paint(){
     window.renderCertificate(document.getElementById('certTarget'), CERT);
     window.renderCertificate(document.getElementById('certCapture'), CERT);
-    document.getElementById('certMeta').innerHTML = (CERT.type_name?esc(CERT.type_name)+' · ':'') + (CERT.company_name?esc(CERT.company_name)+' · ':'') + 'No. <b>' + esc(CERT.cert_number||'') + '</b>';
+    var mco = coName(CERT);
+    document.getElementById('certMeta').innerHTML = (CERT.type_name?esc(CERT.type_name)+' · ':'') + (mco?esc(mco)+' · ':'') + 'No. <b>' + esc(CERT.cert_number||'') + '</b>';
     fitScale();
 }
 
@@ -209,7 +212,8 @@ window.addEventListener('resize', function(){ if (CERT) fitScale(); });
 
 function fileBase(){
     const parts = [(CERT && CERT.recipient_name) || 'certificate'];
-    if (CERT && CERT.company_name) parts.push(CERT.company_name);
+    const co = coName(CERT);
+    if (co) parts.push(co);
     return 'PayProTec_Certificate_' + parts.join('_').replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'');
 }
 

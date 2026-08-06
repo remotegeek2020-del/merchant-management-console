@@ -413,7 +413,7 @@
             heading: d.heading || 'Certificate of Partnership',
             pre_text: d.pre_text || '',
             recipient_name: d.recipient_name || 'Partner Name',
-            company_name: d.company_name || '',
+            company_name: (/^independent$/i.test(String(d.company_name || '').trim()) ? '' : (d.company_name || '')),
             partner_title: d.partner_title || 'Certified Partner',
             body_text: d.body_text || 'has successfully graduated and is hereby recognized as a',
             cert_number: d.cert_number || 'PPT-0000-0000',
