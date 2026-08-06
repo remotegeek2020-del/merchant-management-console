@@ -214,11 +214,21 @@ window.viewProspect=async function(id){
     +(appts.length?appts.map(function(a){return '<div class="pv-appt"><div class="ai"><span class="material-icons" style="font-size:18px;">event</span></div><div style="min-width:0;"><div style="font-weight:700;font-size:13px;">'+esc(a.title||'Appointment')+(a.status?' <span class="muted" style="font-weight:400;">('+esc(a.status)+')</span>':'')+'</div><div class="muted" style="font-size:11.5px;">'+dt(a.start)+(a.calendar?' · '+esc(a.calendar):'')+'</div></div></div>';}).join(''):'<div class="pv-line muted" style="font-size:12.5px;">No appointments found.</div>')
     +'<div class="pv-sec">Onboarding answers</div>'
     +(ans.length?ans.map(function(a){return '<div class="pv-ans"><div class="muted" style="font-size:11.5px;">'+esc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div class="pv-line muted" style="font-size:12.5px;">No answers yet.</div>')
-    +(canDeleteLead()?'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:12px;text-align:left;"><button onclick="deleteLead(\''+l.id+'\',\''+esc((l.full_name||l.email||"this prospect").replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">person_remove</span> Delete prospect & revoke access</button></div>':'')
+    +'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;">'
+      +'<button onclick="sendInvite(\''+l.id+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">mail</span> Send account-setup invite</button>'
+      +(canDeleteLead()?'<button onclick="deleteLead(\''+l.id+'\',\''+esc((l.full_name||l.email||"this prospect").replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">person_remove</span> Delete &amp; revoke access</button>':'')
+    +'</div>'
     +'</div>';
   Swal.fire({html:html,width:560,showConfirmButton:true,confirmButtonText:'Close',confirmButtonColor:'#0f4c81'});
 };
 function canDeleteLead(){ var r=(localStorage.getItem('pp_role')||'').toLowerCase(); return localStorage.getItem('pp_access_delete_leads')==='true' || r.indexOf('super')>-1 || r==='admin' || r==='operations admin'; }
+window.sendInvite=async function(id){
+  var c=await Swal.fire({icon:'question',title:'Send setup invite?',text:'Emails this prospect a link to set a password and access the portal.',showCancelButton:true,confirmButtonText:'Send invite',confirmButtonColor:'#0d9488'});
+  if(!c.isConfirmed) return;
+  var r=await lpApi({action:'send_lead_invite',lead_id:id});
+  if(r&&r.success&&r.sent) Swal.fire({icon:'success',title:'Invite sent',timer:1300,showConfirmButton:false});
+  else Swal.fire('Note',(r&&r.success)?'Saved, but email could not be sent (check Postmark config).':((r&&r.message)||'Could not send'),'warning');
+};
 window.deleteLead=async function(id,name){
   var c=await Swal.fire({icon:'warning',title:'Delete prospect?',html:'This permanently deletes <b>'+esc(name)+'</b> and revokes their Lead Portal access. This cannot be undone.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
   if(!c.isConfirmed) return;

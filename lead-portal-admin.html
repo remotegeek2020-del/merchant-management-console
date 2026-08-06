@@ -80,14 +80,19 @@ async function loadSettings(){
     +'<div class="muted" style="font-size:13px;margin:6px 0 10px;">Contacts in HighLevel that carry this <b>tag</b> (e.g. from your Facebook / LinkedIn / Google ad forms) can be imported as prospect accounts from the Leads tab.</div>'
     +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Lead-gen tag</label>'
     +'<input id="imp-tag" value="'+esc(r.import_tag||'')+'" placeholder="e.g. lead portal" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;margin-top:5px;">'
+    +'<label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:11px 13px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;cursor:pointer;">'
+      +'<input type="checkbox" id="imp-invite" '+(r.auto_invite?'checked':'')+' style="width:16px;height:16px;margin-top:1px;accent-color:#0d9488;">'
+      +'<span style="font-size:13px;"><b>Email an account-setup invite when importing</b><div class="muted" style="font-size:12px;margin-top:2px;">When ON, each <b>new</b> prospect pulled in from HighLevel gets an email to set a password &amp; access the portal. Leave OFF to just sync them silently and invite later.</div></span>'
+    +'</label>'
     +'<div style="margin-top:14px;"><button class="btn btn-p" onclick="saveCal(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button></div>'
     +'</div>';
 }
 window.saveCal=async function(btn){
   var sel=document.getElementById('cal-sel'); var cid=sel.value; var cname=cid?sel.options[sel.selectedIndex].text:'';
   var tagEl=document.getElementById('imp-tag'); var tag=tagEl?tagEl.value.trim():undefined;
+  var invEl=document.getElementById('imp-invite'); var autoInvite=invEl?invEl.checked:undefined;
   btn.disabled=true;
-  var r=await api({action:'save_lead_settings',calendar_id:cid,calendar_name:cname,import_tag:tag});
+  var r=await api({action:'save_lead_settings',calendar_id:cid,calendar_name:cname,import_tag:tag,auto_invite:autoInvite});
   btn.disabled=false;
   if(r&&r.success) Swal.fire({icon:'success',title:'Saved',timer:1100,showConfirmButton:false});
   else Swal.fire('Error',(r&&r.message)||'Could not save','error');
@@ -184,7 +189,7 @@ window.importGhl=async function(btn){
       +'<div style="text-align:left;font-size:12.5px;color:#475569;margin-top:10px;line-height:1.6;">Check that:<br>• the tag is spelled exactly as in HighLevel (case doesn\'t matter)<br>• the contact actually has that tag in the <b>PayProTec Partners</b> sub-account (GHL_LOCATION_ID)<br>• the API token has Contacts read permission</div>'+diagLine,confirmButtonColor:'#2563eb'});
     return;
   }
-  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new · <b>'+(r.updated||0)+'</b> enriched'+(r.skipped?' · '+r.skipped+' unchanged':'')+diagLine,confirmButtonColor:'#2563eb'});
+  await Swal.fire({icon:'success',title:'Sync complete',html:'<b>'+(r.created||0)+'</b> new · <b>'+(r.updated||0)+'</b> enriched'+(r.skipped?' · '+r.skipped+' unchanged':'')+(r.auto_invite?' · <b>'+(r.invited||0)+'</b> invited ✉️':'')+diagLine,confirmButtonColor:'#2563eb'});
   loadLeads();
 };
 window.leadDetail=async function(id){
@@ -217,10 +222,20 @@ window.leadDetail=async function(id){
     +apptBlock
     +'<div style="font-weight:800;font-size:12px;text-transform:uppercase;color:#64748b;margin:14px 0 6px;">Onboarding answers</div>'
     +(ans.length?ans.map(function(a){return '<div style="border-bottom:1px solid #f1f5f9;padding:7px 0;font-size:13px;"><div class="muted" style="font-size:11.5px;">'+esc(a.question)+'</div><div style="font-weight:600;">'+fmtA(a)+'</div></div>';}).join(''):'<div class="muted" style="font-size:12.5px;">No answers yet.</div>')
-    +(canDeleteLead()?'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:12px;"><button onclick="deleteLead(\''+l.id+'\',\''+esc((l.full_name||l.email||"this prospect").replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">person_remove</span> Delete prospect & revoke access</button></div>':'')
+    +'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;">'
+      +'<button onclick="sendInvite(\''+l.id+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">mail</span> Send account-setup invite</button>'
+      +(canDeleteLead()?'<button onclick="deleteLead(\''+l.id+'\',\''+esc((l.full_name||l.email||"this prospect").replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;"><span class="material-icons" style="font-size:16px;">person_remove</span> Delete & revoke access</button>':'')
+    +'</div>'
     +'</div>',confirmButtonText:'Close',confirmButtonColor:'#64748b'});
 };
 function canDeleteLead(){ var r=(localStorage.getItem('pp_role')||'').toLowerCase(); return localStorage.getItem('pp_access_delete_leads')==='true' || r.indexOf('super')>-1 || r==='admin' || r==='operations admin'; }
+window.sendInvite=async function(id){
+  var c=await Swal.fire({icon:'question',title:'Send setup invite?',text:'Emails this prospect a link to set a password and access the portal.',showCancelButton:true,confirmButtonText:'Send invite',confirmButtonColor:'#0d9488'});
+  if(!c.isConfirmed) return;
+  var r=await api({action:'send_lead_invite',lead_id:id});
+  if(r&&r.success&&r.sent) Swal.fire({icon:'success',title:'Invite sent',timer:1300,showConfirmButton:false});
+  else Swal.fire('Note',(r&&r.success)?'Saved, but email could not be sent (check Postmark config).':((r&&r.message)||'Could not send'),'warning');
+};
 window.deleteLead=async function(id,name){
   var c=await Swal.fire({icon:'warning',title:'Delete prospect?',html:'This permanently deletes <b>'+esc(name)+'</b> and revokes their Lead Portal access. This cannot be undone.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
   if(!c.isConfirmed) return;

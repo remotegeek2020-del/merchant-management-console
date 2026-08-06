@@ -7,6 +7,7 @@
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { ServerClient } from 'postmark';
 import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal, canProspects, canDeleteLeads } from './_access.js';
 import { logActivity } from './_activity.js';
@@ -44,6 +45,35 @@ function cors(res) {
 }
 const QTYPES = new Set(['short_text', 'long_text', 'multiple_choice', 'checkboxes', 'dropdown', 'yes_no', 'number']);
 const token = () => crypto.randomBytes(32).toString('hex');
+
+// Send a "set up your account" invite to a lead (best-effort). Generates an
+// invite token, stores it, and emails a setup link. Returns true if emailed.
+async function sendLeadInvite(lead, host) {
+    if (!lead || !lead.email) return false;
+    const tok = token();
+    await supabase.from('leads').update({ invite_token: tok, invite_sent_at: new Date().toISOString() }).eq('id', lead.id);
+    if (!process.env.POSTMARK_SERVER_TOKEN || !process.env.EMAIL_FROM) return false;
+    const link = `https://${host || 'portal.mypayprotec.com'}/lead/setup?token=${tok}`;
+    const first = String(lead.full_name || '').trim().split(/\s+/)[0] || 'there';
+    try {
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        await client.sendEmail({
+            From: process.env.EMAIL_FROM,
+            To: lead.email,
+            Subject: 'Set up your PayProTec Partner Program account',
+            HtmlBody: `<div style="font-family:'DM Sans',Arial,sans-serif;max-width:520px;margin:auto;padding:30px;border:1px solid #e2e8f0;border-radius:16px;color:#0f172a;">
+                <h2 style="color:#0d9488;margin:0 0 6px;">Welcome to the PayProTec Partner Program 🎉</h2>
+                <p style="line-height:1.6;">Hi ${first}, you've been added to the PayProTec Partner Program. Set up your account to watch our webinars, keep up with announcements, and book your become-a-partner call.</p>
+                <div style="text-align:center;margin:32px 0;"><a href="${link}" style="background:#0d9488;color:#fff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:800;display:inline-block;">Set up my account</a></div>
+                <p style="font-size:12px;color:#64748b;">Or paste this link into your browser:<br><a href="${link}" style="color:#0d9488;word-break:break-all;">${link}</a></p>
+                <hr style="border:0;border-top:1px solid #f1f5f9;margin:28px 0;">
+                <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Program</p></div>`,
+            TextBody: `Hi ${first}, set up your PayProTec Partner Program account: ${link}`,
+            MessageStream: 'outbound'
+        });
+        return true;
+    } catch (e) { return false; }
+}
 
 async function validateLead(t) {
     if (!t) return null;
@@ -92,6 +122,28 @@ export default async function handler(req, res) {
             await supabase.from('lead_sessions').insert({ session_token: t, lead_id: lead.id, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() });
             await supabase.from('leads').update({ last_login: new Date().toISOString() }).eq('id', lead.id);
             return ok(res, { token: t, lead: { id: lead.id, full_name: lead.full_name, email: lead.email, onboarding_completed: lead.onboarding_completed, status: lead.status } });
+        }
+        // Invite setup: look up a lead by invite token (for the setup page).
+        if (action === 'lead_setup_info') {
+            const t = String(body.token || '');
+            if (!t) return bad(res, 'Invalid link', 400);
+            const { data: lead } = await supabase.from('leads').select('full_name, email').eq('invite_token', t).maybeSingle();
+            if (!lead) return bad(res, 'This setup link is invalid or has already been used.', 404);
+            return ok(res, { full_name: lead.full_name || '', email: lead.email || '' });
+        }
+        // Invite setup: set the password, consume the token, sign them in.
+        if (action === 'lead_set_password') {
+            const t = String(body.token || '');
+            const password = String(body.password || '');
+            if (!t) return bad(res, 'Invalid link', 400);
+            if (password.length < 6) return bad(res, 'Password must be at least 6 characters.');
+            const { data: lead } = await supabase.from('leads').select('id, full_name, email, onboarding_completed, status').eq('invite_token', t).maybeSingle();
+            if (!lead) return bad(res, 'This setup link is invalid or has already been used.', 404);
+            const password_hash = await bcrypt.hash(password, 12);
+            await supabase.from('leads').update({ password_hash, invite_token: null, last_login: new Date().toISOString() }).eq('id', lead.id);
+            const st = token();
+            await supabase.from('lead_sessions').insert({ session_token: st, lead_id: lead.id, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() });
+            return ok(res, { token: st, lead: { id: lead.id, full_name: lead.full_name, email: lead.email, onboarding_completed: lead.onboarding_completed, status: lead.status } });
         }
         if (action === 'lead_validate') {
             const leadId = await validateLead(body.token);
@@ -339,7 +391,7 @@ export default async function handler(req, res) {
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
-        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead']);
+        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite']);
         if (action === 'delete_lead') {
             if (!canDeleteLeads(actor)) return bad(res, 'Access denied. Delete Leads access required.', 403);
         } else if (STAFF_ACTIONS.has(action)) {
@@ -490,6 +542,16 @@ export default async function handler(req, res) {
             log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
         }
+        // Manually send a prospect their account-setup invite email.
+        if (action === 'send_lead_invite') {
+            if (!body.lead_id) return bad(res, 'lead_id required');
+            const { data: lead } = await supabase.from('leads').select('id, full_name, email').eq('id', body.lead_id).maybeSingle();
+            if (!lead) return bad(res, 'Lead not found', 404);
+            if (!lead.email) return bad(res, 'This prospect has no email.');
+            const sent = await sendLeadInvite(lead, req.headers.host);
+            log({ action: `${actorName(actor)} sent a setup invite to prospect ${lead.email}`, target_type: 'lead', target_id: lead.id });
+            return ok(res, { sent });
+        }
         // Assign / unassign a rep to a lead ("tunnel" the lead to a person).
         if (action === 'set_lead_rep') {
             if (!body.lead_id) return bad(res, 'lead_id required');
@@ -506,7 +568,10 @@ export default async function handler(req, res) {
             if (!tag) return bad(res, 'Set an import tag first (Lead Portal → Settings).');
             let contacts = [], diag = { method: '', scanned: 0, error: '' };
             try { const rr = await ghlSearchContactsByTag(locationId, tag, 200); contacts = rr.contacts || []; diag = { method: rr.method, scanned: rr.scanned, error: rr.error || '' }; } catch (e) { return bad(res, 'HighLevel lookup failed: ' + (e.message || 'error')); }
-            let created = 0, updated = 0, skipped = 0;
+            // Auto-invite toggle: email new prospects a setup link on import.
+            const { data: inv } = await supabase.from('app_settings').select('value').eq('key', 'lead_import_auto_invite').maybeSingle();
+            const autoInvite = String(inv?.value || '') === 'true';
+            let created = 0, updated = 0, skipped = 0, invited = 0;
             for (const c of contacts) {
                 const email = String(c.email || '').toLowerCase().trim();
                 if (!email) { skipped++; continue; }
@@ -520,14 +585,17 @@ export default async function handler(req, res) {
                     if (Object.keys(patch).length) { await supabase.from('leads').update(patch).eq('id', existing.id); updated++; } else { skipped++; }
                     continue;
                 }
-                const { error } = await supabase.from('leads').insert({
+                const { data: newLead, error } = await supabase.from('leads').insert({
                     email, full_name: c.name || email, phone: c.phone || '',
                     ghl_contact_id: c.id || null, source: 'highlevel:' + tag, status: 'new', onboarding_completed: false
-                });
-                if (error) { skipped++; } else { created++; }
+                }).select('id, full_name, email').single();
+                if (error) { skipped++; } else {
+                    created++;
+                    if (autoInvite) { try { if (await sendLeadInvite(newLead, req.headers.host)) invited++; } catch (e) { /* best-effort */ } }
+                }
             }
-            log({ action: `${actorName(actor)} synced HighLevel leads (tag "${tag}"): ${created} new, ${updated} enriched`, target_type: 'lead', target_id: 'import' });
-            return ok(res, { created, updated, skipped, total: contacts.length, tag, diag });
+            log({ action: `${actorName(actor)} synced HighLevel leads (tag "${tag}"): ${created} new, ${updated} enriched${autoInvite ? ', ' + invited + ' invited' : ''}`, target_type: 'lead', target_id: 'import' });
+            return ok(res, { created, updated, skipped, invited, auto_invite: autoInvite, total: contacts.length, tag, diag });
         }
 
         // Lead Portal settings: pick the HighLevel calendar (PayProTec Partners) for book-a-call.
@@ -535,9 +603,9 @@ export default async function handler(req, res) {
             const locationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             let calendars = [], locName = '';
             if (locationId) { try { calendars = await ghlListCalendars(locationId); const n = await ghlLocationNames([locationId]); locName = n[locationId] || ''; } catch (e) { /* ignore */ } }
-            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag']);
+            const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite']);
             const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
-            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '' });
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true' });
         }
         if (action === 'save_lead_settings') {
             const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
@@ -545,6 +613,7 @@ export default async function handler(req, res) {
             await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_id', value: cid, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             await supabase.from('app_settings').upsert({ key: 'lead_portal_calendar_name', value: cname, updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             if (body.import_tag !== undefined) await supabase.from('app_settings').upsert({ key: 'lead_import_tag', value: String(body.import_tag || '').trim(), updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
+            if (body.auto_invite !== undefined) await supabase.from('app_settings').upsert({ key: 'lead_import_auto_invite', value: body.auto_invite ? 'true' : 'false', updated_at: now, updated_by: actorName(actor) }, { onConflict: 'key' });
             log({ action: `${actorName(actor)} updated Lead Portal settings`, target_type: 'lead_setting', target_id: 'lead_portal_calendar_id' });
             return ok(res, {});
         }

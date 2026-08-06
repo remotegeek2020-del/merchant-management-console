@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up your account | PayProTec Partner Program</title>
+<link rel="icon" href="/api/favicon" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#001e3c 0%,#0f3460 50%,#0d9488 100%);}
+  .card{background:#fff;border-radius:22px;width:100%;max-width:420px;padding:40px 34px;box-shadow:0 40px 80px rgba(0,0,0,.3);}
+  .logo{height:26px;display:block;margin:0 auto 22px;}
+  .tag{display:inline-flex;align-items:center;gap:6px;background:#ccfbf1;color:#0f766e;padding:4px 12px;border-radius:99px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;}
+  h1{font-size:1.4rem;font-weight:800;color:#0a1628;margin:0 0 4px;}
+  p.sub{font-size:13px;color:#94a3b8;margin:0 0 24px;}
+  label{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+  .inp{width:100%;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;color:#0a1628;background:#f8fafc;outline:none;margin-bottom:14px;}
+  .inp:focus{border-color:#0d9488;background:#fff;}
+  .btn{width:100%;padding:13px;background:#0d9488;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .btn:hover{background:#0f766e;}
+  .btn:disabled{opacity:.6;cursor:not-allowed;}
+  .center{text-align:center;}
+  .muted{color:#94a3b8;font-size:12px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+  <div class="center"><span class="tag"><span class="material-icons" style="font-size:12px;">rocket_launch</span> Partner Program</span></div>
+  <div id="body"><div class="center muted" style="padding:20px 0;">Loading…</div></div>
+</div>
+<script>
+var TOKEN=new URLSearchParams(location.search).get('token')||'';
+function api(b){ return fetch('/api/lead-portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function invalid(msg){ document.getElementById('body').innerHTML='<h1>Link not valid</h1><p class="sub">'+esc(msg||'This setup link is invalid or has already been used.')+'</p><a class="btn" href="/partner" style="text-decoration:none;">Go to sign in</a>'; }
+(async function(){
+  if(!TOKEN){ invalid('Missing setup link.'); return; }
+  var r=await api({action:'lead_setup_info',token:TOKEN});
+  if(!r||!r.success){ invalid(r&&r.message); return; }
+  var first=(r.full_name||'').split(' ')[0]||'there';
+  document.getElementById('body').innerHTML=''
+    +'<h1>Welcome, '+esc(first)+'!</h1>'
+    +'<p class="sub">Set a password to access your PayProTec Partner Program account.</p>'
+    +'<label>Email</label><input class="inp" value="'+esc(r.email||'')+'" disabled>'
+    +'<label>Create Password</label><input id="pw" class="inp" type="password" placeholder="At least 6 characters" autocomplete="new-password">'
+    +'<label>Confirm Password</label><input id="pw2" class="inp" type="password" placeholder="Repeat password" autocomplete="new-password">'
+    +'<button class="btn" id="go" onclick="setup()"><span class="material-icons" style="font-size:18px;">check_circle</span> Create my account</button>';
+})();
+window.setup=async function(){
+  var pw=document.getElementById('pw').value, pw2=document.getElementById('pw2').value;
+  if(pw.length<6) return Swal.fire('Too short','Password must be at least 6 characters.','warning');
+  if(pw!==pw2) return Swal.fire('Mismatch','Passwords do not match.','warning');
+  var b=document.getElementById('go'); b.disabled=true; b.innerHTML='<span class="material-icons" style="animation:spin .8s linear infinite;font-size:18px;">sync</span> Setting up…';
+  var r=await api({action:'lead_set_password',token:TOKEN,password:pw});
+  if(r&&r.success){
+    localStorage.setItem('pp_lead_token',r.token);
+    localStorage.setItem('pp_lead_name',(r.lead&&r.lead.full_name)||'');
+    location.href=(r.lead&&r.lead.onboarding_completed)?'/lead/home':'/lead/onboarding';
+  } else {
+    Swal.fire('Error',(r&&r.message)||'Could not set up account','error');
+    b.disabled=false; b.innerHTML='<span class="material-icons" style="font-size:18px;">check_circle</span> Create my account';
+  }
+};
+</script>
+</body>
+</html>
