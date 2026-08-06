@@ -18,12 +18,27 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function pick(...vals) { for (const v of vals) { if (v != null && String(v).trim() !== '') return String(v).trim(); } return ''; }
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'POST only' });
-    // Auth
     const secret = req.query.secret || req.headers['x-webhook-secret'];
     const expected = process.env.LEAD_WEBHOOK_SECRET;
-    if (!expected) return res.status(200).json({ success: false, message: 'LEAD_WEBHOOK_SECRET not configured' });
-    if (secret !== expected) return res.status(401).json({ success: false, message: 'Invalid secret' });
+
+    // Health check: open the URL in a browser to verify it's wired correctly.
+    // (Never creates anything.) e.g. /api/lead-webhook?secret=xxx
+    if (req.method === 'GET') {
+        return res.status(200).json({
+            ok: true,
+            endpoint: 'lead-webhook',
+            secret_configured: !!expected,
+            secret_matches: !!(expected && secret === expected),
+            hint: !expected ? 'Set LEAD_WEBHOOK_SECRET in Vercel env and redeploy.'
+                : (secret === expected ? 'Ready. Use this same URL as a POST webhook in HighLevel.'
+                    : 'Secret mismatch — replace YOUR_SECRET in the URL with your LEAD_WEBHOOK_SECRET value.')
+        });
+    }
+
+    if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'POST only' });
+    // Auth
+    if (!expected) return res.status(200).json({ success: false, message: 'LEAD_WEBHOOK_SECRET not configured in Vercel env.' });
+    if (secret !== expected) return res.status(401).json({ success: false, message: 'Invalid secret (replace YOUR_SECRET with your LEAD_WEBHOOK_SECRET value).' });
 
     try {
         const b = req.body || {};
