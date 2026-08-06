@@ -72,6 +72,7 @@
     { "src": "/partner/community", "dest": "/partner/community.html" },
     { "src": "/partner/settings", "dest": "/partner/settings.html" },
     { "src": "/partner/profile", "dest": "/partner/profile.html" },
+    { "src": "/partner/certificate", "dest": "/partner/certificate.html" },
     { "src": "/partner", "dest": "/partner/index.html" },
     { "src": "/partner/", "dest": "/partner/index.html" },
     { "src": "/lead", "dest": "/lead/register.html" },

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Certificate | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--teal:#0d9488;--teal-dark:#0f766e;--teal-light:#ccfbf1;--navy:#001e3c;--border:#e2e8f0;--surface:#f0f2f5;--white:#fff;--text:#0a1628;--muted:#94a3b8;}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);display:flex;min-height:100vh;-webkit-font-smoothing:antialiased;}
+        .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,0.15);}
+        .sidebar-header{padding:20px 16px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo{height:28px;filter:brightness(0) invert(1);display:block;margin-bottom:16px;}
+        .sidebar-partner{display:flex;align-items:center;gap:10px;}
+        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:white;flex-shrink:0;overflow:hidden;}
+        .sidebar-avatar img{width:100%;height:100%;object-fit:cover;}
+        .sidebar-name{font-size:13px;font-weight:700;color:white;}
+        .sidebar-tag{font-size:10px;color:rgba(255,255,255,0.4);font-weight:600;}
+        .sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;}
+        .nav-item:hover{background:rgba(255,255,255,0.08);color:white;}
+        .nav-item.active{background:var(--teal);color:white;}
+        .nav-item .material-icons{font-size:20px;flex-shrink:0;}
+        .nav-divider{height:1px;background:rgba(255,255,255,0.08);margin:8px 0;}
+        .main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-width:0;}
+        .content{padding:28px;max-width:1120px;width:100%;margin:0 auto;}
+        .page-head{margin-bottom:20px;}
+        .page-title{font-size:24px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:10px;}
+        .page-title .material-icons{color:var(--teal);font-size:28px;}
+        .page-sub{color:var(--muted);font-size:14px;margin-top:4px;}
+        .cert-shell{background:white;border:1px solid var(--border);border-radius:18px;box-shadow:0 4px 24px rgba(0,0,0,0.06);padding:24px;}
+        .cert-stage{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:14px;padding:18px;overflow:hidden;}
+        /* scaled wrapper keeps the fixed 1000x707 canvas responsive */
+        #certScaler{position:relative;margin:0 auto;}
+        #certScaler > div{transform-origin:top left;box-shadow:0 10px 40px rgba(15,23,42,0.18);}
+        .cert-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:18px;}
+        .btn{padding:11px 20px;border-radius:11px;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:7px;transition:all 0.2s;}
+        .btn-teal{background:var(--teal);color:white;}
+        .btn-teal:hover{background:var(--teal-dark);}
+        .btn-outline{background:white;color:var(--text);border:1.5px solid var(--border);}
+        .btn-outline:hover{border-color:var(--teal);color:var(--teal-dark);}
+        .btn[disabled]{opacity:0.55;cursor:not-allowed;}
+        .cert-meta{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);}
+        .cert-meta b{color:var(--text);font-family:'DM Mono',monospace;}
+        .loading-box,.empty-box{text-align:center;padding:60px 20px;color:var(--muted);}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .spinner{width:34px;height:34px;border:3px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 14px;}
+        .info-strip{display:flex;gap:10px;align-items:flex-start;background:#f0fdfa;border:1px solid #99f6e4;color:#0f766e;border-radius:12px;padding:12px 15px;font-size:13px;line-height:1.5;margin-top:16px;}
+        .info-strip .material-icons{font-size:19px;flex-shrink:0;margin-top:1px;}
+        .topbar{display:none;}
+        @media (max-width:900px){.sidebar{transform:translateX(-100%);transition:transform .2s;} .sidebar.open{transform:none;} .main{margin-left:0;} .topbar{display:flex;align-items:center;gap:10px;padding:12px 16px;background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;} .content{padding:16px;}}
+        .menu-btn{background:none;border:none;cursor:pointer;color:var(--text);display:flex;}
+    </style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div>
+                <div class="sidebar-name" id="sidebarName">Loading...</div>
+                <div class="sidebar-tag">Partner Portal</div>
+            </div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item" href="/partner/pos-lead"><span class="material-icons">post_add</span> Submit POS Lead</a>
+        <a class="nav-item" href="/partner/pos-leads"><span class="material-icons">point_of_sale</span> My POS Leads</a>
+        <a class="nav-item" href="/partner/webinars"><span class="material-icons">video_library</span> Webinars</a>
+        <a class="nav-item" href="/partner/sub-partners"><span class="material-icons">account_tree</span> Sub-Partners</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item active" href="/partner/certificate"><span class="material-icons">workspace_premium</span> My Certificate</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+    <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;">PayProTec Partner Portal v1.0</div>
+</div>
+
+<div class="main">
+    <div class="topbar">
+        <button class="menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')"><span class="material-icons">menu</span></button>
+        <strong>My Certificate</strong>
+    </div>
+    <div class="content">
+        <div class="page-head">
+            <div class="page-title"><span class="material-icons">workspace_premium</span> My Partnership Certificate</div>
+            <div class="page-sub">Official proof of your PayProTec partnership — download it any time.</div>
+        </div>
+
+        <div class="cert-shell">
+            <div id="certLoading" class="loading-box"><div class="spinner"></div>Preparing your certificate…</div>
+            <div id="certEmpty" class="empty-box" style="display:none;"></div>
+
+            <div id="certWrap" style="display:none;">
+                <div class="cert-stage">
+                    <div id="certScaler"><div id="certTarget"></div></div>
+                </div>
+                <div class="cert-toolbar">
+                    <button class="btn btn-teal" id="btnPdf" onclick="downloadPdf()"><span class="material-icons" style="font-size:18px;">picture_as_pdf</span> Download PDF</button>
+                    <button class="btn btn-outline" id="btnPng" onclick="downloadPng()"><span class="material-icons" style="font-size:18px;">image</span> Download PNG</button>
+                    <button class="btn btn-outline" onclick="window.print()"><span class="material-icons" style="font-size:18px;">print</span> Print</button>
+                    <div class="cert-meta" id="certMeta"></div>
+                </div>
+                <div class="info-strip">
+                    <span class="material-icons">verified</span>
+                    <div>This certificate is issued directly by PayProTec and complements your partner agreement. Your certificate number can be verified with the PayProTec team.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Off-screen full-scale render used for high-resolution PDF/PNG capture -->
+<div id="certCapture" style="position:fixed;left:-10000px;top:0;"></div>
+
+<script src="/js/site-config.js"></script>
+<script src="/js/partner-nav.js"></script>
+<script src="/js/certificate-render.js"></script>
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+let CERT = null;
+
+function initials(name){ return (String(name||'').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2)||'?').toUpperCase(); }
+
+async function init(){
+    try {
+        const authRes = await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'validate', token }) });
+        const auth = await authRes.json();
+        if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
+        const partner = auth.partner || {};
+        document.getElementById('sidebarName').innerText = partner.name || 'Partner';
+        document.getElementById('sidebarAvatar').innerText = initials(partner.name);
+
+        const res = await fetch('/api/certificates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'my_certificate', token }) });
+        const data = await res.json();
+        document.getElementById('certLoading').style.display = 'none';
+        if (!data.success || !data.certificate) {
+            const box = document.getElementById('certEmpty');
+            box.style.display = '';
+            box.innerHTML = '<span class="material-icons" style="font-size:40px;color:#cbd5e1;">workspace_premium</span><div style="margin-top:8px;">'
+                + (data.message || 'Your certificate is not available yet. Please check back shortly.') + '</div>';
+            return;
+        }
+        CERT = data.certificate;
+        paint();
+    } catch (e) {
+        document.getElementById('certLoading').innerHTML = 'Could not load your certificate. Please refresh the page.';
+    }
+}
+
+function paint(){
+    document.getElementById('certWrap').style.display = '';
+    // Visible (scaled) preview
+    window.renderCertificate(document.getElementById('certTarget'), CERT);
+    // Full-scale hidden copy for capture
+    window.renderCertificate(document.getElementById('certCapture'), CERT);
+    document.getElementById('certMeta').innerHTML = 'Certificate No. <b>' + (CERT.cert_number||'') + '</b>';
+    fitScale();
+}
+
+function fitScale(){
+    const scaler = document.getElementById('certScaler');
+    const stageW = scaler.parentElement.clientWidth; // .cert-stage inner width
+    const scale = Math.min(1, stageW / 1000);
+    const el = document.getElementById('certTarget').firstElementChild;
+    if (el){ el.style.transform = 'scale(' + scale + ')'; }
+    scaler.style.width = (1000 * scale) + 'px';
+    scaler.style.height = (707 * scale) + 'px';
+}
+window.addEventListener('resize', function(){ if (CERT) fitScale(); });
+
+function fileBase(){
+    const name = (CERT && CERT.recipient_name || 'certificate').replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'');
+    return 'PayProTec_Certificate_' + name;
+}
+
+async function captureCanvas(){
+    const node = document.getElementById('certCapture').firstElementChild;
+    return await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: null, logging: false, width: 1000, height: 707 });
+}
+
+async function downloadPng(){
+    const btn = document.getElementById('btnPng'); btn.disabled = true;
+    try {
+        const canvas = await captureCanvas();
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = fileBase() + '.png';
+        a.click();
+    } catch(e){ Swal.fire('Download failed','Please try the Print option instead.','error'); }
+    btn.disabled = false;
+}
+
+async function downloadPdf(){
+    const btn = document.getElementById('btnPdf'); btn.disabled = true;
+    try {
+        const canvas = await captureCanvas();
+        const img = canvas.toDataURL('image/png');
+        const jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        const pdf = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+        const pw = pdf.internal.pageSize.getWidth();
+        const ph = pdf.internal.pageSize.getHeight();
+        // Fit the 1000x707 canvas centered on the A4 landscape page.
+        const ratio = Math.min(pw/1000, ph/707);
+        const w = 1000*ratio, h = 707*ratio;
+        pdf.addImage(img, 'PNG', (pw-w)/2, (ph-h)/2, w, h);
+        pdf.save(fileBase() + '.pdf');
+    } catch(e){ Swal.fire('Download failed','Please try the Print option instead.','error'); }
+    btn.disabled = false;
+}
+
+async function handleLogout(){
+    try { await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'logout', token }) }); } catch(e){}
+    localStorage.clear();
+    window.location.href = '/partner';
+}
+
+init();
+</script>
+</body>
+</html>

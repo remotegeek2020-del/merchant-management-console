@@ -12,6 +12,7 @@ import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal, canProspects, canDeleteLeads } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
+import { issueCertificate } from './certificates.js';
 import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers, ghlSetContactCustomFieldsByName, ghlSearchContacts } from './_ghl.js';
 
 async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID || null; }
@@ -577,8 +578,16 @@ export default async function handler(req, res) {
                 } catch (e) { /* best-effort — graduation must still succeed */ }
             }
             await supabase.from('leads').update({ status: 'converted', converted_person_id: personId }).eq('id', lead.id);
+            // Auto-issue the partnership certificate (best-effort — never blocks graduation).
+            let certificate = null;
+            if (personId) {
+                try {
+                    const ic = await issueCertificate(supabase, { personId, recipientName: personName || lead.full_name, source: 'graduation' });
+                    if (ic.ok) certificate = ic.certificate.cert_number;
+                } catch (e) { /* certificate is a bonus — graduation still succeeds */ }
+            }
             log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
-            return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
+            return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult, certificate });
         }
         // Signed upload URL for testimonial/content photos (Supabase 'marketing' bucket).
         if (action === 'content_upload_url') {
