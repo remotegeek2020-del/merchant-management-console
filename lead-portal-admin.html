@@ -85,8 +85,22 @@ async function loadSettings(){
       +'<span style="font-size:13px;"><b>Email an account-setup invite when importing</b><div class="muted" style="font-size:12px;margin-top:2px;">When ON, each <b>new</b> prospect pulled in from HighLevel gets an email to set a password &amp; access the portal. Leave OFF to just sync them silently and invite later.</div></span>'
     +'</label>'
     +'<div style="margin-top:14px;"><button class="btn btn-p" onclick="saveCal(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button></div>'
+    +'</div>'
+    // ── Webhook card ──
+    +'<div class="card" style="max-width:640px;margin-top:16px;">'
+    +'<b style="font-size:15px;">HighLevel Workflow Webhook</b>'
+    +'<div class="muted" style="font-size:13px;margin:6px 0 12px;">Add this as a <b>Webhook</b> action in a HighLevel workflow to push contacts into the Lead Portal automatically. Pick the mode with the <code>invite</code> parameter.</div>'
+    +(r.webhook_secret_set
+        ? '<div style="background:#dcfce7;color:#166534;font-size:12px;font-weight:700;border-radius:8px;padding:8px 11px;margin-bottom:10px;">✓ Webhook secret is configured.</div>'
+        : '<div style="background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;border-radius:8px;padding:8px 11px;margin-bottom:10px;">⚠ Set <code>LEAD_WEBHOOK_SECRET</code> in Vercel env vars, then use it below in place of <code>YOUR_SECRET</code>.</div>')
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Create prospect only</label>'
+    +'<div style="display:flex;gap:6px;margin:5px 0 12px;"><input id="wh1" readonly value="'+esc(location.origin)+'/api/lead-webhook?secret=YOUR_SECRET&invite=false" style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:monospace;background:#f8fafc;" onclick="this.select()"><button class="btn btn-n" onclick="copyVal(\'wh1\',this)">Copy</button></div>'
+    +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Create prospect + send setup invite</label>'
+    +'<div style="display:flex;gap:6px;margin:5px 0 6px;"><input id="wh2" readonly value="'+esc(location.origin)+'/api/lead-webhook?secret=YOUR_SECRET&invite=true" style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:monospace;background:#f8fafc;" onclick="this.select()"><button class="btn btn-n" onclick="copyVal(\'wh2\',this)">Copy</button></div>'
+    +'<div class="muted" style="font-size:11.5px;margin-top:8px;">In the HighLevel webhook action set method <b>POST</b>. The contact\'s email is required; name &amp; phone are pulled if present. Already-active accounts are never re-invited.</div>'
     +'</div>';
 }
+window.copyVal=function(id,btn){ var el=document.getElementById(id); el.select(); try{ navigator.clipboard.writeText(el.value); }catch(e){ document.execCommand('copy'); } var t=btn.textContent; btn.textContent='Copied'; setTimeout(function(){btn.textContent=t;},1200); };
 window.saveCal=async function(btn){
   var sel=document.getElementById('cal-sel'); var cid=sel.value; var cname=cid?sel.options[sel.selectedIndex].text:'';
   var tagEl=document.getElementById('imp-tag'); var tag=tagEl?tagEl.value.trim():undefined;
@@ -167,7 +181,9 @@ async function loadLeads(){
     var rep=l.assigned_rep?esc(repName(l.assigned_rep)||'Assigned'):'<span class="muted">—</span>';
     return '<tr class="lead-row" onclick="leadDetail(\''+l.id+'\')"><td><b>'+esc(l.full_name||'—')+'</b></td><td class="muted">'+esc(l.email||'')+'</td><td class="muted">'+esc(l.phone||'')+'</td><td>'+ob+'</td><td>'+rep+'</td><td class="muted">'+esc(l.source||'')+'</td><td class="muted" style="white-space:nowrap;">'+(l.created_at?new Date(l.created_at).toLocaleDateString():'')+'</td></tr>';
   }).join(''):'<tr><td colspan="7" class="empty">No leads have signed up yet.</td></tr>';
-  p.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><button class="btn btn-p" onclick="importGhl(this)"><span class="material-icons" style="font-size:16px;">cloud_download</span> Sync from HighLevel</button></div>'
+  p.innerHTML='<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'
+    +'<button class="btn btn-n" onclick="addFromGhl()"><span class="material-icons" style="font-size:16px;">person_add</span> Add from HighLevel</button>'
+    +'<button class="btn btn-p" onclick="importGhl(this)"><span class="material-icons" style="font-size:16px;">cloud_download</span> Sync from HighLevel</button></div>'
     +'<div class="statgrid">'
     +'<div class="stat"><div class="n">'+(s.total||0)+'</div><div class="l">Total leads</div></div>'
     +'<div class="stat"><div class="n" style="color:var(--green);">'+(s.onboarded||0)+'</div><div class="l">Onboarded</div></div>'
@@ -176,6 +192,21 @@ async function loadLeads(){
     +'</div>'
     +'<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Onboarding</th><th>Assigned rep</th><th>Source</th><th>Signed up</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
+window.addFromGhl=async function(){
+  var res=await Swal.fire({title:'Add prospect from HighLevel',width:460,html:'<div style="text-align:left;">'
+    +'<label style="font-size:12px;font-weight:700;color:#475569;">Email</label>'
+    +'<input id="agl-email" class="swal2-input" style="margin:6px 0 0;width:100%;" placeholder="contact@email.com">'
+    +'<div class="muted" style="font-size:11.5px;margin-top:6px;">We\'ll look this email up in HighLevel and pull the name/phone if found.</div>'
+    +'<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="agl-invite" style="width:auto;"> Also send account-setup invite</label>'
+    +'</div>',showCancelButton:true,confirmButtonText:'Add prospect',confirmButtonColor:'#2563eb',
+    preConfirm:function(){ var e=(document.getElementById('agl-email').value||'').trim(); if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){ Swal.showValidationMessage('Enter a valid email'); return false; } return {email:e,invite:document.getElementById('agl-invite').checked}; }});
+  if(!res.isConfirmed) return;
+  Swal.fire({title:'Adding…',didOpen:function(){Swal.showLoading();},allowOutsideClick:false});
+  var r=await api({action:'create_lead_from_ghl',email:res.value.email,invite:res.value.invite});
+  if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add','error'); return; }
+  await Swal.fire({icon:'success',title:r.created?'Prospect added':'Prospect updated',html:(r.ghl_found?'Matched a HighLevel contact.':'No HighLevel match — created from the email.')+(r.invited?'<br>✉️ Setup invite sent.':''),confirmButtonColor:'#2563eb'});
+  loadLeads();
+};
 window.importGhl=async function(btn){
   btn.disabled=true; var orig=btn.innerHTML; btn.innerHTML='<span class="material-icons" style="font-size:16px;">sync</span> Syncing…';
   var r=await api({action:'import_ghl_leads'});

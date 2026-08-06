@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { ServerClient } from 'postmark';
+import { sendLeadInvite } from './_lead-invite.js';
 import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal, canProspects, canDeleteLeads } from './_access.js';
 import { logActivity } from './_activity.js';
@@ -45,35 +45,6 @@ function cors(res) {
 }
 const QTYPES = new Set(['short_text', 'long_text', 'multiple_choice', 'checkboxes', 'dropdown', 'yes_no', 'number']);
 const token = () => crypto.randomBytes(32).toString('hex');
-
-// Send a "set up your account" invite to a lead (best-effort). Generates an
-// invite token, stores it, and emails a setup link. Returns true if emailed.
-async function sendLeadInvite(lead, host) {
-    if (!lead || !lead.email) return false;
-    const tok = token();
-    await supabase.from('leads').update({ invite_token: tok, invite_sent_at: new Date().toISOString() }).eq('id', lead.id);
-    if (!process.env.POSTMARK_SERVER_TOKEN || !process.env.EMAIL_FROM) return false;
-    const link = `https://${host || 'portal.mypayprotec.com'}/lead/setup?token=${tok}`;
-    const first = String(lead.full_name || '').trim().split(/\s+/)[0] || 'there';
-    try {
-        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
-        await client.sendEmail({
-            From: process.env.EMAIL_FROM,
-            To: lead.email,
-            Subject: 'Set up your PayProTec Partner Program account',
-            HtmlBody: `<div style="font-family:'DM Sans',Arial,sans-serif;max-width:520px;margin:auto;padding:30px;border:1px solid #e2e8f0;border-radius:16px;color:#0f172a;">
-                <h2 style="color:#0d9488;margin:0 0 6px;">Welcome to the PayProTec Partner Program 🎉</h2>
-                <p style="line-height:1.6;">Hi ${first}, you've been added to the PayProTec Partner Program. Set up your account to watch our webinars, keep up with announcements, and book your become-a-partner call.</p>
-                <div style="text-align:center;margin:32px 0;"><a href="${link}" style="background:#0d9488;color:#fff;padding:14px 28px;text-decoration:none;border-radius:10px;font-weight:800;display:inline-block;">Set up my account</a></div>
-                <p style="font-size:12px;color:#64748b;">Or paste this link into your browser:<br><a href="${link}" style="color:#0d9488;word-break:break-all;">${link}</a></p>
-                <hr style="border:0;border-top:1px solid #f1f5f9;margin:28px 0;">
-                <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Program</p></div>`,
-            TextBody: `Hi ${first}, set up your PayProTec Partner Program account: ${link}`,
-            MessageStream: 'outbound'
-        });
-        return true;
-    } catch (e) { return false; }
-}
 
 async function validateLead(t) {
     if (!t) return null;
@@ -392,7 +363,7 @@ export default async function handler(req, res) {
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
-        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite']);
+        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl']);
         if (action === 'delete_lead') {
             if (!canDeleteLeads(actor)) return bad(res, 'Access denied. Delete Leads access required.', 403);
         } else if (STAFF_ACTIONS.has(action)) {
@@ -544,6 +515,38 @@ export default async function handler(req, res) {
             log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
         }
+        // Look up a HighLevel contact by email and create a prospect from it.
+        if (action === 'create_lead_from_ghl') {
+            const email = String(body.email || '').toLowerCase().trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad(res, 'A valid email is required.');
+            const locationId = await ghlLocId();
+            let found = null;
+            if (locationId) { try { found = await ghlFindContactByEmail(locationId, email); } catch (e) { /* best-effort */ } }
+            const name = (found && found.name) || String(body.name || '').trim() || email;
+            const phone = (found && found.phone) || '';
+            const contactId = (found && found.id) || null;
+            const { data: existing } = await supabase.from('leads').select('id, password_hash, ghl_contact_id, phone, full_name').eq('email', email).maybeSingle();
+            if (existing) {
+                const patch = {};
+                if (!existing.ghl_contact_id && contactId) patch.ghl_contact_id = contactId;
+                if (!existing.phone && phone) patch.phone = phone;
+                if (!existing.full_name && name) patch.full_name = name;
+                if (Object.keys(patch).length) await supabase.from('leads').update(patch).eq('id', existing.id);
+                let invited = false;
+                if (body.invite && !existing.password_hash) invited = await sendLeadInvite(supabase, { id: existing.id, full_name: patch.full_name || existing.full_name || name, email }, req.headers.host);
+                log({ action: `${actorName(actor)} linked an existing prospect from HighLevel (${email})`, target_type: 'lead', target_id: existing.id });
+                return ok(res, { created: false, updated: true, ghl_found: !!found, invited });
+            }
+            const { data: newLead, error } = await supabase.from('leads').insert({
+                email, full_name: name, phone, ghl_contact_id: contactId,
+                source: found ? 'ghl-lookup' : 'manual', status: 'new', onboarding_completed: false
+            }).select('id, full_name, email').single();
+            if (error) return bad(res, error.message);
+            let invited = false;
+            if (body.invite && newLead) invited = await sendLeadInvite(supabase, newLead, req.headers.host);
+            log({ action: `${actorName(actor)} created a prospect from HighLevel (${email})`, target_type: 'lead', target_id: newLead.id });
+            return ok(res, { created: true, ghl_found: !!found, invited });
+        }
         // Manually send a prospect their account-setup invite email.
         if (action === 'send_lead_invite') {
             if (!body.lead_id) return bad(res, 'lead_id required');
@@ -551,7 +554,7 @@ export default async function handler(req, res) {
             if (!lead) return bad(res, 'Lead not found', 404);
             if (!lead.email) return bad(res, 'This prospect has no email.');
             if (lead.password_hash) return bad(res, 'This prospect already has an active account — no setup invite needed.');
-            const sent = await sendLeadInvite(lead, req.headers.host);
+            const sent = await sendLeadInvite(supabase, lead, req.headers.host);
             log({ action: `${actorName(actor)} sent a setup invite to prospect ${lead.email}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { sent });
         }
@@ -594,7 +597,7 @@ export default async function handler(req, res) {
                 }).select('id, full_name, email').single();
                 if (error) { skipped++; } else {
                     created++;
-                    if (autoInvite) { try { if (await sendLeadInvite(newLead, req.headers.host)) invited++; } catch (e) { /* best-effort */ } }
+                    if (autoInvite) { try { if (await sendLeadInvite(supabase, newLead, req.headers.host)) invited++; } catch (e) { /* best-effort */ } }
                 }
             }
             log({ action: `${actorName(actor)} synced HighLevel leads (tag "${tag}"): ${created} new, ${updated} enriched${autoInvite ? ', ' + invited + ' invited' : ''}`, target_type: 'lead', target_id: 'import' });
@@ -608,7 +611,7 @@ export default async function handler(req, res) {
             if (locationId) { try { calendars = await ghlListCalendars(locationId); const n = await ghlLocationNames([locationId]); locName = n[locationId] || ''; } catch (e) { /* ignore */ } }
             const { data: s } = await supabase.from('app_settings').select('key, value').in('key', ['lead_portal_calendar_id', 'lead_portal_calendar_name', 'lead_import_tag', 'lead_import_auto_invite']);
             const map = {}; (s || []).forEach(r => { map[r.key] = r.value; });
-            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true' });
+            return ok(res, { configured: !!locationId, location_id: locationId || '', location_name: locName, calendars, calendar_id: map.lead_portal_calendar_id || '', calendar_name: map.lead_portal_calendar_name || '', import_tag: map.lead_import_tag || '', auto_invite: map.lead_import_auto_invite === 'true', webhook_secret_set: !!process.env.LEAD_WEBHOOK_SECRET });
         }
         if (action === 'save_lead_settings') {
             const cid = String(body.calendar_id || '').trim(), cname = String(body.calendar_name || '').trim();
