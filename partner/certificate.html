@@ -47,6 +47,8 @@
         .btn-outline:hover{border-color:var(--teal);color:var(--teal-dark);}
         .btn[disabled]{opacity:0.55;cursor:not-allowed;}
         .cert-meta{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);}
+        .cert-pill{padding:8px 14px;border-radius:999px;border:1.5px solid var(--border);background:white;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;}
+        .cert-pill.active{background:var(--teal);color:white;border-color:var(--teal);}
         .cert-meta b{color:var(--text);font-family:'DM Mono',monospace;}
         .loading-box,.empty-box{text-align:center;padding:60px 20px;color:var(--muted);}
         @keyframes spin{to{transform:rotate(360deg);}}
@@ -106,6 +108,7 @@
             <div id="certEmpty" class="empty-box" style="display:none;"></div>
 
             <div id="certWrap" style="display:none;">
+                <div id="certPicker" style="display:none;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
                 <div class="cert-stage">
                     <div id="certScaler"><div id="certTarget"></div></div>
                 </div>
@@ -133,8 +136,9 @@
 <script>
 const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
-let CERT = null;
+let CERTS = [], CERT = null;
 
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function initials(name){ return (String(name||'').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2)||'?').toUpperCase(); }
 
 async function init(){
@@ -146,30 +150,44 @@ async function init(){
         document.getElementById('sidebarName').innerText = partner.name || 'Partner';
         document.getElementById('sidebarAvatar').innerText = initials(partner.name);
 
-        const res = await fetch('/api/certificates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'my_certificate', token }) });
+        const res = await fetch('/api/certificates', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'my_certificates', token }) });
         const data = await res.json();
         document.getElementById('certLoading').style.display = 'none';
-        if (!data.success || !data.certificate) {
+        CERTS = (data.success && Array.isArray(data.certificates)) ? data.certificates : [];
+        if (!CERTS.length) {
             const box = document.getElementById('certEmpty');
             box.style.display = '';
             box.innerHTML = '<span class="material-icons" style="font-size:40px;color:#cbd5e1;">workspace_premium</span><div style="margin-top:8px;">'
                 + (data.message || 'Your certificate is not available yet. Please check back shortly.') + '</div>';
             return;
         }
-        CERT = data.certificate;
-        paint();
+        renderPicker();
+        select(0);
+        document.getElementById('certWrap').style.display = '';
     } catch (e) {
         document.getElementById('certLoading').innerHTML = 'Could not load your certificate. Please refresh the page.';
     }
 }
 
+function renderPicker(){
+    const p = document.getElementById('certPicker');
+    if (CERTS.length < 2) { p.style.display = 'none'; return; }
+    p.style.display = 'flex';
+    p.innerHTML = CERTS.map(function(c,i){
+        return '<button class="cert-pill'+(i===0?' active':'')+'" data-i="'+i+'" onclick="select('+i+')">'+esc(c.type_name||'Certificate')+'</button>';
+    }).join('');
+}
+
+function select(i){
+    CERT = CERTS[i]; if (!CERT) return;
+    Array.prototype.forEach.call(document.querySelectorAll('#certPicker .cert-pill'), function(b){ b.classList.toggle('active', String(b.getAttribute('data-i'))===String(i)); });
+    paint();
+}
+
 function paint(){
-    document.getElementById('certWrap').style.display = '';
-    // Visible (scaled) preview
     window.renderCertificate(document.getElementById('certTarget'), CERT);
-    // Full-scale hidden copy for capture
     window.renderCertificate(document.getElementById('certCapture'), CERT);
-    document.getElementById('certMeta').innerHTML = 'Certificate No. <b>' + (CERT.cert_number||'') + '</b>';
+    document.getElementById('certMeta').innerHTML = (CERT.type_name?esc(CERT.type_name)+' · ':'') + 'No. <b>' + esc(CERT.cert_number||'') + '</b>';
     fitScale();
 }
 
