@@ -107,6 +107,7 @@ function renderData(cert, design) {
         partner_logos_label: design.partner_logos_label,
         partner_title: cert.partner_title || design.partner_title,
         recipient_name: cert.recipient_name,
+        company_name: cert.company_name || '',
         cert_number: cert.cert_number,
         issued_date: cert.issued_date,
         type_id: cert.type_id,
@@ -114,6 +115,22 @@ function renderData(cert, design) {
         id: cert.id
     };
 }
+
+// Distinct companies a partner belongs to (via their agents). "Independent"
+// (an agent with no company) counts as one company. Returns [{company_id, company_name}].
+async function getPartnerCompanies(supabase, personId) {
+    const { data: agents } = await supabase.from('agents')
+        .select('company_id, companies:company_id(company_name)').eq('parent_agent_id', personId);
+    const map = {};
+    (agents || []).forEach(a => {
+        const cid = a.company_id || null;
+        const cname = (a.companies && a.companies.company_name) || 'Independent';
+        const key = cid ? String(cid) : ('name:' + cname);
+        if (!map[key]) map[key] = { company_id: cid, company_name: cname };
+    });
+    return Object.keys(map).map(k => map[k]);
+}
+function companyKey(cid, cname) { return cid ? String(cid) : ('name:' + (cname || '')); }
 
 /**
  * Issue (or return the existing) certificate of a given type for a partner.
@@ -124,8 +141,16 @@ export async function issueCertificate(supabase, opts) {
     if (!personId) return { ok: false, error: 'personId required' };
     const designs = await getDesigns(supabase);
     const design = opts.typeId ? findDesign(designs, opts.typeId) : defaultDesign(designs);
+    const companyId = opts.companyId || null;
+    const companyName = opts.companyName || null;
 
-    const { data: existing } = await supabase.from('partner_certificates').select('*').eq('person_id', personId).eq('type_id', design.id).maybeSingle();
+    const findExisting = () => {
+        let q = supabase.from('partner_certificates').select('*').eq('person_id', personId).eq('type_id', design.id);
+        if (companyId) q = q.eq('company_id', companyId);
+        else { q = q.is('company_id', null); q = companyName ? q.eq('company_name', companyName) : q.is('company_name', null); }
+        return q.maybeSingle();
+    };
+    const { data: existing } = await findExisting();
     if (existing) return { ok: true, certificate: existing, created: false, design };
 
     let name = opts.recipientName;
@@ -139,17 +164,67 @@ export async function issueCertificate(supabase, opts) {
     const row = {
         person_id: personId, type_id: design.id, type_name: design.name,
         cert_number: certNo, recipient_name: name, partner_title: design.partner_title,
-        template: design.template, config_snapshot: design, source: opts.source || 'graduation'
+        template: design.template, config_snapshot: design, source: opts.source || 'graduation',
+        company_id: companyId, company_name: companyName
     };
     if (opts.issuedDate) row.issued_date = opts.issuedDate;
 
     const { data: created, error } = await supabase.from('partner_certificates').insert(row).select('*').single();
     if (error) {
-        const { data: again } = await supabase.from('partner_certificates').select('*').eq('person_id', personId).eq('type_id', design.id).maybeSingle();
+        const { data: again } = await findExisting();
         if (again) return { ok: true, certificate: again, created: false, design };
         return { ok: false, error: error.message };
     }
     return { ok: true, certificate: created, created: true, design };
+}
+
+/**
+ * Issue the default (partnership) certificate ONCE PER COMPANY the partner belongs to.
+ * A partner with 4 companies gets 4 certificates; Independent + a company => 2.
+ * Self-healing: adopts a legacy company-less certificate into the first company so
+ * existing partners don't end up with a duplicate blank certificate.
+ */
+export async function issuePartnershipCerts(supabase, personId, opts) {
+    opts = opts || {};
+    const designs = await getDesigns(supabase);
+    const def = defaultDesign(designs);
+    const companies = await getPartnerCompanies(supabase, personId);
+    let name = opts.recipientName;
+    if (!name) {
+        const { data: p } = await supabase.from('persons').select('full_name').eq('id', personId).maybeSingle();
+        name = (p && p.full_name) || 'Partner';
+    }
+    let { data: existing } = await supabase.from('partner_certificates').select('*').eq('person_id', personId).eq('type_id', def.id);
+    existing = existing || [];
+
+    if (!companies.length) {
+        if (!existing.length) {
+            const r = await issueCertificate(supabase, { personId, typeId: def.id, recipientName: name, source: opts.source, issuedDate: opts.issuedDate });
+            return r.ok ? [r.certificate] : [];
+        }
+        return existing;
+    }
+
+    const covered = {};
+    existing.forEach(c => { covered[companyKey(c.company_id, c.company_name)] = c; });
+    // Adopt any company-less legacy certs into uncovered companies (reuse their number).
+    const legacy = existing.filter(c => !c.company_id && (!c.company_name || c.company_name === ''));
+    let li = 0;
+    for (const co of companies) {
+        if (covered[companyKey(co.company_id, co.company_name)]) continue;
+        if (li < legacy.length) {
+            const row = legacy[li++];
+            await supabase.from('partner_certificates').update({ company_id: co.company_id || null, company_name: co.company_name || null }).eq('id', row.id);
+            covered[companyKey(co.company_id, co.company_name)] = row;
+        }
+    }
+    // Issue any still-uncovered companies.
+    for (const co of companies) {
+        if (covered[companyKey(co.company_id, co.company_name)]) continue;
+        await issueCertificate(supabase, { personId, typeId: def.id, recipientName: name, source: opts.source, issuedDate: opts.issuedDate, companyId: co.company_id, companyName: co.company_name });
+    }
+    const { data: final } = await supabase.from('partner_certificates').select('*').eq('person_id', personId).eq('type_id', def.id).order('created_at', { ascending: true });
+    return final || [];
 }
 
 const PARTNER_ACTIONS = new Set(['my_certificates']);
@@ -175,18 +250,14 @@ export default async function handler(req, res) {
 
             const { data: person } = await supabase.from('persons').select('id, full_name, enrolled_at').eq('id', personId).maybeSingle();
             const designs = await getDesigns(supabase);
-            const def = defaultDesign(designs);
 
-            // Ensure the default (partnership) certificate exists.
+            // Ensure the default (partnership) certificate exists — one per company.
+            await issuePartnershipCerts(supabase, personId, {
+                recipientName: person && person.full_name, source: 'auto',
+                issuedDate: person && person.enrolled_at ? String(person.enrolled_at).slice(0, 10) : undefined
+            });
             let { data: certs } = await supabase.from('partner_certificates').select('*').eq('person_id', personId).order('created_at', { ascending: true });
             certs = certs || [];
-            if (!certs.some(c => c.type_id === def.id)) {
-                const iss = await issueCertificate(supabase, {
-                    personId, typeId: def.id, recipientName: person && person.full_name, source: 'auto',
-                    issuedDate: person && person.enrolled_at ? String(person.enrolled_at).slice(0, 10) : undefined
-                });
-                if (iss.ok && iss.certificate) certs.push(iss.certificate);
-            }
             const out = certs.map(c => {
                 // Use the live design; if its design was deleted, fall back to the snapshot.
                 let design = designs.find(d => d.id === c.type_id);

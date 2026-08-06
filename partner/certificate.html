@@ -178,7 +178,8 @@ function renderPicker(){
     if (CERTS.length < 2) { p.style.display = 'none'; return; }
     p.style.display = 'flex';
     p.innerHTML = CERTS.map(function(c,i){
-        return '<button class="cert-pill'+(i===0?' active':'')+'" data-i="'+i+'" onclick="select('+i+')">'+esc(c.type_name||'Certificate')+'</button>';
+        var label = esc(c.type_name||'Certificate') + (c.company_name ? ' — '+esc(c.company_name) : '');
+        return '<button class="cert-pill'+(i===0?' active':'')+'" data-i="'+i+'" onclick="select('+i+')">'+label+'</button>';
     }).join('');
 }
 
@@ -191,7 +192,7 @@ function select(i){
 function paint(){
     window.renderCertificate(document.getElementById('certTarget'), CERT);
     window.renderCertificate(document.getElementById('certCapture'), CERT);
-    document.getElementById('certMeta').innerHTML = (CERT.type_name?esc(CERT.type_name)+' · ':'') + 'No. <b>' + esc(CERT.cert_number||'') + '</b>';
+    document.getElementById('certMeta').innerHTML = (CERT.type_name?esc(CERT.type_name)+' · ':'') + (CERT.company_name?esc(CERT.company_name)+' · ':'') + 'No. <b>' + esc(CERT.cert_number||'') + '</b>';
     fitScale();
 }
 
@@ -207,8 +208,9 @@ function fitScale(){
 window.addEventListener('resize', function(){ if (CERT) fitScale(); });
 
 function fileBase(){
-    const name = (CERT && CERT.recipient_name || 'certificate').replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'');
-    return 'PayProTec_Certificate_' + name;
+    const parts = [(CERT && CERT.recipient_name) || 'certificate'];
+    if (CERT && CERT.company_name) parts.push(CERT.company_name);
+    return 'PayProTec_Certificate_' + parts.join('_').replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'');
 }
 
 async function captureCanvas(){

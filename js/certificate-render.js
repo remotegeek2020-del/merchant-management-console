@@ -167,6 +167,7 @@
             + '<div class="cert-kicker" style="color:' + C.accent + ';font-family:' + HF + '">' + esc(d.heading || 'Certificate of Partnership') + '</div>'
             + '<div class="cert-pre" style="color:' + C.muted + '">' + esc(d.pre_text || 'This certifies that') + '</div>'
             + '<div class="cert-name" style="color:' + C.ink + ';font-family:' + HF + '">' + esc(d.recipient_name) + '</div>'
+            + (d.company_name ? '<div class="cert-company" style="color:' + C.accent + '">' + esc(d.company_name) + '</div>' : '')
             + '<div class="cert-div">' + svgDivider(C.accent) + '</div>'
             + '<div class="cert-body" style="color:' + C.body + '">' + bodyLine + '</div>'
             + '</div>'
@@ -214,7 +215,8 @@
                 '<div style="position:relative;height:100%;padding:66px 84px;display:flex;flex-direction:column;justify-content:center;">'
                 + '<div class="cert-top" style="justify-content:flex-start;margin-bottom:22px;">' + logo(d.logo_url, false, 40) + '<div class="cert-org" style="color:' + C.ink + '">' + esc(d.org_name) + '</div></div>'
                 + '<div style="font-size:13px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:' + C.muted + ';font-family:' + HF + ';">' + esc(d.heading || 'Certificate of Partnership') + '</div>'
-                + '<div style="font-size:52px;font-weight:800;color:' + C.ink + ';margin:10px 0 14px;letter-spacing:-1.5px;font-family:' + HF + ';">' + esc(d.recipient_name) + '</div>'
+                + '<div style="font-size:52px;font-weight:800;color:' + C.ink + ';margin:10px 0 4px;letter-spacing:-1.5px;font-family:' + HF + ';">' + esc(d.recipient_name) + '</div>'
+                + (d.company_name ? '<div style="font-size:17px;font-weight:700;letter-spacing:.5px;color:' + C.accent + ';margin:0 0 12px;">' + esc(d.company_name) + '</div>' : '<div style="margin-bottom:10px;"></div>')
                 + '<div style="font-size:16px;line-height:1.7;color:' + C.body + ';max-width:680px;">' + bodyLine + '</div>'
                 + '<div style="margin-top:24px;">' + sigsLeft(d.signatories, C) + '</div>'
                 + plogosLeft(d, C)
@@ -344,6 +346,7 @@
         return '<div class="cert-col"><div class="cert-mid" style="padding-top:6px;">'
             + '<div class="cert-pre" style="color:' + C.muted + '">' + esc(d.pre_text || 'This is to certify that') + '</div>'
             + '<div class="cert-name" style="color:' + C.ink + ';font-family:' + HF + '">' + esc(d.recipient_name) + '</div>'
+            + (d.company_name ? '<div class="cert-company" style="color:' + C.accent + '">' + esc(d.company_name) + '</div>' : '')
             + '<div class="cert-div">' + svgDivider(C.accent) + '</div>'
             + '<div class="cert-body" style="color:' + C.body + '">' + bodyLine + '</div></div>'
             + sigs(d.signatories, C) + plogos(d, C) + foot(d, C) + '</div>';
@@ -366,6 +369,7 @@
         + '.cert-kicker{font-size:33px;font-weight:700;margin:2px 0 10px;line-height:1.1;}'
         + '.cert-pre{font-size:14px;letter-spacing:1px;}'
         + '.cert-name{font-size:50px;font-weight:700;margin:6px 0 2px;line-height:1.1;}'
+        + '.cert-company{font-size:18px;font-weight:700;letter-spacing:.6px;margin:2px 0 0;}'
         + '.cert-div{margin:8px 0 12px;}'
         + '.cert-body{font-size:16px;line-height:1.6;max-width:660px;}'
         + '.cert-sigs{display:flex;justify-content:center;gap:54px;margin-top:20px;flex-wrap:wrap;}'
@@ -409,6 +413,7 @@
             heading: d.heading || 'Certificate of Partnership',
             pre_text: d.pre_text || '',
             recipient_name: d.recipient_name || 'Partner Name',
+            company_name: d.company_name || '',
             partner_title: d.partner_title || 'Certified Partner',
             body_text: d.body_text || 'has successfully graduated and is hereby recognized as a',
             cert_number: d.cert_number || 'PPT-0000-0000',
