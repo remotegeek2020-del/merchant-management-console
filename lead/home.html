@@ -143,6 +143,10 @@
   .res .ri{width:44px;height:44px;border-radius:12px;background:var(--teal-bg);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex:none;}
   .res .rt{font-weight:800;font-size:14px;}.res .rd{font-size:12px;color:var(--muted);margin-top:2px;}
   .res .rgo{margin-left:auto;color:var(--muted);}
+  /* Settings avatar */
+  .set-av{width:84px;height:84px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;flex:none;overflow:hidden;}
+  .set-av img{width:100%;height:100%;object-fit:cover;}
+  @keyframes spin{to{transform:rotate(360deg);}}
   /* Appointment + rep cards */
   .ar-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
   @media(max-width:860px){.ar-row{grid-template-columns:1fr;}}
@@ -290,6 +294,7 @@
     <button class="nav-item" data-tab="past" id="nav-past" style="display:none;" onclick="showTab('past')"><span class="material-icons">history</span> Past Appointments</button>
     <button class="nav-item" data-tab="courses" onclick="showTab('courses')"><span class="material-icons">video_library</span> Courses & Videos</button>
     <button class="nav-item" data-tab="resources" onclick="showTab('resources')"><span class="material-icons">folder_open</span> Resources</button>
+    <button class="nav-item" data-tab="settings" onclick="showTab('settings')"><span class="material-icons">settings</span> Settings</button>
     <div class="nav-divider"></div>
     <button class="nav-item" onclick="logout()"><span class="material-icons">logout</span> Sign Out</button>
   </nav>
@@ -388,6 +393,32 @@
       <div id="resourcesBody"><div class="card muted">Loading…</div></div>
     </div>
 
+    <!-- SETTINGS -->
+    <div class="tab" id="tab-settings">
+      <h2 class="sec-h"><span class="material-icons">account_circle</span> Profile photo</h2>
+      <div class="card" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+        <div id="setAvatar" class="set-av">?</div>
+        <div>
+          <button class="btn btn-teal" onclick="document.getElementById('setPhotoInput').click()"><span class="material-icons" style="font-size:16px;">upload</span> Upload photo</button>
+          <button class="btn" style="background:#f1f5f9;color:#475569;margin-left:8px;" onclick="removeLeadPhoto()">Remove</button>
+          <div class="muted" style="font-size:11.5px;margin-top:8px;">JPG, PNG or WebP.</div>
+          <input type="file" id="setPhotoInput" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="handleLeadPhoto(this)">
+        </div>
+      </div>
+
+      <h2 class="sec-h" style="margin-top:24px;"><span class="material-icons">lock</span> Change password</h2>
+      <div class="card" style="max-width:440px;">
+        <label class="est-l">Current password</label>
+        <input type="password" id="pwCur" class="gi" style="width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;" placeholder="Current password">
+        <label class="est-l" style="margin-top:12px;">New password</label>
+        <input type="password" id="pwNew" class="gi" style="width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;" placeholder="At least 6 characters">
+        <label class="est-l" style="margin-top:12px;">Confirm new password</label>
+        <input type="password" id="pwNew2" class="gi" style="width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;" placeholder="Repeat new password">
+        <div style="margin-top:14px;"><button class="btn btn-teal" id="pwBtn" onclick="changePw()"><span class="material-icons" style="font-size:16px;">lock_reset</span> Update password</button></div>
+        <div id="pwMsg" style="font-size:12.5px;margin-top:8px;"></div>
+      </div>
+    </div>
+
     <!-- COURSES -->
     <div class="tab" id="tab-courses">
       <h2 class="sec-h"><span class="material-icons">video_library</span> Courses & Videos</h2>
@@ -427,7 +458,7 @@ function embedSrc(provider,url){ url=String(url||''); var m; if(/youtu\.?be|yout
 function thumb(v){ var img=v.thumbnail_url||''; if(!img){ var id=ytId(v.url); if(id) img='https://img.youtube.com/vi/'+id+'/hqdefault.jpg'; } return img?'<img src="'+esc(img)+'" onerror="this.style.display=\'none\'">':''; }
 
 // ── Nav / tabs ──
-var TAB_TITLES={home:'Home',ann:'Announcements',why:'Why Partner?',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos',resources:'Resources'};
+var TAB_TITLES={home:'Home',ann:'Announcements',why:'Why Partner?',book:'Book a Call',past:'Past Appointments',courses:'Courses & Videos',resources:'Resources',settings:'Settings'};
 window.showTab=function(name){
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('show'); });
   var el=document.getElementById('tab-'+name); if(el) el.classList.add('show');
@@ -698,6 +729,37 @@ function applyBookingGate(){
     el.title=disabled?'You already have an upcoming appointment':'';
   });
 }
+// ── Settings: photo + password ───────────────────────────────────────────────
+var LEAD_NAME='', LEAD_PHOTO='';
+function setLeadAvatars(){
+  var ini=esc(initials(LEAD_NAME||'?'));
+  var sb=document.getElementById('sbAvatar'); if(sb) sb.innerHTML=LEAD_PHOTO?'<img src="'+esc(LEAD_PHOTO)+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">':ini;
+  var st=document.getElementById('setAvatar'); if(st) st.innerHTML=LEAD_PHOTO?'<img src="'+esc(LEAD_PHOTO)+'">':ini;
+}
+window.handleLeadPhoto=async function(input){
+  var f=input.files&&input.files[0]; if(!f) return;
+  var st=document.getElementById('setAvatar'); var prev=st.innerHTML; st.innerHTML='<span class="material-icons" style="animation:spin 1s linear infinite;">sync</span>';
+  try{
+    var u=await api({action:'lead_upload_url',file_type:f.type});
+    if(!u.success) throw new Error(u.message||'upload failed');
+    var put=await fetch(u.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}});
+    if(!put.ok) throw new Error('upload failed');
+    await api({action:'lead_set_photo',photo_url:u.public_url});
+    LEAD_PHOTO=u.public_url; setLeadAvatars();
+  }catch(e){ st.innerHTML=prev; alert('Photo upload failed. Please try again.'); }
+};
+window.removeLeadPhoto=async function(){ await api({action:'lead_set_photo',photo_url:''}); LEAD_PHOTO=''; setLeadAvatars(); };
+window.changePw=async function(){
+  var cur=document.getElementById('pwCur').value, nw=document.getElementById('pwNew').value, nw2=document.getElementById('pwNew2').value;
+  var msg=document.getElementById('pwMsg');
+  if(nw.length<6){ msg.style.color='#b45309'; msg.textContent='New password must be at least 6 characters.'; return; }
+  if(nw!==nw2){ msg.style.color='#b45309'; msg.textContent='New passwords do not match.'; return; }
+  var b=document.getElementById('pwBtn'); b.disabled=true;
+  var r=await api({action:'lead_change_password',current_password:cur,new_password:nw});
+  b.disabled=false;
+  if(r&&r.success){ msg.style.color='#16a34a'; msg.textContent='✓ Password updated.'; document.getElementById('pwCur').value=''; document.getElementById('pwNew').value=''; document.getElementById('pwNew2').value=''; }
+  else { msg.style.color='#dc2626'; msg.textContent=(r&&r.message)||'Could not update password.'; }
+};
 window.annClick=function(id,url){ if(id) api({action:'lead_track',campaign_id:id,event_type:'click'}); if(url) window.open(url,'_blank','noopener'); };
 async function loadAnn(){
   var r=await api({action:'lead_announcements'});
@@ -757,7 +819,7 @@ async function loadCourses(){
   var first=(r.lead.full_name||'').split(' ')[0]||'';
   document.getElementById('hi').textContent='Welcome, '+first+'!';
   document.getElementById('sbName').textContent=r.lead.full_name||'Prospect';
-  document.getElementById('sbAvatar').textContent=initials(r.lead.full_name);
+  LEAD_NAME=r.lead.full_name||''; LEAD_PHOTO=r.lead.photo_url||''; setLeadAvatars();
   renderJourney(); renderUnlock(); renderFaq(); renderPrep(); renderNudge();
   loadApptRep(); loadBook(); loadAnn(); loadCourses();
 })();

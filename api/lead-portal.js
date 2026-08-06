@@ -140,8 +140,39 @@ export default async function handler(req, res) {
         if (action === 'lead_validate') {
             const leadId = await validateLead(body.token);
             if (!leadId) return bad(res, 'Session expired', 401);
-            const { data: lead } = await supabase.from('leads').select('id, full_name, email, phone, onboarding_completed, status, assigned_rep').eq('id', leadId).maybeSingle();
+            const { data: lead } = await supabase.from('leads').select('id, full_name, email, phone, photo_url, onboarding_completed, status, assigned_rep').eq('id', leadId).maybeSingle();
             return ok(res, { lead });
+        }
+        // Signed upload URL for a prospect's own photo (Supabase 'marketing' bucket).
+        if (action === 'lead_upload_url') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp' };
+            const ext = EXT[String(body.file_type || '')];
+            if (!ext) return bad(res, 'Only PNG, JPG or WEBP images are allowed.');
+            const path = `lead-photos/${leadId}_${Date.now()}.${ext}`;
+            const { data, error } = await supabase.storage.from('marketing').createSignedUploadUrl(path);
+            if (error) return bad(res, error.message, 500);
+            const public_url = `${process.env.SUPABASE_URL}/storage/v1/object/public/marketing/${path}`;
+            return ok(res, { upload_url: data.signedUrl, public_url });
+        }
+        if (action === 'lead_set_photo') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            await supabase.from('leads').update({ photo_url: (body.photo_url || '').toString().slice(0, 1000) || null }).eq('id', leadId);
+            return ok(res, {});
+        }
+        if (action === 'lead_change_password') {
+            const leadId = await validateLead(body.token);
+            if (!leadId) return bad(res, 'Session expired', 401);
+            const cur = String(body.current_password || ''), nw = String(body.new_password || '');
+            if (nw.length < 6) return bad(res, 'New password must be at least 6 characters.');
+            const { data: lead } = await supabase.from('leads').select('id, password_hash').eq('id', leadId).maybeSingle();
+            if (!lead) return bad(res, 'Session expired', 401);
+            if (lead.password_hash && !(await bcrypt.compare(cur, lead.password_hash))) return bad(res, 'Your current password is incorrect.');
+            const hash = await bcrypt.hash(nw, 12);
+            await supabase.from('leads').update({ password_hash: hash }).eq('id', leadId);
+            return ok(res, {});
         }
         if (action === 'lead_logout') {
             if (body.token) await supabase.from('lead_sessions').delete().eq('session_token', body.token);
