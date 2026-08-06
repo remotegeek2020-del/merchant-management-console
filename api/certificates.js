@@ -315,6 +315,63 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, designs });
         }
 
+        // ── Award: search partners ──────────────────────────────────────────
+        if (action === 'search_partners') {
+            const q = String(body.query || '').replace(/[%,()]/g, ' ').trim();
+            if (q.length < 2) return res.status(200).json({ success: true, partners: [] });
+            const { data } = await supabase.from('persons')
+                .select('id, full_name, email').or(`full_name.ilike.%${q}%,email.ilike.%${q}%`).limit(12);
+            return res.status(200).json({ success: true, partners: data || [] });
+        }
+
+        // ── Award: a partner's companies + current certificates ─────────────
+        if (action === 'person_certs') {
+            if (!body.person_id) return res.status(400).json({ success: false, message: 'person_id required' });
+            const { data: person } = await supabase.from('persons').select('id, full_name, email').eq('id', body.person_id).maybeSingle();
+            if (!person) return res.status(404).json({ success: false, message: 'Partner not found' });
+            const designs = await getDesigns(supabase);
+            const companies = await getPartnerCompanies(supabase, body.person_id);
+            const { data: rows } = await supabase.from('partner_certificates').select('*').eq('person_id', body.person_id).order('created_at', { ascending: true });
+            const certs = (rows || []).map(c => {
+                let design = designs.find(d => d.id === c.type_id) || loadDesign(c.config_snapshot || {});
+                return renderData(c, design);
+            });
+            return res.status(200).json({ success: true, person, companies, certs });
+        }
+
+        // ── Award: issue a certificate to a partner (super_admin) ───────────
+        if (action === 'award') {
+            const { data: caller } = await supabase.from('app_users').select('role, is_active, email').eq('userid', session.userid).maybeSingle();
+            if (!caller?.is_active || caller.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+            if (!body.person_id || !body.type_id) return res.status(400).json({ success: false, message: 'person_id and type_id required' });
+            const { data: person } = await supabase.from('persons').select('id, full_name').eq('id', body.person_id).maybeSingle();
+            if (!person) return res.status(404).json({ success: false, message: 'Partner not found' });
+            const r = await issueCertificate(supabase, {
+                personId: body.person_id, typeId: body.type_id, recipientName: person.full_name,
+                companyId: body.company_id || null, companyName: body.company_name || null, source: 'awarded'
+            });
+            if (!r.ok) return res.status(500).json({ success: false, message: r.error || 'Could not award certificate.' });
+            supabase.from('activity_logs').insert({
+                email: caller.email || session.userid, action: `Awarded certificate "${r.design.name}" to ${person.full_name}`,
+                status: 'success', category: 'admin', target_type: 'certificate', target_id: r.certificate.id, severity: 'info'
+            }).then(() => {}).catch(() => {});
+            return res.status(200).json({ success: true, created: r.created, certificate: renderData(r.certificate, r.design) });
+        }
+
+        // ── Award: revoke an issued certificate (super_admin) ───────────────
+        if (action === 'revoke') {
+            const { data: caller } = await supabase.from('app_users').select('role, is_active, email').eq('userid', session.userid).maybeSingle();
+            if (!caller?.is_active || caller.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+            if (!body.cert_id) return res.status(400).json({ success: false, message: 'cert_id required' });
+            const { error } = await supabase.from('partner_certificates').delete().eq('id', body.cert_id);
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            supabase.from('activity_logs').insert({
+                email: caller.email || session.userid, action: `Revoked a certificate`,
+                status: 'success', category: 'admin', target_type: 'certificate', target_id: body.cert_id, severity: 'warning'
+            }).then(() => {}).catch(() => {});
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action' });
     } catch (err) {
         console.error('[certificates]', err.message);
