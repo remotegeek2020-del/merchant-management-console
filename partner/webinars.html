@@ -149,7 +149,9 @@ window.playVideo=function(id){
   var src=embedSrc(v.provider,v.url);
   if(!src){ alert('This video link could not be played.'); return; }
   document.getElementById('playerFrame').innerHTML='<iframe src="'+esc(src)+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
-  var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML = v.cta_url ? '<button onclick="openBooking(\''+encodeURIComponent(v.cta_url)+'\',\''+esc((v.cta_label||'Book an appointment').replace(/\x27/g,""))+'\')" style="display:inline-flex;align-items:center;gap:7px;background:#0d9488;color:#fff;border:none;cursor:pointer;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:800;font-family:inherit;"><span class="material-icons" style="font-size:18px;">event_available</span> '+esc(v.cta_label||'Book an appointment')+'</button>' : '';
+  // The "book an appointment" video goal is a PROSPECT-only call to action
+  // (lead portal). Partners are already partners, so never show it here.
+  var cta=document.getElementById('playerCta'); if(cta) cta.innerHTML = '';
   document.getElementById('player').style.display='flex';
   // Log a portal view (best-effort; never blocks playback).
   try{ papi({action:'log_view',video_id:id}); }catch(e){}
