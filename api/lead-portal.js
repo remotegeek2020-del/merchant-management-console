@@ -12,7 +12,7 @@ import { validateSession } from './_validate.js';
 import { loadActor, actorName, canLeadPortal, canProspects, canDeleteLeads } from './_access.js';
 import { logActivity } from './_activity.js';
 import { getConfigValue } from './api-config.js';
-import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers, ghlSetContactCustomFieldsByName } from './_ghl.js';
+import { ghlListCalendars, ghlLocationNames, ghlFindContactByEmail, ghlFindContactsByEmail, ghlContactAppointments, ghlSearchContactsByTag, ghlContactLink, ghlListUsers, ghlSetContactCustomFieldsByName, ghlSearchContacts } from './_ghl.js';
 
 async function ghlLocId() { return (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID || null; }
 // The assigned rep's public summary (name + job level + bio + photo) for a lead.
@@ -363,7 +363,7 @@ export default async function handler(req, res) {
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
-        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl']);
+        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl', 'ghl_contact_search']);
         if (action === 'delete_lead') {
             if (!canDeleteLeads(actor)) return bad(res, 'Access denied. Delete Leads access required.', 403);
         } else if (STAFF_ACTIONS.has(action)) {
@@ -515,16 +515,28 @@ export default async function handler(req, res) {
             log({ action: `${actorName(actor)} graduated a prospect to partner${repCode ? ' — ' + repCode : ''}`, target_type: 'lead', target_id: lead.id });
             return ok(res, { converted: true, person_id: personId, rep_code: repCode, prime49_id: primeId, ghl: ghlResult });
         }
-        // Look up a HighLevel contact by email and create a prospect from it.
-        if (action === 'create_lead_from_ghl') {
-            const email = String(body.email || '').toLowerCase().trim();
-            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad(res, 'A valid email is required.');
+        // Typeahead search of HighLevel contacts (name / email / phone / company / id).
+        if (action === 'ghl_contact_search') {
+            const q = String(body.query || '').trim();
+            if (q.length < 2) return ok(res, { contacts: [] });
             const locationId = await ghlLocId();
-            let found = null;
-            if (locationId) { try { found = await ghlFindContactByEmail(locationId, email); } catch (e) { /* best-effort */ } }
+            if (!locationId) return ok(res, { contacts: [], error: 'GHL_LOCATION_ID not configured' });
+            let contacts = [];
+            try { contacts = await ghlSearchContacts(locationId, q, 10); } catch (e) { /* best-effort */ }
+            return ok(res, { contacts });
+        }
+        // Look up a HighLevel contact by email (or use a picked contact) and create a prospect.
+        if (action === 'create_lead_from_ghl') {
+            // A contact picked from the typeahead comes through as body.contact.
+            const picked = (body.contact && typeof body.contact === 'object') ? body.contact : null;
+            const email = String((picked && picked.email) || body.email || '').toLowerCase().trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad(res, 'A valid email is required (the contact must have an email).');
+            const locationId = await ghlLocId();
+            let found = picked;
+            if (!found && locationId) { try { found = await ghlFindContactByEmail(locationId, email); } catch (e) { /* best-effort */ } }
             const name = (found && found.name) || String(body.name || '').trim() || email;
             const phone = (found && found.phone) || '';
-            const contactId = (found && found.id) || null;
+            const contactId = (found && (found.id || found.contact_id)) || null;
             const { data: existing } = await supabase.from('leads').select('id, password_hash, ghl_contact_id, phone, full_name').eq('email', email).maybeSingle();
             if (existing) {
                 const patch = {};

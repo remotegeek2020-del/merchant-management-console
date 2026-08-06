@@ -268,12 +268,36 @@ function normalizeContact(c) {
     const la = c.lastAttributionSource || {}, fa = c.attributionSource || {};
     return {
         id: c.id, email: c.email || '',
-        name: (`${c.firstName || ''} ${c.lastName || ''}`.trim()) || c.contactName || '',
+        name: (`${c.firstName || ''} ${c.lastName || ''}`.trim()) || c.contactName || c.name || '',
         phone: c.phone || '',
+        company: c.companyName || c.company || c.businessName || '',
         tags: Array.isArray(c.tags) ? c.tags.map(t => String(t).toLowerCase()) : [],
         source: la.utmSource || la.sessionSource || fa.utmSource || c.source || 'highlevel',
         date_added: c.dateAdded || c.createdAt || null
     };
+}
+
+// Typeahead contact search: name / email / phone / company (+ direct id lookup).
+export async function ghlSearchContacts(locationId, query, limit = 10) {
+    if (!locationId || !query) return [];
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return [];
+    const headers = { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json' };
+    const q = String(query).trim();
+    const out = [], seen = new Set();
+    // Looks like a contact id → try a direct fetch.
+    if (/^[A-Za-z0-9]{18,}$/.test(q)) {
+        try {
+            const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(q)}`, { headers });
+            if (r.ok) { const d = await r.json().catch(() => ({})); const c = d && (d.contact || d); if (c && c.id) { out.push(normalizeContact(c)); seen.add(c.id); } }
+        } catch (e) { /* ignore */ }
+    }
+    // General query search (HighLevel matches name/email/phone and often company).
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/?locationId=${encodeURIComponent(locationId)}&query=${encodeURIComponent(q)}&limit=${Math.min(25, limit)}`, { headers });
+        if (r.ok) { const d = await r.json().catch(() => ({})); (d?.contacts || []).forEach(c => { if (c && c.id && !seen.has(c.id)) { out.push(normalizeContact(c)); seen.add(c.id); } }); }
+    } catch (e) { /* ignore */ }
+    return out.slice(0, limit);
 }
 
 // Contacts in a sub-account carrying a given tag (lead-gen import).
