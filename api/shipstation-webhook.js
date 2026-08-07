@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { ssFetchResource } from './shipstation.js';
+import { notifyPartner, partnerForMerchant } from './_notify.js';
 
 // ShipStation webhook receiver. Register TWO webhooks pointing here:
 //   1. "On Orders Shipped"   → writes tracking number to the deployment
@@ -56,30 +57,54 @@ async function applyInTransit(supabase, { tracking, orderNumber }) {
 // Mark a deployment delivered: merchant-direct → received date + Closed;
 // partner-first → partner_received_date only (merchant leg handled manually).
 async function applyDelivery(supabase, { tracking, orderNumber, delDate }) {
-    const targets = new Map(); // id → ship_to_type
+    const targets = new Map(); // id → { shipType, merchantId }
 
     if (tracking) {
-        const { data } = await supabase.from('deployments').select('id, ship_to_type').eq('tracking_id', tracking);
-        for (const d of (data || [])) targets.set(d.id, d.ship_to_type || 'merchant');
+        const { data } = await supabase.from('deployments').select('id, ship_to_type, merchant_id').eq('tracking_id', tracking);
+        for (const d of (data || [])) targets.set(d.id, { shipType: d.ship_to_type || 'merchant', merchantId: d.merchant_id });
     }
     if (orderNumber) {
         await supabase.from('shipstation_shipments').update({ status: 'delivered' }).eq('order_number', orderNumber);
         const { data: rows } = await supabase.from('shipstation_shipments').select('deployment_id').eq('order_number', orderNumber);
         const ids = (rows || []).map(r => r.deployment_id).filter(Boolean);
         if (ids.length) {
-            const { data: deps } = await supabase.from('deployments').select('id, ship_to_type').in('id', ids);
-            for (const d of (deps || [])) targets.set(d.id, d.ship_to_type || 'merchant');
+            const { data: deps } = await supabase.from('deployments').select('id, ship_to_type, merchant_id').in('id', ids);
+            for (const d of (deps || [])) targets.set(d.id, { shipType: d.ship_to_type || 'merchant', merchantId: d.merchant_id });
         }
     }
 
     let closed = 0;
-    for (const [id, shipType] of targets) {
+    const merchCache = {}; // merchant_id -> { personId, dba } (memoized to avoid N+1)
+    for (const [id, info] of targets) {
+        const shipType = info.shipType;
         if (shipType === 'partner') {
             await supabase.from('deployments').update({ partner_received_date: delDate }).eq('id', id);
         } else {
             await supabase.from('deployments').update({ merchant_received_date: delDate, status: 'Closed' }).eq('id', id);
         }
         closed++;
+        // Notify the owning partner that their shipment was delivered (best-effort, deduped).
+        try {
+            const mid = info.merchantId;
+            if (mid) {
+                if (!merchCache[mid]) {
+                    const [personId, m] = await Promise.all([
+                        partnerForMerchant(supabase, mid),
+                        supabase.from('merchants').select('dba_name').eq('id', mid).maybeSingle().then(r => r.data)
+                    ]);
+                    merchCache[mid] = { personId: personId || null, dba: (m && m.dba_name) || '' };
+                }
+                const { personId, dba } = merchCache[mid];
+                if (personId) {
+                    await notifyPartner(supabase, {
+                        personId, type: 'shipment_delivered',
+                        title: 'Shipment delivered' + (dba ? ' — ' + dba : ''),
+                        body: shipType === 'partner' ? 'Your equipment shipment has arrived.' : 'Equipment was delivered to your merchant' + (dba ? ' ' + dba : '') + '.',
+                        link: '/partner/merchants', actorName: 'ShipStation', referenceId: 'dep-delivered:' + id
+                    });
+                }
+            }
+        } catch (e) { /* best-effort */ }
     }
     return closed;
 }

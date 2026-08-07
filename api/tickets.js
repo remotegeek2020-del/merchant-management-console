@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { dispatchEvent } from './v1/_deliver.js';
+import { notifyPartner } from './_notify.js';
 
 // Partner actions carry their own `token` and use validatePartner() internally.
 // All other actions are staff-only and require a valid staff session.
@@ -304,6 +305,13 @@ export default async function handler(req, res) {
             // Notify partner of changes (status, priority, assignment)
             if (changes.length > 0 && oldTicket?.person_id) {
                 await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                if (updates.status) {
+                    await notifyPartner(supabase, {
+                        personId: oldTicket.person_id, type: 'ticket_update',
+                        title: `Ticket ${oldTicket.ticket_number} — ${String(updates.status).replace(/_/g, ' ')}`,
+                        body: oldTicket.subject || '', link: '/partner/tickets', actorName: staff_name || 'PayProTec Staff'
+                    });
+                }
             }
 
             // When ticket is closed, clear ticket_id from linked return so its badge disappears
@@ -447,6 +455,13 @@ export default async function handler(req, res) {
                                 `${authorName} added a note on your ticket ${ticket.ticket_number}. Log in to view.`
                             );
                         }
+                        // Portal bell notification (best-effort).
+                        await notifyPartner(supabase, {
+                            personId: ticket.person_id, type: 'ticket_reply',
+                            title: `New reply on ticket ${ticket.ticket_number}`,
+                            body: `${authorName}: ${body.trim().slice(0, 140)}`,
+                            link: '/partner/tickets', actorName: authorName
+                        });
                     }
                 }
             }

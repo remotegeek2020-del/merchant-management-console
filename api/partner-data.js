@@ -1,8 +1,26 @@
 import { createClient } from '@supabase/supabase-js';
+import { getPartnerTiers } from './partner-portal.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// Build a carrier tracking URL from a carrier name + tracking number. Falls back to
+// auto-detecting the carrier from the tracking-number format when carrier is blank.
+function trackingUrl(carrier, tracking) {
+    const t = String(tracking || '').trim();
+    if (!t) return '';
+    let c = String(carrier || '').toLowerCase();
+    if (!c) {
+        if (/^1Z/i.test(t)) c = 'ups';
+        else if (/^(94|93|92|95|94\d)/.test(t) && t.length >= 20) c = 'usps';
+        else if (/^\d{12}$|^\d{15}$/.test(t)) c = 'fedex';
+    }
+    if (c.indexOf('ups') >= 0) return 'https://www.ups.com/track?tracknum=' + encodeURIComponent(t);
+    if (c.indexOf('usps') >= 0 || c.indexOf('stamps') >= 0) return 'https://tools.usps.com/go/TrackConfirmAction?tLabels=' + encodeURIComponent(t);
+    if (c.indexOf('fedex') >= 0) return 'https://www.fedex.com/fedextrack/?trknbr=' + encodeURIComponent(t);
+    return 'https://www.google.com/search?q=' + encodeURIComponent('track package ' + t);
+}
 
 async function validateSession(token) {
     if (!token) return null;
@@ -44,6 +62,52 @@ export default async function handler(req, res) {
             if (error || !data || !data.length) return res.status(200).json({ success: true, rank: null });
             const r = data[0];
             return res.status(200).json({ success: true, rank: Number(r.rank), total: Number(r.total), tier: r.tier, volume_30_day: parseFloat(r.volume_30_day) || 0 });
+        }
+
+        // ── LEADERBOARD BOARD (partner-facing) ─────────────
+        // Ranked by 30-day volume (matches get_my_rank), but the visible metric is
+        // merchant count — we don't expose other partners' dollar volumes.
+        if (action === 'get_leaderboard') {
+            let tiers = { gold: 3, silver: 10 };
+            try { tiers = await getPartnerTiers(supabase); } catch (e) {}
+            const tierOf = (rank) => rank <= tiers.gold ? 'Gold' : rank <= tiers.silver ? 'Silver' : 'Bronze';
+            const maskName = (n) => {
+                const parts = String(n || 'Partner').trim().split(/\s+/);
+                if (parts.length < 2) { const t = parts[0] || 'Partner'; return t.length > 2 ? t[0].toUpperCase() + t.slice(1, 2) + '.' : t; }
+                return parts[0] + ' ' + parts[parts.length - 1][0].toUpperCase() + '.';
+            };
+            // Top 25 only — deterministic tiebreak so rank/tier don't flicker on ties.
+            const { data: rows } = await supabase.from('partner_leaderboard_mv')
+                .select('person_id, name, merchant_count, volume_30_day')
+                .order('volume_30_day', { ascending: false })
+                .order('merchant_count', { ascending: false })
+                .order('person_id', { ascending: true })
+                .limit(25);
+            const top = (rows || []).map((r, i) => ({
+                rank: i + 1,
+                name: maskName(r.name),
+                merchant_count: parseInt(r.merchant_count || 0, 10),
+                tier: tierOf(i + 1),
+                is_me: String(r.person_id) === String(personId)
+            }));
+            // Caller's own rank/total from the same RPC the dashboard uses (authoritative,
+            // works beyond the 1000-row PostgREST cap and stays consistent with get_my_rank).
+            let me = null;
+            try {
+                const { data: rk } = await supabase.rpc('get_partner_rank', { p_person_id: personId });
+                if (rk && rk.length) {
+                    const rank = Number(rk[0].rank);
+                    const inTop = top.find(t => t.is_me);
+                    let merch = inTop ? inTop.merchant_count : 0;
+                    if (!inTop) {
+                        const { data: mm } = await supabase.from('partner_leaderboard_mv').select('merchant_count').eq('person_id', personId).maybeSingle();
+                        merch = mm ? parseInt(mm.merchant_count || 0, 10) : 0;
+                    }
+                    const tierNorm = ['Gold', 'Silver', 'Bronze'].indexOf(rk[0].tier) >= 0 ? rk[0].tier : tierOf(rank);
+                    me = { rank, total: Number(rk[0].total), merchant_count: merch, tier: tierNorm };
+                }
+            } catch (e) {}
+            return res.status(200).json({ success: true, top, me, total: me ? me.total : top.length, tiers });
         }
 
         // ── DASHBOARD OVERVIEW ─────────────────────────────
@@ -197,7 +261,17 @@ export default async function handler(req, res) {
             // RMAs
             const { data: rmas } = await supabase.from('returns').select('id, return_id, return_reason, condition, status, destination, created_at, equipments:equipment_id(serial_number, terminal_type)').eq('merchant_id', merchant_uuid).order('created_at', { ascending: false });
 
-            return res.status(200).json({ success: true, data: { merchant, equipment: equipment || [], legacyEquipment: legacyEquipment || [], notes: notes || [], rmas: rmas || [] } });
+            // Shipments (ShipStation tracking) for this merchant.
+            const { data: ships } = await supabase.from('shipstation_shipments')
+                .select('tracking_number, carrier, service, status, ship_type, order_number, created_at')
+                .eq('merchant_id', merchant_uuid).order('created_at', { ascending: false });
+            const shipments = (ships || []).filter(s => s.tracking_number || s.status).map(s => ({
+                tracking_number: s.tracking_number || '', carrier: s.carrier || '', service: s.service || '',
+                status: s.status || '', ship_type: s.ship_type || 'outbound', order_number: s.order_number || '',
+                created_at: s.created_at, tracking_url: trackingUrl(s.carrier || '', s.tracking_number || '')
+            }));
+
+            return res.status(200).json({ success: true, data: { merchant, equipment: equipment || [], legacyEquipment: legacyEquipment || [], notes: notes || [], rmas: rmas || [], shipments } });
         }
 
         // ── ADD NOTE ───────────────────────────────────────
@@ -494,15 +568,40 @@ export default async function handler(req, res) {
 
             const { data: deployments } = await supabase
                 .from('deployments')
-                .select('id, status, created_at, equipments:equipment_id(serial_number, terminal_type)')
+                .select('id, status, created_at, tracking_id, equipments:equipment_id(serial_number, terminal_type)')
                 .eq('merchant_id', merchant_uuid)
                 .neq('status', 'Closed')
                 .order('created_at', { ascending: false });
 
+            // Attach ShipStation tracking (number/carrier/status) per deployment, if any.
+            const depList = deployments || [];
+            if (depList.length) {
+                const depIds = depList.map(d => d.id);
+                const { data: ships } = await supabase.from('shipstation_shipments')
+                    .select('deployment_id, tracking_number, carrier, service, status, ship_type')
+                    .in('deployment_id', depIds);
+                const byDep = {};
+                (ships || []).forEach(s => {
+                    // Prefer outbound shipments; keep the most informative row per deployment.
+                    if (!byDep[s.deployment_id] || (s.tracking_number && !byDep[s.deployment_id].tracking_number)) byDep[s.deployment_id] = s;
+                });
+                depList.forEach(d => {
+                    const s = byDep[d.id];
+                    const trk = (s && s.tracking_number) || d.tracking_id || '';
+                    d.shipment = {
+                        tracking_number: trk,
+                        carrier: (s && s.carrier) || '',
+                        service: (s && s.service) || '',
+                        status: (s && s.status) || '',
+                        tracking_url: trackingUrl((s && s.carrier) || '', trk)
+                    };
+                });
+            }
+
             return res.status(200).json({
                 success: true,
                 merchant: { id: merchant_uuid, dba_name: merchant.dba_name, merchant_id: merchant.merchant_id },
-                deployments: deployments || []
+                deployments: depList
             });
         }
 

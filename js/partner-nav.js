@@ -194,8 +194,22 @@
         var a = document.createElement('a');
         a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/residuals') !== -1 ? ' active' : '');
         a.href = '/partner/residuals';
-        a.innerHTML = '<span class="material-icons">payments</span> My Prime49';
+        a.innerHTML = '<span class="material-icons">payments</span> Residuals';
         merchants.parentNode.insertBefore(a, merchants.nextSibling);
+    }
+
+    // Inject "Leaderboard" into the sidebar on every partner page (after Sub-Partners
+    // when present, else near the top). Hidden by the section toggle via applySections.
+    function injectLeaderboardNav() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (!nav || nav.querySelector('a[href="/partner/leaderboard"]')) return;
+        var anchor = nav.querySelector('a[href="/partner/sub-partners"]') || nav.querySelector('a[href="/partner/webinars"]') || nav.querySelector('a[href="/partner/residuals"]');
+        var a = document.createElement('a');
+        a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/leaderboard') !== -1 ? ' active' : '');
+        a.href = '/partner/leaderboard';
+        a.innerHTML = '<span class="material-icons">leaderboard</span> Leaderboard';
+        if (anchor) anchor.parentNode.insertBefore(a, anchor.nextSibling);
+        else nav.appendChild(a);
     }
 
     // Inject "Submit POS Lead" into the sidebar on every partner page.
@@ -217,7 +231,8 @@
     var SECTION_PATHS = {
         certificate: '/partner/certificate',
         community: '/partner/community',
-        webinars: '/partner/webinars'
+        webinars: '/partner/webinars',
+        leaderboard: '/partner/leaderboard'
     };
     function applySections() {
         fetch('/api/partner-portal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'public_config' }) })
@@ -239,6 +254,7 @@
     function init() {
         injectBadges();
         injectResidualsNav();
+        injectLeaderboardNav();
         injectPosLeadNav();
         injectNotificationBell();
         injectBrandedBadge();

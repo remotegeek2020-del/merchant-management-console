@@ -368,7 +368,8 @@ async function openMerchantDetail(merchantId, name) {
     const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'get_merchant_detail', token, merchant_uuid:merchantId }) });
     const data = await res.json();
     if (!data.success) { Swal.update({ html: '<p style="color:#ef4444;">Failed to load details.</p>' }); return; }
-    const { merchant: m, equipment, legacyEquipment, notes, rmas } = data.data;
+    const { merchant: m, equipment, legacyEquipment, notes, rmas, shipments } = data.data;
+    const shipList = shipments || [];
     window._modalNotes = notes || [];
     window._notesPage = 0;
     window._currentMerchantUuid = merchantId;
@@ -438,6 +439,18 @@ async function openMerchantDetail(merchantId, name) {
                         ...equipment.map(e=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;"><span style="font-weight:700;">${e.terminal_type}</span><span style="font-family:'DM Mono',monospace;color:#0d9488;">${e.serial_number}</span><span style="color:#94a3b8;">${e.status}</span></div>`),
                         ...(legacyEquipment||[]).map(l=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;"><span style="font-weight:700;">${l.terminal_type||'—'}</span><span style="font-family:'DM Mono',monospace;color:#0d9488;">${l.serial_number||'—'}</span><span style="font-size:9px;font-weight:700;background:#f3e8ff;color:#7c3aed;padding:2px 7px;border-radius:4px;">LEGACY</span></div>`)
                     ].join('') : '<div style="color:#94a3b8;font-size:12px;">No equipment</div>'}
+                </div>
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Shipments (${shipList.length})</div>
+                    ${shipList.length ? shipList.slice(0,5).map(s=>{
+                        const st = (s.status||'').toLowerCase();
+                        const badgeBg = st==='delivered'?'#dcfce7':(st==='in_transit'||st==='shipped')?'#e0f2fe':'#f1f5f9';
+                        const badgeCol = st==='delivered'?'#166534':(st==='in_transit'||st==='shipped')?'#0369a1':'#475569';
+                        const label = st==='in_transit'?'In Transit':(s.status? s.status.charAt(0).toUpperCase()+s.status.slice(1):'—');
+                        const trk = s.tracking_number ? (s.tracking_url?`<a href="${s.tracking_url}" target="_blank" rel="noopener" style="font-family:'DM Mono',monospace;color:#0d9488;text-decoration:none;">${s.tracking_number} ↗</a>`:`<span style="font-family:'DM Mono',monospace;color:#0d9488;">${s.tracking_number}</span>`) : '<span style="color:#94a3b8;">No tracking yet</span>';
+                        const carrier = [s.carrier,s.service].filter(Boolean).join(' · ');
+                        return `<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span>${trk}${carrier?` <span style="color:#94a3b8;">(${carrier})</span>`:''}${s.ship_type==='return_label'?' <span style="font-size:9px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;">RETURN</span>':''}</span><span style="background:${badgeBg};color:${badgeCol};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">${label}</span></div>`;
+                    }).join('') : '<div style="color:#94a3b8;font-size:12px;">No shipments</div>'}
                 </div>
                 <div style="margin-bottom:14px;">
                     <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Recent RMAs (${rmas.length})</div>
