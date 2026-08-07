@@ -4,7 +4,7 @@
     <link rel="icon" href="/api/favicon" />
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Marketing | PayProTec</title>
+<title>Marketing &amp; Portals | PayProTec</title>
 <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
 <script src="/js/access-guard.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,6 +54,14 @@
   .seg{display:inline-flex;background:#f1f5f9;border-radius:10px;padding:3px;gap:3px;}
   .seg button{border:none;background:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--muted);font-family:inherit;}
   .seg button.on{background:#fff;color:var(--blue);box-shadow:var(--shadow);}
+  /* Grouped toolbar */
+  .toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 16px;margin-bottom:16px;}
+  .tgroup{display:flex;flex-direction:column;gap:5px;}
+  .tg-label{font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);}
+  .tgroup .trow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .toolbar .tdiv{align-self:stretch;width:1px;background:var(--border);margin:0 2px;}
+  .toolbar .btn{padding:8px 12px;}
+  .toolbar .btn .material-icons{font-size:16px;vertical-align:-3px;}
   .hs-wrap{position:relative;display:inline-block;max-width:100%;border:1px solid var(--border);border-radius:10px;overflow:hidden;user-select:none;}
   .hs-wrap img{display:block;max-width:100%;}
   .hs-box{position:absolute;border:2px solid #f59e0b;background:rgba(245,158,11,.18);cursor:move;font-size:10px;font-weight:800;color:#92400e;}
@@ -83,12 +91,9 @@
 <body>
 <div class="topbar">
   <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="topbar-logo" alt="PayProTec">
-  <h1>📣 Marketing &amp; Announcements</h1>
+  <h1>📣 Marketing &amp; Portals</h1>
   <div class="sp"></div>
   <button class="btn btn-white" onclick="location.href='/'"><span class="material-icons" style="font-size:17px;">home</span> Home</button>
-  <button class="btn btn-white" id="sitesBtn" onclick="openSites()"><span class="material-icons" style="font-size:17px;">public</span> Embed Sites</button>
-  <button class="btn btn-white" onclick="openLandingPages()"><span class="material-icons" style="font-size:17px;">web_asset</span> Landing Pages</button>
-  <button class="btn btn-white" onclick="openReferrals()"><span class="material-icons" style="font-size:17px;">share</span> Referrals</button>
   <button class="btn btn-brand" onclick="pickCampaignType()"><span class="material-icons" style="font-size:17px;">add</span> New Campaign</button>
 </div>
 
@@ -99,24 +104,67 @@
     <div class="muted" style="margin-top:6px;">Ask a super admin to enable it for your account.</div>
   </div>
 
-  <div id="viewBar" style="display:none;align-items:center;gap:10px;margin-bottom:14px;">
-    <div class="seg">
-      <button id="viewListBtn" class="on" onclick="setView('list')">List</button>
-      <button id="viewCalBtn" onclick="setView('calendar')">Calendar</button>
-      <button id="viewDashBtn" onclick="setView('dashboard')">📊 Dashboard</button>
+  <div id="viewBar" class="toolbar" style="display:none;">
+    <!-- Campaigns: the views this page shows -->
+    <div class="tgroup">
+      <span class="tg-label">Campaigns</span>
+      <div class="seg">
+        <button id="viewListBtn" class="on" onclick="setView('list')">List</button>
+        <button id="viewCalBtn" onclick="setView('calendar')">Calendar</button>
+        <button id="viewDashBtn" onclick="setView('dashboard')">📊 Dashboard</button>
+      </div>
     </div>
-    <a class="btn btn-neutral" href="/marketing-courses" style="text-decoration:none;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">video_library</span> Courses &amp; Webinars</a>
-    <a class="btn btn-neutral" href="/marketing-settings" style="text-decoration:none;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">settings</span> Settings</a>
-    <a class="btn btn-neutral" href="/lead-portal-admin" style="text-decoration:none;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">person_add</span> Lead Portal</a>
-    <a class="btn btn-neutral" href="/partner-portal-admin" style="text-decoration:none;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">handshake</span> Partner Portal</a>
-    <a class="btn btn-neutral" href="/announcement-stats" style="text-decoration:none;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">campaign</span> Community Post Stats</a>
-    <a class="btn btn-neutral" href="/activity-logs?category=marketing" style="text-decoration:none;"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">history</span> Activity Log</a>
+
+    <div class="tdiv"></div>
+
+    <!-- Content & assets you create/publish -->
+    <div class="tgroup">
+      <span class="tg-label">Content</span>
+      <div class="trow">
+        <a class="btn btn-neutral" href="/marketing-courses" style="text-decoration:none;"><span class="material-icons">video_library</span> Courses &amp; Webinars</a>
+        <button class="btn btn-neutral" onclick="openLandingPages()"><span class="material-icons">web_asset</span> Landing Pages</button>
+        <button class="btn btn-neutral" id="sitesBtn" onclick="openSites()"><span class="material-icons">public</span> Embed Sites</button>
+        <button class="btn btn-neutral" onclick="openReferrals()"><span class="material-icons">share</span> Referrals</button>
+      </div>
+    </div>
+
+    <div class="tdiv"></div>
+
+    <!-- Portal admin -->
+    <div class="tgroup">
+      <span class="tg-label">Portals</span>
+      <div class="trow">
+        <a class="btn btn-neutral" href="/lead-portal-admin" style="text-decoration:none;"><span class="material-icons">person_add</span> Lead Portal</a>
+        <a class="btn btn-neutral" href="/partner-portal-admin" style="text-decoration:none;"><span class="material-icons">handshake</span> Partner Portal</a>
+      </div>
+    </div>
+
+    <div class="tdiv"></div>
+
+    <!-- Stats & logs -->
+    <div class="tgroup">
+      <span class="tg-label">Insights</span>
+      <div class="trow">
+        <a class="btn btn-neutral" href="/announcement-stats" style="text-decoration:none;"><span class="material-icons">campaign</span> Post Stats</a>
+        <a class="btn btn-neutral" href="/activity-logs?category=marketing" style="text-decoration:none;"><span class="material-icons">history</span> Activity Log</a>
+      </div>
+    </div>
+
     <div style="flex:1;"></div>
-    <div id="calNav" style="display:none;align-items:center;gap:8px;">
-      <button class="btn btn-neutral" onclick="calMove(-1)"><span class="material-icons" style="font-size:16px;">chevron_left</span></button>
-      <b id="calLabel" style="min-width:130px;text-align:center;"></b>
-      <button class="btn btn-neutral" onclick="calMove(1)"><span class="material-icons" style="font-size:16px;">chevron_right</span></button>
-      <button class="btn btn-neutral" onclick="calToday()">Today</button>
+
+    <div class="tgroup">
+      <span class="tg-label">&nbsp;</span>
+      <a class="btn btn-neutral" href="/marketing-settings" style="text-decoration:none;" title="Marketing settings"><span class="material-icons">settings</span> Settings</a>
+    </div>
+
+    <div id="calNav" class="tgroup" style="display:none;">
+      <span class="tg-label">Calendar</span>
+      <div class="trow">
+        <button class="btn btn-neutral" onclick="calMove(-1)"><span class="material-icons">chevron_left</span></button>
+        <b id="calLabel" style="min-width:130px;text-align:center;"></b>
+        <button class="btn btn-neutral" onclick="calMove(1)"><span class="material-icons">chevron_right</span></button>
+        <button class="btn btn-neutral" onclick="calToday()">Today</button>
+      </div>
     </div>
   </div>
 
