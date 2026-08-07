@@ -416,7 +416,7 @@ export default async function handler(req, res) {
         const log = (fields) => logActivity({ email: actor.email || session.userid, category: 'marketing', ...fields }, req);
         // Prospects page (view + assign) requires the Prospects permission (or
         // Lead Portal / admin). Survey/settings/import still require Lead Portal.
-        const STAFF_ACTIONS = new Set(['list_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl', 'ghl_contact_search', 'content_upload_url']);
+        const STAFF_ACTIONS = new Set(['list_leads', 'count_new_leads', 'lead_detail', 'list_reps', 'set_lead_rep', 'graduate_lead', 'send_lead_invite', 'create_lead_from_ghl', 'ghl_contact_search', 'content_upload_url']);
         if (action === 'delete_lead') {
             if (!canDeleteLeads(actor)) return bad(res, 'Access denied. Delete Leads access required.', 403);
         } else if (STAFF_ACTIONS.has(action)) {
@@ -482,6 +482,11 @@ export default async function handler(req, res) {
             const converted = (leads || []).filter(l => l.status === 'converted').length;
             const stats = { total, onboarded, pending: total - onboarded, converted };
             return ok(res, { leads: leads || [], stats });
+        }
+        if (action === 'count_new_leads') {
+            // New (unhandled) prospects — drives the noticeable nav badge.
+            const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('status', 'new');
+            return ok(res, { count: count || 0 });
         }
         if (action === 'lead_detail') {
             const { data: lead } = await supabase.from('leads').select('*').eq('id', body.lead_id).maybeSingle();
