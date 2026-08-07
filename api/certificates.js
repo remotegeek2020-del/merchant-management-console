@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
+import { getPartnerTiers } from './partner-portal.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '3mb' } } };
 
@@ -227,6 +228,119 @@ export async function issuePartnershipCerts(supabase, personId, opts) {
     return final || [];
 }
 
+// ── AWARD AUTOMATION ─────────────────────────────────────────────────────────
+// Rules live in app_settings key 'partner_award_rules' (JSON array). Each rule:
+//   { id, enabled, metric, value, tier, type_id, label }
+// metric ∈ 'approved' | 'pos_leads' | 'volume_30' | 'rank' | 'tier'
+const AWARD_METRICS = ['approved', 'pos_leads', 'volume_30', 'rank', 'tier'];
+
+async function getAwardRules(supabase) {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'partner_award_rules').maybeSingle();
+    let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch (e) { arr = []; }
+    if (!Array.isArray(arr)) arr = [];
+    return arr.map(r => ({
+        id: String(r.id || '') || ('rule-' + Math.random().toString(36).slice(2, 8)),
+        enabled: r.enabled !== false,
+        metric: AWARD_METRICS.indexOf(r.metric) >= 0 ? r.metric : 'approved',
+        value: Number(r.value) || 0,
+        tier: ['Gold', 'Silver', 'Bronze'].indexOf(r.tier) >= 0 ? r.tier : 'Gold',
+        type_id: String(r.type_id || ''),
+        label: String(r.label || '').slice(0, 120)
+    })).filter(r => r.type_id);
+}
+
+// Count POS Express leads per partner (person_id), paginated to beat the 1k cap.
+async function posCountsByPartner(supabase) {
+    const counts = {}; let from = 0; const page = 1000;
+    for (;;) {
+        const { data, error } = await supabase.from('pos_leads').select('partner_id').range(from, from + page - 1);
+        if (error || !data || !data.length) break;
+        data.forEach(r => { if (r.partner_id) counts[r.partner_id] = (counts[r.partner_id] || 0) + 1; });
+        if (data.length < page) break;
+        from += page;
+    }
+    return counts;
+}
+
+function ruleMet(rule, m) {
+    if (!m) return false;
+    switch (rule.metric) {
+        case 'approved': return (m.approved || 0) >= rule.value;
+        case 'pos_leads': return (m.pos_leads || 0) >= rule.value;
+        case 'volume_30': return (m.vol30 || 0) >= rule.value;
+        case 'rank': return m.rank && m.rank <= rule.value;
+        case 'tier': return m.tier === rule.tier;
+        default: return false;
+    }
+}
+
+/**
+ * Scan all partners and auto-award certificates for every enabled rule they meet.
+ * Idempotent (issueCertificate never double-issues). Returns a summary.
+ */
+export async function runAwardAutomation(supabase) {
+    const rules = (await getAwardRules(supabase)).filter(r => r.enabled);
+    if (!rules.length) return { ran: true, rules: 0, issued: 0, scanned: 0, per_rule: [] };
+
+    const needsPortfolio = rules.some(r => ['approved', 'volume_30', 'rank', 'tier'].indexOf(r.metric) >= 0);
+    const needsPos = rules.some(r => r.metric === 'pos_leads');
+    const needsTier = rules.some(r => r.metric === 'tier');
+
+    const metrics = {}; // person_id -> {approved, vol30, rank, tier, pos_leads, name}
+
+    if (needsPortfolio) {
+        // Refresh the leaderboard so numbers are current, then read it (ranked by 30d volume).
+        try { await supabase.rpc('refresh_leaderboard_mv'); } catch (e) { /* view may auto-refresh */ }
+        const { data: rows } = await supabase.from('partner_leaderboard_mv')
+            .select('person_id, name, merchant_count, volume_30_day, volume_90_day')
+            .order('volume_30_day', { ascending: false });
+        const tiers = needsTier ? await getPartnerTiers(supabase) : { gold: 3, silver: 10 };
+        (rows || []).forEach((r, i) => {
+            const rank = i + 1;
+            metrics[r.person_id] = {
+                name: r.name,
+                approved: parseInt(r.merchant_count || 0, 10),
+                vol30: parseFloat(r.volume_30_day || 0),
+                rank,
+                tier: rank <= tiers.gold ? 'Gold' : rank <= tiers.silver ? 'Silver' : 'Bronze'
+            };
+        });
+    }
+    if (needsPos) {
+        const pos = await posCountsByPartner(supabase);
+        Object.keys(pos).forEach(pid => {
+            if (!metrics[pid]) metrics[pid] = {};
+            metrics[pid].pos_leads = pos[pid];
+        });
+    }
+
+    // Names for any person we might award but didn't get from the leaderboard.
+    const missing = Object.keys(metrics).filter(pid => !metrics[pid].name);
+    if (missing.length) {
+        for (let i = 0; i < missing.length; i += 300) {
+            const chunk = missing.slice(i, i + 300);
+            const { data } = await supabase.from('persons').select('id, full_name').in('id', chunk);
+            (data || []).forEach(p => { if (metrics[p.id]) metrics[p.id].name = p.full_name; });
+        }
+    }
+
+    let issued = 0;
+    const perRule = rules.map(r => ({ id: r.id, label: r.label, metric: r.metric, value: r.value, tier: r.tier, type_id: r.type_id, awarded: 0 }));
+    const ids = Object.keys(metrics);
+    for (const pid of ids) {
+        const m = metrics[pid];
+        for (let ri = 0; ri < rules.length; ri++) {
+            const rule = rules[ri];
+            if (!ruleMet(rule, m)) continue;
+            try {
+                const res = await issueCertificate(supabase, { personId: pid, typeId: rule.type_id, recipientName: m.name, source: 'auto' });
+                if (res.ok && res.created) { issued++; perRule[ri].awarded++; }
+            } catch (e) { /* keep scanning */ }
+        }
+    }
+    return { ran: true, rules: rules.length, scanned: ids.length, issued, per_rule: perRule };
+}
+
 const PARTNER_ACTIONS = new Set(['my_certificates']);
 
 async function validatePartner(supabase, token) {
@@ -370,6 +484,81 @@ export default async function handler(req, res) {
                 status: 'success', category: 'admin', target_type: 'certificate', target_id: body.cert_id, severity: 'warning'
             }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
+        }
+
+        // ── Award: BULK award one design to many partners (super_admin) ─────
+        if (action === 'award_bulk') {
+            const { data: caller } = await supabase.from('app_users').select('role, is_active, email').eq('userid', session.userid).maybeSingle();
+            if (!caller?.is_active || caller.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const ids = Array.isArray(body.person_ids) ? body.person_ids.filter(Boolean).slice(0, 1000) : [];
+            if (!ids.length || !body.type_id) return res.status(400).json({ success: false, message: 'person_ids and type_id required' });
+            // Prefetch names in chunks.
+            const names = {};
+            for (let i = 0; i < ids.length; i += 300) {
+                const { data } = await supabase.from('persons').select('id, full_name').in('id', ids.slice(i, i + 300));
+                (data || []).forEach(p => { names[p.id] = p.full_name; });
+            }
+            let awarded = 0, already = 0, failed = 0;
+            for (const pid of ids) {
+                try {
+                    const r = await issueCertificate(supabase, { personId: pid, typeId: body.type_id, recipientName: names[pid], source: 'awarded' });
+                    if (r.ok) { r.created ? awarded++ : already++; } else failed++;
+                } catch (e) { failed++; }
+            }
+            supabase.from('activity_logs').insert({
+                email: caller.email || session.userid, action: `Bulk-awarded a certificate to ${awarded} partner(s)`,
+                status: 'success', category: 'admin', target_type: 'certificate', target_id: body.type_id, severity: 'info'
+            }).then(() => {}).catch(() => {});
+            return res.status(200).json({ success: true, awarded, already, failed });
+        }
+
+        // ── Awardees list: summary by design, or paginated list for one type ─
+        if (action === 'list_awarded') {
+            if (body.type_id) {
+                const limit = Math.min(parseInt(body.limit, 10) || 25, 100);
+                const offset = parseInt(body.offset, 10) || 0;
+                const { data, count } = await supabase.from('partner_certificates')
+                    .select('id, recipient_name, company_name, cert_number, issued_date, source, person_id', { count: 'exact' })
+                    .eq('type_id', body.type_id).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+                return res.status(200).json({ success: true, rows: data || [], total: count || 0, offset, limit });
+            }
+            const { data, error } = await supabase.rpc('partner_certificate_counts');
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, groups: (data || []).map(g => ({ type_id: g.type_id, type_name: g.type_name, count: Number(g.cnt) })) });
+        }
+
+        // ── Award automation rules: get / save / run ────────────────────────
+        if (action === 'get_award_rules') {
+            const rules = await getAwardRules(supabase);
+            const designs = await getDesigns(supabase);
+            return res.status(200).json({ success: true, rules, designs: designs.map(d => ({ id: d.id, name: d.name })) });
+        }
+        if (action === 'save_award_rules') {
+            const { data: caller } = await supabase.from('app_users').select('role, is_active, first_name, last_name, email').eq('userid', session.userid).maybeSingle();
+            if (!caller?.is_active || caller.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const clean = (Array.isArray(body.rules) ? body.rules : []).map(r => ({
+                id: String(r.id || '') || ('rule-' + Date.now() + '-' + Math.floor(Math.random() * 1e4)),
+                enabled: r.enabled !== false,
+                metric: AWARD_METRICS.indexOf(r.metric) >= 0 ? r.metric : 'approved',
+                value: Number(r.value) || 0,
+                tier: ['Gold', 'Silver', 'Bronze'].indexOf(r.tier) >= 0 ? r.tier : 'Gold',
+                type_id: String(r.type_id || ''),
+                label: String(r.label || '').slice(0, 120)
+            })).filter(r => r.type_id);
+            const who = `${caller.first_name || ''} ${caller.last_name || ''}`.trim() || caller.email;
+            const { error } = await supabase.from('app_settings').upsert({ key: 'partner_award_rules', value: JSON.stringify(clean), updated_at: new Date().toISOString(), updated_by: who }, { onConflict: 'key' });
+            if (error) throw error;
+            return res.status(200).json({ success: true, rules: clean });
+        }
+        if (action === 'run_award_automation') {
+            const { data: caller } = await supabase.from('app_users').select('role, is_active, email').eq('userid', session.userid).maybeSingle();
+            if (!caller?.is_active || caller.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const summary = await runAwardAutomation(supabase);
+            supabase.from('activity_logs').insert({
+                email: caller.email || session.userid, action: `Ran certificate automation — ${summary.issued} awarded`,
+                status: 'success', category: 'admin', target_type: 'certificate', target_id: 'automation', severity: 'info'
+            }).then(() => {}).catch(() => {});
+            return res.status(200).json({ success: true, summary });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

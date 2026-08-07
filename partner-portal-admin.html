@@ -97,6 +97,15 @@
     .cst-cert-s{font-size:11px;color:#94a3b8;font-family:'DM Mono',monospace;}
     .cst-cert-rm{background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
     .cst-cert-rm:hover{background:#fef2f2;}
+    .aw-group{border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+    .aw-ghead{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:#fff;}
+    .aw-ghead:hover{background:#f8fafc;}
+    .aw-gcaret{color:#94a3b8;font-size:20px;}
+    .aw-badge{margin-left:auto;background:#0f172a;color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:2px 9px;}
+    .aw-glist{border-top:1px solid var(--border);background:#f8fafc;padding:6px 12px;}
+    .aw-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #eef2f7;}
+    .aw-row:last-child{border-bottom:none;}
+    .auto-rule{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;}
 </style>
 </head>
 <body>
@@ -110,6 +119,7 @@
     <button class="tab" id="pt-journey" onclick="ppTab('journey')"><span class="material-icons" style="font-size:16px;">timeline</span> Journey</button>
     <button class="tab" id="pt-sections" onclick="ppTab('sections')"><span class="material-icons" style="font-size:16px;">toggle_on</span> Portal Sections</button>
     <button class="tab" id="pt-tiers" onclick="ppTab('tiers')"><span class="material-icons" style="font-size:16px;">leaderboard</span> Leaderboard</button>
+    <button class="tab" id="pt-automation" onclick="ppTab('automation')"><span class="material-icons" style="font-size:16px;">bolt</span> Automation</button>
     <button class="tab" id="pt-brand" onclick="ppTab('brand')"><span class="material-icons" style="font-size:16px;">badge</span> Branding</button>
   </div>
 
@@ -258,6 +268,47 @@
               </div>
             </div>
           </div>
+
+          <!-- BULK AWARD -->
+          <div class="card" style="margin-top:18px;">
+            <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="bulkToggle()">
+              <span class="material-icons" id="bulk-caret" style="color:#64748b;">expand_more</span>
+              <b>Bulk award</b><span class="muted" style="font-size:12px;">Award one certificate to many partners at once.</span>
+            </div>
+            <div id="bulk-body" style="display:none;margin-top:12px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+                <div>
+                  <label class="cset-lbl">Find partners</label>
+                  <input id="bulk-search" class="cset-in" placeholder="Search name or email…" oninput="bulkSearchDeb(this.value)">
+                  <div id="bulk-results" class="cst-results" style="margin-top:8px;"></div>
+                </div>
+                <div>
+                  <label class="cset-lbl">Selected (<span id="bulk-count">0</span>)</label>
+                  <div id="bulk-selected" style="display:flex;flex-wrap:wrap;gap:6px;min-height:34px;border:1px dashed #e2e8f0;border-radius:10px;padding:8px;">
+                    <span class="muted" style="font-size:12px;">No partners selected yet.</span>
+                  </div>
+                  <label class="cset-lbl" style="margin-top:12px;">Certificate</label>
+                  <select id="bulk-design" class="cset-in"></select>
+                  <div class="cset-hint">Bulk certificates are issued with no company line.</div>
+                  <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
+                    <button class="cset-save" onclick="bulkAward(this)"><span class="material-icons" style="font-size:16px;">card_membership</span> Award to selected</button>
+                    <span id="bulk-msg" style="font-size:12px;"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AWARDEES LIST (collapsible) -->
+          <div class="card" style="margin-top:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="material-icons" id="aw-caret" style="color:#64748b;cursor:pointer;" onclick="awToggle()">expand_more</span>
+              <b style="cursor:pointer;" onclick="awToggle()">Issued certificates</b>
+              <span class="muted" style="font-size:12px;">Everyone who holds each certificate — click one to expand.</span>
+              <button class="btn btn-n" style="margin-left:auto;" onclick="awLoad(true)">Refresh</button>
+            </div>
+            <div id="aw-body" style="display:none;margin-top:12px;"><div class="empty">Click to load…</div></div>
+          </div>
         </div>
       </div>
   </div>
@@ -314,6 +365,23 @@
       <span id="br-msg" style="font-size:12px;margin-left:8px;"></span>
     </div>
   </div>
+
+  <!-- AUTOMATION -->
+  <div id="ppc-automation" class="pp-panel" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div><b>Award automation</b><div class="muted" style="font-size:12px;margin-top:2px;max-width:640px;">Auto-award a certificate when a partner reaches a milestone. Triggers: approved merchants (PayProTec), POS&nbsp;Express leads, leaderboard rank/tier, or 30-day volume. Runs daily and can be run on demand. Idempotent — a partner never gets the same certificate twice.</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-n" onclick="autoAdd()">+ Add rule</button>
+          <button class="btn btn-n" onclick="autoRun(this)"><span class="material-icons" style="font-size:16px;">play_arrow</span> Run now</button>
+        </div>
+      </div>
+      <div id="auto-list" style="margin-top:14px;"><div class="empty">Loading…</div></div>
+      <div style="margin-top:6px;"><button class="btn btn-p" onclick="autoSave(this)"><span class="material-icons" style="font-size:16px;">save</span> Save rules</button>
+      <span id="auto-msg" style="font-size:12px;margin-left:8px;"></span></div>
+      <div id="auto-run-result" style="margin-top:12px;"></div>
+    </div>
+  </div>
 </div>
 
 <script src="/js/certificate-render.js"></script>
@@ -321,15 +389,15 @@
 // ── Top-level tab switching ───────────────────────────────────────────────────
 var _ppLoaded={};
 function ppTab(which){
-  var tabs=['cert','journey','sections','tiers','brand'];
+  var tabs=['cert','journey','sections','tiers','automation','brand'];
   tabs.forEach(function(t){
-    document.getElementById('ppc-'+t).style.display = (t===which)?'':'none';
-    var b=document.getElementById('pt-'+(t==='journey'?'journey':t==='sections'?'sections':t==='tiers'?'tiers':t==='brand'?'brand':'cert'));
+    var el=document.getElementById('ppc-'+t); if(el) el.style.display = (t===which)?'':'none';
   });
   document.querySelectorAll('.tabs .tab').forEach(function(b){ b.classList.remove('on'); });
-  var map={cert:'pt-cert',journey:'pt-journey',sections:'pt-sections',tiers:'pt-tiers',brand:'pt-brand'};
+  var map={cert:'pt-cert',journey:'pt-journey',sections:'pt-sections',tiers:'pt-tiers',automation:'pt-automation',brand:'pt-brand'};
   var btn=document.getElementById(map[which]); if(btn) btn.classList.add('on');
   if(which==='cert'){ if(!certsLoaded) certsLoad(); }
+  else if(which==='automation'){ if(!autoLoaded) autoLoad(); }
   else { if(!_ppLoaded.settings) ppLoad(); else ppRender(which); }
 }
 // ── PARTNER CERTIFICATES (multi-design) ───────────────────────────────────────
@@ -701,6 +769,156 @@ function brRender(){ var w=(PPS&&PPS.welcome)||{}; document.getElementById('br-t
 async function brSave(btn){ var m=document.getElementById('br-msg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
   var r=await ppApi({action:'save_settings',settings:{welcome:{title:document.getElementById('br-title').value,text:document.getElementById('br-text').value}}}); btn.disabled=false;
   if(r.success){ PPS=r.settings; brRender(); m.style.color='#0d9488'; m.textContent='Saved ✓'; setTimeout(function(){m.textContent='';},2500);} else { m.style.color='#dc2626'; m.textContent=r.message||'Failed'; } }
+
+// ── BULK AWARD ────────────────────────────────────────────────────────────────
+var bulkSel = {};   // person_id -> full_name
+var bulkTimer = null;
+function bulkToggle(){
+  var body=document.getElementById('bulk-body'); var open=body.style.display==='none';
+  body.style.display=open?'':'none';
+  document.getElementById('bulk-caret').textContent=open?'expand_less':'expand_more';
+  if(open){ var sel=document.getElementById('bulk-design'); sel.innerHTML=(certDesigns||[]).map(function(d){return '<option value="'+certEsc(d.id)+'">'+certEsc(d.name)+(d.is_default?' (default)':'')+'</option>';}).join(''); }
+}
+function bulkSearchDeb(v){ clearTimeout(bulkTimer); bulkTimer=setTimeout(function(){ bulkSearch(v); },250); }
+async function bulkSearch(v){
+  var box=document.getElementById('bulk-results');
+  if(String(v||'').trim().length<2){ box.innerHTML=''; return; }
+  box.innerHTML='<div class="muted" style="font-size:12px;padding:6px;">Searching…</div>';
+  var r=await certApi({action:'search_partners', query:v});
+  var list=(r.success&&r.partners)||[];
+  if(!list.length){ box.innerHTML='<div class="muted" style="font-size:12px;padding:6px;">No partners found.</div>'; return; }
+  box.innerHTML=list.map(function(p){
+    var picked=!!bulkSel[p.id]; var ini=((p.full_name||'?').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2)||'?').toUpperCase();
+    return '<button class="cst-result'+(picked?' sel':'')+'" onclick="bulkAdd(\''+certEsc(p.id)+'\',\''+certEsc((p.full_name||'').replace(/\x27/g,""))+'\')">'
+      +'<div class="cst-av">'+certEsc(ini)+'</div><div style="min-width:0;"><div class="cst-result-name">'+certEsc(p.full_name||'(no name)')+'</div><div class="cst-result-email">'+certEsc(p.email||'')+'</div></div>'
+      +'<span class="material-icons" style="margin-left:auto;color:'+(picked?'#0d9488':'#cbd5e1')+';">'+(picked?'check_circle':'add_circle_outline')+'</span></button>';
+  }).join('');
+}
+function bulkAdd(id,name){ if(bulkSel[id]) delete bulkSel[id]; else bulkSel[id]=name||'(partner)'; bulkRenderSel(); var s=document.getElementById('bulk-search'); if(s&&s.value) bulkSearch(s.value); }
+function bulkRemove(id){ delete bulkSel[id]; bulkRenderSel(); var s=document.getElementById('bulk-search'); if(s&&s.value) bulkSearch(s.value); }
+function bulkRenderSel(){
+  var ids=Object.keys(bulkSel); document.getElementById('bulk-count').textContent=ids.length;
+  var box=document.getElementById('bulk-selected');
+  if(!ids.length){ box.innerHTML='<span class="muted" style="font-size:12px;">No partners selected yet.</span>'; return; }
+  box.innerHTML=ids.map(function(id){ return '<span style="display:inline-flex;align-items:center;gap:5px;background:#f0fdfa;border:1px solid #99f6e4;color:#0f766e;border-radius:99px;padding:3px 6px 3px 10px;font-size:12px;font-weight:700;">'+certEsc(bulkSel[id])+'<span class="material-icons" style="font-size:15px;cursor:pointer;" onclick="bulkRemove(\''+certEsc(id)+'\')">close</span></span>'; }).join('');
+}
+async function bulkAward(btn){
+  var ids=Object.keys(bulkSel); var msg=document.getElementById('bulk-msg');
+  if(!ids.length){ msg.style.color='#dc2626'; msg.textContent='Select at least one partner.'; return; }
+  var typeId=document.getElementById('bulk-design').value;
+  btn.disabled=true; msg.style.color='#64748b'; msg.textContent='Awarding to '+ids.length+'…';
+  var r=await certApi({action:'award_bulk', person_ids:ids, type_id:typeId});
+  btn.disabled=false;
+  if(!r.success){ msg.style.color='#dc2626'; msg.textContent=r.message||'Failed'; return; }
+  msg.style.color='#0d9488'; msg.textContent='Awarded '+r.awarded+(r.already?' · '+r.already+' already had it':'')+(r.failed?' · '+r.failed+' failed':'');
+  bulkSel={}; bulkRenderSel();
+  if(document.getElementById('aw-body').style.display!=='none') awLoad(true);
+}
+
+// ── AWARDEES LIST (collapsible) ───────────────────────────────────────────────
+var awLoaded=false, awState={};
+function awToggle(){ var b=document.getElementById('aw-body'); var open=b.style.display==='none'; b.style.display=open?'':'none'; document.getElementById('aw-caret').textContent=open?'expand_less':'expand_more'; if(open&&!awLoaded) awLoad(); }
+async function awLoad(force){
+  awLoaded=true; var box=document.getElementById('aw-body'); box.innerHTML='<div class="empty">Loading…</div>';
+  var r=await certApi({action:'list_awarded'});
+  if(!r.success){ box.innerHTML='<div class="empty" style="color:#dc2626;">'+certEsc(r.message||'Failed')+'</div>'; return; }
+  var groups=r.groups||[]; awState={};
+  if(!groups.length){ box.innerHTML='<div class="empty">No certificates issued yet.</div>'; return; }
+  box.innerHTML=groups.map(function(g){
+    return '<div class="aw-group" data-t="'+certEsc(g.type_id)+'">'
+      +'<div class="aw-ghead" onclick="awExpand(\''+certEsc(g.type_id)+'\')"><span class="material-icons aw-gcaret">chevron_right</span>'
+      +'<b>'+certEsc(g.type_name||g.type_id)+'</b><span class="aw-badge">'+g.count+'</span></div>'
+      +'<div class="aw-glist" style="display:none;"></div></div>';
+  }).join('');
+}
+async function awExpand(typeId){
+  var group=document.querySelector('.aw-group[data-t="'+cssEsc(typeId)+'"]'); if(!group) return;
+  var list=group.querySelector('.aw-glist'); var caret=group.querySelector('.aw-gcaret');
+  if(list.style.display!=='none'){ list.style.display='none'; caret.textContent='chevron_right'; return; }
+  caret.textContent='expand_more'; list.style.display='';
+  if(!awState[typeId]){ awState[typeId]={offset:0,total:0,rows:[]}; list.innerHTML='<div class="muted" style="font-size:12px;padding:8px;">Loading…</div>'; await awFetch(typeId,true); }
+}
+async function awFetch(typeId, reset){
+  var st=awState[typeId]; if(reset){ st.offset=0; st.rows=[]; }
+  var r=await certApi({action:'list_awarded', type_id:typeId, offset:st.offset, limit:25});
+  if(!r.success) return;
+  st.total=r.total; st.rows=st.rows.concat(r.rows||[]); st.offset=st.rows.length;
+  awRenderGroup(typeId);
+}
+function awRenderGroup(typeId){
+  var group=document.querySelector('.aw-group[data-t="'+cssEsc(typeId)+'"]'); if(!group) return;
+  var list=group.querySelector('.aw-glist'); var st=awState[typeId];
+  var rows=st.rows.map(function(c){
+    var co=/^independent$/i.test(String(c.company_name||'').trim())?'':(c.company_name||'');
+    var sub=certEsc(c.cert_number||'')+(co?' · '+certEsc(co):'')+(c.issued_date?' · '+certEsc(String(c.issued_date)):'')+(c.source?' · '+certEsc(c.source):'');
+    return '<div class="aw-row"><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">'+certEsc(c.recipient_name||'(unknown)')+'</div><div class="muted" style="font-size:11px;font-family:\'DM Mono\',monospace;">'+sub+'</div></div>'
+      +'<button class="cst-cert-rm" onclick="awRevoke(\''+certEsc(c.id)+'\',\''+certEsc(typeId)+'\')">Revoke</button></div>';
+  }).join('');
+  var more=st.rows.length<st.total?'<div style="text-align:center;padding:8px;"><button class="btn btn-n" onclick="awMore(\''+certEsc(typeId)+'\')">Load more ('+(st.total-st.rows.length)+' left)</button></div>':'';
+  list.innerHTML=rows+more;
+}
+async function awMore(typeId){ await awFetch(typeId,false); }
+async function awRevoke(certId, typeId){
+  var ok=await Swal.fire({icon:'warning',title:'Revoke certificate?',text:'This removes it from the partner’s portal.',showCancelButton:true,confirmButtonColor:'#dc2626',confirmButtonText:'Revoke'});
+  if(!ok.isConfirmed) return;
+  var r=await certApi({action:'revoke', cert_id:certId});
+  if(!r.success){ Swal.fire('Error', r.message||'Failed', 'error'); return; }
+  awLoad(true);
+}
+function cssEsc(s){ return String(s).replace(/["\\]/g,'\\$&'); }
+
+// ── AWARD AUTOMATION ──────────────────────────────────────────────────────────
+var autoLoaded=false, autoRules=[], autoDesigns=[];
+var AUTO_METRICS=[['approved','Approved merchants','≥'],['pos_leads','POS Express leads','≥'],['volume_30','30-day volume ($)','≥'],['rank','Leaderboard rank','≤'],['tier','Leaderboard tier','=']];
+function autoApi(b){ return certApi(b); }
+async function autoLoad(){
+  autoLoaded=true; var r=await autoApi({action:'get_award_rules'});
+  var box=document.getElementById('auto-list');
+  if(!r.success){ box.innerHTML='<div class="empty" style="color:#dc2626;">'+certEsc(r.message||'Failed')+'</div>'; autoLoaded=false; return; }
+  autoRules=r.rules||[]; autoDesigns=r.designs||[];
+  autoRender();
+}
+function autoRender(){
+  var box=document.getElementById('auto-list');
+  if(!autoRules.length){ box.innerHTML='<div class="empty">No rules yet. Click “Add rule”.</div>'; return; }
+  var dopts=function(sel){ return autoDesigns.map(function(d){return '<option value="'+certEsc(d.id)+'"'+(sel===d.id?' selected':'')+'>'+certEsc(d.name)+'</option>';}).join(''); };
+  box.innerHTML=autoRules.map(function(r,i){
+    var mopts=AUTO_METRICS.map(function(m){return '<option value="'+m[0]+'"'+(r.metric===m[0]?' selected':'')+'>'+m[1]+'</option>';}).join('');
+    var op=(AUTO_METRICS.filter(function(m){return m[0]===r.metric;})[0]||['','','≥'])[2];
+    var valInput = r.metric==='tier'
+      ? '<select class="cset-in" style="width:120px;" onchange="autoSet('+i+',\'tier\',this.value)">'+['Gold','Silver','Bronze'].map(function(t){return '<option'+(r.tier===t?' selected':'')+'>'+t+'</option>';}).join('')+'</select>'
+      : '<span style="font-weight:800;color:#64748b;">'+op+'</span><input class="cset-in" type="number" style="width:110px;" value="'+certEsc(r.value)+'" oninput="autoSet('+i+',\'value\',this.value)">';
+    return '<div class="auto-rule">'
+      +'<label class="sw" style="flex-shrink:0;"><input type="checkbox" '+(r.enabled!==false?'checked':'')+' onchange="autoSet('+i+',\'enabled\',this.checked)"><span></span></label>'
+      +'<span class="muted" style="font-size:12px;">When</span>'
+      +'<select class="cset-in" style="width:180px;" onchange="autoSet('+i+',\'metric\',this.value)">'+mopts+'</select>'
+      +valInput
+      +'<span class="muted" style="font-size:12px;">→ award</span>'
+      +'<select class="cset-in" style="min-width:170px;" onchange="autoSet('+i+',\'type_id\',this.value)">'+dopts(r.type_id)+'</select>'
+      +'<button class="cst-cert-rm" style="margin-left:auto;" onclick="autoDel('+i+')">Remove</button>'
+      +'</div>';
+  }).join('');
+}
+function autoSet(i,k,v){ if(!autoRules[i])return; autoRules[i][k]=(k==='enabled')?v:(k==='value'?Number(v)||0:v); if(k==='metric') autoRender(); }
+function autoAdd(){ autoRules.push({id:'',enabled:true,metric:'approved',value:10,tier:'Gold',type_id:(autoDesigns[0]||{}).id||'',label:''}); autoRender(); }
+function autoDel(i){ autoRules.splice(i,1); autoRender(); }
+async function autoSave(btn){
+  var m=document.getElementById('auto-msg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
+  var r=await autoApi({action:'save_award_rules', rules:autoRules}); btn.disabled=false;
+  if(r.success){ autoRules=r.rules||autoRules; autoRender(); m.style.color='#0d9488'; m.textContent='Saved ✓'; setTimeout(function(){m.textContent='';},2500);} else { m.style.color='#dc2626'; m.textContent=r.message||'Failed'; }
+}
+async function autoRun(btn){
+  var box=document.getElementById('auto-run-result'); btn.disabled=true;
+  box.innerHTML='<div class="muted" style="font-size:13px;">Scanning partners…</div>';
+  var r=await autoApi({action:'run_award_automation'}); btn.disabled=false;
+  if(!r.success){ box.innerHTML='<div style="color:#dc2626;font-size:13px;">'+certEsc(r.message||'Failed')+'</div>'; return; }
+  var s=r.summary||{};
+  var per=(s.per_rule||[]).map(function(p){ return '<li>'+certEsc(p.label||p.metric)+' — <b>'+p.awarded+'</b> awarded</li>'; }).join('');
+  box.innerHTML='<div class="card" style="background:#f0fdfa;border-color:#99f6e4;"><b>Automation run complete</b>'
+    +'<div class="muted" style="font-size:12px;margin:4px 0;">Scanned '+ (s.scanned||0) +' partners · <b style="color:#0f766e;">'+(s.issued||0)+'</b> new certificate(s) issued.</div>'
+    +(per?'<ul style="margin:6px 0 0;padding-left:18px;font-size:12px;">'+per+'</ul>':'')+'</div>';
+  if(document.getElementById('aw-body') && document.getElementById('aw-body').style.display!=='none') awLoad(true);
+}
 
 // Start on the Certificates tab.
 ppTab('cert');

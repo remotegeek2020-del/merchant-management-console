@@ -20,9 +20,14 @@
     "api/cron-youtube-comments.js": { "maxDuration": 60 },
     "api/cron-youtube-livechat.js": { "maxDuration": 60 },
     "api/youtube-oauth.js": { "maxDuration": 60 },
-    "api/ghl-documents.js": { "maxDuration": 30 }
+    "api/ghl-documents.js": { "maxDuration": 30 },
+    "api/cron-award-certificates.js": { "maxDuration": 60 }
   },
   "crons": [
+    {
+      "path": "/api/cron-award-certificates",
+      "schedule": "0 6 * * *"
+    },
     {
       "path": "/api/cron-security-check",
       "schedule": "0 * * * *"
