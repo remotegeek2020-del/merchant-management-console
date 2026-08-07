@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partner Portal | Marketing</title>
+<link rel="icon" href="/api/favicon" />
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<script src="/js/access-guard.js"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *{box-sizing:border-box;}body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:#f8fafc;color:#0f172a;}
+  :root{--pri:#0d9488;--pri-d:#0f766e;--border:#e2e8f0;--muted:#94a3b8;}
+  .top{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;}
+  .top h1{font-size:18px;font-weight:800;margin:0;flex:1;}
+  .top a.back{color:var(--muted);text-decoration:none;font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px;}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px;}
+  .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+  .tab{border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 15px;font-size:13px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+  .tab.on{background:var(--pri);color:#fff;border-color:var(--pri);}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;margin-bottom:12px;padding:16px 18px;}
+  .cl{display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 5px;}
+  .ci{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;background:#fff;}
+  .ci:focus{border-color:var(--pri);}
+  .btn{border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+  .btn-p{background:var(--pri);color:#fff;}.btn-p:hover{background:var(--pri-d);}
+  .btn-n{background:#fff;color:#475569;border:1px solid var(--border);}
+  .muted{color:var(--muted);}.empty{text-align:center;padding:44px;color:var(--muted);}
+  .pj-row{display:grid;grid-template-columns:120px 1fr 8px;gap:10px;align-items:start;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;}
+  .pj-row .ci{background:#fff;}
+  .pj-ico{display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .pj-ico .material-icons{font-size:26px;color:var(--pri);}
+  .pj-move{display:flex;flex-direction:column;gap:2px;}
+  .pj-move button{border:none;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;line-height:1;padding:2px 4px;}
+  .ptoggle{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fff;}
+  .ptoggle .pt-l{font-size:13px;font-weight:700;}
+  .ptoggle .pt-d{font-size:11px;color:var(--muted);}
+  .sw{position:relative;width:42px;height:24px;flex-shrink:0;}
+  .sw input{opacity:0;width:0;height:0;}
+  .sw span{position:absolute;inset:0;background:#cbd5e1;border-radius:99px;transition:.2s;cursor:pointer;}
+  .sw span:before{content:'';position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+  .sw input:checked+span{background:var(--pri);}
+  .sw input:checked+span:before{transform:translateX(18px);}
+    .cset-group{margin-bottom:16px;}
+    .cset-lbl{display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+    .cset-in{width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;color:#0f172a;outline:none;background:#f8fafc;}
+    .cset-in:focus{border-color:#0d9488;background:#fff;}
+    .cset-hint{font-size:11px;color:#94a3b8;margin-top:4px;}
+    .cset-templates{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;}
+    .cset-tpl{border:2px solid #e2e8f0;border-radius:10px;padding:8px;cursor:pointer;text-align:center;background:#fff;transition:all .15s;}
+    .cset-tpl:hover{border-color:#99f6e4;}
+    .cset-tpl.sel{border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,0.12);}
+    .cset-tpl-swatch{height:44px;border-radius:6px;margin-bottom:6px;}
+    .cset-tpl-name{font-size:11px;font-weight:700;color:#334155;}
+    .cset-btn-sm{background:#0f172a;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px;}
+    .cset-btn-sm.cset-btn-ghost{background:#fff;color:#64748b;border:1px solid #e2e8f0;}
+    .cset-sig-row{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px;margin-bottom:8px;}
+    .cset-sig-top{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+    .cset-sig-bot{display:flex;align-items:center;gap:8px;}
+    .cset-sig-row input[type=text]{width:100%;padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:inherit;outline:none;background:#fff;}
+    .cset-sig-img{width:88px;height:34px;object-fit:contain;border:1px dashed #cbd5e1;border-radius:6px;background:#fff;flex-shrink:0;}
+    .cset-save{background:#0d9488;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+    .cset-save:hover{background:#0f766e;}
+    .cset-colors{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .cset-color{display:flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:5px 7px;}
+    .cset-color input[type=color]{width:26px;height:26px;border:none;background:none;padding:0;cursor:pointer;border-radius:5px;}
+    .cset-color input[type=text]{width:100%;border:none;background:none;font-size:11px;font-family:'DM Mono',monospace;color:#334155;outline:none;text-transform:uppercase;}
+    .cset-color-lbl{font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;}
+    .cset-design-pill{padding:7px 13px;border-radius:999px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;}
+    .cset-design-pill.sel{background:#0f172a;color:#fff;border-color:#0f172a;}
+    .cset-design-pill .star{color:#f59e0b;font-size:13px;}
+    .cset-plogo{position:relative;width:96px;height:44px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+    .cset-plogo img{max-width:100%;max-height:100%;object-fit:contain;}
+    .cset-plogo .rm{position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:12px;cursor:pointer;line-height:1;}
+    .cset-subtabs{display:flex;gap:6px;margin-bottom:18px;background:#f1f5f9;padding:4px;border-radius:12px;width:fit-content;}
+    .cset-subtab{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;background:none;border-radius:9px;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;font-family:inherit;}
+    .cset-subtab.sel{background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+    .cset-award-grid{display:grid;grid-template-columns:minmax(280px,340px) 1fr;gap:24px;align-items:start;}
+    .cst-results{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;}
+    .cst-result{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;cursor:pointer;text-align:left;font-family:inherit;}
+    .cst-result:hover{border-color:#0d9488;background:#f0fdfa;}
+    .cst-result.sel{border-color:#0d9488;background:#f0fdfa;}
+    .cst-av{width:34px;height:34px;border-radius:50%;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;}
+    .cst-result-name{font-size:13px;font-weight:700;color:#0f172a;}
+    .cst-result-email{font-size:11px;color:#94a3b8;}
+    .cst-empty{text-align:center;color:#94a3b8;font-size:13px;padding:60px 20px;border:1px dashed #e2e8f0;border-radius:12px;}
+    .cst-person{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+    .cst-person-av{width:46px;height:46px;border-radius:50%;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0;}
+    .cst-person-name{font-size:16px;font-weight:800;color:#0f172a;}
+    .cst-person-email{font-size:12px;color:#94a3b8;}
+    .cst-cert{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:7px;}
+    .cst-cert-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+    .cst-cert-main{flex:1;min-width:0;}
+    .cst-cert-t{font-size:13px;font-weight:700;color:#0f172a;}
+    .cst-cert-s{font-size:11px;color:#94a3b8;font-family:'DM Mono',monospace;}
+    .cst-cert-rm{background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+    .cst-cert-rm:hover{background:#fef2f2;}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="back" href="/marketing"><span class="material-icons" style="font-size:18px;">arrow_back</span> Marketing</a>
+  <h1>🤝 Partner Portal</h1>
+</div>
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab on" id="pt-cert" onclick="ppTab('cert')"><span class="material-icons" style="font-size:16px;">workspace_premium</span> Certificates &amp; Awards</button>
+    <button class="tab" id="pt-journey" onclick="ppTab('journey')"><span class="material-icons" style="font-size:16px;">timeline</span> Journey</button>
+    <button class="tab" id="pt-sections" onclick="ppTab('sections')"><span class="material-icons" style="font-size:16px;">toggle_on</span> Portal Sections</button>
+    <button class="tab" id="pt-tiers" onclick="ppTab('tiers')"><span class="material-icons" style="font-size:16px;">leaderboard</span> Leaderboard</button>
+    <button class="tab" id="pt-brand" onclick="ppTab('brand')"><span class="material-icons" style="font-size:16px;">badge</span> Branding</button>
+  </div>
+
+  <!-- CERTIFICATES & AWARDS -->
+  <div id="ppc-cert" class="pp-panel">
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:800;color:#0f172a;">🏅 Certificates &amp; Awards</h2>
+    <p style="color:#64748b;font-size:13px;margin:0 0 4px;">Design partner certificates and award them. The <b>default</b> certificate is auto-issued (per company) when a prospect graduates.</p>
+    <p style="color:#b45309;font-size:12px;margin:0 0 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 11px;">Editing a design changes the look of every certificate using it; recipient names, numbers and dates never change. Saving designs & awarding require super-admin.</p>
+      <div id="certs-body" style="color:#64748b;font-size:13px;">Loading…</div>
+
+      <div id="certs-editor" style="display:none;">
+        <div class="cset-subtabs">
+          <button id="cst-tab-designs" class="cset-subtab sel" onclick="certSubTab('designs')"><span class="material-icons" style="font-size:16px;">palette</span> Designs</button>
+          <button id="cst-tab-award" class="cset-subtab" onclick="certSubTab('award')"><span class="material-icons" style="font-size:16px;">workspace_premium</span> Award &amp; Recipients</button>
+        </div>
+
+        <div id="cset-panel-designs">
+        <!-- DESIGN LIST -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #e2e8f0;">
+          <div id="cset-designs" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+          <button class="cset-btn-sm" onclick="certAddDesign()">+ New certificate</button>
+          <button class="cset-btn-sm cset-btn-ghost" onclick="certDuplicateDesign()">Duplicate</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(340px,440px) 1fr;gap:24px;align-items:start;">
+          <!-- FORM -->
+          <div>
+            <div class="cset-group">
+              <label class="cset-lbl">Certificate name <span style="color:#94a3b8;font-weight:600;">(internal / shown as the type)</span></label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" id="cset-dname" class="cset-in" oninput="certNameChange(this.value)">
+              </div>
+              <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#334155;text-transform:none;letter-spacing:0;"><input type="checkbox" id="cset-default" onchange="certSetDefault(this.checked)"> Default (auto-issued on graduation)</label>
+                <button class="cset-btn-sm cset-btn-ghost" style="margin-left:auto;color:#dc2626;border-color:#fecaca;" onclick="certDeleteDesign()">Delete this certificate</button>
+              </div>
+            </div>
+
+            <div class="cset-group">
+              <label class="cset-lbl">Template</label>
+              <div id="cset-templates" class="cset-templates"></div>
+            </div>
+
+            <div class="cset-group">
+              <label class="cset-lbl">Fonts</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div><div class="cset-hint" style="margin:0 0 4px;">Heading / name</div><select id="cset-hfont" class="cset-in" onchange="certPreview()"></select></div>
+                <div><div class="cset-hint" style="margin:0 0 4px;">Body text</div><select id="cset-bfont" class="cset-in" onchange="certPreview()"></select></div>
+              </div>
+            </div>
+
+            <div class="cset-group">
+              <label class="cset-lbl">Colors <button class="cset-btn-sm cset-btn-ghost" style="padding:2px 8px;font-size:10px;margin-left:6px;" onclick="certResetColors()">Reset to template</button></label>
+              <div id="cset-colors" class="cset-colors"></div>
+            </div>
+
+            <div class="cset-group">
+              <label class="cset-lbl">Logo</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div id="cset-logo-prev" style="width:120px;height:52px;border:1px dashed #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#f8fafc;overflow:hidden;color:#94a3b8;font-size:11px;">No logo</div>
+                <div>
+                  <input type="file" id="cset-logo-file" accept="image/*" style="display:none;" onchange="certUpload(this,'logo')">
+                  <button class="cset-btn-sm" onclick="document.getElementById('cset-logo-file').click()">Upload logo</button>
+                  <button class="cset-btn-sm cset-btn-ghost" onclick="certClearLogo()">Remove</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="cset-group"><label class="cset-lbl">Heading</label><input type="text" id="cset-heading" class="cset-in" placeholder="Certificate of Partnership" oninput="certPreview()"></div>
+            <div class="cset-group"><label class="cset-lbl">Organization name</label><input type="text" id="cset-org" class="cset-in" oninput="certPreview()"></div>
+            <div class="cset-group"><label class="cset-lbl">Recipient title</label><input type="text" id="cset-title" class="cset-in" placeholder="e.g. Certified Partner" oninput="certPreview()"></div>
+            <div class="cset-group"><label class="cset-lbl">Intro line</label><input type="text" id="cset-pre" class="cset-in" placeholder="This certifies that" oninput="certPreview()"></div>
+            <div class="cset-group"><label class="cset-lbl">Body text</label><input type="text" id="cset-bodytext" class="cset-in" oninput="certPreview()"><div class="cset-hint">Shown as: "[name] &lt;body text&gt; <b>[title]</b> of [org]."</div></div>
+            <div class="cset-group" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div><label class="cset-lbl">Preview name (not saved)</label><input type="text" id="cset-name" class="cset-in" placeholder="Partner Name" oninput="certPreview()"></div>
+              <div><label class="cset-lbl">Preview company (not saved)</label><input type="text" id="cset-pcompany" class="cset-in" placeholder="Company / Independent" oninput="certPreview()"><div class="cset-hint">Auto-added per company when issued.</div></div>
+            </div>
+
+            <div class="cset-group">
+              <label class="cset-lbl">Signatories <span style="color:#94a3b8;font-weight:600;">(up to 5)</span></label>
+              <div id="cset-sigs"></div>
+              <button class="cset-btn-sm" id="cset-addsig" onclick="certAddSig()">+ Add signatory</button>
+            </div>
+
+            <div class="cset-group">
+              <label class="cset-lbl">"In partnership with" logos <span style="color:#94a3b8;font-weight:600;">(up to 14)</span></label>
+              <input type="text" id="cset-plglabel" class="cset-in" style="margin-bottom:8px;" placeholder="In partnership with" oninput="certPlgLabel(this.value)">
+              <div id="cset-plogos" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+              <input type="file" id="cset-plg-file" accept="image/*" style="display:none;" onchange="certUpload(this,'plogo')">
+              <button class="cset-btn-sm" id="cset-addplg" style="margin-top:8px;" onclick="document.getElementById('cset-plg-file').click()">+ Add logo</button>
+            </div>
+
+            <div style="margin-top:18px;display:flex;gap:10px;align-items:center;position:sticky;bottom:0;background:#fff;padding:10px 0;">
+              <button class="cset-save" onclick="certSave(this)"><span class="material-icons" style="font-size:16px;">save</span> Save all certificates</button>
+              <span id="cset-msg" style="font-size:12px;"></span>
+            </div>
+          </div>
+          <!-- PREVIEW -->
+          <div style="position:sticky;top:12px;">
+            <label class="cset-lbl">Live preview</label>
+            <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;padding:14px;overflow:hidden;">
+              <div id="cset-scaler" style="margin:0 auto;"><div id="cset-preview"></div></div>
+            </div>
+          </div>
+        </div>
+        </div><!-- /cset-panel-designs -->
+
+        <!-- AWARD & RECIPIENTS -->
+        <div id="cset-panel-award" style="display:none;">
+          <p style="color:#64748b;font-size:13px;margin:0 0 16px;">Grant any certificate to a specific partner — skills, custom, or an extra partnership certificate. Awarded certificates appear on that partner's portal instantly.</p>
+          <div class="cset-award-grid">
+            <div>
+              <label class="cset-lbl">Find a partner</label>
+              <input type="text" id="cst-search" class="cset-in" placeholder="Search by name or email…" oninput="certSearchDebounced(this.value)">
+              <div id="cst-results" class="cst-results"></div>
+            </div>
+            <div>
+              <div id="cst-empty" class="cst-empty"><span class="material-icons" style="font-size:34px;color:#cbd5e1;">badge</span><div style="margin-top:6px;">Search for a partner to view and award certificates.</div></div>
+              <div id="cst-detail" style="display:none;">
+                <div class="cst-person">
+                  <div class="cst-person-av" id="cst-pav">?</div>
+                  <div><div class="cst-person-name" id="cst-pname"></div><div class="cst-person-email" id="cst-pemail"></div></div>
+                </div>
+
+                <div class="cset-group" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;">
+                  <label class="cset-lbl">Award a certificate</label>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div><div class="cset-hint" style="margin:0 0 4px;">Certificate</div><select id="cst-design" class="cset-in" onchange="certAwardPreview()"></select></div>
+                    <div><div class="cset-hint" style="margin:0 0 4px;">Company</div><select id="cst-company" class="cset-in" onchange="certAwardPreview()"></select></div>
+                  </div>
+                  <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+                    <button class="cset-save" onclick="certDoAward(this)"><span class="material-icons" style="font-size:16px;">card_membership</span> Award certificate</button>
+                    <span id="cst-award-msg" style="font-size:12px;"></span>
+                  </div>
+                </div>
+
+                <div class="cset-group">
+                  <label class="cset-lbl">Preview</label>
+                  <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;padding:12px;overflow:hidden;"><div id="cst-scaler" style="margin:0 auto;"><div id="cst-preview"></div></div></div>
+                </div>
+
+                <div class="cset-group">
+                  <label class="cset-lbl">Certificates this partner holds</label>
+                  <div id="cst-certs" style="color:#64748b;font-size:13px;">None yet.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
+
+  <!-- JOURNEY -->
+  <div id="ppc-journey" class="pp-panel" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div><b>Partner Journey milestones</b><div class="muted" style="font-size:12px;margin-top:2px;">The animated journey shown on the partner dashboard. "Achieved when" decides when each milestone lights up.</div></div>
+        <button class="btn btn-n" onclick="pjAdd()">+ Add milestone</button>
+      </div>
+      <div id="pj-list" style="margin-top:14px;"><div class="empty">Loading…</div></div>
+      <button class="btn btn-p" onclick="pjSave(this)" style="margin-top:6px;"><span class="material-icons" style="font-size:16px;">save</span> Save journey</button>
+      <span id="pj-msg" style="font-size:12px;margin-left:8px;"></span>
+    </div>
+  </div>
+
+  <!-- SECTIONS -->
+  <div id="ppc-sections" class="pp-panel" style="display:none;">
+    <div class="card">
+      <b>Partner portal sections</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 12px;">Turn portal features on or off. When off, the section is hidden from partners (both the sidebar link and the page/card).</div>
+      <div id="ps-list"><div class="empty">Loading…</div></div>
+      <button class="btn btn-p" onclick="psSave(this)" style="margin-top:6px;"><span class="material-icons" style="font-size:16px;">save</span> Save sections</button>
+      <span id="ps-msg" style="font-size:12px;margin-left:8px;"></span>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD TIERS -->
+  <div id="ppc-tiers" class="pp-panel" style="display:none;">
+    <div class="card" style="max-width:460px;">
+      <b>Leaderboard tiers</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 10px;">Partners are ranked by 30-day volume. Set where each tier cuts off.</div>
+      <label class="cl">🥇 Gold — top N ranks</label>
+      <input id="tr-gold" class="ci" type="number" min="1" style="max-width:160px;">
+      <label class="cl">🥈 Silver — up to rank</label>
+      <input id="tr-silver" class="ci" type="number" min="2" style="max-width:160px;">
+      <div class="muted" style="font-size:12px;margin-top:8px;">🥉 Everyone below Silver is Bronze.</div>
+      <button class="btn btn-p" onclick="ptrSave(this)" style="margin-top:12px;"><span class="material-icons" style="font-size:16px;">save</span> Save tiers</button>
+      <span id="ptr-msg" style="font-size:12px;margin-left:8px;"></span>
+    </div>
+  </div>
+
+  <!-- BRANDING -->
+  <div id="ppc-brand" class="pp-panel" style="display:none;">
+    <div class="card" style="max-width:620px;">
+      <b>Partner dashboard welcome</b>
+      <div class="muted" style="font-size:12px;margin:2px 0 10px;">Optional welcome banner shown at the top of the partner dashboard. Leave both blank to hide it.</div>
+      <label class="cl">Headline</label>
+      <input id="br-title" class="ci" placeholder="e.g. Welcome to the PayProTec Partner family">
+      <label class="cl">Message</label>
+      <input id="br-text" class="ci" placeholder="e.g. Everything you need to grow — in one place.">
+      <button class="btn btn-p" onclick="brSave(this)" style="margin-top:12px;"><span class="material-icons" style="font-size:16px;">save</span> Save branding</button>
+      <span id="br-msg" style="font-size:12px;margin-left:8px;"></span>
+    </div>
+  </div>
+</div>
+
+<script src="/js/certificate-render.js"></script>
+<script>
+// ── Top-level tab switching ───────────────────────────────────────────────────
+var _ppLoaded={};
+function ppTab(which){
+  var tabs=['cert','journey','sections','tiers','brand'];
+  tabs.forEach(function(t){
+    document.getElementById('ppc-'+t).style.display = (t===which)?'':'none';
+    var b=document.getElementById('pt-'+(t==='journey'?'journey':t==='sections'?'sections':t==='tiers'?'tiers':t==='brand'?'brand':'cert'));
+  });
+  document.querySelectorAll('.tabs .tab').forEach(function(b){ b.classList.remove('on'); });
+  var map={cert:'pt-cert',journey:'pt-journey',sections:'pt-sections',tiers:'pt-tiers',brand:'pt-brand'};
+  var btn=document.getElementById(map[which]); if(btn) btn.classList.add('on');
+  if(which==='cert'){ if(!certsLoaded) certsLoad(); }
+  else { if(!_ppLoaded.settings) ppLoad(); else ppRender(which); }
+}
+// ── PARTNER CERTIFICATES (multi-design) ───────────────────────────────────────
+let certsLoaded = false;
+let certDesigns = [];   // array of design objects (source of truth)
+let certIdx = 0;
+let certFontsReady = false;
+const CERT_COLOR_SLOTS = [['bg','Background'],['ink','Headings'],['body','Body text'],['accent','Accent'],['accent2','Accent 2'],['muted','Muted']];
+function certApi(body){
+    return fetch('/api/certificates',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify(body)}).then(function(r){return r.json();});
+}
+function certEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function cur(){ return certDesigns[certIdx]; }
+function certTplDef(id){ return (window.CERT_TEMPLATES||[]).filter(function(t){return t.id===id;})[0] || (window.CERT_TEMPLATES||[])[0]; }
+
+async function certsLoad(){
+    certsLoaded = true;
+    const body = document.getElementById('certs-body');
+    const r = await certApi({action:'get_designs'});
+    if(!r.success){ body.innerHTML = '<div style="color:#dc2626;">'+certEsc(r.message||'Failed to load.')+'</div>'; certsLoaded=false; return; }
+    certDesigns = (r.designs||[]).length ? r.designs : [certBlankDesign('classic','Partnership Certificate',true)];
+    body.style.display='none';
+    document.getElementById('certs-editor').style.display='';
+    certRenderFonts();
+    certIdx = 0;
+    certRenderDesignPills();
+    certSelectDesign(0);
+}
+function certRenderFonts(){
+    if(certFontsReady) return; certFontsReady = true;
+    const opts = (window.CERT_FONTS||[]).map(function(f){ return '<option value="'+certEsc(f.value)+'">'+certEsc(f.label)+'</option>'; }).join('');
+    document.getElementById('cset-hfont').innerHTML = opts;
+    document.getElementById('cset-bfont').innerHTML = opts;
+}
+function certBlankDesign(tpl, name, isDefault){
+    const t = certTplDef(tpl) || {colors:{},headingFont:'Playfair Display',bodyFont:'DM Sans'};
+    return { id:'', name:name||'New Certificate', is_default:!!isDefault, template:t.id||'classic',
+        heading_font:t.headingFont||'Playfair Display', body_font:t.bodyFont||'DM Sans',
+        colors:Object.assign({}, t.colors), logo_url:'', org_name:'PayProTec',
+        partner_title:'Certified Partner', name_placeholder:'Partner Name',
+        heading:'Certificate of Achievement', pre_text:'This certifies that',
+        body_text:'has successfully completed', signatories:[], partner_logos:[], partner_logos_label:'In partnership with' };
+}
+function certRenderDesignPills(){
+    document.getElementById('cset-designs').innerHTML = certDesigns.map(function(d,i){
+        return '<button class="cset-design-pill'+(i===certIdx?' sel':'')+'" onclick="certSelectDesign('+i+')">'
+          + (d.is_default?'<span class="star material-icons" style="font-size:14px;">star</span>':'') + certEsc(d.name||'Certificate') + '</button>';
+    }).join('');
+}
+function certSelectDesign(i){
+    certIdx = i; const d = cur(); if(!d) return;
+    document.getElementById('cset-dname').value = d.name||'';
+    document.getElementById('cset-default').checked = !!d.is_default;
+    document.getElementById('cset-hfont').value = d.heading_font||'Playfair Display';
+    document.getElementById('cset-bfont').value = d.body_font||'DM Sans';
+    document.getElementById('cset-heading').value = d.heading||'';
+    document.getElementById('cset-org').value = d.org_name||'';
+    document.getElementById('cset-title').value = d.partner_title||'';
+    document.getElementById('cset-pre').value = d.pre_text||'';
+    document.getElementById('cset-bodytext').value = d.body_text||'';
+    document.getElementById('cset-name').value = d.name_placeholder||'';
+    document.getElementById('cset-plglabel').value = d.partner_logos_label||'';
+    certRenderTemplates(); certRenderColors(); certRenderLogo(); certRenderSigs(); certRenderPlogos();
+    certRenderDesignPills();
+    certPreview();
+}
+function certNameChange(v){ cur().name=v; certRenderDesignPills(); }
+function certSetDefault(checked){
+    if(!checked){ document.getElementById('cset-default').checked=true; return; }
+    certDesigns.forEach(function(d){ d.is_default=false; }); cur().is_default=true; certRenderDesignPills();
+}
+function certAddDesign(){ certDesigns.push(certBlankDesign('modern','New Certificate',false)); certIdx=certDesigns.length-1; certRenderDesignPills(); certSelectDesign(certIdx); }
+function certDuplicateDesign(){ const c=JSON.parse(JSON.stringify(cur())); c.id=''; c.is_default=false; c.name=(c.name||'Certificate')+' (copy)'; certDesigns.push(c); certIdx=certDesigns.length-1; certRenderDesignPills(); certSelectDesign(certIdx); }
+function certDeleteDesign(){
+    if(certDesigns.length<=1){ Swal.fire('Cannot delete','At least one certificate design is required.','info'); return; }
+    const wasDefault = cur().is_default;
+    certDesigns.splice(certIdx,1);
+    if(wasDefault) certDesigns[0].is_default=true;
+    certIdx=0; certRenderDesignPills(); certSelectDesign(0);
+}
+function certRenderTemplates(){
+    const box = document.getElementById('cset-templates'); const sel = cur().template;
+    box.innerHTML = (window.CERT_TEMPLATES||[]).map(function(t){
+        const c=t.colors||{};
+        const sw = 'linear-gradient(135deg,'+(c.bg||'#eee')+' 0%,'+(c.bg||'#eee')+' 45%,'+(c.accent||'#999')+' 100%)';
+        return '<div class="cset-tpl'+(t.id===sel?' sel':'')+'" onclick="certPickTemplate(\''+t.id+'\')">'
+          +'<div class="cset-tpl-swatch" style="background:'+sw+';border:1px solid rgba(0,0,0,0.08);"></div>'
+          +'<div class="cset-tpl-name">'+certEsc(t.name)+'</div></div>';
+    }).join('');
+}
+function certPickTemplate(id){ cur().template=id; certRenderTemplates(); certPreview(); }
+function certRenderColors(){
+    const d = cur(); const box = document.getElementById('cset-colors');
+    box.innerHTML = CERT_COLOR_SLOTS.map(function(s){
+        const key=s[0], val=(d.colors&&d.colors[key])||'#000000';
+        return '<div class="cset-color"><input type="color" value="'+certEsc(val)+'" oninput="certColor(\''+key+'\',this.value)">'
+          +'<div style="flex:1;min-width:0;"><div class="cset-color-lbl">'+s[1]+'</div>'
+          +'<input type="text" value="'+certEsc(val)+'" oninput="certColor(\''+key+'\',this.value)"></div></div>';
+    }).join('');
+}
+function certColor(key,val){ if(!cur().colors) cur().colors={}; cur().colors[key]=val; if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(val)){ certRenderColors(); certPreview(); } }
+function certResetColors(){ const t=certTplDef(cur().template); cur().colors=Object.assign({}, t.colors); certRenderColors(); certPreview(); }
+function certRenderLogo(){
+    const p = document.getElementById('cset-logo-prev'); const u=cur().logo_url;
+    p.innerHTML = u ? '<img src="'+certEsc(u)+'" style="max-width:100%;max-height:100%;object-fit:contain;">' : 'No logo';
+}
+function certClearLogo(){ cur().logo_url=''; certRenderLogo(); certPreview(); }
+function certRenderSigs(){
+    const sigs = cur().signatories||(cur().signatories=[]);
+    const box = document.getElementById('cset-sigs');
+    box.innerHTML = sigs.map(function(s,i){
+        const img = s.image_url? '<img class="cset-sig-img" src="'+certEsc(s.image_url)+'">' : '<div class="cset-sig-img"></div>';
+        return '<div class="cset-sig-row">'
+          +'<div class="cset-sig-top">'
+          +'<input type="text" placeholder="Name" value="'+certEsc(s.name)+'" oninput="certSigField('+i+',\'name\',this.value)">'
+          +'<input type="text" placeholder="Title" value="'+certEsc(s.title)+'" oninput="certSigField('+i+',\'title\',this.value)">'
+          +'</div>'
+          +'<div class="cset-sig-bot">'+img
+          +'<input type="file" accept="image/*" id="cset-sig-file-'+i+'" style="display:none;" onchange="certUpload(this,\'sig\','+i+')">'
+          +'<button class="cset-btn-sm" style="padding:5px 10px;font-size:11px;margin:0;" onclick="document.getElementById(\'cset-sig-file-'+i+'\').click()">'+(s.image_url?'Change signature':'Upload signature')+'</button>'
+          +'<button class="cset-btn-sm cset-btn-ghost" style="padding:5px 10px;font-size:11px;margin:0;" onclick="certRemoveSig('+i+')">Remove</button>'
+          +'</div></div>';
+    }).join('');
+    document.getElementById('cset-addsig').style.display = sigs.length>=5 ? 'none':'';
+}
+function certSigField(i,k,v){ const s=cur().signatories; if(s&&s[i]){ s[i][k]=v; certPreview(); } }
+function certAddSig(){ const s=cur().signatories||(cur().signatories=[]); if(s.length<5){ s.push({name:'',title:'',image_url:''}); certRenderSigs(); certPreview(); } }
+function certRemoveSig(i){ cur().signatories.splice(i,1); certRenderSigs(); certPreview(); }
+function certRenderPlogos(){
+    const arr = cur().partner_logos||(cur().partner_logos=[]);
+    document.getElementById('cset-plogos').innerHTML = arr.map(function(x,i){
+        return '<div class="cset-plogo"><img src="'+certEsc(x.url)+'"><button class="rm" onclick="certRemovePlogo('+i+')">&times;</button></div>';
+    }).join('');
+    document.getElementById('cset-addplg').style.display = arr.length>=14 ? 'none':'';
+}
+function certRemovePlogo(i){ cur().partner_logos.splice(i,1); certRenderPlogos(); certPreview(); }
+function certPlgLabel(v){ cur().partner_logos_label=v; certPreview(); }
+async function certUpload(input, kind, idx){
+    const f = input.files && input.files[0]; if(!f) return;
+    const u = await certApi({action:'upload_url', file_type:f.type});
+    if(!u.success){ Swal.fire('Upload error', u.message||'Could not get upload URL', 'error'); input.value=''; return; }
+    try {
+        const put = await fetch(u.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}});
+        if(!put.ok) throw new Error('upload failed');
+    } catch(e){ Swal.fire('Upload error','Could not upload the image.','error'); input.value=''; return; }
+    if(kind==='logo'){ cur().logo_url=u.public_url; certRenderLogo(); }
+    else if(kind==='sig' && cur().signatories[idx]){ cur().signatories[idx].image_url=u.public_url; certRenderSigs(); }
+    else if(kind==='plogo'){ (cur().partner_logos||(cur().partner_logos=[])).push({url:u.public_url,name:''}); certRenderPlogos(); }
+    input.value='';
+    certPreview();
+}
+function certSyncText(){
+    const d = cur(); if(!d) return;
+    d.heading_font = document.getElementById('cset-hfont').value;
+    d.body_font = document.getElementById('cset-bfont').value;
+    d.heading = document.getElementById('cset-heading').value;
+    d.org_name = document.getElementById('cset-org').value;
+    d.partner_title = document.getElementById('cset-title').value;
+    d.pre_text = document.getElementById('cset-pre').value;
+    d.body_text = document.getElementById('cset-bodytext').value;
+    d.name_placeholder = document.getElementById('cset-name').value;
+}
+function certPreview(){
+    certSyncText();
+    const d = cur(); if(!d) return;
+    window.renderCertificate(document.getElementById('cset-preview'), {
+        template:d.template, colors:d.colors, heading_font:d.heading_font, body_font:d.body_font,
+        org_name:d.org_name, logo_url:d.logo_url, heading:d.heading, pre_text:d.pre_text,
+        partner_title:d.partner_title, body_text:d.body_text,
+        recipient_name: d.name_placeholder || 'Partner Name',
+        company_name: (document.getElementById('cset-pcompany')||{}).value || '',
+        signatories:d.signatories, partner_logos:d.partner_logos, partner_logos_label:d.partner_logos_label,
+        cert_number:'PPT-2026-1001', issued_date:''
+    });
+    const scaler = document.getElementById('cset-scaler');
+    const avail = scaler.parentElement.clientWidth - 4;
+    const scale = Math.min(1, avail/1000);
+    const el = document.getElementById('cset-preview').firstElementChild;
+    if(el){ el.style.transformOrigin='top left'; el.style.transform='scale('+scale+')'; }
+    scaler.style.width=(1000*scale)+'px'; scaler.style.height=(707*scale)+'px';
+}
+window.addEventListener('resize', function(){ if(certsLoaded && document.getElementById('ppc-cert').style.display!=='none') certPreview(); });
+async function certSave(btn){
+    certSyncText();
+    const msg = document.getElementById('cset-msg');
+    btn.disabled=true; msg.style.color='#64748b'; msg.textContent='Saving…';
+    const r = await certApi({action:'save_designs', designs:certDesigns});
+    btn.disabled=false;
+    if(r.success){ certDesigns=r.designs||certDesigns; if(certIdx>=certDesigns.length) certIdx=0; certRenderDesignPills(); msg.style.color='#0d9488'; msg.textContent='Saved ✓'; setTimeout(function(){msg.textContent='';},2500); }
+    else { msg.style.color='#dc2626'; msg.textContent = r.message||'Save failed'; }
+}
+
+// ── AWARD & RECIPIENTS ────────────────────────────────────────────────────────
+let cstPerson=null, cstCompanies=[], cstCerts=[], cstSearchTimer=null;
+function certSubTab(which){
+    const dz = which==='designs';
+    document.getElementById('cset-panel-designs').style.display = dz?'':'none';
+    document.getElementById('cset-panel-award').style.display = dz?'none':'';
+    document.getElementById('cst-tab-designs').classList.toggle('sel', dz);
+    document.getElementById('cst-tab-award').classList.toggle('sel', !dz);
+    if(!dz){ certPopulateDesignDropdown(); if(cstPerson) certAwardPreview(); }
+    else if(certsLoaded){ certPreview(); }
+}
+function certPopulateDesignDropdown(){
+    const sel = document.getElementById('cst-design'); if(!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = (certDesigns||[]).map(function(d){ return '<option value="'+certEsc(d.id)+'">'+certEsc(d.name)+(d.is_default?' (default)':'')+'</option>'; }).join('');
+    if(keep) sel.value = keep;
+}
+function certSearchDebounced(v){ clearTimeout(cstSearchTimer); cstSearchTimer=setTimeout(function(){ certSearch(v); }, 250); }
+async function certSearch(v){
+    const box = document.getElementById('cst-results');
+    if(String(v||'').trim().length<2){ box.innerHTML=''; return; }
+    box.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:6px;">Searching…</div>';
+    const r = await certApi({action:'search_partners', query:v});
+    const list = (r.success && r.partners)||[];
+    if(!list.length){ box.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:6px;">No partners found.</div>'; return; }
+    box.innerHTML = list.map(function(p){
+        const nm = certEsc(p.full_name||'(no name)'); const em=certEsc(p.email||'');
+        const ini = ((p.full_name||'?').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2)||'?').toUpperCase();
+        return '<button class="cst-result" data-id="'+certEsc(p.id)+'" onclick="certSelectPerson(\''+certEsc(p.id)+'\')">'
+          +'<div class="cst-av">'+certEsc(ini)+'</div><div style="min-width:0;"><div class="cst-result-name">'+nm+'</div><div class="cst-result-email">'+em+'</div></div></button>';
+    }).join('');
+}
+async function certSelectPerson(id){
+    Array.prototype.forEach.call(document.querySelectorAll('#cst-results .cst-result'), function(b){ b.classList.toggle('sel', b.getAttribute('data-id')===id); });
+    const r = await certApi({action:'person_certs', person_id:id});
+    if(!r.success){ Swal.fire('Error', r.message||'Could not load partner.', 'error'); return; }
+    cstPerson = r.person; cstCompanies = r.companies||[]; cstCerts = r.certs||[];
+    document.getElementById('cst-empty').style.display='none';
+    document.getElementById('cst-detail').style.display='';
+    const nm = cstPerson.full_name||'(no name)';
+    document.getElementById('cst-pname').textContent = nm;
+    document.getElementById('cst-pemail').textContent = cstPerson.email||'';
+    document.getElementById('cst-pav').textContent = ((nm||'?').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2)||'?').toUpperCase();
+    certPopulateDesignDropdown();
+    certPopulateCompanyDropdown();
+    certRenderPersonCerts();
+    certAwardPreview();
+}
+function coDisplay(name){ return /^independent$/i.test(String(name||'').trim()) ? '' : (name||''); }
+function certPopulateCompanyDropdown(){
+    const sel = document.getElementById('cst-company');
+    let html = '<option value="-1">General (no company)</option>';
+    html += (cstCompanies||[]).map(function(c,i){ const nm=coDisplay(c.company_name)|| (c.company_name||'Independent'); return '<option value="'+i+'">'+certEsc(nm)+'</option>'; }).join('');
+    sel.innerHTML = html;
+}
+function certAwardPreview(){
+    if(!cstPerson) return;
+    const d = (certDesigns||[]).filter(function(x){return x.id===document.getElementById('cst-design').value;})[0] || certDesigns[0];
+    if(!d) return;
+    const ci = parseInt(document.getElementById('cst-company').value,10);
+    const co = (ci>=0 && cstCompanies[ci]) ? cstCompanies[ci] : null;
+    window.renderCertificate(document.getElementById('cst-preview'), {
+        template:d.template, colors:d.colors, heading_font:d.heading_font, body_font:d.body_font,
+        org_name:d.org_name, logo_url:d.logo_url, heading:d.heading, pre_text:d.pre_text,
+        partner_title:d.partner_title, body_text:d.body_text,
+        recipient_name: cstPerson.full_name||'Partner',
+        company_name: co ? co.company_name : '',
+        signatories:d.signatories, partner_logos:d.partner_logos, partner_logos_label:d.partner_logos_label,
+        cert_number:'PPT-2026-••••', issued_date:''
+    });
+    const scaler = document.getElementById('cst-scaler');
+    const avail = scaler.parentElement.clientWidth - 4;
+    const scale = Math.min(1, avail/1000);
+    const el = document.getElementById('cst-preview').firstElementChild;
+    if(el){ el.style.transformOrigin='top left'; el.style.transform='scale('+scale+')'; }
+    scaler.style.width=(1000*scale)+'px'; scaler.style.height=(707*scale)+'px';
+}
+function certRenderPersonCerts(){
+    const box = document.getElementById('cst-certs');
+    if(!cstCerts.length){ box.innerHTML='None yet.'; return; }
+    box.innerHTML = cstCerts.map(function(c){
+        const dot = (c.colors && c.colors.accent) || '#0d9488';
+        const co = coDisplay(c.company_name);
+        const sub = certEsc(c.cert_number||'') + (co?' · '+certEsc(co):'') + (c.issued_date?' · '+certEsc(String(c.issued_date)):'');
+        return '<div class="cst-cert"><div class="cst-cert-dot" style="background:'+dot+'"></div>'
+          +'<div class="cst-cert-main"><div class="cst-cert-t">'+certEsc(c.type_name||'Certificate')+'</div><div class="cst-cert-s">'+sub+'</div></div>'
+          +'<button class="cst-cert-rm" onclick="certRevoke(\''+certEsc(c.id)+'\')">Revoke</button></div>';
+    }).join('');
+}
+async function certDoAward(btn){
+    if(!cstPerson) return;
+    const msg = document.getElementById('cst-award-msg');
+    const typeId = document.getElementById('cst-design').value;
+    const ci = parseInt(document.getElementById('cst-company').value,10);
+    const co = (ci>=0 && cstCompanies[ci]) ? cstCompanies[ci] : null;
+    btn.disabled=true; msg.style.color='#64748b'; msg.textContent='Awarding…';
+    const r = await certApi({action:'award', person_id:cstPerson.id, type_id:typeId, company_id: co?co.company_id:null, company_name: co?co.company_name:null});
+    btn.disabled=false;
+    if(!r.success){ msg.style.color='#dc2626'; msg.textContent=r.message||'Failed'; return; }
+    msg.style.color='#0d9488'; msg.textContent = r.created?'Awarded ✓':'Already had this certificate';
+    setTimeout(function(){msg.textContent='';},2500);
+    const pc = await certApi({action:'person_certs', person_id:cstPerson.id});
+    if(pc.success){ cstCerts = pc.certs||[]; certRenderPersonCerts(); }
+}
+async function certRevoke(certId){
+    const ok = await Swal.fire({icon:'warning',title:'Revoke certificate?',text:'This removes it from the partner’s portal.',showCancelButton:true,confirmButtonColor:'#dc2626',confirmButtonText:'Revoke'});
+    if(!ok.isConfirmed) return;
+    const r = await certApi({action:'revoke', cert_id:certId});
+    if(!r.success){ Swal.fire('Error', r.message||'Could not revoke.', 'error'); return; }
+    const pc = await certApi({action:'person_certs', person_id:cstPerson.id});
+    if(pc.success){ cstCerts = pc.certs||[]; certRenderPersonCerts(); }
+}
+
+// ── Partner portal settings (journey / sections / tiers / branding) ───────────
+var PP_TOKEN=localStorage.getItem('pp_session_token')||'';
+var PPS=null;
+var RULE_OPTS=[['always','Always achieved'],['approved_1','1+ approved merchants'],['approved_5','5+ approved merchants'],['approved_10','10+ approved merchants'],['approved_25','25+ approved merchants'],['approved_50','50+ approved merchants']];
+var SECTION_META=[['certificate','My Certificate','Certificate download page + sidebar link'],['journey','PayProTec Journey','Animated milestones card on the dashboard'],['leaderboard','Rank & Leaderboard','Rank banner on the dashboard'],['community','Community','Partner community feed + sidebar link'],['webinars','Webinars','Courses & videos + sidebar link']];
+function ppEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function ppApi(b){ return fetch('/api/partner-portal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+PP_TOKEN},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+async function ppLoad(){
+  var r=await ppApi({action:'get_settings'});
+  if(!r.success){ Swal.fire('Error', r.message||'Could not load settings.', 'error'); return; }
+  PPS=r.settings; _ppLoaded.settings=true;
+  ppRenderAll();
+}
+function ppRenderAll(){ pjRender(); psRender(); ptrRender(); brRender(); }
+function ppRender(which){ if(which==='journey')pjRender(); else if(which==='sections')psRender(); else if(which==='tiers')ptrRender(); else if(which==='brand')brRender(); }
+
+// Journey
+function pjRender(){
+  var box=document.getElementById('pj-list'); var arr=(PPS&&PPS.journey)||[];
+  if(!arr.length){ box.innerHTML='<div class="empty">No milestones. Add one.</div>'; return; }
+  box.innerHTML=arr.map(function(m,i){
+    var opts=RULE_OPTS.map(function(o){return '<option value="'+o[0]+'"'+(m.rule===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('');
+    return '<div class="pj-row">'
+      +'<div class="pj-ico"><span class="material-icons">'+ppEsc(m.icon||'star')+'</span>'
+      +'<input class="ci" style="text-align:center;font-size:11px;padding:5px;" value="'+ppEsc(m.icon)+'" oninput="pjSet('+i+',\'icon\',this.value)" title="Material icon name"></div>'
+      +'<div><input class="ci" style="font-weight:700;margin-bottom:6px;" placeholder="Title" value="'+ppEsc(m.title)+'" oninput="pjSet('+i+',\'title\',this.value)">'
+      +'<input class="ci" style="margin-bottom:6px;" placeholder="Description" value="'+ppEsc(m.desc)+'" oninput="pjSet('+i+',\'desc\',this.value)">'
+      +'<select class="ci" onchange="pjSet('+i+',\'rule\',this.value)">'+opts+'</select></div>'
+      +'<div class="pj-move"><button onclick="pjMove('+i+',-1)" title="Up">▲</button><button onclick="pjMove('+i+',1)" title="Down">▼</button><button onclick="pjDel('+i+')" title="Remove" style="color:#dc2626;">✕</button></div>'
+      +'</div>';
+  }).join('');
+}
+function pjSet(i,k,v){ PPS.journey[i][k]=v; if(k==='icon') pjRender(); }
+function pjMove(i,d){ var a=PPS.journey; var j=i+d; if(j<0||j>=a.length)return; var t=a[i];a[i]=a[j];a[j]=t; pjRender(); }
+function pjDel(i){ PPS.journey.splice(i,1); pjRender(); }
+function pjAdd(){ PPS.journey.push({icon:'star',title:'New milestone',desc:'',rule:'always'}); pjRender(); }
+async function pjSave(btn){ var m=document.getElementById('pj-msg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
+  var r=await ppApi({action:'save_settings',settings:{journey:PPS.journey}}); btn.disabled=false;
+  if(r.success){ PPS=r.settings; pjRender(); m.style.color='#0d9488'; m.textContent='Saved ✓'; setTimeout(function(){m.textContent='';},2500);} else { m.style.color='#dc2626'; m.textContent=r.message||'Failed'; } }
+
+// Sections
+function psRender(){
+  var box=document.getElementById('ps-list'); var s=(PPS&&PPS.sections)||{};
+  box.innerHTML=SECTION_META.map(function(x){
+    var on=s[x[0]]!==false;
+    return '<div class="ptoggle"><div><div class="pt-l">'+ppEsc(x[1])+'</div><div class="pt-d">'+ppEsc(x[2])+'</div></div>'
+      +'<label class="sw"><input type="checkbox" '+(on?'checked':'')+' onchange="psSet(\''+x[0]+'\',this.checked)"><span></span></label></div>';
+  }).join('');
+}
+function psSet(k,v){ if(!PPS.sections)PPS.sections={}; PPS.sections[k]=v; }
+async function psSave(btn){ var m=document.getElementById('ps-msg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
+  var r=await ppApi({action:'save_settings',settings:{sections:PPS.sections}}); btn.disabled=false;
+  if(r.success){ PPS=r.settings; psRender(); m.style.color='#0d9488'; m.textContent='Saved ✓'; setTimeout(function(){m.textContent='';},2500);} else { m.style.color='#dc2626'; m.textContent=r.message||'Failed'; } }
+
+// Tiers
+function ptrRender(){ var t=(PPS&&PPS.tiers)||{gold:3,silver:10}; document.getElementById('tr-gold').value=t.gold; document.getElementById('tr-silver').value=t.silver; }
+async function ptrSave(btn){ var m=document.getElementById('ptr-msg'); var gold=parseInt(document.getElementById('tr-gold').value,10), silver=parseInt(document.getElementById('tr-silver').value,10);
+  btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
+  var r=await ppApi({action:'save_settings',settings:{tiers:{gold:gold,silver:silver}}}); btn.disabled=false;
+  if(r.success){ PPS=r.settings; ptrRender(); m.style.color='#0d9488'; m.textContent='Saved ✓'; setTimeout(function(){m.textContent='';},2500);} else { m.style.color='#dc2626'; m.textContent=r.message||'Failed'; } }
+
+// Branding
+function brRender(){ var w=(PPS&&PPS.welcome)||{}; document.getElementById('br-title').value=w.title||''; document.getElementById('br-text').value=w.text||''; }
+async function brSave(btn){ var m=document.getElementById('br-msg'); btn.disabled=true; m.style.color='#64748b'; m.textContent='Saving…';
+  var r=await ppApi({action:'save_settings',settings:{welcome:{title:document.getElementById('br-title').value,text:document.getElementById('br-text').value}}}); btn.disabled=false;
+  if(r.success){ PPS=r.settings; brRender(); m.style.color='#0d9488'; m.textContent='Saved ✓'; setTimeout(function(){m.textContent='';},2500);} else { m.style.color='#dc2626'; m.textContent=r.message||'Failed'; } }
+
+// Start on the Certificates tab.
+ppTab('cert');
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
+import { getPartnerTiers } from './partner-portal.js';
 
 async function sendEmail(to, subject, htmlBody, textBody) {
     if (!process.env.POSTMARK_SERVER_TOKEN || !to) return;
@@ -1719,9 +1720,10 @@ if (action === 'get_merchant_data_raw') {
 
             if (lvErr) throw lvErr;
 
+            const tiers = await getPartnerTiers(supabase);
             const ranked = (rows || []).map((p, i) => {
                 const rank = i + 1;
-                const tier = rank <= 3 ? 'Gold' : rank <= 10 ? 'Silver' : 'Bronze';
+                const tier = rank <= tiers.gold ? 'Gold' : rank <= tiers.silver ? 'Silver' : 'Bronze';
                 const vol30 = parseFloat(p.volume_30_day) || 0;
                 const vol90 = parseFloat(p.volume_90_day) || 0;
                 const baseline = vol90 / 3;

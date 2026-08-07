@@ -211,12 +211,38 @@
         merchants.parentNode.insertBefore(a, merchants.nextSibling);
     }
 
+    // ── PARTNER PORTAL SECTION TOGGLES ───────────────────────────
+    // Admin can turn portal sections off (Marketing → Partner Portal → Sections).
+    // Hide the sidebar link for a disabled section, and bounce off its page.
+    var SECTION_PATHS = {
+        certificate: '/partner/certificate',
+        community: '/partner/community',
+        webinars: '/partner/webinars'
+    };
+    function applySections() {
+        fetch('/api/partner-portal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'public_config' }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success || !d.sections) return;
+                window.PP_SECTIONS = d.sections;
+                var path = window.location.pathname;
+                Object.keys(SECTION_PATHS).forEach(function (key) {
+                    if (d.sections[key] === false) {
+                        var href = SECTION_PATHS[key];
+                        document.querySelectorAll('.sidebar-nav a[href="' + href + '"]').forEach(function (a) { a.style.display = 'none'; });
+                        if (path.indexOf(href) === 0) window.location.href = '/partner/dashboard';
+                    }
+                });
+            }).catch(function () {});
+    }
+
     function init() {
         injectBadges();
         injectResidualsNav();
         injectPosLeadNav();
         injectNotificationBell();
         injectBrandedBadge();
+        applySections();
         pollNav();
         setInterval(function () { pollNav(); }, 30000);
     }

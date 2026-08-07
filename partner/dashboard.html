@@ -410,6 +410,13 @@ async function init() {
         document.getElementById('sidebarName').innerText = partner.name;
         document.getElementById('topbarGreeting').innerText = `Welcome back, ${partner.name.split(' ')[0]} 👋`;
 
+        // ── PARTNER PORTAL CONFIG (journey / sections / welcome) ──
+        try {
+            const cfgRes = await fetch('/api/partner-portal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'public_config' }) });
+            const cfg = await cfgRes.json();
+            if (cfg && cfg.success) { window.PP_CFG = cfg; renderWelcome(cfg.welcome); }
+        } catch(e) {}
+
         // Render agent IDs
         const idGrid = document.getElementById('idGrid');
         if (!identifiers.length) {
@@ -491,21 +498,47 @@ async function init() {
     }
 }
 
-// Default PayProTec Journey milestones. (Future: these will be configurable
-// from Secret Dungeon; for now this is the built-in default set.)
-// `done(approved)` decides whether a milestone is achieved for this partner.
+// PayProTec Journey milestones — configurable in Marketing → Partner Portal → Journey.
+// This built-in set is the fallback if no config is loaded. Each milestone has a
+// `rule` ('always' | 'approved_N') deciding when it's marked achieved.
 const JOURNEY_MILESTONES = [
-    { icon:'explore',              title:'Discovered PayProTec',   desc:'You found the partner opportunity and joined as a prospect.',        done:()=>true },
-    { icon:'assignment_turned_in', title:'Completed Onboarding',   desc:'You shared your goals so we could tailor your path.',                done:()=>true },
-    { icon:'handshake',            title:'Met the Team',           desc:'You connected with a PayProTec rep on your become-a-partner call.',  done:()=>true },
-    { icon:'workspace_premium',    title:'Became a Partner',       desc:'Welcome to the PayProTec family — your Partner Portal is live!',     done:()=>true },
-    { icon:'storefront',           title:'First Merchant Approved', desc:'Your first approved merchant account is on the books.',              done:(a)=>a>=1 },
-    { icon:'trending_up',          title:'Building Your Portfolio', desc:'10+ approved merchants — momentum is building.',                     done:(a)=>a>=10 },
-    { icon:'rocket_launch',        title:'Scaling Up',              desc:'50+ approved merchants. You\'re a force. 🚀',                        done:(a)=>a>=50 },
+    { icon:'explore',              title:'Discovered PayProTec',   desc:'You found the partner opportunity and joined as a prospect.',        rule:'always' },
+    { icon:'assignment_turned_in', title:'Completed Onboarding',   desc:'You shared your goals so we could tailor your path.',                rule:'always' },
+    { icon:'handshake',            title:'Met the Team',           desc:'You connected with a PayProTec rep on your become-a-partner call.',  rule:'always' },
+    { icon:'workspace_premium',    title:'Became a Partner',       desc:'Welcome to the PayProTec family — your Partner Portal is live!',     rule:'always' },
+    { icon:'storefront',           title:'First Merchant Approved', desc:'Your first approved merchant account is on the books.',              rule:'approved_1' },
+    { icon:'trending_up',          title:'Building Your Portfolio', desc:'10+ approved merchants — momentum is building.',                     rule:'approved_10' },
+    { icon:'rocket_launch',        title:'Scaling Up',              desc:'50+ approved merchants. You\'re a force. 🚀',                        rule:'approved_50' },
 ];
 
+function journeyDone(rule, approved) {
+    if (rule === 'always' || !rule) return true;
+    const m = /^approved_(\d+)$/.exec(rule);
+    return m ? approved >= parseInt(m[1], 10) : true;
+}
+
+// Optional welcome banner (Marketing → Partner Portal → Branding).
+function renderWelcome(w) {
+    if (!w || (!w.title && !w.text)) return;
+    const content = document.querySelector('.content');
+    if (!content || document.getElementById('ppWelcome')) return;
+    const el = document.createElement('div');
+    el.id = 'ppWelcome';
+    el.className = 'pp-animate';
+    el.style.cssText = 'background:linear-gradient(135deg,#001e3c,#0f766e);color:#fff;border-radius:16px;padding:18px 22px;margin-bottom:22px;box-shadow:var(--shadow-sm);';
+    el.innerHTML = (w.title ? '<div style="font-size:18px;font-weight:800;">' + String(w.title).replace(/</g,'&lt;') + '</div>' : '')
+        + (w.text ? '<div style="font-size:13px;opacity:.9;margin-top:3px;">' + String(w.text).replace(/</g,'&lt;') + '</div>' : '');
+    content.insertBefore(el, content.firstChild);
+}
+
 function renderJourney(approved) {
-    const steps = JOURNEY_MILESTONES.map(m => ({ ...m, done: !!m.done(approved) }));
+    const cfg = window.PP_CFG || {};
+    if (cfg.sections && cfg.sections.journey === false) {
+        const jc = document.getElementById('journeyCard'); if (jc) jc.style.display = 'none';
+        return;
+    }
+    const list = (cfg.journey && cfg.journey.length) ? cfg.journey : JOURNEY_MILESTONES;
+    const steps = list.map(m => ({ icon:m.icon, title:m.title, desc:m.desc, done: journeyDone(m.rule, approved) }));
     // The first not-yet-done milestone is the current focus ("now").
     const nowIdx = steps.findIndex(s => !s.done);
     const doneCount = steps.filter(s => s.done).length;
@@ -532,6 +565,11 @@ function renderJourney(approved) {
 
 async function loadRanking(personId) {
     try {
+        const cfg = window.PP_CFG || {};
+        if (cfg.sections && cfg.sections.leaderboard === false) {
+            const b = document.getElementById('rankingBanner'); if (b) b.style.display = 'none';
+            return;
+        }
         const token = localStorage.getItem('pp_partner_token');
         const res = await fetch('/api/partner-data', {
             method: 'POST',
