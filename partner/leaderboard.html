@@ -49,6 +49,8 @@
         .lb-rank.top{color:#f59e0b;}
         .lb-name{flex:1;min-width:0;font-weight:700;font-size:14px;}
         .lb-name .you{font-size:10px;font-weight:800;color:var(--teal);background:var(--teal-light);border-radius:99px;padding:1px 7px;margin-left:6px;}
+        .blurname{filter:blur(5px);-webkit-filter:blur(5px);color:#64748b;font-weight:700;user-select:none;pointer-events:none;letter-spacing:.5px;}
+        .lb-sep{text-align:center;color:#cbd5e1;font-weight:800;padding:6px 0;letter-spacing:3px;}
         .lb-merch{font-size:13px;color:#475569;font-weight:700;width:110px;text-align:right;}
         .lb-merch small{color:#94a3b8;font-weight:600;}
         @keyframes spin{to{transform:rotate(360deg);}}
@@ -109,6 +111,7 @@
 <script>
 const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
+let MYNAME = 'You';
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function initials(name){ return (String(name||'').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2)||'?').toUpperCase(); }
 
@@ -117,7 +120,8 @@ async function init(){
         const authRes = await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'validate', token }) });
         const auth = await authRes.json();
         if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
-        document.getElementById('sidebarName').innerText = (auth.partner && auth.partner.name) || 'Partner';
+        MYNAME = (auth.partner && auth.partner.name) || 'You';
+        document.getElementById('sidebarName').innerText = MYNAME;
         document.getElementById('sidebarAvatar').innerText = initials(auth.partner && auth.partner.name);
 
         const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_leaderboard', token }) });
@@ -143,14 +147,27 @@ function render(d){
     const top = d.top || [];
     const board = document.getElementById('board');
     if (!top.length) { board.innerHTML = '<div class="empty-box">No ranked partners yet.</div>'; return; }
-    board.innerHTML = top.map(function(r){
+
+    function row(r){
         const medal = r.rank<=3 ? '★' : r.rank;
+        const nameHtml = r.is_me
+            ? (esc(r.name || MYNAME) + '<span class="you">YOU</span>')
+            : '<span class="blurname">PayProTec Partner</span>';
         return '<div class="lb-row'+(r.is_me?' me':'')+'">'
           + '<div class="lb-rank'+(r.rank<=3?' top':'')+'">'+medal+'</div>'
-          + '<div class="lb-name">'+esc(r.name)+(r.is_me?'<span class="you">YOU</span>':'')+' <span class="tier-badge tier-'+esc(r.tier)+'" style="font-size:10px;padding:1px 8px;margin-left:6px;">'+esc(r.tier)+'</span></div>'
+          + '<div class="lb-name">'+nameHtml+' <span class="tier-badge tier-'+esc(r.tier)+'" style="font-size:10px;padding:1px 8px;margin-left:6px;">'+esc(r.tier)+'</span></div>'
           + '<div class="lb-merch">'+(r.merchant_count||0)+' <small>merchants</small></div>'
           + '</div>';
-    }).join('');
+    }
+
+    let html = top.map(row).join('');
+    // If the partner isn't in the visible top-25, append their own row so they
+    // always see exactly where they stand.
+    if (me && !top.some(function(t){ return t.is_me; })) {
+        html += '<div class="lb-sep">• • •</div>'
+          + row({ rank: me.rank, name: MYNAME, merchant_count: me.merchant_count, tier: me.tier, is_me: true });
+    }
+    board.innerHTML = html;
 }
 
 async function handleLogout(){

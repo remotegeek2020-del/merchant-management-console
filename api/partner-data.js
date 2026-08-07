@@ -71,11 +71,6 @@ export default async function handler(req, res) {
             let tiers = { gold: 3, silver: 10 };
             try { tiers = await getPartnerTiers(supabase); } catch (e) {}
             const tierOf = (rank) => rank <= tiers.gold ? 'Gold' : rank <= tiers.silver ? 'Silver' : 'Bronze';
-            const maskName = (n) => {
-                const parts = String(n || 'Partner').trim().split(/\s+/);
-                if (parts.length < 2) { const t = parts[0] || 'Partner'; return t.length > 2 ? t[0].toUpperCase() + t.slice(1, 2) + '.' : t; }
-                return parts[0] + ' ' + parts[parts.length - 1][0].toUpperCase() + '.';
-            };
             // Top 25 only — deterministic tiebreak so rank/tier don't flicker on ties.
             const { data: rows } = await supabase.from('partner_leaderboard_mv')
                 .select('person_id, name, merchant_count, volume_30_day')
@@ -83,13 +78,18 @@ export default async function handler(req, res) {
                 .order('merchant_count', { ascending: false })
                 .order('person_id', { ascending: true })
                 .limit(25);
-            const top = (rows || []).map((r, i) => ({
-                rank: i + 1,
-                name: maskName(r.name),
-                merchant_count: parseInt(r.merchant_count || 0, 10),
-                tier: tierOf(i + 1),
-                is_me: String(r.person_id) === String(personId)
-            }));
+            // CONFIDENTIAL: other partners' names are NEVER sent to the client — only the
+            // caller's own name is returned. Everyone else is anonymous.
+            const top = (rows || []).map((r, i) => {
+                const mine = String(r.person_id) === String(personId);
+                return {
+                    rank: i + 1,
+                    name: mine ? (r.name || 'You') : '',
+                    merchant_count: parseInt(r.merchant_count || 0, 10),
+                    tier: tierOf(i + 1),
+                    is_me: mine
+                };
+            });
             // Caller's own rank/total from the same RPC the dashboard uses (authoritative,
             // works beyond the 1000-row PostgREST cap and stays consistent with get_my_rank).
             let me = null;

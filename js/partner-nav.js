@@ -35,7 +35,10 @@
     if (!document.getElementById('pnav-style')) {
         var s = document.createElement('style');
         s.id = 'pnav-style';
-        s.textContent = '.nav-badge{background:#ef4444;color:white;border-radius:99px;font-size:9px;font-weight:800;padding:1px 6px;margin-left:auto;line-height:1.4;}';
+        // nav badge + make the sidebar nav scroll so injected items never overflow/clip
+        // the fixed-height sidebar (some partner pages don't set overflow on .sidebar-nav).
+        s.textContent = '.nav-badge{background:#ef4444;color:white;border-radius:99px;font-size:9px;font-weight:800;padding:1px 6px;margin-left:auto;line-height:1.4;}'
+            + '.sidebar-nav{overflow-y:auto;min-height:0;}';
         document.head.appendChild(s);
     }
 
