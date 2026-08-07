@@ -159,6 +159,12 @@
             </div>
 
             <div class="cset-group">
+              <label class="cset-lbl">Category</label>
+              <select id="cset-category" class="cset-in" onchange="certSetCategory(this.value)"></select>
+              <div class="cset-hint">Groups this certificate on the partner portal.</div>
+            </div>
+
+            <div class="cset-group">
               <label class="cset-lbl">Template</label>
               <div id="cset-templates" class="cset-templates"></div>
             </div>
@@ -431,10 +437,11 @@ function certRenderFonts(){
     const opts = (window.CERT_FONTS||[]).map(function(f){ return '<option value="'+certEsc(f.value)+'">'+certEsc(f.label)+'</option>'; }).join('');
     document.getElementById('cset-hfont').innerHTML = opts;
     document.getElementById('cset-bfont').innerHTML = opts;
+    document.getElementById('cset-category').innerHTML = (window.CERT_CATEGORIES||[]).map(function(c){ return '<option value="'+certEsc(c.id)+'">'+certEsc(c.label)+'</option>'; }).join('');
 }
 function certBlankDesign(tpl, name, isDefault){
     const t = certTplDef(tpl) || {colors:{},headingFont:'Playfair Display',bodyFont:'DM Sans'};
-    return { id:'', name:name||'New Certificate', is_default:!!isDefault, template:t.id||'classic',
+    return { id:'', name:name||'New Certificate', category:(isDefault?'payprotec':'special'), is_default:!!isDefault, template:t.id||'classic',
         heading_font:t.headingFont||'Playfair Display', body_font:t.bodyFont||'DM Sans',
         colors:Object.assign({}, t.colors), logo_url:'', org_name:'PayProTec',
         partner_title:'Certified Partner', name_placeholder:'Partner Name',
@@ -442,14 +449,24 @@ function certBlankDesign(tpl, name, isDefault){
         body_text:'has successfully completed', signatories:[], partner_logos:[], partner_logos_label:'In partnership with' };
 }
 function certRenderDesignPills(){
-    document.getElementById('cset-designs').innerHTML = certDesigns.map(function(d,i){
-        return '<button class="cset-design-pill'+(i===certIdx?' sel':'')+'" onclick="certSelectDesign('+i+')">'
-          + (d.is_default?'<span class="star material-icons" style="font-size:14px;">star</span>':'') + certEsc(d.name||'Certificate') + '</button>';
+    var box = document.getElementById('cset-designs');
+    box.style.display='flex'; box.style.flexDirection='column'; box.style.gap='10px'; box.style.width='100%';
+    var cats = window.CERT_CATEGORIES||[];
+    var html = cats.map(function(cat){
+        var items = certDesigns.map(function(d,i){return {d:d,i:i};}).filter(function(x){ return (x.d.category||'payprotec')===cat.id; });
+        if(!items.length) return '';
+        var pills = items.map(function(x){
+            return '<button class="cset-design-pill'+(x.i===certIdx?' sel':'')+'" onclick="certSelectDesign('+x.i+')">'
+              + (x.d.is_default?'<span class="star material-icons" style="font-size:14px;">star</span>':'') + certEsc(x.d.name||'Certificate') + '</button>';
+        }).join('');
+        return '<div><div style="font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#94a3b8;margin-bottom:5px;">'+certEsc(cat.label)+'</div><div style="display:flex;flex-wrap:wrap;gap:8px;">'+pills+'</div></div>';
     }).join('');
+    box.innerHTML = html || '<span class="muted" style="font-size:12px;">No certificates.</span>';
 }
 function certSelectDesign(i){
     certIdx = i; const d = cur(); if(!d) return;
     document.getElementById('cset-dname').value = d.name||'';
+    document.getElementById('cset-category').value = d.category||'payprotec';
     document.getElementById('cset-default').checked = !!d.is_default;
     document.getElementById('cset-hfont').value = d.heading_font||'Playfair Display';
     document.getElementById('cset-bfont').value = d.body_font||'DM Sans';
@@ -465,6 +482,7 @@ function certSelectDesign(i){
     certPreview();
 }
 function certNameChange(v){ cur().name=v; certRenderDesignPills(); }
+function certSetCategory(v){ cur().category=v; }
 function certSetDefault(checked){
     if(!checked){ document.getElementById('cset-default').checked=true; return; }
     certDesigns.forEach(function(d){ d.is_default=false; }); cur().is_default=true; certRenderDesignPills();

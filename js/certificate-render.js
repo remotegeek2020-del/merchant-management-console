@@ -32,6 +32,15 @@
     ];
     window.CERT_FONTS = FONTS;
 
+    // Fixed certificate categories (order = display order on the partner portal).
+    window.CERT_CATEGORIES = [
+        { id: 'payprotec', label: 'PayProTec Certificates' },
+        { id: 'pos', label: 'Point of Sale (POS)' },
+        { id: 'terminal', label: 'Terminal' },
+        { id: 'software', label: 'Software / Gateways' },
+        { id: 'special', label: 'Special Awards and Recognition' }
+    ];
+
     function ensureFonts() {
         if (document.getElementById('cert-google-fonts')) return;
         var l = document.createElement('link');

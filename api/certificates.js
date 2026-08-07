@@ -26,6 +26,17 @@ const DEFAULT_DESIGN = {
     partner_logos_label: 'In partnership with'
 };
 
+// Fixed certificate categories (order = display order on the partner portal).
+const CATEGORIES = [
+    { id: 'payprotec', label: 'PayProTec Certificates' },
+    { id: 'pos', label: 'Point of Sale (POS)' },
+    { id: 'terminal', label: 'Terminal' },
+    { id: 'software', label: 'Software / Gateways' },
+    { id: 'special', label: 'Special Awards and Recognition' }
+];
+const CATEGORY_IDS = CATEGORIES.map(c => c.id);
+const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]));
+
 function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'cert'; }
 function genId(name) { return slug(name) + '-' + Math.random().toString(36).slice(2, 7); }
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -44,6 +55,7 @@ function loadDesign(raw) {
     return {
         id: String(c.id || '').trim() || genId(c.name || 'cert'),
         name: String(c.name || 'Certificate').slice(0, 80),
+        category: CATEGORY_IDS.indexOf(c.category) >= 0 ? c.category : 'payprotec',
         is_default: !!c.is_default,
         template: String(c.template || 'classic').slice(0, 40),
         heading_font: String(c.heading_font || 'Playfair Display').slice(0, 60),
@@ -107,6 +119,8 @@ function renderData(cert, design) {
         partner_logos: design.partner_logos,
         partner_logos_label: design.partner_logos_label,
         partner_title: cert.partner_title || design.partner_title,
+        category: design.category || 'payprotec',
+        category_label: CATEGORY_LABEL[design.category] || CATEGORY_LABEL.payprotec,
         recipient_name: cert.recipient_name,
         company_name: cert.company_name || '',
         cert_number: cert.cert_number,
@@ -387,7 +401,7 @@ export default async function handler(req, res) {
 
         if (action === 'get_designs') {
             const designs = await getDesigns(supabase);
-            return res.status(200).json({ success: true, designs });
+            return res.status(200).json({ success: true, designs, categories: CATEGORIES });
         }
 
         if (action === 'upload_url') {

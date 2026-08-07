@@ -49,6 +49,9 @@
         .cert-meta{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);}
         .cert-pill{padding:8px 14px;border-radius:999px;border:1.5px solid var(--border);background:white;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;}
         .cert-pill.active{background:var(--teal);color:white;border-color:var(--teal);}
+        .cert-cat{margin-bottom:12px;}
+        .cert-cat-l{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+        .cert-cat-pills{display:flex;flex-wrap:wrap;gap:8px;}
         .cert-meta b{color:var(--text);font-family:'DM Mono',monospace;}
         .loading-box,.empty-box{text-align:center;padding:60px 20px;color:var(--muted);}
         @keyframes spin{to{transform:rotate(360deg);}}
@@ -177,12 +180,24 @@ async function init(){
 function renderPicker(){
     const p = document.getElementById('certPicker');
     if (CERTS.length < 2) { p.style.display = 'none'; return; }
-    p.style.display = 'flex';
-    p.innerHTML = CERTS.map(function(c,i){
-        var co = coName(c);
-        var label = esc(c.type_name||'Certificate') + (co ? ' — '+esc(co) : '');
-        return '<button class="cert-pill'+(i===0?' active':'')+'" data-i="'+i+'" onclick="select('+i+')">'+label+'</button>';
+    p.style.display = 'block';
+    // Group the partner's certificates by category (fixed order).
+    var cats = window.CERT_CATEGORIES || [{id:'payprotec',label:'Certificates'}];
+    var byCat = {};
+    CERTS.forEach(function(c,i){ var k=c.category||'payprotec'; (byCat[k]=byCat[k]||[]).push(i); });
+    var order = cats.map(function(c){return c.id;});
+    // include any unknown categories at the end
+    Object.keys(byCat).forEach(function(k){ if(order.indexOf(k)<0) order.push(k); });
+    var labelOf = {}; cats.forEach(function(c){ labelOf[c.id]=c.label; });
+    var html = order.filter(function(k){return byCat[k];}).map(function(k){
+        var pills = byCat[k].map(function(i){
+            var c = CERTS[i]; var co = coName(c);
+            var label = esc(c.type_name||'Certificate') + (co ? ' — '+esc(co) : '');
+            return '<button class="cert-pill'+(i===0?' active':'')+'" data-i="'+i+'" onclick="select('+i+')">'+label+'</button>';
+        }).join('');
+        return '<div class="cert-cat"><div class="cert-cat-l">'+esc(labelOf[k]||'Certificates')+'</div><div class="cert-cat-pills">'+pills+'</div></div>';
     }).join('');
+    p.innerHTML = html;
 }
 
 function select(i){
