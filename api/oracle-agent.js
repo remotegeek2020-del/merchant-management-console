@@ -292,6 +292,11 @@ export default async function handler(req, res) {
             description: 'List available certificate designs. Returns id (type_id), name, category. Use to get the type_id before awarding a certificate.',
             parameters: { type: 'object', properties: {}, required: [] }
         },
+        {
+            name: 'search_tickets',
+            description: 'Search support tickets by ticket number, subject, or status. Returns the ticket id, number, subject, and status. Use to get the ticket_id before updating a ticket status.',
+            parameters: { type: 'object', properties: { query: { type: 'string', description: 'Ticket number, subject text, or status' } }, required: ['query'] }
+        },
 
         // ── OPERATOR: actions (prepared, then user must confirm in the UI) ──────
         {
@@ -600,6 +605,15 @@ export default async function handler(req, res) {
                     const { data } = await supabase.from('app_settings').select('value').eq('key', 'cert_designs').maybeSingle();
                     let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch (e) { arr = []; }
                     return { designs: (Array.isArray(arr) ? arr : []).map(d => ({ id: d.id, name: d.name, category: d.category || 'payprotec', is_default: !!d.is_default })) };
+                }
+                case 'search_tickets': {
+                    const q = String(args.query || '').replace(/[%,()]/g, ' ').trim();
+                    if (q.length < 2) return { tickets: [] };
+                    const { data } = await supabase.from('support_tickets')
+                        .select('id, ticket_number, subject, status')
+                        .or(`ticket_number.ilike.%${q}%,subject.ilike.%${q}%,status.ilike.%${q}%`)
+                        .order('updated_at', { ascending: false }).limit(10);
+                    return { tickets: data || [] };
                 }
 
                 // ── OPERATOR actions: PROPOSE only (never execute here) ───────
