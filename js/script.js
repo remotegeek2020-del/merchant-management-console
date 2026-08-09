@@ -252,6 +252,7 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_task_dashboard',    parseBool(user.access_task_dashboard)    ? 'true' : 'false');
         localStorage.setItem('pp_access_pos_express',       parseBool(user.access_pos_express)       ? 'true' : 'false');
         localStorage.setItem('pp_access_pos_settings',    parseBool(user.access_pos_settings)      ? 'true' : 'false');
+        localStorage.setItem('pp_access_jarvis',          parseBool(user.access_jarvis)            ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
         window.dispatchEvent(new CustomEvent('pp-authorized', { detail: user }));
     } catch (e) { console.error("Storage Error:", e); }
@@ -287,8 +288,9 @@ async function authorizeUser(user, sessionToken) {
     const hasJarvisAccess = isSuperAdmin || parseBool(user.access_jarvis);
     if (hasJarvisAccess && elements.jarvisBtn && elements.jarvisSidebar) {
         elements.jarvisBtn.style.display = 'block';
-        elements.jarvisSidebar.style.display = 'flex'; 
+        elements.jarvisSidebar.style.display = 'flex';
         console.log("🤖 Jarvis Online.");
+        _jarvisLoadHistory();
     } else {
         if (elements.jarvisBtn) elements.jarvisBtn.style.display = 'none';
         if (elements.jarvisSidebar) elements.jarvisSidebar.style.display = 'none';
@@ -657,6 +659,25 @@ window.clearJarvisHistory = async function() {
 };
 
 let _jarvisLastResponse = '';
+
+async function _jarvisLoadHistory() {
+    try {
+        const res = await fetch('/api/oracle-agent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'history', userId: localStorage.getItem('pp_userid') })
+        });
+        const d = await res.json();
+        const c = document.getElementById('jarvis-messages');
+        if (!c || !d.history || !d.history.length) return;
+        let h = '';
+        d.history.forEach(function (m) {
+            if (m.role === 'user') h += `<div style="text-align:right;margin-bottom:10px;"><span style="display:inline-block;background:#004990;color:white;border-radius:12px 12px 2px 12px;padding:9px 14px;font-size:13px;max-width:90%;text-align:left;">${String(m.content).replace(/</g, '&lt;')}</span></div>`;
+            else { h += `<div class="ai-bubble">${_jarvisMd(m.content)}</div>`; _jarvisLastResponse = m.content; }
+        });
+        c.innerHTML = h + '<div style="text-align:center;color:#3b5578;font-size:10px;margin:6px 0;">— restored your recent conversation —</div>';
+        c.scrollTop = c.scrollHeight;
+    } catch (e) { /* non-fatal */ }
+}
 
 window.confirmJarvisAction = async function (btn) {
     const pa = window._jarvisPending;

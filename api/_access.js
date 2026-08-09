@@ -7,7 +7,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export async function loadActor(userid) {
     if (!userid) return null;
     const { data } = await supabase.from('app_users')
-        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects, access_delete_leads')
+        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects, access_delete_leads, access_jarvis')
         .eq('userid', userid).maybeSingle();
     return data || null;
 }

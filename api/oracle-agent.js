@@ -30,6 +30,18 @@ export default async function handler(req, res) {
         opEnabled = String(fl?.value) === 'true';
     } catch (e) { opEnabled = false; }
 
+    // Access gate: only super_admins or users with the Jarvis permission.
+    const jarvisAllowed = !!actor && actor.is_active !== false && (String(actor.role || '') === 'super_admin' || actor.access_jarvis === true);
+    if (!jarvisAllowed) {
+        return res.status(200).json({ answer: 'You do not have access to Jarvis. Ask a super admin to enable it for your account.', suggestions: [], tools_used: [], denied: true });
+    }
+
+    // History mode: return recent conversation so the UI can restore it (memory).
+    if (req.body.mode === 'history') {
+        const { data } = await supabase.from('chat_history').select('role, content').eq('userid', userId).order('created_at', { ascending: false }).limit(20);
+        return res.status(200).json({ history: (data || []).reverse() });
+    }
+
     let pendingAction = null; // set by an action tool during the agentic loop
 
     const ACTION_SPECS = {
