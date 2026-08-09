@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { loadActor, isAdminRole } from './_access.js';
 import { issueCertificate } from './certificates.js';
 import { notifyPartner } from './_notify.js';
+import { sendLeadInvite } from './_lead-invite.js';
 
 // ── Generic operator query support ────────────────────────────────────────────
 // Allowlisted entities Jarvis can query. Read-only; no raw SQL from the model.
@@ -132,8 +133,110 @@ export default async function handler(req, res) {
                 }
                 return { ok: true, message: `Ticket ${t.ticket_number} set to ${status.replace(/_/g, ' ')}.` };
             }
+        },
+        add_partner_note: {
+            access: (a) => !!a && a.is_active !== false,
+            describe: async (args) => {
+                let who = args.person_id;
+                try { const { data: p } = await supabase.from('persons').select('full_name').eq('id', args.person_id).maybeSingle(); if (p) who = p.full_name; } catch (e) {}
+                return `Add a note to partner ${who}: "${String(args.body || '').slice(0, 80)}"`;
+            },
+            run: async (args) => {
+                if (!args.person_id || !args.body) return { ok: false, message: 'person_id and body are required.' };
+                const { error } = await supabase.from('partner_notes').insert({ person_id: args.person_id, title: String(args.title || 'Note').slice(0, 160), body: String(args.body), note_type: 'general', author_name: actorLabel, source: 'jarvis' });
+                return error ? { ok: false, message: error.message } : { ok: true, message: 'Note added to the partner.' };
+            }
+        },
+        add_merchant_note: {
+            access: (a) => !!a && a.is_active !== false,
+            describe: async (args) => {
+                let who = args.merchant_id;
+                try { const { data: m } = await supabase.from('merchants').select('dba_name').eq('id', args.merchant_id).maybeSingle(); if (m) who = m.dba_name; } catch (e) {}
+                return `Add a note to merchant ${who}: "${String(args.body || '').slice(0, 80)}"`;
+            },
+            run: async (args) => {
+                if (!args.merchant_id || !args.body) return { ok: false, message: 'merchant_id (uuid) and body are required.' };
+                const { error } = await supabase.from('merchant_notes').insert({ merchant_id: args.merchant_id, title: String(args.title || 'Note').slice(0, 160), body: String(args.body), created_by: actorLabel });
+                return error ? { ok: false, message: error.message } : { ok: true, message: 'Note added to the merchant.' };
+            }
+        },
+        create_task: {
+            access: (a) => !!a && a.is_active !== false,
+            describe: async (args) => {
+                let m = args.merchant_id, who = args.assigned_to || 'unassigned';
+                try { const { data: mm } = await supabase.from('merchants').select('dba_name').eq('id', args.merchant_id).maybeSingle(); if (mm) m = mm.dba_name; } catch (e) {}
+                if (args.assigned_to) { try { const { data: u } = await supabase.from('app_users').select('first_name,last_name').eq('userid', args.assigned_to).maybeSingle(); if (u) who = (`${u.first_name || ''} ${u.last_name || ''}`.trim()); } catch (e) {} }
+                return `Create task "${String(args.title || '').slice(0, 60)}" on ${m}${args.assigned_to ? ' — assigned to ' + who : ''}${args.due_date ? ', due ' + args.due_date : ''}`;
+            },
+            run: async (args) => {
+                if (!args.title || !args.merchant_id) return { ok: false, message: 'title and merchant_id (uuid) are required.' };
+                const row = { merchant_id: args.merchant_id, title: String(args.title).slice(0, 200), body: String(args.body || ''), status: 'open', created_by: actorLabel, priority: ['low', 'medium', 'high'].indexOf(String(args.priority || '').toLowerCase()) >= 0 ? String(args.priority).toLowerCase() : 'medium', source: 'jarvis' };
+                if (args.assigned_to) row.assigned_to = args.assigned_to;
+                if (args.due_date && /^\d{4}-\d{2}-\d{2}/.test(String(args.due_date))) row.due_date = args.due_date;
+                const { data: t, error } = await supabase.from('merchant_tasks').insert(row).select('id').single();
+                if (error) return { ok: false, message: error.message };
+                if (args.assigned_to) {
+                    let dba = ''; try { const { data: mm } = await supabase.from('merchants').select('dba_name').eq('id', args.merchant_id).maybeSingle(); dba = (mm && mm.dba_name) || ''; } catch (e) {}
+                    try { await supabase.from('user_notifications').insert({ user_id: args.assigned_to, type: 'task_assigned', title: 'New task: ' + row.title, body: dba ? 'On ' + dba : '', merchant_id: args.merchant_id, merchant_name: dba, task_id: t.id, from_name: actorLabel, is_read: false }); } catch (e) {}
+                }
+                return { ok: true, message: 'Task created' + (args.assigned_to ? ' and assigned.' : '.') };
+            }
+        },
+        add_ticket_comment: {
+            access: (a) => !!a && a.is_active !== false,
+            describe: async (args) => {
+                let tn = args.ticket_id;
+                try { const { data: t } = await supabase.from('support_tickets').select('ticket_number').eq('id', args.ticket_id).maybeSingle(); if (t) tn = t.ticket_number; } catch (e) {}
+                return `${args.is_internal ? 'Internal note' : 'Reply'} on ticket ${tn}: "${String(args.body || '').slice(0, 80)}"` + (args.is_internal ? '' : ' (the partner will be notified)');
+            },
+            run: async (args) => {
+                if (!args.ticket_id || !args.body) return { ok: false, message: 'ticket_id and body are required.' };
+                const isInternal = !!args.is_internal;
+                const { data: t } = await supabase.from('support_tickets').select('person_id, ticket_number, subject').eq('id', args.ticket_id).maybeSingle();
+                if (!t) return { ok: false, message: 'Ticket not found.' };
+                const { error } = await supabase.from('ticket_comments').insert({ ticket_id: args.ticket_id, author_type: 'staff', author_name: actorLabel, body: String(args.body), is_internal: isInternal });
+                if (error) return { ok: false, message: error.message };
+                await supabase.from('support_tickets').update({ updated_at: new Date().toISOString() }).eq('id', args.ticket_id);
+                if (!isInternal && t.person_id) {
+                    try { await supabase.rpc('increment_partner_unread', { tid: parseInt(args.ticket_id) }); } catch (e) {}
+                    await notifyPartner(supabase, { personId: t.person_id, type: 'ticket_reply', title: `New reply on ticket ${t.ticket_number}`, body: String(args.body).slice(0, 140), link: '/partner/tickets', actorName: actorLabel });
+                }
+                return { ok: true, message: `Comment added to ticket ${t.ticket_number}.` };
+            }
+        },
+        send_prospect_invite: {
+            access: (a) => !!a && a.is_active !== false && (isAdminRole(a) || a.access_prospects === true || a.access_lead_portal === true),
+            describe: async (args) => {
+                let who = args.lead_id;
+                try { const { data: l } = await supabase.from('leads').select('full_name,email').eq('id', args.lead_id).maybeSingle(); if (l) who = (l.full_name || '') + ' <' + (l.email || '') + '>'; } catch (e) {}
+                return `Email a portal setup invite to prospect ${who}`;
+            },
+            run: async (args) => {
+                if (!args.lead_id) return { ok: false, message: 'lead_id is required.' };
+                const { data: lead } = await supabase.from('leads').select('id, full_name, email, password_hash').eq('id', args.lead_id).maybeSingle();
+                if (!lead) return { ok: false, message: 'Prospect not found.' };
+                if (lead.password_hash) return { ok: false, message: 'This prospect already has an active account — invite not sent.' };
+                if (!lead.email) return { ok: false, message: 'Prospect has no email.' };
+                const okSent = await sendLeadInvite(supabase, { id: lead.id, full_name: lead.full_name, email: lead.email }, reqHost);
+                return okSent ? { ok: true, message: 'Invite emailed to ' + lead.email + '.' } : { ok: false, message: 'Could not send the invite email.' };
+            }
+        },
+        notify_partner: {
+            access: (a) => !!a && a.is_active !== false,
+            describe: async (args) => {
+                let who = args.person_id;
+                try { const { data: p } = await supabase.from('persons').select('full_name').eq('id', args.person_id).maybeSingle(); if (p) who = p.full_name; } catch (e) {}
+                return `Send a portal notification to ${who}: "${String(args.title || args.body || '').slice(0, 80)}"`;
+            },
+            run: async (args) => {
+                if (!args.person_id || !(args.title || args.body)) return { ok: false, message: 'person_id and a title/body are required.' };
+                await notifyPartner(supabase, { personId: args.person_id, type: 'message', title: String(args.title || 'Message from PayProTec').slice(0, 160), body: String(args.body || '').slice(0, 400), link: args.link || '/partner/dashboard', actorName: actorLabel });
+                return { ok: true, message: 'Notification sent to the partner.' };
+            }
         }
     };
+    const actorLabel = (`${actor && actor.first_name || ''} ${actor && actor.last_name || ''}`.trim()) || (actor && actor.email) || 'PayProTec Staff';
+    const reqHost = req.headers && req.headers.host;
 
     // ── EXECUTE path: the UI calls this after the user clicks Confirm ──────────
     if (req.body.execute_action && req.body.execute_action.name) {
@@ -382,12 +485,56 @@ export default async function handler(req, res) {
             name: 'update_ticket_status',
             description: 'Prepare to change a support ticket status. Requires ticket_id and status (open, in_progress, waiting, resolved, closed). Proposed for user confirmation, not executed immediately.',
             parameters: { type: 'object', properties: { ticket_id: { type: 'string' }, status: { type: 'string' } }, required: ['ticket_id', 'status'] }
+        },
+        {
+            name: 'find_merchant',
+            description: 'Find a merchant by DBA name or merchant id (MID). Returns the merchant uuid (id), merchant_id, dba_name, status. Use to get the id (uuid) before adding a merchant note or creating a task.',
+            parameters: { type: 'object', properties: { query: { type: 'string', description: 'DBA name or MID' } }, required: ['query'] }
+        },
+        {
+            name: 'add_partner_note',
+            description: 'Prepare to add an internal note to a partner. Requires person_id (from find_partner_person) and body. Proposed for confirmation.',
+            parameters: { type: 'object', properties: { person_id: { type: 'string' }, body: { type: 'string' }, title: { type: 'string' } }, required: ['person_id', 'body'] }
+        },
+        {
+            name: 'add_merchant_note',
+            description: 'Prepare to add an internal note to a merchant. Requires merchant_id (the UUID from find_merchant) and body. Proposed for confirmation.',
+            parameters: { type: 'object', properties: { merchant_id: { type: 'string', description: 'merchant UUID (id) from find_merchant' }, body: { type: 'string' }, title: { type: 'string' } }, required: ['merchant_id', 'body'] }
+        },
+        {
+            name: 'create_task',
+            description: 'Prepare to create a task on a merchant, optionally assigned to a staff member. Requires title and merchant_id (UUID from find_merchant). Optional assigned_to (userid from list_reps), due_date (YYYY-MM-DD), priority (low/medium/high), body. Proposed for confirmation.',
+            parameters: { type: 'object', properties: { title: { type: 'string' }, merchant_id: { type: 'string', description: 'merchant UUID' }, assigned_to: { type: 'string' }, due_date: { type: 'string' }, priority: { type: 'string' }, body: { type: 'string' } }, required: ['title', 'merchant_id'] }
+        },
+        {
+            name: 'add_ticket_comment',
+            description: 'Prepare to post a staff comment on a ticket. Requires ticket_id (from search_tickets) and body. Set is_internal:true for a private note (partner is NOT notified); otherwise the partner is notified. Proposed for confirmation.',
+            parameters: { type: 'object', properties: { ticket_id: { type: 'string' }, body: { type: 'string' }, is_internal: { type: 'boolean' } }, required: ['ticket_id', 'body'] }
+        },
+        {
+            name: 'send_prospect_invite',
+            description: 'Prepare to email a prospect their portal account-setup invite. Requires lead_id (from search_prospects). Refuses if they already have an account. Proposed for confirmation — this SENDS AN EMAIL.',
+            parameters: { type: 'object', properties: { lead_id: { type: 'string' } }, required: ['lead_id'] }
+        },
+        {
+            name: 'notify_partner',
+            description: 'Prepare to send an in-app portal notification (bell) to a partner. Requires person_id (from find_partner_person) and title and/or body. Optional link. Proposed for confirmation. In-app only (no email).',
+            parameters: { type: 'object', properties: { person_id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, link: { type: 'string' } }, required: ['person_id'] }
         }
     ];
 
     // ── TOOL EXECUTOR ─────────────────────────────────────────────────────────
     async function executeTool(name, args) {
         try {
+            // Operator actions: PROPOSE only (execution happens after the user confirms).
+            if (ACTION_SPECS[name]) {
+                const spec = ACTION_SPECS[name];
+                if (!opEnabled) return { error: 'Operator mode is off. An admin can enable "Jarvis Operator" in Secret Dungeon → Feature Flags.' };
+                if (!spec.access(actor)) return { error: 'You do not have permission to perform this action.' };
+                let label = name; try { label = await spec.describe(args || {}); } catch (e) {}
+                pendingAction = { name, args: args || {}, label };
+                return { proposed: true, requires_confirmation: true, summary: label, note: 'Prepared. Tell the user exactly what will happen and that they must click Confirm in the UI. Do NOT claim it is done.' };
+            }
             switch (name) {
 
                 // ── MERCHANTS ────────────────────────────────────────────────
@@ -723,16 +870,14 @@ export default async function handler(req, res) {
                     return { tickets: data || [] };
                 }
 
-                // ── OPERATOR actions: PROPOSE only (never execute here) ───────
-                case 'assign_prospect_rep':
-                case 'award_certificate':
-                case 'update_ticket_status': {
-                    const spec = ACTION_SPECS[name];
-                    if (!opEnabled) return { error: 'Operator mode is off. An admin can enable "Jarvis Operator" in Secret Dungeon → Feature Flags.' };
-                    if (!spec.access(actor)) return { error: 'You do not have permission to perform this action.' };
-                    let label = name; try { label = await spec.describe(args || {}); } catch (e) {}
-                    pendingAction = { name, args: args || {}, label };
-                    return { proposed: true, requires_confirmation: true, summary: label, note: 'Prepared. Tell the user exactly what will happen and that they must click Confirm in the UI. Do NOT claim it is done.' };
+                case 'find_merchant': {
+                    const q = String(args.query || '').replace(/[%,()]/g, ' ').trim();
+                    if (q.length < 2) return { merchants: [] };
+                    const isNum = /^\d+$/.test(q);
+                    let mq = supabase.from('merchants').select('id, merchant_id, dba_name, account_status').limit(10);
+                    mq = isNum ? mq.ilike('merchant_id', `%${q}%`) : mq.ilike('dba_name', `%${q}%`);
+                    const { data } = await mq;
+                    return { merchants: data || [] };
                 }
 
                 default:
@@ -805,7 +950,17 @@ NAVIGATION ACTIONS — when suggesting a page to visit, use EXACTLY these URL fo
 - Search returns: → Search returns (url:/returns-dashboard.html?q=[term])
 Only include navigation actions when they are genuinely useful. Use real names/values in the URL query params, not placeholder text like [name].
 
-OPERATOR ACTIONS${opEnabled ? ' (ENABLED)' : ' (currently OFF — do not attempt)'}: You can PREPARE these write actions: assign_prospect_rep, award_certificate, update_ticket_status. First resolve exact ids with the read helpers (search_prospects, list_reps, find_partner_person, list_certificate_designs), then call the action tool with those ids. Actions are NEVER executed immediately — they are proposed to the user, who must click Confirm. After calling an action tool, clearly state what you've prepared and that the user must confirm it. NEVER say an action is complete/done — it isn't until the user confirms.` + knowledgeBlock;
+OPERATOR ACTIONS${opEnabled ? ' (ENABLED)' : ' (currently OFF — do not attempt)'}: You can PREPARE these write actions:
+- assign_prospect_rep (needs lead_id via search_prospects + rep_userid via list_reps)
+- send_prospect_invite (needs lead_id — SENDS AN EMAIL to the prospect)
+- award_certificate (needs person_id via find_partner_person + type_id via list_certificate_designs) [super-admin only]
+- add_partner_note (needs person_id via find_partner_person)
+- notify_partner (needs person_id — sends an in-app bell to the partner)
+- add_merchant_note (needs merchant UUID via find_merchant)
+- create_task (needs title + merchant UUID via find_merchant; optional assigned_to via list_reps, due_date, priority)
+- update_ticket_status (needs ticket_id via search_tickets)
+- add_ticket_comment (needs ticket_id via search_tickets; a non-internal comment notifies the partner)
+ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool. Actions are NEVER executed immediately — they are proposed and the user must click Confirm. After calling an action tool, clearly state what you've prepared, mention any email/notification side effect, and that the user must confirm. NEVER say an action is complete/done — it isn't until the user confirms.` + knowledgeBlock;
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 

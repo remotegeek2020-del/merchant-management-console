@@ -765,9 +765,16 @@ async function askJarvis() {
                 list_reps: 'Rep List',
                 list_certificate_designs: 'Certificates',
                 search_tickets: 'Ticket Search',
+                find_merchant: 'Merchant Lookup',
                 assign_prospect_rep: 'Assign Rep',
                 award_certificate: 'Award Certificate',
-                update_ticket_status: 'Ticket Update'
+                update_ticket_status: 'Ticket Update',
+                add_partner_note: 'Partner Note',
+                add_merchant_note: 'Merchant Note',
+                create_task: 'Create Task',
+                add_ticket_comment: 'Ticket Reply',
+                send_prospect_invite: 'Prospect Invite',
+                notify_partner: 'Notify Partner'
             };
             html += '<div style="margin-bottom:10px;">';
             data.tools_used.forEach(t => {
