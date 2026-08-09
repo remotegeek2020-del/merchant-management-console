@@ -1,6 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { createClient } from '@supabase/supabase-js';
+import { loadActor, isAdminRole } from './_access.js';
+import { issueCertificate } from './certificates.js';
+import { notifyPartner } from './_notify.js';
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
@@ -9,12 +12,96 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ answer: "Method not allowed." });
 
     const { query, userId, userName, lastResponse } = req.body;
-    if (!query) return res.status(400).json({ answer: "No query provided." });
+    if (!query && !(req.body.execute_action && req.body.execute_action.name)) return res.status(400).json({ answer: "No query provided." });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ answer: "GEMINI_API_KEY is not configured." });
+    }
+
+    // ── OPERATOR MODE (writes) ────────────────────────────────────────────────
+    // Jarvis can PREPARE actions; the user must confirm in the UI before they run.
+    // Gated by the app_settings flag `jarvis_operator_enabled` and per-action access.
+    const actor = await loadActor(session.userid);
+    let opEnabled = false;
+    try {
+        const { data: fl } = await supabase.from('app_settings').select('value').eq('key', 'jarvis_operator_enabled').maybeSingle();
+        opEnabled = String(fl?.value) === 'true';
+    } catch (e) { opEnabled = false; }
+
+    let pendingAction = null; // set by an action tool during the agentic loop
+
+    const ACTION_SPECS = {
+        assign_prospect_rep: {
+            access: (a) => !!a && a.is_active !== false && (isAdminRole(a) || a.access_prospects === true || a.access_lead_portal === true),
+            describe: async (args) => {
+                let rep = args.rep_userid, lead = args.lead_id;
+                try { const { data: u } = await supabase.from('app_users').select('first_name,last_name,email').eq('userid', args.rep_userid).maybeSingle(); if (u) rep = (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email; } catch (e) {}
+                try { const { data: l } = await supabase.from('leads').select('full_name,email').eq('id', args.lead_id).maybeSingle(); if (l) lead = l.full_name || l.email; } catch (e) {}
+                return `Assign rep ${rep} to prospect ${lead}`;
+            },
+            run: async (args) => {
+                if (!args.lead_id || !args.rep_userid) return { ok: false, message: 'lead_id and rep_userid are required.' };
+                const { error } = await supabase.from('leads').update({ assigned_rep: args.rep_userid }).eq('id', args.lead_id);
+                return error ? { ok: false, message: error.message } : { ok: true, message: 'Rep assigned to the prospect.' };
+            }
+        },
+        award_certificate: {
+            access: (a) => !!a && a.is_active !== false && String(a.role || '') === 'super_admin',
+            describe: async (args) => {
+                let who = args.person_id;
+                try { const { data: p } = await supabase.from('persons').select('full_name').eq('id', args.person_id).maybeSingle(); if (p) who = p.full_name; } catch (e) {}
+                return `Award certificate "${args.type_id}" to ${who}`;
+            },
+            run: async (args) => {
+                if (!args.person_id || !args.type_id) return { ok: false, message: 'person_id and type_id are required.' };
+                const r = await issueCertificate(supabase, { personId: args.person_id, typeId: args.type_id, source: 'awarded' });
+                if (!r.ok) return { ok: false, message: r.error || 'Could not award certificate.' };
+                return { ok: true, message: r.created ? 'Certificate awarded.' : 'Partner already held that certificate.' };
+            }
+        },
+        update_ticket_status: {
+            access: (a) => !!a && a.is_active !== false,
+            describe: async (args) => {
+                let tn = args.ticket_id;
+                try { const { data: t } = await supabase.from('support_tickets').select('ticket_number').eq('id', args.ticket_id).maybeSingle(); if (t) tn = t.ticket_number; } catch (e) {}
+                return `Set ticket ${tn} status to "${args.status}"`;
+            },
+            run: async (args) => {
+                const VALID = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
+                if (!args.ticket_id || !args.status) return { ok: false, message: 'ticket_id and status are required.' };
+                const status = String(args.status).toLowerCase().replace(/\s+/g, '_');
+                if (VALID.indexOf(status) < 0) return { ok: false, message: 'Invalid status. Use one of: ' + VALID.join(', ') };
+                const { data: t } = await supabase.from('support_tickets').select('person_id, ticket_number, subject').eq('id', args.ticket_id).maybeSingle();
+                if (!t) return { ok: false, message: 'Ticket not found.' };
+                const { error } = await supabase.from('support_tickets').update({ status, updated_at: new Date().toISOString() }).eq('id', args.ticket_id);
+                if (error) return { ok: false, message: error.message };
+                if (t.person_id) {
+                    try { await supabase.rpc('increment_partner_unread', { tid: parseInt(args.ticket_id) }); } catch (e) {}
+                    await notifyPartner(supabase, { personId: t.person_id, type: 'ticket_update', title: `Ticket ${t.ticket_number} — ${status.replace(/_/g, ' ')}`, body: t.subject || '', link: '/partner/tickets', actorName: 'PayProTec Staff' });
+                }
+                return { ok: true, message: `Ticket ${t.ticket_number} set to ${status.replace(/_/g, ' ')}.` };
+            }
+        }
+    };
+
+    // ── EXECUTE path: the UI calls this after the user clicks Confirm ──────────
+    if (req.body.execute_action && req.body.execute_action.name) {
+        const { name, args } = req.body.execute_action;
+        const spec = ACTION_SPECS[name];
+        if (!spec) return res.status(200).json({ answer: 'Unknown action.', executed: false });
+        if (!opEnabled) return res.status(200).json({ answer: 'Operator mode is off. Enable "Jarvis Operator" in Secret Dungeon → Feature Flags.', executed: false });
+        if (!spec.access(actor)) return res.status(200).json({ answer: 'You do not have permission for that action.', executed: false });
+        const r = await spec.run(args || {});
+        try {
+            await supabase.from('activity_logs').insert({
+                email: actor?.email || session.userid, action: `Jarvis operator: ${name} — ${r.ok ? 'done' : 'failed'}`,
+                status: r.ok ? 'success' : 'error', category: 'admin', target_type: 'jarvis_action', target_id: name,
+                severity: r.ok ? 'info' : 'warning', new_value: { args, message: r.message }
+            });
+        } catch (e) {}
+        return res.status(200).json({ answer: (r.ok ? '✅ ' : '⚠️ ') + r.message, executed: !!r.ok });
     }
 
     // ── TOOL DEFINITIONS ──────────────────────────────────────────────────────
@@ -182,6 +269,45 @@ export default async function handler(req, res) {
                 },
                 required: []
             }
+        },
+
+        // ── OPERATOR: read helpers (to resolve ids before proposing an action) ──
+        {
+            name: 'search_prospects',
+            description: 'Search prospects/leads by name or email. Returns lead id, name, email, status, and assigned rep. Use to get the lead id before assigning a rep.',
+            parameters: { type: 'object', properties: { query: { type: 'string', description: 'Name or email' } }, required: ['query'] }
+        },
+        {
+            name: 'list_reps',
+            description: 'List active staff users (reps) with their userid and name. Use to resolve the rep_userid before assigning a rep to a prospect.',
+            parameters: { type: 'object', properties: {}, required: [] }
+        },
+        {
+            name: 'find_partner_person',
+            description: 'Find a partner person by name or email. Returns person_id, full_name, email. Use to get the person_id before awarding a certificate.',
+            parameters: { type: 'object', properties: { query: { type: 'string', description: 'Name or email' } }, required: ['query'] }
+        },
+        {
+            name: 'list_certificate_designs',
+            description: 'List available certificate designs. Returns id (type_id), name, category. Use to get the type_id before awarding a certificate.',
+            parameters: { type: 'object', properties: {}, required: [] }
+        },
+
+        // ── OPERATOR: actions (prepared, then user must confirm in the UI) ──────
+        {
+            name: 'assign_prospect_rep',
+            description: 'Prepare to assign a staff rep to a prospect/lead. Requires lead_id (from search_prospects) and rep_userid (from list_reps). This is NOT executed immediately — it is proposed for the user to confirm.',
+            parameters: { type: 'object', properties: { lead_id: { type: 'string' }, rep_userid: { type: 'string' } }, required: ['lead_id', 'rep_userid'] }
+        },
+        {
+            name: 'award_certificate',
+            description: 'Prepare to award a certificate to a partner. Requires person_id (from find_partner_person) and type_id (from list_certificate_designs). Proposed for user confirmation, not executed immediately.',
+            parameters: { type: 'object', properties: { person_id: { type: 'string' }, type_id: { type: 'string' } }, required: ['person_id', 'type_id'] }
+        },
+        {
+            name: 'update_ticket_status',
+            description: 'Prepare to change a support ticket status. Requires ticket_id and status (open, in_progress, waiting, resolved, closed). Proposed for user confirmation, not executed immediately.',
+            parameters: { type: 'object', properties: { ticket_id: { type: 'string' }, status: { type: 'string' } }, required: ['ticket_id', 'status'] }
         }
     ];
 
@@ -453,6 +579,41 @@ export default async function handler(req, res) {
                     return { returns: data || [], count: (data || []).length };
                 }
 
+                // ── OPERATOR read helpers ────────────────────────────────────
+                case 'search_prospects': {
+                    const q = String(args.query || '').replace(/[%,()]/g, ' ').trim();
+                    if (q.length < 2) return { prospects: [] };
+                    const { data } = await supabase.from('leads').select('id, full_name, email, status, assigned_rep').or(`full_name.ilike.%${q}%,email.ilike.%${q}%`).limit(10);
+                    return { prospects: data || [] };
+                }
+                case 'list_reps': {
+                    const { data } = await supabase.from('app_users').select('userid, first_name, last_name, email, role').eq('is_active', true).order('first_name').limit(200);
+                    return { reps: (data || []).map(u => ({ userid: u.userid, name: (`${u.first_name || ''} ${u.last_name || ''}`.trim()) || u.email, role: u.role || '' })) };
+                }
+                case 'find_partner_person': {
+                    const q = String(args.query || '').replace(/[%,()]/g, ' ').trim();
+                    if (q.length < 2) return { partners: [] };
+                    const { data } = await supabase.from('persons').select('id, full_name, email').or(`full_name.ilike.%${q}%,email.ilike.%${q}%`).limit(10);
+                    return { partners: data || [] };
+                }
+                case 'list_certificate_designs': {
+                    const { data } = await supabase.from('app_settings').select('value').eq('key', 'cert_designs').maybeSingle();
+                    let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch (e) { arr = []; }
+                    return { designs: (Array.isArray(arr) ? arr : []).map(d => ({ id: d.id, name: d.name, category: d.category || 'payprotec', is_default: !!d.is_default })) };
+                }
+
+                // ── OPERATOR actions: PROPOSE only (never execute here) ───────
+                case 'assign_prospect_rep':
+                case 'award_certificate':
+                case 'update_ticket_status': {
+                    const spec = ACTION_SPECS[name];
+                    if (!opEnabled) return { error: 'Operator mode is off. An admin can enable "Jarvis Operator" in Secret Dungeon → Feature Flags.' };
+                    if (!spec.access(actor)) return { error: 'You do not have permission to perform this action.' };
+                    let label = name; try { label = await spec.describe(args || {}); } catch (e) {}
+                    pendingAction = { name, args: args || {}, label };
+                    return { proposed: true, requires_confirmation: true, summary: label, note: 'Prepared. Tell the user exactly what will happen and that they must click Confirm in the UI. Do NOT claim it is done.' };
+                }
+
                 default:
                     return { error: `Unknown tool: ${name}` };
             }
@@ -520,7 +681,9 @@ NAVIGATION ACTIONS — when suggesting a page to visit, use EXACTLY these URL fo
 - Search inventory: → Search inventory (url:/equipments-dashboard.html?q=[term])
 - Returns: → View returns (url:/returns-dashboard.html)
 - Search returns: → Search returns (url:/returns-dashboard.html?q=[term])
-Only include navigation actions when they are genuinely useful. Use real names/values in the URL query params, not placeholder text like [name].` + knowledgeBlock;
+Only include navigation actions when they are genuinely useful. Use real names/values in the URL query params, not placeholder text like [name].
+
+OPERATOR ACTIONS${opEnabled ? ' (ENABLED)' : ' (currently OFF — do not attempt)'}: You can PREPARE these write actions: assign_prospect_rep, award_certificate, update_ticket_status. First resolve exact ids with the read helpers (search_prospects, list_reps, find_partner_person, list_certificate_designs), then call the action tool with those ids. Actions are NEVER executed immediately — they are proposed to the user, who must click Confirm. After calling an action tool, clearly state what you've prepared and that the user must confirm it. NEVER say an action is complete/done — it isn't until the user confirms.` + knowledgeBlock;
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -608,7 +771,8 @@ Only include navigation actions when they are genuinely useful. Use real names/v
         return res.status(200).json({
             answer: cleanAnswer,
             suggestions,
-            tools_used: [...new Set(toolCallsLog)]
+            tools_used: [...new Set(toolCallsLog)],
+            pending_action: pendingAction
         });
 
     } catch (err) {

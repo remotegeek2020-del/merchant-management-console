@@ -658,6 +658,30 @@ window.clearJarvisHistory = async function() {
 
 let _jarvisLastResponse = '';
 
+window.confirmJarvisAction = async function (btn) {
+    const pa = window._jarvisPending;
+    if (!pa) return;
+    btn.disabled = true;
+    const wrap = btn.closest('.jarvis-pending');
+    if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:#7dd3fc;"><span class="material-icons" style="font-size:14px;vertical-align:-2px;animation:spin 1s linear infinite;">sync</span> Running…</div>';
+    try {
+        const res = await fetch('/api/oracle-agent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ execute_action: { name: pa.name, args: pa.args } })
+        });
+        const d = await res.json();
+        if (wrap) wrap.innerHTML = '<div style="font-size:13px;color:' + (d.executed ? '#22c55e' : '#ef4444') + ';">' + _jarvisMd(d.answer || (d.executed ? 'Done.' : 'Could not complete.')) + '</div>';
+    } catch (e) {
+        if (wrap) wrap.innerHTML = '<div style="font-size:13px;color:#ef4444;">Connection error — action not run.</div>';
+    }
+    window._jarvisPending = null;
+};
+window.cancelJarvisAction = function (btn) {
+    const wrap = btn.closest('.jarvis-pending');
+    if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:#94a3b8;">Action cancelled.</div>';
+    window._jarvisPending = null;
+};
+
 async function askJarvis() {
     const input = document.getElementById('jarvis-input');
     const container = document.getElementById('jarvis-messages');
@@ -735,6 +759,18 @@ async function askJarvis() {
                 html += `<button class="jarvis-action-btn" onclick="window.location.href='${safeUrl}'"><span class="material-icons" style="font-size:13px;">open_in_new</span>${safeLabel}</button>`;
             });
             html += '</div>';
+        }
+
+        // Operator action — requires explicit confirmation before it runs
+        if (data.pending_action && data.pending_action.name) {
+            window._jarvisPending = data.pending_action;
+            const paLabel = (data.pending_action.label || 'Run this action').replace(/</g, '&lt;');
+            html += '<div class="jarvis-pending" style="margin-top:12px;border:1px solid #f59e0b;background:rgba(245,158,11,0.10);border-radius:10px;padding:12px;">'
+                + '<div style="font-size:10px;font-weight:800;color:#f59e0b;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;">bolt</span> Action — confirm to run</div>'
+                + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:10px;">' + paLabel + '</div>'
+                + '<button class="jarvis-action-btn" style="background:#0d9488;color:#fff;" onclick="confirmJarvisAction(this)"><span class="material-icons" style="font-size:13px;">check</span>Confirm</button>'
+                + '<button class="jarvis-action-btn" onclick="cancelJarvisAction(this)"><span class="material-icons" style="font-size:13px;">close</span>Cancel</button>'
+                + '</div>';
         }
 
         el.innerHTML = html;
