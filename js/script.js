@@ -758,7 +758,16 @@ async function askJarvis() {
                 search_inventory: 'Inventory Search',
                 get_inventory_by_location: 'Inventory Location',
                 get_returns_overview: 'Returns Overview',
-                get_returns: 'Returns List'
+                get_returns: 'Returns List',
+                query_records: 'Data Query',
+                search_prospects: 'Prospect Search',
+                find_partner_person: 'Partner Lookup',
+                list_reps: 'Rep List',
+                list_certificate_designs: 'Certificates',
+                search_tickets: 'Ticket Search',
+                assign_prospect_rep: 'Assign Rep',
+                award_certificate: 'Award Certificate',
+                update_ticket_status: 'Ticket Update'
             };
             html += '<div style="margin-bottom:10px;">';
             data.tools_used.forEach(t => {

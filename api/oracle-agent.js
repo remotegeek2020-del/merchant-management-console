@@ -5,6 +5,43 @@ import { loadActor, isAdminRole } from './_access.js';
 import { issueCertificate } from './certificates.js';
 import { notifyPartner } from './_notify.js';
 
+// ── Generic operator query support ────────────────────────────────────────────
+// Allowlisted entities Jarvis can query. Read-only; no raw SQL from the model.
+const JARVIS_ENTITIES = {
+    merchants:   { table: 'merchants',        date: 'created_at', dateAlt: ['enrollment_date', 'approved_date'], statusCol: 'account_status', prime49: 'merchant', select: 'merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_30_day, created_at' },
+    partners:    { table: 'persons',          date: 'created_at', dateAlt: ['enrolled_at'],                      statusCol: null,             prime49: 'partner',  select: 'id, full_name, email, enrolled_at, is_portal_active, created_at' },
+    prospects:   { table: 'leads',            date: 'created_at', dateAlt: [],                                    statusCol: 'status',         select: 'id, full_name, email, status, assigned_rep, created_at' },
+    pos_leads:   { table: 'pos_leads',        date: 'created_at', dateAlt: [],                                    statusCol: 'status',         select: 'id, status, classification, partner_id, created_at' },
+    deployments: { table: 'deployments',      date: 'created_at', dateAlt: ['target_deployment_date'],           statusCol: 'status',         select: 'id, status, merchant_id, target_deployment_date, created_at' },
+    returns:     { table: 'returns',          date: 'created_at', dateAlt: [],                                    statusCol: 'status',         select: 'return_id, status, return_reason, merchant_id, created_at' },
+    tickets:     { table: 'support_tickets',  date: 'created_at', dateAlt: [],                                    statusCol: 'status',         select: 'ticket_number, subject, status, priority, created_at' }
+};
+
+// Turn a relative keyword (or ISO date) into {gte, lt} ISO bounds.
+function jarvisDateRange(since, until) {
+    const now = new Date();
+    const iso = (d) => d.toISOString();
+    const startOfDay = (d) => { const x = new Date(d); x.setUTCHours(0, 0, 0, 0); return x; };
+    const daysAgo = (n) => { const x = new Date(now); x.setUTCDate(x.getUTCDate() - n); return x; };
+    let gte = null, lt = null;
+    const key = String(since || '').toLowerCase().trim();
+    switch (key) {
+        case 'today': gte = startOfDay(now); break;
+        case 'yesterday': gte = startOfDay(daysAgo(1)); lt = startOfDay(now); break;
+        case 'last_7_days': case 'last_week': case 'past_week': gte = daysAgo(7); break;
+        case 'this_week': { const dow = (startOfDay(now).getUTCDay() + 6) % 7; gte = startOfDay(daysAgo(dow)); break; }
+        case 'last_14_days': case 'last_2_weeks': gte = daysAgo(14); break;
+        case 'last_30_days': case 'past_month': gte = daysAgo(30); break;
+        case 'this_month': gte = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); break;
+        case 'last_month': gte = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)); lt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); break;
+        case 'last_90_days': case 'last_quarter': gte = daysAgo(90); break;
+        case 'this_year': case 'ytd': gte = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)); break;
+        default: if (/^\d{4}-\d{2}-\d{2}/.test(key)) gte = new Date(key);
+    }
+    if (until && /^\d{4}-\d{2}-\d{2}/.test(String(until))) lt = new Date(until);
+    return { gte: gte ? iso(gte) : null, lt: lt ? iso(lt) : null };
+}
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
@@ -280,6 +317,26 @@ export default async function handler(req, res) {
                     limit: { type: 'number', description: 'Max results, default 15' }
                 },
                 required: []
+            }
+        },
+
+        // ── UNIVERSAL QUERY (counts/lists with filters + date ranges) ──────────
+        {
+            name: 'query_records',
+            description: 'Powerful universal read across core entities. Use this for "how many / which / list" questions with a time window, status, or Prime49 filter — e.g. "Prime49 merchants added last week", "partners enrolled this month", "open tickets", "POS leads today". Set count_only:true for "how many" questions.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    entity: { type: 'string', description: 'One of: merchants, partners, prospects, pos_leads, deployments, returns, tickets' },
+                    since: { type: 'string', description: 'Time window: today, yesterday, last_7_days (=last week), this_week, last_14_days, last_30_days, this_month, last_month, last_90_days, this_year — or an ISO date YYYY-MM-DD' },
+                    until: { type: 'string', description: 'Optional ISO end date YYYY-MM-DD' },
+                    date_field: { type: 'string', description: 'Which date to filter on. Default created_at. merchants also allow enrollment_date/approved_date; partners allow enrolled_at; deployments allow target_deployment_date.' },
+                    status: { type: 'string', description: 'Optional status filter (e.g. Approved, open, Pending)' },
+                    prime49_only: { type: 'boolean', description: 'Only Prime49 (merchants or partners)' },
+                    count_only: { type: 'boolean', description: 'Return just the count (for "how many" questions)' },
+                    limit: { type: 'number', description: 'Max sample rows when listing, default 15, max 50' }
+                },
+                required: ['entity']
             }
         },
 
@@ -596,6 +653,44 @@ export default async function handler(req, res) {
                     return { returns: data || [], count: (data || []).length };
                 }
 
+                // ── UNIVERSAL QUERY ──────────────────────────────────────────
+                case 'query_records': {
+                    const ecfg = JARVIS_ENTITIES[args.entity];
+                    if (!ecfg) return { error: 'Unknown entity. Use one of: ' + Object.keys(JARVIS_ENTITIES).join(', ') };
+                    const allowedDates = [ecfg.date].concat(ecfg.dateAlt || []);
+                    const dateField = (args.date_field && allowedDates.indexOf(args.date_field) >= 0) ? args.date_field : ecfg.date;
+                    const range = jarvisDateRange(args.since, args.until);
+
+                    // Prime49 resolution (no direct column on merchants/persons).
+                    let primeIdStrings = null, primePersonIds = null;
+                    if (args.prime49_only) {
+                        if (ecfg.prime49 !== 'merchant' && ecfg.prime49 !== 'partner') return { error: 'prime49_only is only supported for merchants and partners.' };
+                        const { data: pi } = await supabase.from('agent_identifiers').select('id_string, agent_id').eq('prime49', true).limit(10000);
+                        if (ecfg.prime49 === 'merchant') {
+                            primeIdStrings = [...new Set((pi || []).map(x => x.id_string).filter(Boolean))];
+                            if (!primeIdStrings.length) primeIdStrings = ['__none__'];
+                        } else {
+                            const agentUuids = [...new Set((pi || []).map(x => x.agent_id).filter(Boolean))];
+                            let persons = [];
+                            if (agentUuids.length) { const { data: ag } = await supabase.from('agents').select('parent_agent_id').in('id', agentUuids); persons = [...new Set((ag || []).map(a => a.parent_agent_id).filter(Boolean))]; }
+                            primePersonIds = persons.length ? persons : ['__none__'];
+                        }
+                    }
+
+                    const countOnly = !!args.count_only;
+                    let q = supabase.from(ecfg.table).select(countOnly ? 'id' : ecfg.select, countOnly ? { count: 'exact', head: true } : { count: 'exact' });
+                    if (range.gte) q = q.gte(dateField, range.gte);
+                    if (range.lt) q = q.lt(dateField, range.lt);
+                    if (args.status && ecfg.statusCol) q = q.ilike(ecfg.statusCol, String(args.status));
+                    if (primeIdStrings) q = q.in('agent_id', primeIdStrings);
+                    if (primePersonIds) q = q.in('id', primePersonIds);
+                    q = q.order(dateField, { ascending: false, nullsFirst: false }).limit(countOnly ? 1 : Math.min(args.limit || 15, 50));
+                    const { data, count, error } = await q;
+                    if (error) return { error: error.message };
+                    const meta = { entity: args.entity, count: count || 0, since: args.since || 'all time', date_field: dateField, status: args.status || null, prime49_only: !!args.prime49_only };
+                    return countOnly ? meta : { ...meta, records: data || [] };
+                }
+
                 // ── OPERATOR read helpers ────────────────────────────────────
                 case 'search_prospects': {
                     const q = String(args.query || '').replace(/[%,()]/g, ' ').trim();
@@ -692,6 +787,7 @@ CRITICAL CONVERSATION RULES:
 TOOL USAGE:
 - Call tools for fresh data lookups
 - Do NOT call tools when you already have the data from this conversation
+- For ANY "how many / which / list / added / new / recently / this week / last month / Prime49 / by status" question about merchants, partners, prospects, POS leads, deployments, returns, or tickets — use the query_records tool (set count_only:true for "how many"). It supports time windows (last_7_days, this_month, etc.), a status filter, and prime49_only. You can call it multiple times (e.g. once for merchants and once for partners) and combine the answers.
 
 Formatting: use **bold** for names/numbers, bullet lists for items, keep responses concise.
 
