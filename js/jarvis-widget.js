@@ -21,6 +21,7 @@
     var _last = '';
     var _historyLoaded = false;
     window._jwPending = null;
+    window._jwConv = null;
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]); }); }
     function md(t) {
@@ -51,6 +52,13 @@
         + '.jw-foot input:focus{border-color:#0369a1;}'
         + '.jw-send{background:#0369a1;border:none;border-radius:10px;color:#fff;width:42px;cursor:pointer;display:flex;align-items:center;justify-content:center;}'
         + '.jw-pending{margin-top:10px;border:1px solid #f59e0b;background:rgba(245,158,11,.10);border-radius:10px;padding:11px;}'
+        + '.jw-hbtn{background:none;border:none;color:#9fb3d1;cursor:pointer;display:flex;padding:2px;}.jw-hbtn:hover{color:#fff;}'
+        + '#jw-threads{position:absolute;inset:53px 0 62px 0;background:#0b1526;z-index:5;overflow-y:auto;display:none;}'
+        + '.jw-th-head{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748b;padding:12px 14px 6px;}'
+        + '.jw-th-row{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid #12233c;}'
+        + '.jw-th-row:hover{background:#0f2036;}'
+        + '.jw-th-title{flex:1;min-width:0;font-size:13px;color:#dbe7f5;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.jw-th-ic{font-size:15px;color:#64748b;cursor:pointer;}.jw-th-ic:hover{color:#7dd3fc;}'
         + '@keyframes jwspin{to{transform:rotate(360deg);}}';
 
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -59,7 +67,11 @@
     wrap.innerHTML = ''
         + '<button id="jw-fab" title="Ask Jarvis"><span class="material-icons">smart_toy</span></button>'
         + '<div id="jw-panel">'
-        + '  <div class="jw-head"><span class="jw-dot"></span><b>JARVIS</b><button class="jw-x" onclick="jwToggle()"><span class="material-icons" style="font-size:18px;">close</span></button></div>'
+        + '  <div class="jw-head"><span class="jw-dot"></span><b style="flex:1;">JARVIS</b>'
+        + '    <button class="jw-hbtn" title="New chat" onclick="jwNew()"><span class="material-icons" style="font-size:19px;">add</span></button>'
+        + '    <button class="jw-hbtn" title="Conversations" onclick="jwThreads()"><span class="material-icons" style="font-size:19px;">history</span></button>'
+        + '    <button class="jw-x" onclick="jwToggle()"><span class="material-icons" style="font-size:18px;">close</span></button></div>'
+        + '  <div id="jw-threads"></div>'
         + '  <div class="jw-body" id="jw-body"><div class="jw-msg-a">Hello — I\'m JARVIS. Ask me about merchants, partners, prospects, deployments, or tell me to assign a rep, award a certificate, or update a ticket.</div></div>'
         + '  <div class="jw-foot"><input id="jw-input" type="text" placeholder="Ask Jarvis anything..." onkeydown="if(event.key===\'Enter\')jwAsk()"><button class="jw-send" onclick="jwAsk()"><span class="material-icons" style="font-size:18px;">send</span></button></div>'
         + '</div>';
@@ -76,22 +88,66 @@
         if (open) setTimeout(function () { var i = document.getElementById('jw-input'); if (i) i.focus(); }, 50);
     };
 
+    function jwApi(body) { return fetch('/api/oracle-agent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); }
+
+    function renderHistory(hist) {
+        var body = document.getElementById('jw-body');
+        if (!hist || !hist.length) { body.innerHTML = '<div class="jw-msg-a">New chat — ask me anything.</div>'; return; }
+        body.innerHTML = '';
+        hist.forEach(function (m) {
+            if (m.role === 'user') body.innerHTML += '<div class="jw-msg-u"><span>' + esc(m.content) + '</span></div>';
+            else { body.innerHTML += '<div class="jw-msg-a">' + md(m.content) + '</div>'; _last = m.content; }
+        });
+        scrollDown();
+    }
+
     async function jwLoadHistory() {
         try {
-            var res = await fetch('/api/oracle-agent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }, body: JSON.stringify({ mode: 'history', userId: userId() }) });
-            var d = await res.json();
-            var hist = (d && d.history) || [];
-            if (!hist.length) return;
-            var body = document.getElementById('jw-body');
-            body.innerHTML = ''; // replace greeting with restored conversation
-            hist.forEach(function (m) {
-                if (m.role === 'user') body.innerHTML += '<div class="jw-msg-u"><span>' + esc(m.content) + '</span></div>';
-                else { body.innerHTML += '<div class="jw-msg-a">' + md(m.content) + '</div>'; _last = m.content; }
-            });
-            body.innerHTML += '<div style="text-align:center;color:#3b5578;font-size:10px;margin:6px 0 10px;">— restored your recent conversation —</div>';
-            scrollDown();
+            var d = await jwApi({ mode: 'history', userId: userId() });
+            if (d && d.conversation_id) window._jwConv = d.conversation_id;
+            if (d && d.history && d.history.length) renderHistory(d.history);
         } catch (e) { /* ignore */ }
     }
+
+    window.jwNew = function () {
+        window._jwConv = null; _last = '';
+        document.getElementById('jw-threads').style.display = 'none';
+        document.getElementById('jw-body').innerHTML = '<div class="jw-msg-a">New chat — ask me anything.</div>';
+        var i = document.getElementById('jw-input'); if (i) i.focus();
+    };
+    window.jwThreads = async function () {
+        var t = document.getElementById('jw-threads');
+        if (t.style.display === 'block') { t.style.display = 'none'; return; }
+        t.style.display = 'block';
+        t.innerHTML = '<div style="padding:14px;color:#7dd3fc;font-size:12px;">Loading…</div>';
+        try {
+            var d = await jwApi({ mode: 'list_conversations', userId: userId() });
+            var list = (d && d.conversations) || [];
+            if (!list.length) { t.innerHTML = '<div style="padding:16px;color:#64748b;font-size:12px;">No conversations yet. Start typing to begin one.</div>'; return; }
+            t.innerHTML = '<div class="jw-th-head">Conversations</div>' + list.map(function (c) {
+                return '<div class="jw-th-row"><span class="jw-th-title"' + (window._jwConv === c.id ? ' style="color:#7dd3fc;font-weight:700;"' : '') + ' onclick="jwOpenConv(\'' + c.id + '\')">' + esc(c.title || 'Conversation') + '</span>'
+                    + '<span class="material-icons jw-th-ic" title="Rename" onclick="jwRenameConv(\'' + c.id + '\')">edit</span>'
+                    + '<span class="material-icons jw-th-ic" title="Delete" onclick="jwDeleteConv(\'' + c.id + '\')">delete</span></div>';
+            }).join('');
+        } catch (e) { t.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:12px;">Could not load conversations.</div>'; }
+    };
+    window.jwOpenConv = async function (id) {
+        window._jwConv = id; _last = '';
+        document.getElementById('jw-threads').style.display = 'none';
+        document.getElementById('jw-body').innerHTML = '<div style="padding:14px;color:#7dd3fc;font-size:12px;">Loading…</div>';
+        try { var d = await jwApi({ mode: 'history', conversation_id: id, userId: userId() }); renderHistory(d.history || []); } catch (e) {}
+    };
+    window.jwRenameConv = async function (id) {
+        var t = prompt('Rename conversation:'); if (t == null || !t.trim()) return;
+        await jwApi({ mode: 'rename_conversation', conversation_id: id, title: t.trim(), userId: userId() });
+        var p = document.getElementById('jw-threads'); p.style.display = 'none'; window.jwThreads();
+    };
+    window.jwDeleteConv = async function (id) {
+        if (!confirm('Delete this conversation? This cannot be undone.')) return;
+        await jwApi({ mode: 'delete_conversation', conversation_id: id, userId: userId() });
+        if (window._jwConv === id) window.jwNew();
+        var p = document.getElementById('jw-threads'); p.style.display = 'none'; window.jwThreads();
+    };
 
     window.jwAsk = async function () {
         var input = document.getElementById('jw-input');
@@ -106,9 +162,10 @@
         try {
             var res = await fetch('/api/oracle-agent', {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
-                body: JSON.stringify({ query: q, lastResponse: _last, userId: userId(), userName: userName() })
+                body: JSON.stringify({ query: q, lastResponse: _last, userId: userId(), userName: userName(), conversation_id: window._jwConv || null })
             });
             var d = await res.json();
+            if (d && d.conversation_id) window._jwConv = d.conversation_id;
             var el = document.getElementById(lid);
             var html = '';
             if (d.tools_used && d.tools_used.length) { d.tools_used.forEach(function (t) { html += '<span class="jw-tag"><span class="material-icons" style="font-size:10px;">database</span>' + esc(t) + '</span>'; }); html += '<br>'; }

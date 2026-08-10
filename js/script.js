@@ -659,25 +659,73 @@ window.clearJarvisHistory = async function() {
 };
 
 let _jarvisLastResponse = '';
+window._jarvisConv = null;
+
+function _jarvisApi(body) {
+    return fetch('/api/oracle-agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+}
+function _jarvisRenderMsgs(hist) {
+    const c = document.getElementById('jarvis-messages');
+    if (!c) return;
+    if (!hist || !hist.length) { c.innerHTML = '<div class="ai-bubble">New chat — ask me anything.</div>'; return; }
+    let h = '';
+    hist.forEach(function (m) {
+        if (m.role === 'user') h += `<div style="text-align:right;margin-bottom:10px;"><span style="display:inline-block;background:#004990;color:white;border-radius:12px 12px 2px 12px;padding:9px 14px;font-size:13px;max-width:90%;text-align:left;">${String(m.content).replace(/</g, '&lt;')}</span></div>`;
+        else { h += `<div class="ai-bubble">${_jarvisMd(m.content)}</div>`; _jarvisLastResponse = m.content; }
+    });
+    c.innerHTML = h;
+    c.scrollTop = c.scrollHeight;
+}
 
 async function _jarvisLoadHistory() {
     try {
-        const res = await fetch('/api/oracle-agent', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'history', userId: localStorage.getItem('pp_userid') })
-        });
-        const d = await res.json();
-        const c = document.getElementById('jarvis-messages');
-        if (!c || !d.history || !d.history.length) return;
-        let h = '';
-        d.history.forEach(function (m) {
-            if (m.role === 'user') h += `<div style="text-align:right;margin-bottom:10px;"><span style="display:inline-block;background:#004990;color:white;border-radius:12px 12px 2px 12px;padding:9px 14px;font-size:13px;max-width:90%;text-align:left;">${String(m.content).replace(/</g, '&lt;')}</span></div>`;
-            else { h += `<div class="ai-bubble">${_jarvisMd(m.content)}</div>`; _jarvisLastResponse = m.content; }
-        });
-        c.innerHTML = h + '<div style="text-align:center;color:#3b5578;font-size:10px;margin:6px 0;">— restored your recent conversation —</div>';
-        c.scrollTop = c.scrollHeight;
+        const d = await _jarvisApi({ mode: 'history', userId: localStorage.getItem('pp_userid') });
+        if (d && d.conversation_id) window._jarvisConv = d.conversation_id;
+        if (d && d.history && d.history.length) _jarvisRenderMsgs(d.history);
     } catch (e) { /* non-fatal */ }
 }
+
+window.newJarvisChat = function () {
+    window._jarvisConv = null; _jarvisLastResponse = '';
+    const t = document.getElementById('jarvis-threads'); if (t) t.style.display = 'none';
+    const c = document.getElementById('jarvis-messages'); if (c) c.innerHTML = '<div class="ai-bubble">New chat — ask me anything.</div>';
+    const i = document.getElementById('jarvis-input'); if (i) i.focus();
+};
+window.jarvisThreads = async function () {
+    const t = document.getElementById('jarvis-threads'); if (!t) return;
+    if (t.style.display === 'block') { t.style.display = 'none'; return; }
+    t.style.display = 'block';
+    t.innerHTML = '<div style="padding:14px;color:#7dd3fc;font-size:12px;">Loading…</div>';
+    try {
+        const d = await _jarvisApi({ mode: 'list_conversations', userId: localStorage.getItem('pp_userid') });
+        const list = (d && d.conversations) || [];
+        if (!list.length) { t.innerHTML = '<div style="padding:16px;color:#64748b;font-size:12px;">No conversations yet. Start typing to begin one.</div>'; return; }
+        t.innerHTML = '<div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748b;padding:12px 14px 6px;">Conversations</div>' + list.map(function (c) {
+            const sel = window._jarvisConv === c.id ? 'color:#7dd3fc;font-weight:700;' : 'color:#dbe7f5;';
+            return `<div style="display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid #12233c;">`
+                + `<span style="flex:1;min-width:0;font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${sel}" onclick="openJarvisConv('${c.id}')">${String(c.title || 'Conversation').replace(/</g, '&lt;')}</span>`
+                + `<span class="material-icons" style="font-size:15px;color:#64748b;cursor:pointer;" title="Rename" onclick="renameJarvisConv('${c.id}')">edit</span>`
+                + `<span class="material-icons" style="font-size:15px;color:#64748b;cursor:pointer;" title="Delete" onclick="deleteJarvisConv('${c.id}')">delete</span></div>`;
+        }).join('');
+    } catch (e) { t.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:12px;">Could not load conversations.</div>'; }
+};
+window.openJarvisConv = async function (id) {
+    window._jarvisConv = id; _jarvisLastResponse = '';
+    const t = document.getElementById('jarvis-threads'); if (t) t.style.display = 'none';
+    const c = document.getElementById('jarvis-messages'); if (c) c.innerHTML = '<div class="ai-bubble">Loading…</div>';
+    try { const d = await _jarvisApi({ mode: 'history', conversation_id: id, userId: localStorage.getItem('pp_userid') }); _jarvisRenderMsgs(d.history || []); } catch (e) {}
+};
+window.renameJarvisConv = async function (id) {
+    const t = prompt('Rename conversation:'); if (t == null || !t.trim()) return;
+    await _jarvisApi({ mode: 'rename_conversation', conversation_id: id, title: t.trim(), userId: localStorage.getItem('pp_userid') });
+    const p = document.getElementById('jarvis-threads'); if (p) p.style.display = 'none'; window.jarvisThreads();
+};
+window.deleteJarvisConv = async function (id) {
+    if (!confirm('Delete this conversation? This cannot be undone.')) return;
+    await _jarvisApi({ mode: 'delete_conversation', conversation_id: id, userId: localStorage.getItem('pp_userid') });
+    if (window._jarvisConv === id) window.newJarvisChat();
+    const p = document.getElementById('jarvis-threads'); if (p) p.style.display = 'none'; window.jarvisThreads();
+};
 
 window.confirmJarvisAction = async function (btn) {
     const pa = window._jarvisPending;
@@ -740,10 +788,12 @@ async function askJarvis() {
                 query,
                 lastResponse: _jarvisLastResponse,
                 userId: localStorage.getItem('pp_userid'),
-                userName: localStorage.getItem('pp_user_first_name')
+                userName: localStorage.getItem('pp_user_first_name'),
+                conversation_id: window._jarvisConv || null
             })
         });
         const data = await res.json();
+        if (data && data.conversation_id) window._jarvisConv = data.conversation_id;
         const el = document.getElementById(loadingId);
         if (!el) return;
 

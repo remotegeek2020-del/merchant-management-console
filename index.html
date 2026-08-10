@@ -936,15 +936,19 @@
                 <div style="font-size:9px; color:#7dd3fc; font-weight:500; letter-spacing:.5px;">AI BUSINESS INTELLIGENCE</div>
             </div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;">
-            <button onclick="clearJarvisHistory()" title="Clear chat" style="background:none;border:none;color:#475569;cursor:pointer;padding:4px;">
-                <span class="material-icons" style="font-size:16px;">delete_sweep</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+            <button onclick="newJarvisChat()" title="New chat" style="background:none;border:none;color:#7dd3fc;cursor:pointer;padding:4px;">
+                <span class="material-icons" style="font-size:17px;">add</span>
+            </button>
+            <button onclick="jarvisThreads()" title="Conversations" style="background:none;border:none;color:#7dd3fc;cursor:pointer;padding:4px;">
+                <span class="material-icons" style="font-size:17px;">history</span>
             </button>
             <button onclick="toggleJarvis()" style="background:none; border:none; color:white; cursor:pointer;">
                 <span class="material-icons">close</span>
             </button>
         </div>
     </div>
+    <div id="jarvis-threads" style="display:none;position:absolute;top:58px;bottom:66px;left:0;right:0;background:#0b1526;z-index:6;overflow-y:auto;"></div>
 
     <div id="jarvis-messages" class="oracle-chat-body">
         <div class="ai-bubble jarvis-welcome">

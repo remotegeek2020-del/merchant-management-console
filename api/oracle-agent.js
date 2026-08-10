@@ -75,10 +75,33 @@ export default async function handler(req, res) {
         return res.status(200).json({ answer: 'You do not have access to Jarvis. Ask a super admin to enable it for your account.', suggestions: [], tools_used: [], denied: true });
     }
 
-    // History mode: return recent conversation so the UI can restore it (memory).
+    // ── Conversation (thread) management — ChatGPT-style ──────────────────────
+    if (req.body.mode === 'list_conversations') {
+        const { data } = await supabase.from('jarvis_conversations').select('id, title, updated_at').eq('userid', userId).order('updated_at', { ascending: false }).limit(100);
+        return res.status(200).json({ conversations: data || [] });
+    }
+    if (req.body.mode === 'rename_conversation') {
+        if (!req.body.conversation_id) return res.status(400).json({ success: false });
+        await supabase.from('jarvis_conversations').update({ title: String(req.body.title || 'Conversation').slice(0, 120) }).eq('id', req.body.conversation_id).eq('userid', userId);
+        return res.status(200).json({ success: true });
+    }
+    if (req.body.mode === 'delete_conversation') {
+        if (!req.body.conversation_id) return res.status(400).json({ success: false });
+        await supabase.from('chat_history').delete().eq('conversation_id', req.body.conversation_id);
+        await supabase.from('jarvis_conversations').delete().eq('id', req.body.conversation_id).eq('userid', userId);
+        return res.status(200).json({ success: true });
+    }
+
+    // History mode: return one conversation's messages (or the latest thread).
     if (req.body.mode === 'history') {
-        const { data } = await supabase.from('chat_history').select('role, content').eq('userid', userId).order('id', { ascending: false }).limit(20);
-        return res.status(200).json({ history: (data || []).reverse() });
+        let convId = req.body.conversation_id || null;
+        if (!convId) {
+            const { data: last } = await supabase.from('jarvis_conversations').select('id').eq('userid', userId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+            convId = last ? last.id : null;
+        }
+        if (!convId) return res.status(200).json({ history: [], conversation_id: null });
+        const { data } = await supabase.from('chat_history').select('role, content').eq('conversation_id', convId).order('id', { ascending: false }).limit(60);
+        return res.status(200).json({ history: (data || []).reverse(), conversation_id: convId });
     }
 
     let pendingAction = null; // set by an action tool during the agentic loop
@@ -1004,13 +1027,20 @@ export default async function handler(req, res) {
               (knowledgeRows || []).map(k => `• [${k.topic}] ${k.correct_logic}`).join('\n')
             : '';
 
-        // ── CHAT HISTORY ──────────────────────────────────────────────────────
-        const { data: history } = await supabase
-            .from('chat_history')
-            .select('role, content')
-            .eq('userid', userId)
-            .order('id', { ascending: false })   // id is monotonic — stable even when a pair shares created_at
-            .limit(40);
+        // ── CONVERSATION THREAD (create if none) ──────────────────────────────
+        let conversationId = req.body.conversation_id || null;
+        let conversationCreated = false;
+        if (!conversationId) {
+            const title = (String(query || '').replace(/\s+/g, ' ').trim().slice(0, 60)) || 'New chat';
+            const { data: conv } = await supabase.from('jarvis_conversations').insert({ userid: userId, title }).select('id').single();
+            conversationId = conv ? conv.id : null;
+            conversationCreated = true;
+        }
+
+        // ── CHAT HISTORY (scoped to this conversation) ────────────────────────
+        let histQ = supabase.from('chat_history').select('role, content').order('id', { ascending: false }).limit(40);
+        histQ = conversationId ? histQ.eq('conversation_id', conversationId) : histQ.eq('userid', userId);
+        const { data: history } = await histQ;
 
         const formattedHistory = (history || []).map(h => ({
             role: h.role === 'user' ? 'user' : 'model',
@@ -1135,19 +1165,22 @@ ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool.
         }
         const cleanAnswer = finalAnswer.replace(/\s*\(url:[^)]+\)/g, '');
 
-        // ── PERSIST HISTORY ───────────────────────────────────────────────────
+        // ── PERSIST HISTORY (into this conversation) ──────────────────────────
         try {
             await supabase.from('chat_history').insert([
-                { userid: userId, role: 'user', content: query },
-                { userid: userId, role: 'assistant', content: cleanAnswer }
+                { userid: userId, conversation_id: conversationId, role: 'user', content: query },
+                { userid: userId, conversation_id: conversationId, role: 'assistant', content: cleanAnswer }
             ]);
+            if (conversationId) await supabase.from('jarvis_conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
         } catch { /* non-fatal */ }
 
         return res.status(200).json({
             answer: cleanAnswer,
             suggestions,
             tools_used: [...new Set(toolCallsLog)],
-            pending_action: pendingAction
+            pending_action: pendingAction,
+            conversation_id: conversationId,
+            conversation_created: conversationCreated
         });
 
     } catch (err) {
