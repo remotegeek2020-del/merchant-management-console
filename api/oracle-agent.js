@@ -1010,7 +1010,7 @@ export default async function handler(req, res) {
             .select('role, content')
             .eq('userid', userId)
             .order('id', { ascending: false })   // id is monotonic — stable even when a pair shares created_at
-            .limit(12);
+            .limit(40);
 
         const formattedHistory = (history || []).map(h => ({
             role: h.role === 'user' ? 'user' : 'model',
@@ -1029,6 +1029,7 @@ CRITICAL CONVERSATION RULES:
 2. For follow-up questions ("review it", "what about that merchant", "tell me more", "can you analyze it"), use the data already retrieved in previous messages — do NOT call tools again or ask "what would you like to review?" You already have the context.
 3. Pronouns like "it", "that", "this merchant", "the above" always refer to the most recently discussed subject in the conversation history.
 4. Only call tools when genuinely NEW data is needed (e.g. a different merchant, a new topic, or refreshing stale data).
+4b. MEMORY: the messages above ARE your memory of this ongoing conversation with the user (they persist across logins). If the user asks "what did I ask", "do you remember…", or "recap", answer from that history. Only say you don't recall something if it genuinely is not in the history above.
 5. For greetings or fully off-topic messages, respond briefly.
 6. End substantive answers with "**Suggested Actions:**" listing 2-4 concrete next steps.
 
@@ -1097,16 +1098,9 @@ ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool.
 
         } else {
             // ── MAIN PATH: full agentic loop with tools ────────────────────────
-            // If there's a previous response, inject it at the start of history
-            // so the model knows what subject was being discussed (e.g. which
-            // partner to look up when asked "analyze his merchants").
-            const historyWithContext = hasLastResponse
-                ? [
-                    { role: 'user', parts: [{ text: 'What was the last thing you showed me?' }] },
-                    { role: 'model', parts: [{ text: lastResponse.slice(0, 1500) }] },
-                    ...formattedHistory.slice(0, 8)
-                  ]
-                : formattedHistory;
+            // The stored conversation (formattedHistory) is the source of truth for
+            // memory — pass it directly so the model recalls the whole recent thread.
+            const historyWithContext = formattedHistory;
 
             const model = genAI.getGenerativeModel({
                 model: 'gemini-2.5-flash',
