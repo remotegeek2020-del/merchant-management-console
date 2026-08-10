@@ -682,13 +682,22 @@ async function _jarvisLoadHistory() {
 window.confirmJarvisAction = async function (btn) {
     const pa = window._jarvisPending;
     if (!pa) return;
+    let confirmText = '';
+    if (pa.dangerous) {
+        const inp = document.getElementById('jarvis-confirm-text');
+        confirmText = inp ? inp.value : '';
+        if (String(confirmText).trim().toUpperCase() !== 'CONFIRM') {
+            const msg = document.getElementById('jarvis-confirm-msg'); if (msg) msg.textContent = 'Type CONFIRM to proceed.';
+            return;
+        }
+    }
     btn.disabled = true;
     const wrap = btn.closest('.jarvis-pending');
     if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:#7dd3fc;"><span class="material-icons" style="font-size:14px;vertical-align:-2px;animation:spin 1s linear infinite;">sync</span> Running…</div>';
     try {
         const res = await fetch('/api/oracle-agent', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ execute_action: { name: pa.name, args: pa.args } })
+            body: JSON.stringify({ execute_action: { name: pa.name, args: pa.args, confirm_text: confirmText } })
         });
         const d = await res.json();
         if (wrap) wrap.innerHTML = '<div style="font-size:13px;color:' + (d.executed ? '#22c55e' : '#ef4444') + ';">' + _jarvisMd(d.answer || (d.executed ? 'Done.' : 'Could not complete.')) + '</div>';
@@ -774,7 +783,11 @@ async function askJarvis() {
                 create_task: 'Create Task',
                 add_ticket_comment: 'Ticket Reply',
                 send_prospect_invite: 'Prospect Invite',
-                notify_partner: 'Notify Partner'
+                notify_partner: 'Notify Partner',
+                update_merchant_status: 'Merchant Status',
+                delete_prospect: 'Delete Prospect',
+                delete_task: 'Delete Task',
+                delete_ticket: 'Delete Ticket'
             };
             html += '<div style="margin-bottom:10px;">';
             data.tools_used.forEach(t => {
@@ -801,12 +814,16 @@ async function askJarvis() {
         // Operator action — requires explicit confirmation before it runs
         if (data.pending_action && data.pending_action.name) {
             window._jarvisPending = data.pending_action;
+            const dz = !!data.pending_action.dangerous;
+            const accent = dz ? '#ef4444' : '#f59e0b';
             const paLabel = (data.pending_action.label || 'Run this action').replace(/</g, '&lt;');
-            html += '<div class="jarvis-pending" style="margin-top:12px;border:1px solid #f59e0b;background:rgba(245,158,11,0.10);border-radius:10px;padding:12px;">'
-                + '<div style="font-size:10px;font-weight:800;color:#f59e0b;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;">bolt</span> Action — confirm to run</div>'
+            html += '<div class="jarvis-pending" style="margin-top:12px;border:1px solid ' + accent + ';background:' + (dz ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.10)') + ';border-radius:10px;padding:12px;">'
+                + '<div style="font-size:10px;font-weight:800;color:' + accent + ';letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;">' + (dz ? 'warning' : 'bolt') + '</span> ' + (dz ? 'Destructive action' : 'Action — confirm to run') + '</div>'
                 + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:10px;">' + paLabel + '</div>'
-                + '<button class="jarvis-action-btn" style="background:#0d9488;color:#fff;" onclick="confirmJarvisAction(this)"><span class="material-icons" style="font-size:13px;">check</span>Confirm</button>'
+                + (dz ? '<input id="jarvis-confirm-text" type="text" placeholder="Type CONFIRM" autocomplete="off" style="width:100%;margin-bottom:8px;background:#0b1526;border:1px solid ' + accent + ';border-radius:8px;padding:8px 11px;color:#fff;font-size:13px;outline:none;">' : '')
+                + '<button class="jarvis-action-btn" style="background:' + (dz ? '#ef4444' : '#0d9488') + ';color:#fff;" onclick="confirmJarvisAction(this)"><span class="material-icons" style="font-size:13px;">check</span>' + (dz ? 'Delete' : 'Confirm') + '</button>'
                 + '<button class="jarvis-action-btn" onclick="cancelJarvisAction(this)"><span class="material-icons" style="font-size:13px;">close</span>Cancel</button>'
+                + '<span id="jarvis-confirm-msg" style="font-size:11px;color:#ef4444;margin-left:8px;"></span>'
                 + '</div>';
         }
 

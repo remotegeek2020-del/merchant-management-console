@@ -1,10 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { createClient } from '@supabase/supabase-js';
-import { loadActor, isAdminRole } from './_access.js';
+import { loadActor, isAdminRole, canDeleteLeads } from './_access.js';
 import { issueCertificate } from './certificates.js';
-import { notifyPartner } from './_notify.js';
+import { notifyPartner, partnerForMerchant } from './_notify.js';
 import { sendLeadInvite } from './_lead-invite.js';
+import { dispatchEvent } from './v1/_deliver.js';
 
 // ── Generic operator query support ────────────────────────────────────────────
 // Allowlisted entities Jarvis can query. Read-only; no raw SQL from the model.
@@ -233,6 +234,83 @@ export default async function handler(req, res) {
                 await notifyPartner(supabase, { personId: args.person_id, type: 'message', title: String(args.title || 'Message from PayProTec').slice(0, 160), body: String(args.body || '').slice(0, 400), link: args.link || '/partner/dashboard', actorName: actorLabel });
                 return { ok: true, message: 'Notification sent to the partner.' };
             }
+        },
+
+        // ── DESTRUCTIVE actions (require typed CONFIRM) ───────────────────────
+        update_merchant_status: {
+            dangerous: true,
+            access: (a) => !!a && a.is_active !== false && String(a.role || '') === 'super_admin',
+            describe: async (args) => {
+                let who = args.merchant_id;
+                try { const { data: m } = await supabase.from('merchants').select('dba_name, account_status').eq('id', args.merchant_id).maybeSingle(); if (m) who = `${m.dba_name} (currently ${m.account_status || '—'})`; } catch (e) {}
+                return `Change status of merchant ${who} → "${args.status}". This fires the merchant.status_changed webhook.`;
+            },
+            run: async (args) => {
+                if (!args.merchant_id || !args.status) return { ok: false, message: 'merchant_id (uuid) and status are required.' };
+                const VALID = ['Approved', 'Suspended', 'Terminated', 'Pending', 'PCI Non-Compliant', 'Approved - Collections'];
+                const match = VALID.find(v => v.toLowerCase() === String(args.status).toLowerCase()) || String(args.status);
+                const { data: m } = await supabase.from('merchants').select('id, dba_name, merchant_id, account_status, agent_id').eq('id', args.merchant_id).maybeSingle();
+                if (!m) return { ok: false, message: 'Merchant not found.' };
+                const old = m.account_status;
+                const { error } = await supabase.from('merchants').update({ account_status: match }).eq('id', args.merchant_id);
+                if (error) return { ok: false, message: error.message };
+                try { await supabase.from('merchant_notes').insert({ merchant_id: args.merchant_id, title: 'Status changed', body: `Status: ${old || '—'} → ${match} (via Jarvis by ${actorLabel})`, created_by: actorLabel }); } catch (e) {}
+                try { const pid = await partnerForMerchant(supabase, args.merchant_id); if (pid) dispatchEvent(pid, 'merchant.status_changed', { merchant_id: m.merchant_id, dba_name: m.dba_name, old_status: old, new_status: match, changed_by: actorLabel }).catch(() => {}); } catch (e) {}
+                return { ok: true, message: `${m.dba_name} status set to ${match}.` };
+            }
+        },
+        delete_prospect: {
+            dangerous: true,
+            access: (a) => canDeleteLeads(a),
+            describe: async (args) => {
+                let who = args.lead_id;
+                try { const { data: l } = await supabase.from('leads').select('full_name, email').eq('id', args.lead_id).maybeSingle(); if (l) who = (l.full_name || '') + ' <' + (l.email || '') + '>'; } catch (e) {}
+                return `Permanently delete prospect ${who} and revoke their portal access. This cannot be undone.`;
+            },
+            run: async (args) => {
+                if (!args.lead_id) return { ok: false, message: 'lead_id is required.' };
+                try { await supabase.from('lead_sessions').delete().eq('lead_id', args.lead_id); } catch (e) {}
+                try { await supabase.from('lead_onboarding_answers').delete().eq('lead_id', args.lead_id); } catch (e) {}
+                try { await supabase.from('course_video_views').delete().eq('lead_id', args.lead_id); } catch (e) {}
+                const { error } = await supabase.from('leads').delete().eq('id', args.lead_id);
+                return error ? { ok: false, message: error.message } : { ok: true, message: 'Prospect deleted and portal access revoked.' };
+            }
+        },
+        delete_task: {
+            dangerous: true,
+            access: (a) => isAdminRole(a),
+            describe: async (args) => {
+                let who = args.task_id;
+                try { const { data: t } = await supabase.from('merchant_tasks').select('title').eq('id', args.task_id).maybeSingle(); if (t) who = '"' + t.title + '"'; } catch (e) {}
+                return `Delete task ${who}. This cannot be undone.`;
+            },
+            run: async (args) => {
+                if (!args.task_id) return { ok: false, message: 'task_id is required.' };
+                try { await supabase.from('task_comments').delete().eq('task_id', args.task_id); } catch (e) {}
+                const { error } = await supabase.from('merchant_tasks').delete().eq('id', args.task_id);
+                return error ? { ok: false, message: error.message } : { ok: true, message: 'Task deleted.' };
+            }
+        },
+        delete_ticket: {
+            dangerous: true,
+            access: (a) => !!a && a.is_active !== false && (String(a.role || '') === 'super_admin' || a.can_delete_tickets === true),
+            describe: async (args) => {
+                let who = args.ticket_id;
+                try { const { data: t } = await supabase.from('support_tickets').select('ticket_number, subject').eq('id', args.ticket_id).maybeSingle(); if (t) who = `#${t.ticket_number} — ${t.subject || ''}`; } catch (e) {}
+                return `Delete ticket ${who}. It is archived (restorable), but removed from the queue.`;
+            },
+            run: async (args) => {
+                if (!args.ticket_id) return { ok: false, message: 'ticket_id is required.' };
+                const { data: fullT } = await supabase.from('support_tickets').select('*').eq('id', args.ticket_id).maybeSingle();
+                if (!fullT) return { ok: false, message: 'Ticket not found.' };
+                try {
+                    const { data: cmts } = await supabase.from('ticket_comments').select('*').eq('ticket_id', args.ticket_id);
+                    await supabase.from('deleted_records').insert({ entity_type: 'ticket', entity_id: String(fullT.id), label: `Ticket #${fullT.ticket_number || ''} — ${fullT.subject || ''}`, snapshot: { ...fullT, __comments: cmts || [] }, deleted_by: (actor && actor.userid) || '' });
+                } catch (e) {}
+                await supabase.from('ticket_comments').delete().eq('ticket_id', args.ticket_id);
+                const { error } = await supabase.from('support_tickets').delete().eq('id', args.ticket_id);
+                return error ? { ok: false, message: error.message } : { ok: true, message: `Ticket ${fullT.ticket_number || ''} deleted (archived — restorable from the recycle bin).` };
+            }
         }
     };
     const actorLabel = (`${actor && actor.first_name || ''} ${actor && actor.last_name || ''}`.trim()) || (actor && actor.email) || 'PayProTec Staff';
@@ -245,6 +323,9 @@ export default async function handler(req, res) {
         if (!spec) return res.status(200).json({ answer: 'Unknown action.', executed: false });
         if (!opEnabled) return res.status(200).json({ answer: 'Operator mode is off. Enable "Jarvis Operator" in Secret Dungeon → Feature Flags.', executed: false });
         if (!spec.access(actor)) return res.status(200).json({ answer: 'You do not have permission for that action.', executed: false });
+        if (spec.dangerous && String(req.body.execute_action.confirm_text || '').trim().toUpperCase() !== 'CONFIRM') {
+            return res.status(200).json({ answer: 'This is a destructive action — type CONFIRM to proceed.', executed: false, needs_confirm_text: true });
+        }
         const r = await spec.run(args || {});
         try {
             await supabase.from('activity_logs').insert({
@@ -520,6 +601,26 @@ export default async function handler(req, res) {
             name: 'notify_partner',
             description: 'Prepare to send an in-app portal notification (bell) to a partner. Requires person_id (from find_partner_person) and title and/or body. Optional link. Proposed for confirmation. In-app only (no email).',
             parameters: { type: 'object', properties: { person_id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, link: { type: 'string' } }, required: ['person_id'] }
+        },
+        {
+            name: 'update_merchant_status',
+            description: 'DESTRUCTIVE. Prepare to change a merchant account_status (Approved, Suspended, Terminated, Pending, PCI Non-Compliant, Approved - Collections). Requires merchant_id (UUID from find_merchant). Fires the merchant.status_changed webhook. Super-admin only; user must type CONFIRM.',
+            parameters: { type: 'object', properties: { merchant_id: { type: 'string', description: 'merchant UUID' }, status: { type: 'string' } }, required: ['merchant_id', 'status'] }
+        },
+        {
+            name: 'delete_prospect',
+            description: 'DESTRUCTIVE and irreversible. Prepare to delete a prospect and revoke their portal access. Requires lead_id (from search_prospects). User must type CONFIRM.',
+            parameters: { type: 'object', properties: { lead_id: { type: 'string' } }, required: ['lead_id'] }
+        },
+        {
+            name: 'delete_task',
+            description: 'DESTRUCTIVE. Prepare to delete a task. Requires task_id. Admin only; user must type CONFIRM.',
+            parameters: { type: 'object', properties: { task_id: { type: 'string' } }, required: ['task_id'] }
+        },
+        {
+            name: 'delete_ticket',
+            description: 'DESTRUCTIVE (archived/restorable). Prepare to delete a support ticket. Requires ticket_id (from search_tickets). Needs ticket-delete permission; user must type CONFIRM.',
+            parameters: { type: 'object', properties: { ticket_id: { type: 'string' } }, required: ['ticket_id'] }
         }
     ];
 
@@ -532,8 +633,8 @@ export default async function handler(req, res) {
                 if (!opEnabled) return { error: 'Operator mode is off. An admin can enable "Jarvis Operator" in Secret Dungeon → Feature Flags.' };
                 if (!spec.access(actor)) return { error: 'You do not have permission to perform this action.' };
                 let label = name; try { label = await spec.describe(args || {}); } catch (e) {}
-                pendingAction = { name, args: args || {}, label };
-                return { proposed: true, requires_confirmation: true, summary: label, note: 'Prepared. Tell the user exactly what will happen and that they must click Confirm in the UI. Do NOT claim it is done.' };
+                pendingAction = { name, args: args || {}, label, dangerous: !!spec.dangerous };
+                return { proposed: true, requires_confirmation: true, dangerous: !!spec.dangerous, summary: label, note: (spec.dangerous ? 'This is a DESTRUCTIVE action — the user must type CONFIRM in the UI. ' : '') + 'Prepared. Tell the user exactly what will happen and that they must confirm in the UI. Do NOT claim it is done.' };
             }
             switch (name) {
 
@@ -960,6 +1061,7 @@ OPERATOR ACTIONS${opEnabled ? ' (ENABLED)' : ' (currently OFF — do not attempt
 - create_task (needs title + merchant UUID via find_merchant; optional assigned_to via list_reps, due_date, priority)
 - update_ticket_status (needs ticket_id via search_tickets)
 - add_ticket_comment (needs ticket_id via search_tickets; a non-internal comment notifies the partner)
+DESTRUCTIVE actions (the user will be required to TYPE "CONFIRM"): update_merchant_status (super-admin; fires a webhook), delete_prospect (irreversible), delete_task, delete_ticket (archived/restorable). Only propose these when the user clearly asks to delete or change a status; state plainly that it is destructive.
 ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool. Actions are NEVER executed immediately — they are proposed and the user must click Confirm. After calling an action tool, clearly state what you've prepared, mention any email/notification side effect, and that the user must confirm. NEVER say an action is complete/done — it isn't until the user confirms.` + knowledgeBlock;
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);

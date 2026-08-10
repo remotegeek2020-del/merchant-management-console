@@ -118,10 +118,15 @@
             }
             if (d.pending_action && d.pending_action.name) {
                 window._jwPending = d.pending_action;
-                html += '<div class="jw-pending"><div style="font-size:10px;font-weight:800;color:#f59e0b;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;">bolt</span> Action — confirm to run</div>'
+                var dz = !!d.pending_action.dangerous;
+                var accent = dz ? '#ef4444' : '#f59e0b';
+                html += '<div class="jw-pending" style="border-color:' + accent + ';background:' + (dz ? 'rgba(239,68,68,.10)' : 'rgba(245,158,11,.10)') + ';">'
+                    + '<div style="font-size:10px;font-weight:800;color:' + accent + ';letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase;"><span class="material-icons" style="font-size:12px;vertical-align:-2px;">' + (dz ? 'warning' : 'bolt') + '</span> ' + (dz ? 'Destructive action' : 'Action — confirm to run') + '</div>'
                     + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:9px;">' + esc(d.pending_action.label || '') + '</div>'
-                    + '<button class="jw-btn" style="background:#0d9488;" onclick="jwConfirm(this)"><span class="material-icons" style="font-size:12px;">check</span>Confirm</button>'
-                    + '<button class="jw-btn" style="background:#334155;" onclick="jwCancel(this)"><span class="material-icons" style="font-size:12px;">close</span>Cancel</button></div>';
+                    + (dz ? '<input id="jw-confirm-text" type="text" placeholder="Type CONFIRM" autocomplete="off" style="width:100%;margin-bottom:8px;background:#0b1526;border:1px solid ' + accent + ';border-radius:8px;padding:8px 11px;color:#fff;font-size:13px;outline:none;">' : '')
+                    + '<button class="jw-btn" style="background:' + (dz ? '#ef4444' : '#0d9488') + ';" onclick="jwConfirm(this)"><span class="material-icons" style="font-size:12px;">check</span>' + (dz ? 'Delete' : 'Confirm') + '</button>'
+                    + '<button class="jw-btn" style="background:#334155;" onclick="jwCancel(this)"><span class="material-icons" style="font-size:12px;">close</span>Cancel</button>'
+                    + '<span id="jw-confirm-msg" style="font-size:11px;color:#ef4444;margin-left:6px;"></span></div>';
             }
             el.innerHTML = html;
             _last = d.answer || '';
@@ -133,10 +138,16 @@
 
     window.jwConfirm = async function (btn) {
         var pa = window._jwPending; if (!pa) return;
+        var confirmText = '';
+        if (pa.dangerous) {
+            var inp = document.getElementById('jw-confirm-text');
+            confirmText = inp ? inp.value : '';
+            if (String(confirmText).trim().toUpperCase() !== 'CONFIRM') { var msg = document.getElementById('jw-confirm-msg'); if (msg) msg.textContent = 'Type CONFIRM to proceed.'; return; }
+        }
         var wrapEl = btn.closest('.jw-pending');
         if (wrapEl) wrapEl.innerHTML = '<div style="font-size:12px;color:#7dd3fc;"><span class="material-icons" style="font-size:13px;vertical-align:-2px;animation:jwspin 1s linear infinite;">sync</span> Running…</div>';
         try {
-            var res = await fetch('/api/oracle-agent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }, body: JSON.stringify({ execute_action: { name: pa.name, args: pa.args } }) });
+            var res = await fetch('/api/oracle-agent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }, body: JSON.stringify({ execute_action: { name: pa.name, args: pa.args, confirm_text: confirmText } }) });
             var d = await res.json();
             if (wrapEl) wrapEl.innerHTML = '<div style="font-size:13px;color:' + (d.executed ? '#22c55e' : '#ef4444') + ';">' + md(d.answer || '') + '</div>';
         } catch (e) { if (wrapEl) wrapEl.innerHTML = '<div style="font-size:13px;color:#ef4444;">Connection error — action not run.</div>'; }
