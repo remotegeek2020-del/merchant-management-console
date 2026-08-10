@@ -1140,11 +1140,13 @@ ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool.
             const chat = model.startChat({ history: historyWithContext });
             let result = await chat.sendMessage(query);
             let maxIterations = 8;
+            let usedTools = false;
 
             while (maxIterations-- > 0) {
                 let calls;
                 try { calls = result.response.functionCalls(); } catch { calls = null; }
                 if (!calls || calls.length === 0) break;
+                usedTools = true;
                 const toolResponses = [];
                 for (const call of calls) {
                     toolCallsLog.push(call.name);
@@ -1154,7 +1156,21 @@ ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool.
                 result = await chat.sendMessage(toolResponses);
             }
             try { finalAnswer = result.response.text(); }
-            catch { finalAnswer = 'I encountered an issue generating a response. Please try again.'; }
+            catch { finalAnswer = ''; }
+
+            // Sometimes (esp. after tool calls) the model returns an empty text turn.
+            // Nudge it once to write the answer from the data it just gathered.
+            if (!finalAnswer || !finalAnswer.trim()) {
+                try {
+                    const r2 = await chat.sendMessage(usedTools
+                        ? 'Now answer my question in plain text using the data you just retrieved. Be concise and use **bold** for the key numbers.'
+                        : 'Please answer my previous question directly in plain text.');
+                    finalAnswer = r2.response.text();
+                } catch (e) { finalAnswer = ''; }
+            }
+            if (!finalAnswer || !finalAnswer.trim()) {
+                finalAnswer = "I couldn't put together a response for that, Sir. Please try rephrasing, or ask me something more specific.";
+            }
         }
 
         // ── EXTRACT NAVIGATION SUGGESTIONS ────────────────────────────────────
