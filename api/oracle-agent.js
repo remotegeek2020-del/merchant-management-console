@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ answer: "Method not allowed." });
 
     const { query, userId, userName, lastResponse } = req.body;
-    if (!query && !(req.body.execute_action && req.body.execute_action.name)) return res.status(400).json({ answer: "No query provided." });
+    if (!query && !req.body.mode && !(req.body.execute_action && req.body.execute_action.name)) return res.status(400).json({ answer: "No query provided." });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
