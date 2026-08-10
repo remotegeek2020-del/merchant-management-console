@@ -77,7 +77,7 @@ export default async function handler(req, res) {
 
     // History mode: return recent conversation so the UI can restore it (memory).
     if (req.body.mode === 'history') {
-        const { data } = await supabase.from('chat_history').select('role, content').eq('userid', userId).order('created_at', { ascending: false }).limit(20);
+        const { data } = await supabase.from('chat_history').select('role, content').eq('userid', userId).order('id', { ascending: false }).limit(20);
         return res.status(200).json({ history: (data || []).reverse() });
     }
 
@@ -1009,13 +1009,15 @@ export default async function handler(req, res) {
             .from('chat_history')
             .select('role, content')
             .eq('userid', userId)
-            .order('created_at', { ascending: false })
+            .order('id', { ascending: false })   // id is monotonic — stable even when a pair shares created_at
             .limit(12);
 
         const formattedHistory = (history || []).map(h => ({
             role: h.role === 'user' ? 'user' : 'model',
             parts: [{ text: h.content }]
         })).reverse();
+        // Gemini requires history to begin with a 'user' turn — drop any leading model turns.
+        while (formattedHistory.length && formattedHistory[0].role !== 'user') formattedHistory.shift();
 
         // ── SYSTEM PROMPT ─────────────────────────────────────────────────────
         const systemInstruction = `You are JARVIS, the AI business intelligence agent for PayProTec's merchant management console. Address the user as ${userName || 'Sir'}.
