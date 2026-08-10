@@ -1174,6 +1174,17 @@ ALWAYS resolve exact ids with the read helpers FIRST, then call the action tool.
             if (conversationId) await supabase.from('jarvis_conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
         } catch { /* non-fatal */ }
 
+        // Auto-title a brand-new conversation with a short AI summary of the first message.
+        if (conversationCreated && conversationId) {
+            try {
+                const titleModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+                const tr = await titleModel.generateContent(`Write a very short 3-5 word title (Title Case, no quotes, no punctuation at the end) that summarizes this request:\n"${String(query).slice(0, 200)}"`);
+                let title = '';
+                try { title = tr.response.text().trim().replace(/^["'#\-\s]+|["'\s]+$/g, '').replace(/\n/g, ' ').slice(0, 60); } catch (e) { title = ''; }
+                if (title) await supabase.from('jarvis_conversations').update({ title }).eq('id', conversationId);
+            } catch (e) { /* keep the fallback title */ }
+        }
+
         return res.status(200).json({
             answer: cleanAnswer,
             suggestions,
