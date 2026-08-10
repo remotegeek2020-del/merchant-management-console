@@ -707,17 +707,31 @@ export default async function handler(req, res) {
                 }
 
                 case 'get_merchant_detail': {
-                    const { data: m } = await supabase.from('merchants')
-                        .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, agent_name, agent_id, merchant_phone, merchant_state, merchant_email, enrollment_date, last_batch_date')
-                        .eq('merchant_id', args.merchant_id).single();
-                    if (!m) return { error: 'Merchant not found' };
+                    const key = String(args.merchant_id || '').trim();
+                    const cols = 'id, merchant_id, dba_name, account_status, volume_30_day, volume_90_day, agent_name, agent_id, merchant_phone, merchant_state, merchant_email, enrollment_date, last_batch_date';
+                    // Match by MID first (may be duplicated → take first), then by DBA name.
+                    let m = null;
+                    let r = await supabase.from('merchants').select(cols).eq('merchant_id', key).order('created_at', { ascending: false }).limit(1).maybeSingle();
+                    m = r.data;
+                    if (!m) { const r2 = await supabase.from('merchants').select(cols).ilike('dba_name', `%${key}%`).limit(1).maybeSingle(); m = r2.data; }
+                    if (!m) return { error: `No merchant found for "${key}".` };
                     const baseline = m.volume_90_day ? parseFloat(m.volume_90_day) / 3 : 0;
                     const dropPct = baseline > 0 ? Math.round((1 - parseFloat(m.volume_30_day) / baseline) * 100) : 0;
-                    const [{ data: deployments }, { data: returns_ }] = await Promise.all([
-                        supabase.from('deployments').select('deployment_id, status, target_deployment_date, equipments:equipment_id(terminal_type, serial_number)').eq('merchant_id', m.merchant_id).order('target_deployment_date', { ascending: false }).limit(5),
-                        supabase.from('returns').select('return_id, status, return_reason, created_at').eq('merchant_id', m.merchant_id).limit(5)
-                    ]);
-                    return { ...m, volume_baseline_monthly: Math.round(baseline), volume_drop_pct: dropPct, recent_deployments: deployments || [], recent_returns: returns_ || [] };
+                    // deployments/returns are keyed by the merchant UUID (m.id), not the MID.
+                    let deployments = [], returns_ = [];
+                    try { const d = await supabase.from('deployments').select('deployment_id, status, target_deployment_date, tracking_id, equipments:equipment_id(terminal_type, serial_number)').eq('merchant_id', m.id).order('created_at', { ascending: false }).limit(5); deployments = d.data || []; } catch (e) {}
+                    try { const rr = await supabase.from('returns').select('return_id, status, return_reason, created_at').eq('merchant_id', m.id).order('created_at', { ascending: false }).limit(5); returns_ = rr.data || []; } catch (e) {}
+                    // Resolve the actual PARTNER (person) behind the agent id_string — the
+                    // merchants.agent_name is the writing agent, which may differ from the partner.
+                    let partner_name = null;
+                    try {
+                        const { data: ident } = await supabase.from('agent_identifiers').select('agent_id').eq('id_string', m.agent_id).maybeSingle();
+                        if (ident && ident.agent_id) {
+                            const { data: ag } = await supabase.from('agents').select('parent_agent_id').eq('id', ident.agent_id).maybeSingle();
+                            if (ag && ag.parent_agent_id) { const { data: p } = await supabase.from('persons').select('full_name').eq('id', ag.parent_agent_id).maybeSingle(); partner_name = p ? p.full_name : null; }
+                        }
+                    } catch (e) {}
+                    return { ...m, agent_id_string: m.agent_id, writing_agent_name: m.agent_name, partner_name, volume_baseline_monthly: Math.round(baseline), volume_drop_pct: dropPct, recent_deployments: deployments, recent_returns: returns_ };
                 }
 
                 case 'get_at_risk_merchants': {
