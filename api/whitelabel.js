@@ -115,6 +115,13 @@ async function ensurePortal(personId, agencyName) {
     return created;
 }
 
+// God-mode account: a platform super-user who sees & can enter EVERY agency.
+async function isGod(personId) {
+    if (!personId) return false;
+    const { data } = await supabase.from('persons').select('is_portal_god').eq('id', personId).maybeSingle();
+    return !!(data && data.is_portal_god);
+}
+
 // A partner's default agency name (for auto-fill): their company, else full name.
 async function defaultAgencyName(personId) {
     const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).maybeSingle();
@@ -243,9 +250,10 @@ export default async function handler(req, res) {
                 if (!sub) return res.status(404).json({ success: false, message: 'Sub-account not found.' });
                 // Access control: must be a member of the owning agency (sub-partners must
                 // have this sub-account explicitly in their granted scope).
+                const god = await isGod(personId);
                 const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', sub.portal_id).eq('person_id', personId).maybeSingle();
-                if (!mem) return res.status(403).json({ success: false, message: 'You do not have access to this sub-account.' });
-                if (mem.role === 'sub_partner') {
+                if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not have access to this sub-account.' });
+                if (!god && mem.role === 'sub_partner') {
                     const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
                     if (!granted.includes(sub.id)) return res.status(403).json({ success: false, message: 'This sub-account is outside your granted access.' });
                 }
@@ -297,7 +305,7 @@ export default async function handler(req, res) {
                     success: true,
                     sub_account: { id: sub.id, name: sub.name, type: sub.company_id ? 'company' : 'client', company_id: sub.company_id, company_name: companyName },
                     agency: portal ? { portal_id: portal.id, relationship_id: portal.relationship_id, agency_name: portal.agency_name } : null,
-                    my_role: mem.role,
+                    my_role: god ? 'god' : mem.role,
                     objects: {
                         merchants,
                         partner_ids: { count: partnerIds.length, sample: partnerIds },
@@ -315,14 +323,15 @@ export default async function handler(req, res) {
                     ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
                     : await findPortalForPerson(personId);
                 if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+                const god = await isGod(personId);
                 const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
-                if (!mem) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
-                const role = mem.role || 'admin';
-                const canManage = role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+                if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
+                const role = god ? 'god' : (mem.role || 'admin');
+                const canManage = god || role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
 
                 let { data: subs } = await supabase.from('agency_sub_accounts').select('id, company_id, name, status').eq('portal_id', portal.id).order('created_at', { ascending: true });
                 subs = subs || [];
-                if (role === 'sub_partner') {
+                if (!god && role === 'sub_partner') {
                     const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
                     subs = subs.filter(s => granted.includes(s.id));
                 }
@@ -366,36 +375,45 @@ export default async function handler(req, res) {
             // PayProTec companies (available to add as sub-accounts / work standard).
             if (action === 'get_my_agencies') {
                 const { data: person } = await supabase.from('persons').select('id, full_name, email').eq('id', personId).maybeSingle();
-                const { data: memberships } = await supabase.from('partner_portal_members').select('*').eq('person_id', personId);
-                const portalIds = [...new Set((memberships || []).map(m => m.portal_id))];
+                const god = await isGod(personId);
+                // God sees ALL agencies; everyone else sees the ones they're a member of.
+                let memberships = [];
+                let portals = [];
+                if (god) {
+                    portals = (await supabase.from('partner_portals').select('*').order('created_at', { ascending: true })).data || [];
+                } else {
+                    memberships = (await supabase.from('partner_portal_members').select('*').eq('person_id', personId)).data || [];
+                    const pIds = [...new Set(memberships.map(m => m.portal_id))];
+                    if (pIds.length) portals = (await supabase.from('partner_portals').select('*').in('id', pIds)).data || [];
+                }
+                const portalIds = portals.map(p => p.id);
 
-                let portals = [], subRows = [], domains = {};
+                let subRows = [], domains = {};
                 if (portalIds.length) {
-                    const [pRes, sRes, dRes] = await Promise.all([
-                        supabase.from('partner_portals').select('*').in('id', portalIds),
+                    const [sRes, dRes] = await Promise.all([
                         supabase.from('agency_sub_accounts').select('id, portal_id, company_id, name, status').in('portal_id', portalIds),
                         supabase.from('portal_brands').select('portal_id, host, ssl_status, active').eq('added_by_partner', true).in('portal_id', portalIds)
                     ]);
-                    portals = pRes.data || []; subRows = sRes.data || [];
+                    subRows = sRes.data || [];
                     (dRes.data || []).forEach(d => { if (!domains[d.portal_id]) domains[d.portal_id] = d; });
                 }
 
                 const agencies = portals.map(p => {
-                    const mem = (memberships || []).find(m => m.portal_id === p.id) || {};
+                    const mem = god ? { role: 'owner', full_access: true } : ((memberships || []).find(m => m.portal_id === p.id) || {});
                     const role = mem.role || 'admin';
                     const isOwner = role === 'owner';
-                    const canManage = role === 'admin' || (isOwner && (mem.is_primary === true || mem.full_access === true));
+                    const canManage = god || role === 'admin' || (isOwner && (mem.is_primary === true || mem.full_access === true));
                     let subs = subRows.filter(r => r.portal_id === p.id).map(r => ({ id: r.id, name: r.name, company_id: r.company_id, type: r.company_id ? 'company' : 'client' }));
                     // Sub-partner: nothing until explicitly granted (scope.sub_account_ids).
-                    if (role === 'sub_partner') {
+                    if (!god && role === 'sub_partner') {
                         const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
                         subs = subs.filter(s => granted.includes(s.id));
                     }
                     return {
                         portal_id: p.id, relationship_id: p.relationship_id, agency_name: p.agency_name,
                         agency_enabled: p.agency_enabled === true,
-                        my_role: role, is_primary: mem.is_primary === true, full_access: mem.full_access === true,
-                        is_owner: isOwner, can_manage: canManage,
+                        my_role: god ? 'god' : role, is_primary: mem.is_primary === true, full_access: god || mem.full_access === true,
+                        is_owner: isOwner || god, can_manage: canManage, god: god,
                         domain: domains[p.id] || null, sub_accounts: subs
                     };
                 });
@@ -416,10 +434,11 @@ export default async function handler(req, res) {
                     ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
                     : await findPortalForPerson(personId);
                 if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+                const god = await isGod(personId);
                 const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
-                if (!mem) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
-                const role = mem.role || 'admin';
-                const canManage = role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+                if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
+                const role = god ? 'owner' : (mem.role || 'admin');
+                const canManage = god || role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
 
                 // ── Team & visibility grants (owners/admins) ──
                 if (action === 'agency_team') {

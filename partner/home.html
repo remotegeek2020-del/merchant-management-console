@@ -112,6 +112,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){retur
 function initials(name){ return (String(name||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
 
 function roleBadge(a){
+    if (a.my_role === 'god') return '<span class="role-badge" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;">🔑 God</span>';
     if (a.my_role === 'owner') return '<span class="role-badge role-owner">'+(a.is_primary?'★ ':'')+'Owner'+(a.full_access&&!a.is_primary?' · Full':'')+'</span>';
     if (a.my_role === 'sub_partner') return '<span class="role-badge role-sub">Sub-partner</span>';
     return '<span class="role-badge role-admin">'+esc((a.my_role||'admin').replace('_',' '))+'</span>';
