@@ -2287,6 +2287,7 @@ async function submitOnboarding() {
               </button>
               <span id="agency-rel-id" style="margin-top:8px;font-family:monospace;font-size:10px;color:#6d28d9;"></span>
             </div>
+            <div id="agency-members-wrap" style="display:none;margin-top:10px;width:100%;"></div>
         </div>
                         <div id="summary-stats" style="text-align:right;">
                             <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">Loading...</div>
@@ -2581,6 +2582,85 @@ window.wlAgencyInit = async function(personId) {
         window._wlAgency[personId] = r && r.success ? r : { agency_enabled: false };
     } catch (e) { window._wlAgency[personId] = { agency_enabled: false }; }
     _wlAgPaint(personId);
+    _wlRenderMembers(personId);
+};
+
+// Owners & admins team manager (shown when agency access is ON).
+function _wlEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function _wlRenderMembers(personId){
+    var st = window._wlAgency[personId] || {};
+    var wrap = document.getElementById('agency-members-wrap');
+    if(!wrap) return;
+    if(!st.agency_enabled || !st.portal_id){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+    wrap.style.display='';
+    var members = st.members || [];
+    var rows = members.map(function(m){
+        var star = m.is_primary ? '<span title="Primary owner" style="color:#f59e0b;">★</span> ' : '';
+        var roleChip = m.role==='owner'
+            ? '<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#ede9fe;color:#6d28d9;">OWNER</span>'
+            : '<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#f1f5f9;color:#475569;">ADMIN</span>';
+        var actions = [];
+        if(!m.is_primary && m.role==='owner') actions.push('<a href="#" onclick="wlMakePrimary(\''+personId+'\',\''+m.person_id+'\');return false;" style="color:#f59e0b;text-decoration:none;font-weight:700;">Make primary</a>');
+        if(m.role==='admin') actions.push('<a href="#" onclick="wlSetRole(\''+personId+'\',\''+m.id+'\',\'owner\');return false;" style="color:#6d28d9;text-decoration:none;font-weight:700;">Make owner</a>');
+        if(m.role==='owner' && !m.is_primary) actions.push('<a href="#" onclick="wlSetRole(\''+personId+'\',\''+m.id+'\',\'admin\');return false;" style="color:#64748b;text-decoration:none;font-weight:700;">Make admin</a>');
+        if(!m.is_primary) actions.push('<a href="#" onclick="wlRemoveMember(\''+personId+'\',\''+m.id+'\');return false;" style="color:#dc2626;text-decoration:none;font-weight:700;">Remove</a>');
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;">'
+          +'<div style="min-width:0;"><div style="font-weight:700;font-size:12px;">'+star+_wlEsc(m.full_name||m.email||m.person_id)+'</div>'
+          +'<div style="font-size:11px;color:#94a3b8;">'+_wlEsc(m.email||'')+'</div></div>'
+          +'<div style="display:flex;align-items:center;gap:10px;font-size:11px;white-space:nowrap;">'+roleChip+' '+actions.join(' · ')+'</div></div>';
+    }).join('') || '<div style="font-size:12px;color:#94a3b8;padding:6px 0;">No owners yet.</div>';
+
+    wrap.innerHTML =
+      '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">'
+      +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;margin-bottom:6px;">Owners &amp; Team</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">Owners have the highest access. A partnership can have multiple owners; one is the primary (★). Everyone else is a CRM admin.</div>'
+      +rows
+      +'<div style="margin-top:10px;position:relative;">'
+      +'<div style="display:flex;gap:6px;">'
+      +'<input id="wlMemSearch" oninput="wlMemSearch(\''+personId+'\')" placeholder="Add a partner by name or email…" autocomplete="off" style="flex:1;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">'
+      +'<select id="wlMemRole" style="padding:7px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;"><option value="owner">Owner</option><option value="admin">Admin</option></select>'
+      +'</div><div id="wlMemResults" style="position:absolute;z-index:50;left:0;right:0;background:white;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;max-height:180px;overflow:auto;display:none;box-shadow:0 6px 18px rgba(0,0,0,.08);"></div>'
+      +'</div></div>';
+}
+window.wlMemSearch = function(personId){
+    var q = (document.getElementById('wlMemSearch').value||'').trim().toLowerCase();
+    var box = document.getElementById('wlMemResults');
+    var st = window._wlAgency[personId] || {};
+    var taken = new Set((st.members||[]).map(function(m){return m.person_id;}));
+    if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+    var pool = (typeof allPartners!=='undefined'?allPartners:[]).filter(function(p){
+        if(taken.has(p.id)) return false;
+        return (p.name||'').toLowerCase().indexOf(q)>=0 || (p.email||'').toLowerCase().indexOf(q)>=0;
+    }).slice(0,8);
+    if(!pool.length){ box.style.display='block'; box.innerHTML='<div style="padding:8px 10px;font-size:12px;color:#94a3b8;">No matches</div>'; return; }
+    box.style.display='block';
+    box.innerHTML = pool.map(function(p){
+        return '<div onclick="wlAddMember(\''+personId+'\',\''+p.id+'\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12px;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'white\'">'
+          +'<div style="font-weight:700;">'+_wlEsc(p.name||'')+'</div><div style="color:#94a3b8;">'+_wlEsc(p.email||'')+'</div></div>';
+    }).join('');
+};
+async function _wlMemApi(personId, body){
+    var r = await fetch('/api/whitelabel', { method:'POST', headers:_wlAgHdrs(), body: JSON.stringify(body) }).then(x=>x.json());
+    if(!r || !r.success){ Swal.fire('Error', (r&&r.message)||'Action failed.', 'error'); return null; }
+    if(r.members){ window._wlAgency[personId] = Object.assign({}, window._wlAgency[personId], { members: r.members }); _wlRenderMembers(personId); }
+    return r;
+}
+window.wlAddMember = async function(personId, memberPersonId){
+    var role = (document.getElementById('wlMemRole')||{}).value === 'admin' ? 'admin' : 'owner';
+    document.getElementById('wlMemResults').style.display='none';
+    document.getElementById('wlMemSearch').value='';
+    await _wlMemApi(personId, { action:'add_member', person_id: personId, member_person_id: memberPersonId, role: role });
+};
+window.wlMakePrimary = async function(personId, memberPersonId){
+    await _wlMemApi(personId, { action:'set_primary_owner', person_id: personId, member_person_id: memberPersonId });
+};
+window.wlSetRole = async function(personId, memberId, role){
+    await _wlMemApi(personId, { action:'set_member_role', member_id: memberId, role: role });
+};
+window.wlRemoveMember = async function(personId, memberId){
+    var c = await Swal.fire({ icon:'warning', title:'Remove from agency?', showCancelButton:true, confirmButtonText:'Remove', confirmButtonColor:'#dc2626' });
+    if(!c.isConfirmed) return;
+    await _wlMemApi(personId, { action:'remove_member', member_id: memberId });
 };
 window.toggleAgencyAccess = async function(personId) {
     var st = window._wlAgency[personId] || {};
@@ -2596,6 +2676,7 @@ window.toggleAgencyAccess = async function(personId) {
         if (!r || !r.success) { Swal.fire('Error', (r && r.message) || 'Could not update agency access.', 'error'); _wlAgPaint(personId); return; }
         window._wlAgency[personId] = Object.assign({}, st, { agency_enabled: r.agency_enabled, relationship_id: r.relationship_id });
         _wlAgPaint(personId);
+        await wlAgencyInit(personId); // refresh portal_id + seeded owner/members
         if (turningOn) Swal.fire({ icon: 'success', title: 'Agency access granted', html: 'Relationship ID <b>' + (r.relationship_id || '') + '</b>. They can now connect their domain in Settings → Your White-Label CRM.', timer: 2600, showConfirmButton: false });
     } catch (e) { Swal.fire('Error', e.message, 'error'); _wlAgPaint(personId); }
 };
