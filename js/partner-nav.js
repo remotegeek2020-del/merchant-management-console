@@ -340,7 +340,30 @@
             .catch(function(){});
     }
 
+    // God-mode banner: when a super-admin is impersonating a partner ("Login As"),
+    // show a sticky bar with an Exit that drops the partner session and returns to staff.
+    function injectImpersonationBanner() {
+        var who = localStorage.getItem('pp_impersonating');
+        if (!who || document.getElementById('ppImpersonateBar')) return;
+        var bar = document.createElement('div');
+        bar.id = 'ppImpersonateBar';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#7c3aed,#4f46e5);color:white;font-family:inherit;font-size:12px;font-weight:700;padding:6px 14px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+        bar.innerHTML = '<span>🔑 God mode — viewing as ' + String(who).replace(/[<>&]/g,'') + '</span>'
+            + '<button id="ppExitImp" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.4);border-radius:7px;padding:3px 12px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">Exit</button>';
+        document.body.appendChild(bar);
+        document.body.style.paddingTop = '30px';
+        document.getElementById('ppExitImp').onclick = function () {
+            localStorage.removeItem('pp_partner_token');
+            localStorage.removeItem('pp_partner_id');
+            localStorage.removeItem('pp_impersonating');
+            localStorage.removeItem('pp_active_portal');
+            localStorage.removeItem('pp_active_sub_account');
+            window.location.href = '/partners-dashboard';
+        };
+    }
+
     function init() {
+        injectImpersonationBanner();
         injectBadges();
         injectAgencySwitcher();
         injectHomeNav();

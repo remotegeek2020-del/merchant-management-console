@@ -237,13 +237,18 @@ export default async function handler(req, res) {
                     const agentUuids = (ags || []).map(a => a.id);
                     let compIdents = [];
                     if (agentUuids.length) { const { data: ids } = await supabase.from('agent_identifiers').select('id, id_string, rev_share, prime49').in('agent_id', agentUuids); compIdents = ids || []; }
-                    partnerIds = compIdents.map(i => ({ id_string: i.id_string, rev_share: i.rev_share, prime49: i.prime49 === true }));
                     const idStrings = compIdents.map(i => i.id_string);
 
-                    // Merchants under those Partner IDs
+                    // Partner IDs with per-ID merchant counts (shows the alignment).
+                    partnerIds = await Promise.all(compIdents.map(async i => {
+                        const { count } = await supabase.from('merchants').select('id', { count: 'exact', head: true }).eq('agent_id', i.id_string);
+                        return { id_string: i.id_string, rev_share: i.rev_share, prime49: i.prime49 === true, merchant_count: count || 0 };
+                    }));
+
+                    // Merchants under those Partner IDs (each row carries its partner ID = agent_id).
                     if (idStrings.length) {
                         const { data: mData, count } = await supabase.from('merchants')
-                            .select('id, dba_name, account_status, volume_30_day, merchant_city, merchant_state', { count: 'exact' })
+                            .select('id, dba_name, account_status, volume_30_day, merchant_city, merchant_state, agent_id', { count: 'exact' })
                             .in('agent_id', idStrings).order('volume_30_day', { ascending: false, nullsFirst: false }).limit(25);
                         merchants.count = count || 0;
                         merchants.sample = mData || [];
@@ -526,6 +531,14 @@ export default async function handler(req, res) {
                 await supabase.from('portal_brands').update({ active: false }).eq('portal_id', portal.id).eq('added_by_partner', true);
             }
             return res.status(200).json({ success: true, agency_enabled: enabled, relationship_id: portal.relationship_id });
+        }
+
+        // Staff/god-mode: set an agency's name (resolves by person_id or portal_id).
+        if (action === 'admin_set_agency_name') {
+            const portal = await resolvePortal(body);
+            if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+            await supabase.from('partner_portals').update({ agency_name: (body.agency_name || '').trim() || null, updated_at: new Date().toISOString() }).eq('id', portal.id);
+            return res.status(200).json({ success: true, agency_name: (body.agency_name || '').trim() || null });
         }
 
         // Read a partner's agency status (staff — used by the partners dashboard toggle).

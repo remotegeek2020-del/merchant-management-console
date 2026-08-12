@@ -2577,6 +2577,7 @@ window.loginAsPartner = async function(personId) {
         // Same-origin localStorage: seed the partner token, then open the portal.
         localStorage.setItem('pp_partner_token', r.token);
         localStorage.setItem('pp_partner_id', r.partner.id);
+        localStorage.setItem('pp_impersonating', r.partner.name || nm);
         localStorage.removeItem('pp_active_portal');
         localStorage.removeItem('pp_active_sub_account');
         window.open('/partner/home', '_blank');
@@ -2654,9 +2655,15 @@ function _wlRenderMembers(personId){
         ? '<div style="font-size:11px;margin-top:6px;color:'+(Math.abs(totalPct-100)<0.01?'#059669':(totalPct>100?'#dc2626':'#b45309'))+';font-weight:700;">Total ownership: '+(Math.round(totalPct*100)/100)+'%'+(Math.abs(totalPct-100)<0.01?' ✓':(totalPct>100?' — over 100%':' — '+(Math.round((100-totalPct)*100)/100)+'% unassigned'))+'</div>'
         : '';
 
+    var nameEditor = st.relationship_id
+      ? '<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">'
+        +'<input id="wlAgencyNameInput" value="'+_wlEsc(st.agency_name||'')+'" placeholder="Agency / brand name" style="flex:1;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;">'
+        +'<button onclick="wlSaveAgencyName(\''+personId+'\')" style="background:#0d9488;color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;">Save name</button></div>'
+      : '';
     wrap.innerHTML =
       '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">'
       +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;margin-bottom:6px;">Company Ownership &amp; Team</div>'
+      +nameEditor
       +'<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">Owners are the company owner(s) — highest access. A partnership can have several owners; one is primary (★). Ownership&nbsp;% is optional. Everyone else is a CRM admin.</div>'
       +rows
       +pctSummary
@@ -2730,6 +2737,14 @@ window.wlAddMember = async function(personId, memberPersonId){
 };
 window.wlSetPct = async function(personId, memberId, val){
     await _wlMemApi(personId, { action:'set_ownership_percent', member_id: memberId, ownership_percent: val });
+};
+window.wlSaveAgencyName = async function(personId){
+    var name = (document.getElementById('wlAgencyNameInput')||{}).value || '';
+    var r = await fetch('/api/whitelabel', { method:'POST', headers:_wlAgHdrs(), body: JSON.stringify({ action:'admin_set_agency_name', person_id: personId, agency_name: name }) }).then(x=>x.json());
+    if (r && r.success) {
+        window._wlAgency[personId] = Object.assign({}, window._wlAgency[personId], { agency_name: r.agency_name });
+        Swal.fire({ icon:'success', title:'Agency name saved', timer:1000, showConfirmButton:false });
+    } else { Swal.fire('Error', (r&&r.message)||'Could not save.', 'error'); }
 };
 window.wlMakePrimary = async function(personId, memberPersonId){
     await _wlMemApi(personId, { action:'set_primary_owner', person_id: personId, member_person_id: memberPersonId });
