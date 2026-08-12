@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { validateSession as validateStaffSession } from './_validate.js';
+import { loadActor } from './_access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -93,6 +95,26 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: 'No action provided' });
 
     try {
+
+        // ── GOD MODE: super-admin "Login As" a partner (impersonation) ──
+        // Mints a partner session for ANY person. Requires a valid staff super_admin
+        // session (Authorization: Bearer <pp_session_token>). Lets an admin jump into
+        // any partner's portal / agency — the HighLevel "Login As" equivalent.
+        if (action === 'admin_login_as') {
+            const staff = await validateStaffSession(req);
+            if (!staff) return res.status(401).json({ success: false, message: 'Staff session required.' });
+            const actor = await loadActor(staff.userid);
+            if (!actor || !actor.is_active || String(actor.role || '').toLowerCase() !== 'super_admin') {
+                return res.status(403).json({ success: false, message: 'Super admin only.' });
+            }
+            const { person_id } = req.body;
+            if (!person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
+            const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active').eq('id', person_id).single();
+            if (!person) return res.status(404).json({ success: false, message: 'Partner not found.' });
+            const token = await createSession(person.id, req);
+            console.log(`[LOGIN AS] ${actor.userid} -> partner ${person.email} (${person.id})`);
+            return res.status(200).json({ success: true, token, partner: { id: person.id, name: person.full_name, email: person.email } });
+        }
 
         if (action === 'login') {
             const { email, password } = req.body;

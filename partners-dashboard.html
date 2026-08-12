@@ -2285,6 +2285,10 @@ async function submitOnboarding() {
                 style="margin-top:8px;padding:5px 12px;border-radius:99px;font-size:11px;font-weight:800;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">
                 🌐 …
               </button>
+              <button id="login-as-btn" onclick="loginAsPartner('${p.id}')" title="God mode: open this partner's portal as them (super admin only)"
+                style="margin-top:8px;padding:5px 12px;border-radius:99px;font-size:11px;font-weight:800;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;">
+                🔑 Login As
+              </button>
               <span id="agency-rel-id" style="margin-top:8px;font-family:monospace;font-size:10px;color:#6d28d9;"></span>
             </div>
             <div id="agency-members-wrap" style="display:none;margin-top:10px;width:100%;"></div>
@@ -2548,6 +2552,34 @@ window.toggleBrandedPartner = async function(personId, currentlyBranded) {
             // Re-open with updated state
             openPartnerDetails(personId);
         } else { Swal.fire('Error', 'Could not update branded status.', 'error'); }
+    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+};
+
+// --- FEATURE: GOD MODE "LOGIN AS" (super-admin impersonation) ---
+// Mints a partner session for the target person and opens their portal in a new tab.
+// Same origin, so setting localStorage here is readable by /partner.
+window.loginAsPartner = async function(personId) {
+    var p = (typeof allPartners !== 'undefined') ? allPartners.find(function(x){ return x.id === personId; }) : null;
+    var nm = p ? p.name : 'this partner';
+    var confirm = await Swal.fire({
+        icon: 'question', title: 'Login as ' + nm + '?',
+        html: 'Opens their partner portal as them in a new tab (god mode). Your staff session stays signed in here.',
+        showCancelButton: true, confirmButtonText: 'Login As', confirmButtonColor: '#4f46e5'
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+        var r = await fetch('/api/partner-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') },
+            body: JSON.stringify({ action: 'admin_login_as', person_id: personId })
+        }).then(function(x){ return x.json(); });
+        if (!r || !r.success) { Swal.fire('Error', (r && r.message) || 'Could not start session.', 'error'); return; }
+        // Same-origin localStorage: seed the partner token, then open the portal.
+        localStorage.setItem('pp_partner_token', r.token);
+        localStorage.setItem('pp_partner_id', r.partner.id);
+        localStorage.removeItem('pp_active_portal');
+        localStorage.removeItem('pp_active_sub_account');
+        window.open('/partner/home', '_blank');
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
 };
 
