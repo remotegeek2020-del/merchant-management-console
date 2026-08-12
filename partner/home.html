@@ -123,45 +123,96 @@ function domainStatus(a){
     if (d) return '<span class="status" style="color:#92400e;"><span class="dot" style="background:#f59e0b;"></span>'+esc(d.host)+' · setting up</span>';
     return '<span class="status" style="color:#92400e;"><span class="dot" style="background:#f59e0b;"></span>No domain yet</span>';
 }
-function companyChips(list){
-    if (!list || !list.length) return '<div class="muted-note" style="margin:12px 0;">No companies visible to you here yet.</div>';
-    var shown = list.slice(0,6).map(function(c){ return '<span class="chip">'+esc(c.company_name)+'</span>'; }).join('');
-    if (list.length > 6) shown += '<span class="chip">+'+(list.length-6)+' more</span>';
-    return '<div class="companies">'+shown+'</div>';
-}
-
-// Entering an agency/company stores the active context for the CRM (switcher-ready),
-// then lands on the existing dashboard. Full per-agency scoping comes with the CRM layer.
-window.enterAgency = function(portalId, companyId){
+// Entering an agency (optionally a specific sub-account) stores the active context for
+// the CRM (switcher-ready), then lands on the dashboard. Per-context scoping lands with
+// the CRM layer.
+window.enterAgency = function(portalId, subId){
     localStorage.setItem('pp_active_portal', portalId || '');
-    localStorage.setItem('pp_active_company', companyId || '');
+    localStorage.setItem('pp_active_sub_account', subId || '');
     window.location.href = '/partner/dashboard';
 };
 window.enterCompany = function(companyId){
     localStorage.setItem('pp_active_portal', '');
+    localStorage.setItem('pp_active_sub_account', '');
     localStorage.setItem('pp_active_company', companyId || '');
     window.location.href = '/partner/dashboard';
 };
 
+function subAccountList(a){
+    var subs = a.sub_accounts || [];
+    var rows = subs.map(function(s){
+        var icon = s.type === 'company' ? 'business' : 'person';
+        var del = a.can_manage ? '<span class="material-icons" title="Remove" onclick="event.stopPropagation();removeSub(\''+a.portal_id+'\',\''+s.id+'\')" style="font-size:15px;color:#cbd5e1;cursor:pointer;">close</span>' : '';
+        return '<div onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')" style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:9px;cursor:pointer;background:white;" onmouseover="this.style.borderColor=\'#99f6e4\'" onmouseout="this.style.borderColor=\'#e2e8f0\'">'
+          +'<span class="material-icons" style="font-size:16px;color:var(--teal);">'+icon+'</span>'
+          +'<span style="flex:1;font-size:12px;font-weight:600;">'+esc(s.name)+'</span>'
+          +(s.type==='client'?'<span class="chip" style="font-size:9px;">Client</span>':'')+del+'</div>';
+    }).join('');
+    if (!subs.length) rows = '<div class="muted-note" style="padding:4px 0;">No sub-accounts yet.</div>';
+    var addBtn = a.can_manage
+        ? '<button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:6px 10px;" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add sub-account</button>'
+        : '';
+    return '<div style="display:flex;flex-direction:column;gap:6px;margin:12px 0;">'+rows+'</div>'+addBtn;
+}
+
 function agencyCard(a){
     var title = a.agency_name || 'Unnamed agency';
-    var enterCid = (a.companies && a.companies.length===1) ? a.companies[0].company_id : '';
     return '<div class="card agency">'
       +'<div class="card-top"><div class="card-title">'+esc(title)+'</div><span class="rel">'+esc(a.relationship_id||'')+'</span></div>'
-      +'<div>'+roleBadge(a)+(a.companies&&a.companies.length>1?' <span class="muted-note">· '+a.companies.length+' companies</span>':'')+'</div>'
-      +companyChips(a.companies)
+      +'<div>'+roleBadge(a)+' <span class="muted-note">· '+((a.sub_accounts||[]).length)+' sub-account'+((a.sub_accounts||[]).length===1?'':'s')+'</span></div>'
+      +subAccountList(a)
       +'<div class="card-foot">'+domainStatus(a)
-      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\''+enterCid+'\')">Enter <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
+      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\'\')">Open agency <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
 function standaloneCard(c){
     return '<div class="card standalone">'
       +'<div class="card-top"><div class="card-title">'+esc(c.company_name)+'</div></div>'
-      +'<div class="muted-note" style="margin:6px 0 2px;">Standard company · not white-labeled</div>'
-      +'<div class="card-foot"><span class="status" style="color:#94a3b8;"><span class="dot" style="background:#cbd5e1;"></span>Standard portal</span>'
+      +'<div class="muted-note" style="margin:6px 0 2px;">Your company · standard portal</div>'
+      +'<div class="card-foot"><span class="status" style="color:#94a3b8;"><span class="dot" style="background:#cbd5e1;"></span>Standard</span>'
       +'<button class="btn btn-teal" onclick="enterCompany(\''+c.company_id+'\')">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
+
+// Create a sub-account: pick one of your PayProTec companies, or a free-form client.
+window.openCreateSub = async function(portalId){
+    var comps = [];
+    try { var r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'my_companies',token:token,portal_id:portalId})}).then(x=>x.json()); if(r&&r.success) comps=r.companies||[]; } catch(e){}
+    var opts = comps.map(function(c){ return '<option value="'+esc(c.company_id)+'">'+esc(c.company_name)+'</option>'; }).join('');
+    var html =
+      '<div style="text-align:left;font-size:13px;">'
+      +'<label style="font-weight:700;display:block;margin-bottom:6px;">Sub-account type</label>'
+      +'<select id="scType" class="swal2-select" style="width:100%;margin:0 0 12px;" onchange="document.getElementById(\'scCompanyWrap\').style.display=this.value===\'company\'?\'block\':\'none\';document.getElementById(\'scNameWrap\').style.display=this.value===\'client\'?\'block\':\'none\';">'
+      +'<option value="company">One of my companies</option>'
+      +'<option value="client">New client (not a PayProTec partner)</option>'
+      +'</select>'
+      +'<div id="scCompanyWrap">'
+      + (comps.length ? '<label style="font-weight:700;display:block;margin-bottom:6px;">Company</label><select id="scCompany" class="swal2-select" style="width:100%;margin:0;">'+opts+'</select>'
+                      : '<div class="muted-note">All your companies are already added, or you have none. Use “New client” instead.</div>')
+      +'</div>'
+      +'<div id="scNameWrap" style="display:none;"><label style="font-weight:700;display:block;margin-bottom:6px;">Client name</label><input id="scName" class="swal2-input" style="width:100%;margin:0;" placeholder="e.g. Downtown Diner"></div>'
+      +'</div>';
+    var res = await Swal.fire({
+        title:'New sub-account', html:html, showCancelButton:true, confirmButtonText:'Create', confirmButtonColor:'#0d9488',
+        focusConfirm:false,
+        preConfirm:function(){
+            var type=document.getElementById('scType').value;
+            if(type==='company'){ var el=document.getElementById('scCompany'); if(!el||!el.value){ Swal.showValidationMessage('No company available — use New client.'); return false; } return {company_id:el.value}; }
+            var nm=(document.getElementById('scName').value||'').trim(); if(!nm){ Swal.showValidationMessage('Enter a client name.'); return false; } return {name:nm};
+        }
+    });
+    if(!res.isConfirmed) return;
+    var payload = Object.assign({action:'create_sub_account',token:token,portal_id:portalId}, res.value);
+    var cr = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(x=>x.json());
+    if(!cr||!cr.success){ Swal.fire('Error',(cr&&cr.message)||'Could not create.','error'); return; }
+    loadHub();
+};
+window.removeSub = async function(portalId, subId){
+    var c = await Swal.fire({icon:'warning',title:'Remove sub-account?',text:'This removes it from the agency (the underlying company/partner record is untouched).',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_sub_account',token:token,portal_id:portalId,sub_account_id:subId})}).then(x=>x.json());
+    loadHub();
+};
 
 async function loadHub(){
     var r;
@@ -180,7 +231,7 @@ async function loadHub(){
 
     var owned = (r.agencies||[]).filter(function(a){ return a.is_owner; });
     var accessed = (r.agencies||[]).filter(function(a){ return !a.is_owner; });
-    var standalone = r.standalone_companies || [];
+    var companies = r.companies || [];
 
     var html = '';
     if (owned.length){
@@ -191,11 +242,11 @@ async function loadHub(){
         html += '<div class="section-label"><span class="material-icons" style="font-size:15px;">key</span> Agencies You Can Access</div>';
         html += '<div class="grid">'+accessed.map(agencyCard).join('')+'</div>';
     }
-    if (standalone.length){
+    if (companies.length){
         html += '<div class="section-label"><span class="material-icons" style="font-size:15px;">business</span> Your Companies</div>';
-        html += '<div class="grid">'+standalone.map(standaloneCard).join('')+'</div>';
+        html += '<div class="grid">'+companies.map(standaloneCard).join('')+'</div>';
     }
-    if (!owned.length && !accessed.length && !standalone.length){
+    if (!owned.length && !accessed.length && !companies.length){
         html = '<div class="empty"><span class="material-icons">workspaces</span>No agencies or companies yet.</div>';
     }
     document.getElementById('hubBody').innerHTML = html;

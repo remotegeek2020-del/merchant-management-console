@@ -198,54 +198,107 @@ export default async function handler(req, res) {
             const cf = await getCfConfig();
 
             // The launchpad: every agency this person belongs to (owned + accessed) with
-            // their role and the companies they can see there, plus their standalone
-            // (non-white-labeled) companies — everything in one place.
+            // their role and the SUB-ACCOUNTS they can see there (created explicitly by the
+            // partner — a linked company or a free-form client), plus the person's own
+            // PayProTec companies (available to add as sub-accounts / work standard).
             if (action === 'get_my_agencies') {
                 const { data: person } = await supabase.from('persons').select('id, full_name, email').eq('id', personId).maybeSingle();
                 const { data: memberships } = await supabase.from('partner_portal_members').select('*').eq('person_id', personId);
                 const portalIds = [...new Set((memberships || []).map(m => m.portal_id))];
 
-                let portals = [], acRows = [], domains = {}, companyNames = {};
+                let portals = [], subRows = [], domains = {};
                 if (portalIds.length) {
-                    const [pRes, acRes, dRes] = await Promise.all([
+                    const [pRes, sRes, dRes] = await Promise.all([
                         supabase.from('partner_portals').select('*').in('id', portalIds),
-                        supabase.from('agency_companies').select('portal_id, company_id').in('portal_id', portalIds),
+                        supabase.from('agency_sub_accounts').select('id, portal_id, company_id, name, status').in('portal_id', portalIds),
                         supabase.from('portal_brands').select('portal_id, host, ssl_status, active').eq('added_by_partner', true).in('portal_id', portalIds)
                     ]);
-                    portals = pRes.data || []; acRows = acRes.data || [];
+                    portals = pRes.data || []; subRows = sRes.data || [];
                     (dRes.data || []).forEach(d => { if (!domains[d.portal_id]) domains[d.portal_id] = d; });
-                    const cids = [...new Set(acRows.map(r => r.company_id))];
-                    if (cids.length) { const { data } = await supabase.from('companies').select('id, company_name').in('id', cids); (data || []).forEach(c => companyNames[c.id] = c.company_name); }
                 }
 
                 const agencies = portals.map(p => {
                     const mem = (memberships || []).find(m => m.portal_id === p.id) || {};
                     const role = mem.role || 'admin';
                     const isOwner = role === 'owner';
-                    const canManage = isOwner && (mem.is_primary === true || mem.full_access === true);
-                    let comps = acRows.filter(r => r.portal_id === p.id).map(r => ({ company_id: r.company_id, company_name: companyNames[r.company_id] || 'Company' }));
-                    // Sub-partner: nothing until explicitly granted (scope.company_ids).
+                    const canManage = role === 'admin' || (isOwner && (mem.is_primary === true || mem.full_access === true));
+                    let subs = subRows.filter(r => r.portal_id === p.id).map(r => ({ id: r.id, name: r.name, company_id: r.company_id, type: r.company_id ? 'company' : 'client' }));
+                    // Sub-partner: nothing until explicitly granted (scope.sub_account_ids).
                     if (role === 'sub_partner') {
-                        const granted = (mem.scope && Array.isArray(mem.scope.company_ids)) ? mem.scope.company_ids : [];
-                        comps = comps.filter(c => granted.includes(c.company_id));
+                        const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
+                        subs = subs.filter(s => granted.includes(s.id));
                     }
                     return {
                         portal_id: p.id, relationship_id: p.relationship_id, agency_name: p.agency_name,
                         agency_enabled: p.agency_enabled === true,
                         my_role: role, is_primary: mem.is_primary === true, full_access: mem.full_access === true,
                         is_owner: isOwner, can_manage: canManage,
-                        domain: domains[p.id] || null, companies: comps
+                        domain: domains[p.id] || null, sub_accounts: subs
                     };
                 });
 
-                // Standalone: the person's own companies not under any of their agencies.
+                // The person's own PayProTec companies (for the sub-account picker + standard access).
                 const { data: myAgents } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').eq('parent_agent_id', personId);
                 const owned = {};
                 (myAgents || []).forEach(a => { if (a.company_id) owned[a.company_id] = (a.companies && a.companies.company_name) || 'Company'; });
-                const inAgency = new Set(acRows.map(r => r.company_id));
-                const standalone = Object.keys(owned).filter(cid => !inAgency.has(cid)).map(cid => ({ company_id: cid, company_name: owned[cid] }));
+                const companies = Object.keys(owned).map(cid => ({ company_id: cid, company_name: owned[cid] }));
 
-                return res.status(200).json({ success: true, person: person || null, agencies, standalone_companies: standalone });
+                return res.status(200).json({ success: true, person: person || null, agencies, companies });
+            }
+
+            // ── Sub-account self-service (owners + admins; co-owners need full_access) ──
+            if (['list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies'].includes(action)) {
+                const portal = body.portal_id
+                    ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
+                    : await findPortalForPerson(personId);
+                if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+                const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
+                if (!mem) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
+                const role = mem.role || 'admin';
+                const canManage = role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+
+                if (action === 'my_companies') {
+                    // The person's PayProTec companies not yet added as a sub-account here.
+                    const { data: myAgents } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').eq('parent_agent_id', personId);
+                    const owned = {};
+                    (myAgents || []).forEach(a => { if (a.company_id) owned[a.company_id] = (a.companies && a.companies.company_name) || 'Company'; });
+                    const { data: existing } = await supabase.from('agency_sub_accounts').select('company_id').eq('portal_id', portal.id).not('company_id', 'is', null);
+                    const taken = new Set((existing || []).map(e => e.company_id));
+                    const companies = Object.keys(owned).filter(cid => !taken.has(cid)).map(cid => ({ company_id: cid, company_name: owned[cid] }));
+                    return res.status(200).json({ success: true, companies });
+                }
+
+                if (action === 'list_sub_accounts') {
+                    const { data: subs } = await supabase.from('agency_sub_accounts').select('id, company_id, name, status, created_at').eq('portal_id', portal.id).order('created_at', { ascending: true });
+                    return res.status(200).json({ success: true, can_manage: canManage, sub_accounts: (subs || []).map(s => ({ ...s, type: s.company_id ? 'company' : 'client' })) });
+                }
+
+                if (action === 'create_sub_account') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can create sub-accounts.' });
+                    const companyId = body.company_id || null;
+                    let name = (body.name || '').trim();
+                    if (companyId) {
+                        // Linking a PayProTec company — verify the person actually owns it, name from company.
+                        const { data: comp } = await supabase.from('companies').select('id, company_name').eq('id', companyId).maybeSingle();
+                        if (!comp) return res.status(400).json({ success: false, message: 'Company not found.' });
+                        if (!name) name = comp.company_name;
+                        const { data: dup } = await supabase.from('agency_sub_accounts').select('id').eq('portal_id', portal.id).eq('company_id', companyId).maybeSingle();
+                        if (dup) return res.status(409).json({ success: false, message: 'That company is already a sub-account here.' });
+                    } else {
+                        if (!name) return res.status(400).json({ success: false, message: 'Enter a name for the sub-account.' });
+                    }
+                    const { data: created, error } = await supabase.from('agency_sub_accounts')
+                        .insert({ portal_id: portal.id, company_id: companyId, name, created_by: personId })
+                        .select('id, company_id, name, status').single();
+                    if (error) return res.status(500).json({ success: false, message: 'Could not create sub-account.' });
+                    return res.status(200).json({ success: true, sub_account: { ...created, type: created.company_id ? 'company' : 'client' } });
+                }
+
+                if (action === 'delete_sub_account') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can remove sub-accounts.' });
+                    await supabase.from('agency_sub_accounts').delete().eq('id', body.sub_account_id).eq('portal_id', portal.id);
+                    return res.status(200).json({ success: true });
+                }
             }
 
             if (action === 'my_domain') {

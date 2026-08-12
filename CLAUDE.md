@@ -282,3 +282,23 @@ The multi-agency array (`get_my_agencies`) + switchers + home hub are NOT built 
 Finalize open decisions #2-4, add `full_access` col, build `get_my_agencies` (array), the home
 hub, the two switchers, then the lean CRM layer (opportunities/pipeline first). Build tenancy
 CRM-READY (roles/scoping designed for opportunities/contacts/tasks, not just domains).
+
+### 2026-08-12 REFINEMENTS (session continued) — Phase 3 built + model clarified
+- **Agency = per PERSON, not per company** (user confirmed better approach). One agency per
+  partner account holding many companies. Ownership defined on the person. NO per-company
+  white-labels. Setting ownership CREATES the agency (REL id) but white-label stays OFF until
+  the separate "Grant Agency Access" toggle (kept separate, user-confirmed).
+- **Sub-accounts (HighLevel-style, self-service)**: partners (owners + admins; co-owners need
+  full_access) create sub-accounts inside their agency. Each = EITHER a linked PayProTec
+  company OR a free-form client (not a PayProTec partner). Nothing auto-appears — created
+  explicitly (user decision). The internal "company switcher" is really a SUB-ACCOUNT switcher.
+- Sub-partner default scope = **nothing until granted** (scope.sub_account_ids on the membership).
+- Home hub shows everything in one place (owned agencies + accessed agencies + your companies).
+- BUILT this session: `full_access` + `scope` cols on partner_portal_members; `agency_sub_accounts`
+  table (portal_id, company_id nullable, name, created_by); DROPPED the earlier auto-link
+  `agency_companies` table. `api/whitelabel.js`: `get_my_agencies` (returns agencies w/ sub_accounts
+  by role + person's companies), `list_sub_accounts`/`create_sub_account`/`delete_sub_account`/
+  `my_companies` (owner+admin gated). `partner/home.html` launchpad (agency cards + sub-account
+  list + create modal: pick a company or free-form client). `js/partner-nav.js` injects "Home".
+- NOT yet built: persistent top-bar switchers (agency + sub-account) across portal pages;
+  per-context data scoping; co-owner full_access toggle UI + sub-partner scope grant UI; CRM layer.
