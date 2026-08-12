@@ -140,10 +140,35 @@ async function loadMembers(portalId) {
     if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
     return list.map(m => ({
         id: m.id, person_id: m.person_id, role: m.role, is_primary: m.is_primary === true,
+        full_access: m.full_access === true,
+        scope: m.scope || {},
+        sub_account_ids: (m.scope && Array.isArray(m.scope.sub_account_ids)) ? m.scope.sub_account_ids : [],
         ownership_percent: (m.ownership_percent === null || m.ownership_percent === undefined) ? null : Number(m.ownership_percent),
         full_name: (people[m.person_id] || {}).full_name || null,
         email: (people[m.person_id] || {}).email || null
     })).sort((a, b) => (b.is_primary - a.is_primary) || (a.role === b.role ? 0 : a.role === 'owner' ? -1 : 1));
+}
+
+// The agency's sub-agents (people who are sub-partners under the agency's companies'
+// partner IDs) — the natural candidates an owner can grant scoped portal access to.
+async function agencySubAgents(portalId) {
+    const companies = await agencyCompanies(portalId);
+    const companyIds = Object.keys(companies);
+    if (!companyIds.length) return [];
+    const { data: ags } = await supabase.from('agents').select('id').in('company_id', companyIds);
+    const agentUuids = (ags || []).map(a => a.id);
+    if (!agentUuids.length) return [];
+    const { data: compIdents } = await supabase.from('agent_identifiers').select('id').in('agent_id', agentUuids);
+    const parentIds = (compIdents || []).map(i => i.id);
+    if (!parentIds.length) return [];
+    const { data: subIdents } = await supabase.from('agent_identifiers').select('agent_id').in('parent_config_id', parentIds);
+    const subAgentIds = [...new Set((subIdents || []).map(s => s.agent_id))];
+    if (!subAgentIds.length) return [];
+    const { data: subAgents } = await supabase.from('agents').select('parent_agent_id').in('id', subAgentIds);
+    const personIds = [...new Set((subAgents || []).map(a => a.parent_agent_id).filter(Boolean))];
+    if (!personIds.length) return [];
+    const { data: people } = await supabase.from('persons').select('id, full_name, email').in('id', personIds);
+    return people || [];
 }
 
 // Ensure exactly one primary owner exists (does NOT touch owner_person_id, which is
@@ -385,7 +410,8 @@ export default async function handler(req, res) {
             }
 
             // ── Sub-account self-service (owners + admins; co-owners need full_access) ──
-            if (['list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies'].includes(action)) {
+            if (['list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
+                 'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke'].includes(action)) {
                 const portal = body.portal_id
                     ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
                     : await findPortalForPerson(personId);
@@ -394,6 +420,47 @@ export default async function handler(req, res) {
                 if (!mem) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
                 const role = mem.role || 'admin';
                 const canManage = role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+
+                // ── Team & visibility grants (owners/admins) ──
+                if (action === 'agency_team') {
+                    const members = await loadMembers(portal.id);
+                    const memberPids = new Set(members.map(m => m.person_id));
+                    const candidates = (await agencySubAgents(portal.id)).filter(p => !memberPids.has(p.id));
+                    const { data: subs } = await supabase.from('agency_sub_accounts').select('id, company_id, name').eq('portal_id', portal.id).order('created_at', { ascending: true });
+                    return res.status(200).json({ success: true, can_manage: canManage, members, candidates, sub_accounts: (subs || []).map(s => ({ id: s.id, name: s.name, type: s.company_id ? 'company' : 'client' })) });
+                }
+
+                if (action === 'agency_grant') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can grant access.' });
+                    if (!body.member_person_id) return res.status(400).json({ success: false, message: 'member_person_id required.' });
+                    // Don't touch owners via this flow.
+                    const { data: ex } = await supabase.from('partner_portal_members').select('id, role').eq('portal_id', portal.id).eq('person_id', body.member_person_id).maybeSingle();
+                    if (ex && ex.role === 'owner') return res.status(400).json({ success: false, message: 'That person is an owner already.' });
+                    const grantRole = body.role === 'admin' ? 'admin' : 'sub_partner';
+                    const scope = grantRole === 'sub_partner' ? { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } : {};
+                    await supabase.from('partner_portal_members').upsert(
+                        { portal_id: portal.id, person_id: body.member_person_id, role: grantRole, scope, added_by: personId },
+                        { onConflict: 'portal_id,person_id' });
+                    return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+                }
+
+                if (action === 'agency_set_scope') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can change access.' });
+                    const { data: m } = await supabase.from('partner_portal_members').select('*').eq('id', body.member_id).eq('portal_id', portal.id).maybeSingle();
+                    if (!m) return res.status(404).json({ success: false, message: 'Member not found.' });
+                    if (m.role === 'owner') return res.status(400).json({ success: false, message: 'Owners see everything.' });
+                    await supabase.from('partner_portal_members').update({ scope: { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } }).eq('id', m.id);
+                    return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+                }
+
+                if (action === 'agency_revoke') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can revoke access.' });
+                    const { data: m } = await supabase.from('partner_portal_members').select('role').eq('id', body.member_id).eq('portal_id', portal.id).maybeSingle();
+                    if (!m) return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+                    if (m.role === 'owner') return res.status(400).json({ success: false, message: 'Remove owners from the staff dashboard.' });
+                    await supabase.from('partner_portal_members').delete().eq('id', body.member_id).eq('portal_id', portal.id);
+                    return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+                }
 
                 if (action === 'my_companies') {
                     // The AGENCY's companies (its owners' book) not yet added as a sub-account.

@@ -165,12 +165,7 @@ async function load(){
           +'</div></div>';
     }).join('') || '<div class="empty"><span class="material-icons">workspaces</span>No sub-accounts yet.'+(ag.can_manage?' Add your first below.':'')+'</div>';
 
-    var memberRows = (r.members||[]).map(function(m){
-        var badge = m.role==='owner' ? '<span class="role-badge role-owner">'+(m.is_primary?'★ ':'')+'Owner'+(m.ownership_percent!=null?' · '+m.ownership_percent+'%':'')+'</span>'
-                  : m.role==='sub_partner' ? '<span class="role-badge role-sub">Sub-partner</span>'
-                  : '<span class="role-badge role-admin">Admin</span>';
-        return '<div class="member-row"><div><div style="font-weight:700;font-size:13px;">'+esc(m.full_name||m.email||'—')+'</div><div style="font-size:11px;color:var(--muted);">'+esc(m.email||'')+'</div></div>'+badge+'</div>';
-    }).join('') || '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No team yet.</div>';
+    window._agencyCanManage = ag.can_manage;
 
     document.getElementById('content').innerHTML =
       '<div class="crumb"><a href="/partner/home">Home</a> › Agency</div>'
@@ -186,9 +181,91 @@ async function load(){
       +'</div>'
       +'<div class="section-label"><span>Sub-Accounts</span>'+(ag.can_manage?'<button class="btn btn-teal" onclick="openCreateSub()"><span class="material-icons" style="font-size:15px;">add</span> Add sub-account</button>':'')+'</div>'
       +'<div class="grid">'+subCards+'</div>'
-      +'<div class="section-label"><span>Team &amp; Ownership</span></div>'
-      +'<div class="panel">'+memberRows+(ag.can_manage?'<div style="margin-top:10px;font-size:11px;color:var(--muted);">Manage owners, admins and % on the staff dashboard, or your Settings.</div>':'')+'</div>';
+      +'<div class="section-label"><span>Team &amp; Visibility</span></div>'
+      +'<div class="panel" id="teamPanel"><div style="color:var(--muted);font-size:13px;">Loading team…</div></div>';
+    loadTeam();
 }
+
+// ── TEAM & VISIBILITY GRANTS (owners/admins grant scoped access to sub-agents) ──
+var _team = null;
+function scopeSummary(m){
+    if (m.role !== 'sub_partner') return '';
+    var n = (m.sub_account_ids||[]).length;
+    return '<span style="font-size:11px;color:var(--muted);margin-left:8px;">'+(n? n+' sub-account'+(n>1?'s':'') : 'no access yet')+'</span>';
+}
+async function loadTeam(){
+    var r;
+    try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'agency_team',token:token,portal_id:portalId})}).then(x=>x.json()); }
+    catch(e){ r=null; }
+    var el = document.getElementById('teamPanel'); if(!el) return;
+    if (!r || !r.success){ el.innerHTML='<div style="color:#dc2626;font-size:13px;">Could not load team.</div>'; return; }
+    _team = r;
+    renderTeam();
+}
+function renderTeam(){
+    var el = document.getElementById('teamPanel'); if(!el) return;
+    var cm = _team.can_manage;
+    var rows = (_team.members||[]).map(function(m){
+        var badge = m.role==='owner' ? '<span class="role-badge role-owner">'+(m.is_primary?'★ ':'')+'Owner'+(m.ownership_percent!=null?' · '+m.ownership_percent+'%':'')+'</span>'
+                  : m.role==='sub_partner' ? '<span class="role-badge role-sub">Sub-partner</span>'
+                  : '<span class="role-badge role-admin">Admin</span>';
+        var actions = (cm && m.role!=='owner')
+            ? '<div style="display:flex;gap:8px;">'+(m.role==='sub_partner'?'<a href="#" onclick="editScope(\''+m.id+'\');return false;" style="color:var(--teal);font-weight:700;text-decoration:none;font-size:12px;">Edit access</a>':'')+'<a href="#" onclick="revokeMember(\''+m.id+'\');return false;" style="color:#dc2626;font-weight:700;text-decoration:none;font-size:12px;">Revoke</a></div>'
+            : '';
+        return '<div class="member-row"><div><div style="font-weight:700;font-size:13px;">'+esc(m.full_name||m.email||'—')+scopeSummary(m)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(m.email||'')+'</div></div><div style="display:flex;align-items:center;gap:12px;">'+badge+actions+'</div></div>';
+    }).join('') || '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No team yet.</div>';
+
+    var grant = '';
+    if (cm) {
+        if ((_team.candidates||[]).length) {
+            var opts = _team.candidates.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.full_name||c.email||c.id)+'</option>'; }).join('');
+            grant = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;">'
+              +'<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Grant portal access to a sub-agent</div>'
+              +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+              +'<select id="grantPerson" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">'+opts+'</select>'
+              +'<select id="grantRole" onchange="document.getElementById(\'grantScopeWrap\').style.display=this.value===\'sub_partner\'?\'block\':\'none\';" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;"><option value="sub_partner">Sub-partner (scoped)</option><option value="admin">Admin (full agency)</option></select>'
+              +'<button class="btn btn-teal" onclick="doGrant()"><span class="material-icons" style="font-size:15px;">person_add</span> Grant</button></div>'
+              +'<div id="grantScopeWrap" style="margin-top:10px;">'+scopeChecks('grantScope',[])+'</div></div>';
+        } else {
+            grant = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;font-size:12px;color:var(--muted);">No sub-agents available to grant. Sub-agents tied to this agency’s partner IDs appear here.</div>';
+        }
+    }
+    el.innerHTML = rows + grant;
+}
+function scopeChecks(idPrefix, selected){
+    var sel = new Set(selected||[]);
+    var boxes = (_team.sub_accounts||[]).map(function(s){
+        return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" class="'+idPrefix+'-cb" value="'+esc(s.id)+'"'+(sel.has(s.id)?' checked':'')+'> '+esc(s.name)+'</label>';
+    }).join('') || '<span style="font-size:12px;color:var(--muted);">No sub-accounts to scope to yet.</span>';
+    return '<div style="font-size:11px;font-weight:700;color:var(--secondary);margin-bottom:6px;">Which sub-accounts can they see?</div>'+boxes;
+}
+function collectScope(idPrefix){
+    return Array.prototype.slice.call(document.querySelectorAll('.'+idPrefix+'-cb')).filter(function(c){return c.checked;}).map(function(c){return c.value;});
+}
+async function _teamApi(body){
+    var r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token,portal_id:portalId},body))}).then(x=>x.json());
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Action failed.','error'); return null; }
+    if(r.members){ _team.members = r.members; loadTeam(); } // reload to refresh candidates too
+    return r;
+}
+window.doGrant = async function(){
+    var pid = (document.getElementById('grantPerson')||{}).value;
+    var role = (document.getElementById('grantRole')||{}).value;
+    if(!pid) return;
+    var scope = role==='sub_partner' ? collectScope('grantScope') : [];
+    await _teamApi({action:'agency_grant', member_person_id:pid, role:role, sub_account_ids:scope});
+};
+window.editScope = async function(memberId){
+    var m = (_team.members||[]).find(function(x){return x.id===memberId;}); if(!m) return;
+    var res = await Swal.fire({ title:'Edit access', html:'<div style="text-align:left;">'+scopeChecks('editScope', m.sub_account_ids||[])+'</div>', showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#0d9488', focusConfirm:false, preConfirm:function(){ return collectScope('editScope'); } });
+    if(!res.isConfirmed) return;
+    await _teamApi({action:'agency_set_scope', member_id:memberId, sub_account_ids:res.value});
+};
+window.revokeMember = async function(memberId){
+    var c = await Swal.fire({icon:'warning',title:'Revoke access?',showCancelButton:true,confirmButtonText:'Revoke',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    await _teamApi({action:'agency_revoke', member_id:memberId});
+};
 
 function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ localStorage.clear(); location.href='/partner'; }); }
 window.addEventListener('pp-context-change', function(){
