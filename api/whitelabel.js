@@ -192,10 +192,58 @@ export default async function handler(req, res) {
 
     try {
         // ─────────────────────── PARTNER (token) surface ───────────────────────
-        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies'].includes(action)) {
+        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
             const cf = await getCfConfig();
+
+            // Open a sub-account's CRM workspace: its details + scoped object counts/data.
+            // A sub-account is the CRM tenant that holds merchants, leads, sub-partners and
+            // affiliates. Merchants come from the linked company (real data); the other
+            // objects are seeded empty until their sources are wired.
+            if (action === 'get_sub_account') {
+                const { data: sub } = await supabase.from('agency_sub_accounts').select('*').eq('id', body.sub_account_id).maybeSingle();
+                if (!sub) return res.status(404).json({ success: false, message: 'Sub-account not found.' });
+                // Access control: must be a member of the owning agency (sub-partners must
+                // have this sub-account explicitly in their granted scope).
+                const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', sub.portal_id).eq('person_id', personId).maybeSingle();
+                if (!mem) return res.status(403).json({ success: false, message: 'You do not have access to this sub-account.' });
+                if (mem.role === 'sub_partner') {
+                    const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
+                    if (!granted.includes(sub.id)) return res.status(403).json({ success: false, message: 'This sub-account is outside your granted access.' });
+                }
+                const { data: portal } = await supabase.from('partner_portals').select('id, relationship_id, agency_name').eq('id', sub.portal_id).maybeSingle();
+                let companyName = null, merchants = { count: 0, volume_30_day: 0, sample: [] };
+                if (sub.company_id) {
+                    const { data: comp } = await supabase.from('companies').select('company_name').eq('id', sub.company_id).maybeSingle();
+                    companyName = comp && comp.company_name;
+                    // Company → agents → identifiers → merchants
+                    const { data: ags } = await supabase.from('agents').select('id').eq('company_id', sub.company_id);
+                    const agentUuids = (ags || []).map(a => a.id);
+                    let idStrings = [];
+                    if (agentUuids.length) { const { data: ids } = await supabase.from('agent_identifiers').select('id_string').in('agent_id', agentUuids); idStrings = (ids || []).map(i => i.id_string); }
+                    if (idStrings.length) {
+                        const { data: mData, count } = await supabase.from('merchants')
+                            .select('id, dba_name, account_status, volume_30_day, merchant_city, merchant_state', { count: 'exact' })
+                            .in('agent_id', idStrings).order('volume_30_day', { ascending: false, nullsFirst: false }).limit(25);
+                        merchants.count = count || 0;
+                        merchants.sample = mData || [];
+                        merchants.volume_30_day = (mData || []).reduce((s, m) => s + (parseFloat(m.volume_30_day) || 0), 0);
+                    }
+                }
+                return res.status(200).json({
+                    success: true,
+                    sub_account: { id: sub.id, name: sub.name, type: sub.company_id ? 'company' : 'client', company_id: sub.company_id, company_name: companyName },
+                    agency: portal ? { portal_id: portal.id, relationship_id: portal.relationship_id, agency_name: portal.agency_name } : null,
+                    my_role: mem.role,
+                    objects: {
+                        merchants,
+                        leads: { count: 0, sample: [] },
+                        sub_partners: { count: 0, sample: [] },
+                        affiliates: { count: 0, sample: [] }
+                    }
+                });
+            }
 
             // The launchpad: every agency this person belongs to (owned + accessed) with
             // their role and the SUB-ACCOUNTS they can see there (created explicitly by the

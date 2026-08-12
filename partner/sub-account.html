@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sub-Account | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --teal:#0d9488; --teal-dark:#0f766e; --teal-bg:#f0fdfa;
+            --navy:#001e3c; --border:#e2e8f0; --surface:#f8fafc;
+            --text:#0a1628; --secondary:#475569; --muted:#94a3b8;
+            --green-bg:#dcfce7; --green-text:#166534; --amber-bg:#fef3c7; --amber-text:#92400e;
+            --purple-bg:#ede9fe; --purple-text:#6d28d9;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.06); --shadow-md:0 4px 16px rgba(0,0,0,0.07);
+        }
+        body { margin:0; font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+        .sidebar { position:fixed; top:0; left:0; width:240px; height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:100; box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px; filter:brightness(0) invert(1); display:block; margin-bottom:16px; }
+        .sidebar-partner { display:flex; align-items:center; gap:10px; }
+        .sidebar-avatar { width:36px; height:36px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:white; }
+        .sidebar-name { font-size:13px; font-weight:700; color:white; }
+        .sidebar-tag { font-size:10px; color:rgba(255,255,255,0.4); }
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
+        .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); text-decoration:none; cursor:pointer; border:none; background:none; width:100%; font-family:inherit; }
+        .nav-item:hover { background:rgba(255,255,255,0.08); color:white; }
+        .nav-item.active { background:var(--teal); color:white; }
+        .nav-item .material-icons { font-size:20px; }
+        .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+        .main { margin-left:240px; min-height:100vh; }
+        .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .content { padding:24px 28px; max-width:1150px; }
+        .crumb { font-size:12px; color:var(--muted); margin-bottom:4px; }
+        .crumb a { color:var(--teal); text-decoration:none; font-weight:700; }
+        .sa-head { display:flex; align-items:center; gap:14px; margin-bottom:22px; }
+        .sa-icon { width:52px; height:52px; border-radius:14px; background:var(--teal-bg); color:var(--teal); display:flex; align-items:center; justify-content:center; }
+        .sa-icon .material-icons { font-size:28px; }
+        .sa-title { font-size:1.5rem; font-weight:800; }
+        .type-badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:99px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.4px; }
+        .type-company { background:var(--purple-bg); color:var(--purple-text); }
+        .type-client { background:var(--amber-bg); color:var(--amber-text); }
+        .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px; }
+        .kpi { background:white; border:1px solid var(--border); border-radius:14px; padding:16px 18px; box-shadow:var(--shadow-sm); }
+        .kpi-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px; display:flex; align-items:center; gap:5px; }
+        .kpi-value { font-size:1.6rem; font-weight:800; font-family:'DM Mono',monospace; line-height:1; }
+        .tabs { display:flex; gap:4px; background:#f1f5f9; border-radius:12px; padding:4px; margin-bottom:18px; flex-wrap:wrap; }
+        .tab { flex:1; min-width:120px; padding:9px 6px; border:none; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; background:transparent; color:var(--secondary); font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+        .tab.active { background:white; color:var(--teal); box-shadow:var(--shadow-sm); }
+        .tab .cnt { font-size:10px; background:#e2e8f0; color:#475569; border-radius:99px; padding:1px 7px; font-weight:800; }
+        .tab.active .cnt { background:var(--teal-bg); color:var(--teal); }
+        .panel { background:white; border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow-sm); overflow:hidden; }
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        thead th { background:#f8fafc; padding:10px 16px; text-align:left; font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border); }
+        tbody tr { border-bottom:1px solid var(--border); }
+        tbody tr:last-child { border-bottom:none; }
+        tbody tr:hover { background:var(--teal-bg); }
+        tbody td { padding:11px 16px; }
+        .badge { display:inline-flex; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; text-transform:uppercase; }
+        .badge.approved,.badge.active { background:var(--green-bg); color:var(--green-text); }
+        .badge.pending { background:var(--amber-bg); color:var(--amber-text); }
+        .badge.closed,.badge.declined,.badge.other { background:#f1f5f9; color:#475569; }
+        .mono { font-family:'DM Mono',monospace; }
+        .empty { padding:52px 24px; text-align:center; color:var(--muted); }
+        .empty .material-icons { font-size:44px; opacity:0.3; display:block; margin:0 auto 10px; }
+        .empty h4 { margin:0 0 4px; color:var(--secondary); font-size:15px; }
+        .empty p { margin:0; font-size:13px; }
+        .soon { display:inline-block; margin-top:10px; font-size:11px; font-weight:800; background:#f1f5f9; color:#64748b; padding:3px 10px; border-radius:99px; letter-spacing:0.5px; }
+        @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
+        @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-tag">Partner Portal</div></div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+    <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;">PayProTec Partner Portal v1.0</div>
+</div>
+
+<div class="main">
+    <div class="topbar"><div style="font-size:1.1rem;font-weight:800;">CRM Workspace</div></div>
+    <div class="content" id="content">
+        <div style="color:var(--muted);padding:40px;">Loading sub-account…</div>
+    </div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+const subId = new URLSearchParams(location.search).get('sub') || localStorage.getItem('pp_active_sub_account') || '';
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function initials(n){ return (String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
+function money(n){ return '$'+(Number(n||0)).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function statusClass(s){ s=String(s||'').toLowerCase(); if(s.indexOf('appro')>=0||s.indexOf('active')>=0)return 'approved'; if(s.indexOf('pend')>=0)return 'pending'; if(s.indexOf('clos')>=0||s.indexOf('decl')>=0)return 'closed'; return 'other'; }
+
+var DATA = null;
+function merchantsPanel(){
+    var m = DATA.objects.merchants;
+    if (!m.sample.length) return emptyPanel('storefront','No merchants yet','Merchants for this sub-account will appear here.', DATA.sub_account.type==='client');
+    var rows = m.sample.map(function(x){
+        var loc = [x.merchant_city,x.merchant_state].filter(Boolean).join(', ');
+        return '<tr><td style="font-weight:700;">'+esc(x.dba_name||'—')+'</td>'
+          +'<td><span class="badge '+statusClass(x.account_status)+'">'+esc(x.account_status||'—')+'</span></td>'
+          +'<td class="mono">'+money(x.volume_30_day)+'</td>'
+          +'<td style="color:var(--secondary);">'+esc(loc||'—')+'</td></tr>';
+    }).join('');
+    var more = m.count>m.sample.length ? '<div style="padding:12px 16px;font-size:12px;color:var(--muted);">Showing top '+m.sample.length+' of '+m.count+' merchants.</div>' : '';
+    return '<div class="panel"><table><thead><tr><th>Merchant (DBA)</th><th>Status</th><th>30-Day Volume</th><th>Location</th></tr></thead><tbody>'+rows+'</tbody></table>'+more+'</div>';
+}
+function emptyPanel(icon,title,sub,soon){
+    return '<div class="panel"><div class="empty"><span class="material-icons">'+icon+'</span><h4>'+esc(title)+'</h4><p>'+esc(sub)+'</p>'+(soon?'<span class="soon">COMING SOON</span>':'')+'</div></div>';
+}
+var PANELS = {
+    merchants: merchantsPanel,
+    leads: function(){ return emptyPanel('person_search','No leads yet','Capture and track leads for this sub-account here.', true); },
+    sub_partners: function(){ return emptyPanel('account_tree','No sub-partners yet','Recruit and manage potential sub-partners here.', true); },
+    affiliates: function(){ return emptyPanel('handshake','No affiliates yet','Track affiliates and their referrals here.', true); }
+};
+function showTab(key){
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.k===key); });
+    document.getElementById('panelWrap').innerHTML = PANELS[key]();
+}
+
+async function load(){
+    if (!subId){ document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">workspaces</span><h4>No sub-account selected</h4><p>Pick one from <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</p></div>'; return; }
+    var r;
+    try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_sub_account',token:token,sub_account_id:subId})}).then(x=>x.json()); }
+    catch(e){ r=null; }
+    if (!r || !r.success){
+        if (r && /session/i.test(r.message||'')){ localStorage.clear(); location.href='/partner'; return; }
+        document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">error_outline</span><h4>Could not open sub-account</h4><p>'+esc((r&&r.message)||'Please try again.')+'</p></div>';
+        return;
+    }
+    DATA = r;
+    localStorage.setItem('pp_active_sub_account', subId);
+    if (r.agency) localStorage.setItem('pp_active_portal', r.agency.portal_id);
+    var sa = r.sub_account, o = r.objects;
+    var agencyName = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'Agency';
+    document.getElementById('content').innerHTML =
+      '<div class="crumb"><a href="/partner/home">Home</a> › '+esc(agencyName)+'</div>'
+      +'<div class="sa-head"><div class="sa-icon"><span class="material-icons">'+(sa.type==='company'?'business':'person')+'</span></div>'
+      +'<div><div class="sa-title">'+esc(sa.name)+'</div><span class="type-badge type-'+sa.type+'">'+(sa.type==='company'?'Company':'Client')+'</span></div></div>'
+      +'<div class="kpi-grid">'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">storefront</span> Merchants</div><div class="kpi-value">'+o.merchants.count.toLocaleString()+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">person_search</span> Leads</div><div class="kpi-value">'+o.leads.count+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Partners</div><div class="kpi-value">'+o.sub_partners.count+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">handshake</span> Affiliates</div><div class="kpi-value">'+o.affiliates.count+'</div></div>'
+      +'</div>'
+      +'<div class="tabs">'
+      +'<button class="tab active" data-k="merchants" onclick="showTab(\'merchants\')"><span class="material-icons" style="font-size:16px;">storefront</span> Merchants <span class="cnt">'+o.merchants.count+'</span></button>'
+      +'<button class="tab" data-k="leads" onclick="showTab(\'leads\')"><span class="material-icons" style="font-size:16px;">person_search</span> Leads <span class="cnt">'+o.leads.count+'</span></button>'
+      +'<button class="tab" data-k="sub_partners" onclick="showTab(\'sub_partners\')"><span class="material-icons" style="font-size:16px;">account_tree</span> Sub-Partners <span class="cnt">'+o.sub_partners.count+'</span></button>'
+      +'<button class="tab" data-k="affiliates" onclick="showTab(\'affiliates\')"><span class="material-icons" style="font-size:16px;">handshake</span> Affiliates <span class="cnt">'+o.affiliates.count+'</span></button>'
+      +'</div><div id="panelWrap"></div>';
+    showTab('merchants');
+}
+
+function handleLogout(){
+    fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ localStorage.clear(); location.href='/partner'; });
+}
+// Re-load if the top-bar switcher changes the active sub-account.
+window.addEventListener('pp-context-change', function(){
+    var s = localStorage.getItem('pp_active_sub_account') || '';
+    if (s && s !== subId) location.href = '/partner/sub-account?sub=' + s;
+});
+load();
+</script>
+<script src="/js/partner-nav.js"></script>
+</body>
+</html>

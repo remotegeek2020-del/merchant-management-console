@@ -307,6 +307,8 @@
         if (subSel) subSel.onchange = function(){
             localStorage.setItem('pp_active_sub_account', this.value);
             window.dispatchEvent(new CustomEvent('pp-context-change'));
+            // Selecting a specific sub-account opens its CRM workspace.
+            if (this.value) window.location.href = '/partner/sub-account?sub=' + encodeURIComponent(this.value);
         };
     }
     function injectAgencySwitcher(){
