@@ -302,3 +302,27 @@ CRM-READY (roles/scoping designed for opportunities/contacts/tasks, not just dom
   list + create modal: pick a company or free-form client). `js/partner-nav.js` injects "Home".
 - NOT yet built: persistent top-bar switchers (agency + sub-account) across portal pages;
   per-context data scoping; co-owner full_access toggle UI + sub-partner scope grant UI; CRM layer.
+
+### 2026-08-12 ACCESS MODEL locked (Phase 3 continued)
+- **Branded requirement**: only BRANDED partners (`persons.is_branded`) can be white-labeled
+  agency owners. `set_agency_access` (enable) now rejects non-branded with `need_branded:true`;
+  partners-dashboard toggle offers "Mark as Branded now". get_agency_access returns is_branded.
+- **Two scoping layers** (user-confirmed):
+  1. Portal/merchant data (partner IDs, merchants) → sub-agent HARD-scoped to their partner ID.
+  2. CRM data (leads/opportunities catered for merchants) → OWNER-CONFIGURABLE team setting
+     ("only assigned user's leads" vs see-all), owner ALWAYS sees everything (like HighLevel).
+     Build this toggle with the CRM layer.
+- **Agency Home vs Sub-account split** (feature scan):
+  - Agency Home (owner sees all): aggregate overview, sub-account list, Team & Ownership +
+    visibility grants, Agency Settings (white-label domain/branding/name), global Community/
+    Webinars/Leaderboard/Messages, roll-up residuals/POS leads/tickets.
+  - Sub-account (per company, scoped to its partner IDs): company overview, Merchants,
+    Partner IDs (w/ per-ID merchant counts), Sub-Partners/Sub-Agents (tied to that company's
+    partner IDs), POS Leads, Certificates (incl sub-partners'), Tickets, Residuals; later
+    Opportunities/Leads/Affiliates.
+- Owners + admins fully customize the agency. Owner grants visibility to specific partners.
+- Sub-accounts = custom client OR default registered PayProTec company (built).
+- GOD MODE: super-admin "Login As" (api/partner-auth.js admin_login_as) + partners-dashboard
+  "🔑 Login As" button + impersonation banner (partner-nav.js). Dev test acct:
+  devtest@mypayprotec.com / DevTest#2026 (full_access co-owner of REL-100001). Michelle's
+  REL-100001 seeded as populated test agency (4 company sub-accounts).

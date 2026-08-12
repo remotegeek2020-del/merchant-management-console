@@ -2760,6 +2760,16 @@ window.wlRemoveMember = async function(personId, memberId){
 window.toggleAgencyAccess = async function(personId) {
     var st = window._wlAgency[personId] || {};
     var turningOn = !st.agency_enabled;
+    // Rule: only Branded partners can be white-labeled agency owners.
+    if (turningOn && st.is_branded === false) {
+        var mb = await Swal.fire({
+            icon: 'info', title: 'Mark as Branded first',
+            html: 'White-label agency access is only for <b>branded partners</b>. Mark this partner as Branded, then grant agency access.',
+            showCancelButton: true, confirmButtonText: 'Mark as Branded now', confirmButtonColor: '#004990'
+        });
+        if (mb.isConfirmed) { await toggleBrandedPartner(personId, false); }
+        return;
+    }
     if (!turningOn) {
         var c = await Swal.fire({ icon: 'warning', title: 'Revoke agency access?', text: 'Their custom domain will stop resolving and the white-label CRM section disappears from their settings.', showCancelButton: true, confirmButtonText: 'Revoke', confirmButtonColor: '#dc2626' });
         if (!c.isConfirmed) return;

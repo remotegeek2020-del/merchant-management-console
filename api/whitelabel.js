@@ -509,6 +509,13 @@ export default async function handler(req, res) {
             const personId = body.person_id;
             if (!personId) return res.status(400).json({ success: false, message: 'person_id required.' });
             const enabled = body.enabled === true || body.enabled === 'true';
+            // Rule: only BRANDED partners can be white-labeled agency owners.
+            if (enabled) {
+                const { data: pr } = await supabase.from('persons').select('is_branded').eq('id', personId).maybeSingle();
+                if (!pr || pr.is_branded !== true) {
+                    return res.status(400).json({ success: false, message: 'Mark this partner as a Branded partner before granting white-label agency access.', need_branded: true });
+                }
+            }
             // Toggle the SHARED agency this person belongs to (co-owner or anchor). Only
             // create a new one (anchored to them) if they don't belong to any yet.
             let portal = await findPortalForPerson(personId);
@@ -545,6 +552,8 @@ export default async function handler(req, res) {
         if (action === 'get_agency_access') {
             const personId = body.person_id;
             if (!personId) return res.status(400).json({ success: false, message: 'person_id required.' });
+            const { data: pbr } = await supabase.from('persons').select('is_branded').eq('id', personId).maybeSingle();
+            const isBranded = !!(pbr && pbr.is_branded);
             // The agency this person belongs to (their own, or one they co-own) — shared,
             // so co-owners reflect each other's ownership on both profiles.
             const portal = await findPortalForPerson(personId);
@@ -562,6 +571,7 @@ export default async function handler(req, res) {
                 relationship_id: portal ? portal.relationship_id : null,
                 agency_name: portal ? portal.agency_name : null,
                 is_anchor: isAnchor,
+                is_branded: isBranded,
                 domain, members
             });
         }
