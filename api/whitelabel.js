@@ -213,22 +213,42 @@ export default async function handler(req, res) {
                     if (!granted.includes(sub.id)) return res.status(403).json({ success: false, message: 'This sub-account is outside your granted access.' });
                 }
                 const { data: portal } = await supabase.from('partner_portals').select('id, relationship_id, agency_name').eq('id', sub.portal_id).maybeSingle();
-                let companyName = null, merchants = { count: 0, volume_30_day: 0, sample: [] };
+                let companyName = null;
+                let merchants = { count: 0, volume_30_day: 0, sample: [] };
+                let partnerIds = [];                          // the company's agent IDs (the breakdown)
+                let subPartners = { count: 0, sample: [] };   // sub-agents tied to those partner IDs
                 if (sub.company_id) {
                     const { data: comp } = await supabase.from('companies').select('company_name').eq('id', sub.company_id).maybeSingle();
                     companyName = comp && comp.company_name;
-                    // Company → agents → identifiers → merchants
+                    // Company → agents → identifiers (the Partner IDs)
                     const { data: ags } = await supabase.from('agents').select('id').eq('company_id', sub.company_id);
                     const agentUuids = (ags || []).map(a => a.id);
-                    let idStrings = [];
-                    if (agentUuids.length) { const { data: ids } = await supabase.from('agent_identifiers').select('id_string').in('agent_id', agentUuids); idStrings = (ids || []).map(i => i.id_string); }
+                    let compIdents = [];
+                    if (agentUuids.length) { const { data: ids } = await supabase.from('agent_identifiers').select('id, id_string, rev_share, prime49').in('agent_id', agentUuids); compIdents = ids || []; }
+                    partnerIds = compIdents.map(i => ({ id_string: i.id_string, rev_share: i.rev_share, prime49: i.prime49 === true }));
+                    const idStrings = compIdents.map(i => i.id_string);
+
+                    // Merchants under those Partner IDs
                     if (idStrings.length) {
                         const { data: mData, count } = await supabase.from('merchants')
                             .select('id, dba_name, account_status, volume_30_day, merchant_city, merchant_state', { count: 'exact' })
                             .in('agent_id', idStrings).order('volume_30_day', { ascending: false, nullsFirst: false }).limit(25);
                         merchants.count = count || 0;
                         merchants.sample = mData || [];
-                        merchants.volume_30_day = (mData || []).reduce((s, m) => s + (parseFloat(m.volume_30_day) || 0), 0);
+                    }
+
+                    // Sub-agents (sub-partners) tied to this company's Partner IDs
+                    const parentIdentIds = compIdents.map(i => i.id);
+                    if (parentIdentIds.length) {
+                        const { data: subIdents } = await supabase.from('agent_identifiers').select('id, agent_id, id_string, rev_share').in('parent_config_id', parentIdentIds);
+                        const subAgentIds = [...new Set((subIdents || []).map(s => s.agent_id))];
+                        let agentToPerson = {};
+                        if (subAgentIds.length) { const { data: subAgents } = await supabase.from('agents').select('id, parent_agent_id').in('id', subAgentIds); (subAgents || []).forEach(a => { agentToPerson[a.id] = a.parent_agent_id; }); }
+                        const personIds = [...new Set(Object.values(agentToPerson).filter(Boolean))];
+                        let people = {};
+                        if (personIds.length) { const { data: ps } = await supabase.from('persons').select('id, full_name, email').in('id', personIds); (ps || []).forEach(p => { people[p.id] = p; }); }
+                        const list = (subIdents || []).map(s => { const pe = people[agentToPerson[s.agent_id]] || {}; return { id_string: s.id_string, rev_share: s.rev_share, full_name: pe.full_name || null, email: pe.email || null }; });
+                        subPartners = { count: list.length, sample: list.slice(0, 50) };
                     }
                 }
                 return res.status(200).json({
@@ -238,8 +258,9 @@ export default async function handler(req, res) {
                     my_role: mem.role,
                     objects: {
                         merchants,
+                        partner_ids: { count: partnerIds.length, sample: partnerIds },
                         leads: { count: 0, sample: [] },
-                        sub_partners: { count: 0, sample: [] },
+                        sub_partners: subPartners,
                         affiliates: { count: 0, sample: [] }
                     }
                 });

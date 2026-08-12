@@ -127,10 +127,32 @@ function merchantsPanel(){
 function emptyPanel(icon,title,sub,soon){
     return '<div class="panel"><div class="empty"><span class="material-icons">'+icon+'</span><h4>'+esc(title)+'</h4><p>'+esc(sub)+'</p>'+(soon?'<span class="soon">COMING SOON</span>':'')+'</div></div>';
 }
+function partnerIdsPanel(){
+    var p = DATA.objects.partner_ids;
+    if (!p.sample.length) return emptyPanel('badge','No partner IDs','This company has no agent IDs on file.', false);
+    var rows = p.sample.map(function(x){
+        return '<tr><td class="mono" style="font-weight:700;color:var(--teal);">'+esc(x.id_string)+'</td>'
+          +'<td>'+(x.prime49?'<span class="badge approved">Prime49</span>':'<span style="color:var(--muted);">—</span>')+'</td>'
+          +'<td class="mono">'+(x.rev_share!=null?esc(x.rev_share)+'%':'—')+'</td></tr>';
+    }).join('');
+    return '<div class="panel"><table><thead><tr><th>Partner ID</th><th>Tier</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function subPartnersPanel(){
+    var sp = DATA.objects.sub_partners;
+    if (!sp.sample.length) return emptyPanel('account_tree','No sub-partners yet','Sub-agents tied to this company’s partner IDs will appear here.', false);
+    var rows = sp.sample.map(function(x){
+        return '<tr><td style="font-weight:700;">'+esc(x.full_name||'—')+'</td>'
+          +'<td style="color:var(--secondary);">'+esc(x.email||'—')+'</td>'
+          +'<td class="mono" style="color:var(--teal);">'+esc(x.id_string||'—')+'</td>'
+          +'<td class="mono">'+(x.rev_share!=null?esc(x.rev_share)+'%':'—')+'</td></tr>';
+    }).join('');
+    return '<div class="panel"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
 var PANELS = {
     merchants: merchantsPanel,
+    partner_ids: partnerIdsPanel,
+    sub_partners: subPartnersPanel,
     leads: function(){ return emptyPanel('person_search','No leads yet','Capture and track leads for this sub-account here.', true); },
-    sub_partners: function(){ return emptyPanel('account_tree','No sub-partners yet','Recruit and manage potential sub-partners here.', true); },
     affiliates: function(){ return emptyPanel('handshake','No affiliates yet','Track affiliates and their referrals here.', true); }
 };
 function showTab(key){
@@ -159,14 +181,15 @@ async function load(){
       +'<div><div class="sa-title">'+esc(sa.name)+'</div><span class="type-badge type-'+sa.type+'">'+(sa.type==='company'?'Company':'Client')+'</span></div></div>'
       +'<div class="kpi-grid">'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">storefront</span> Merchants</div><div class="kpi-value">'+o.merchants.count.toLocaleString()+'</div></div>'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">person_search</span> Leads</div><div class="kpi-value">'+o.leads.count+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">badge</span> Partner IDs</div><div class="kpi-value">'+o.partner_ids.count+'</div></div>'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Partners</div><div class="kpi-value">'+o.sub_partners.count+'</div></div>'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">handshake</span> Affiliates</div><div class="kpi-value">'+o.affiliates.count+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">person_search</span> Leads</div><div class="kpi-value">'+o.leads.count+'</div></div>'
       +'</div>'
       +'<div class="tabs">'
-      +'<button class="tab active" data-k="merchants" onclick="showTab(\'merchants\')"><span class="material-icons" style="font-size:16px;">storefront</span> Merchants <span class="cnt">'+o.merchants.count+'</span></button>'
-      +'<button class="tab" data-k="leads" onclick="showTab(\'leads\')"><span class="material-icons" style="font-size:16px;">person_search</span> Leads <span class="cnt">'+o.leads.count+'</span></button>'
+      +'<button class="tab active" data-k="merchants" onclick="showTab(\'merchants\')"><span class="material-icons" style="font-size:16px;">storefront</span> Merchants <span class="cnt">'+o.merchants.count.toLocaleString()+'</span></button>'
+      +'<button class="tab" data-k="partner_ids" onclick="showTab(\'partner_ids\')"><span class="material-icons" style="font-size:16px;">badge</span> Partner IDs <span class="cnt">'+o.partner_ids.count+'</span></button>'
       +'<button class="tab" data-k="sub_partners" onclick="showTab(\'sub_partners\')"><span class="material-icons" style="font-size:16px;">account_tree</span> Sub-Partners <span class="cnt">'+o.sub_partners.count+'</span></button>'
+      +'<button class="tab" data-k="leads" onclick="showTab(\'leads\')"><span class="material-icons" style="font-size:16px;">person_search</span> Leads <span class="cnt">'+o.leads.count+'</span></button>'
       +'<button class="tab" data-k="affiliates" onclick="showTab(\'affiliates\')"><span class="material-icons" style="font-size:16px;">handshake</span> Affiliates <span class="cnt">'+o.affiliates.count+'</span></button>'
       +'</div><div id="panelWrap"></div>';
     showTab('merchants');
