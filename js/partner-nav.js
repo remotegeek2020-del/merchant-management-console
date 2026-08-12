@@ -179,9 +179,9 @@
             var td = await tr.json();
             if (td.success) setBadge('navTicketBadge', td.total || 0);
         } catch (e) {}
-        // DM unread count
+        // DM unread count — skip entirely during impersonation (messages are private).
         if (!myId) { myId = localStorage.getItem('pp_partner_id'); }
-        if (myId) {
+        if (myId && sessionStorage.getItem('pp_imp_mode') !== '1') {
             try {
                 var mr = await fetch('/api/chat', {
                     method: 'POST',
@@ -398,8 +398,21 @@
         };
     }
 
+    // During impersonation (Login As), the user's private Messages are confidential —
+    // hide the nav item and block the page.
+    function hideConfidentialForImpersonation() {
+        if (sessionStorage.getItem('pp_imp_mode') !== '1') return;
+        try {
+            document.querySelectorAll('a[href^="/partner/messages"]').forEach(function (a) { a.style.display = 'none'; });
+        } catch (e) {}
+        if (window.location.pathname.indexOf('/partner/messages') === 0) {
+            window.location.href = '/partner/home';
+        }
+    }
+
     function init() {
         injectImpersonationBanner();
+        hideConfidentialForImpersonation();
         injectBadges();
         // Two distinct zones so navigation doesn't bleed together:
         //  - Agency zone (home/agency/sub-account): curated own sidebars + the agency
