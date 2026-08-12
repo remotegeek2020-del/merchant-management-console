@@ -204,7 +204,7 @@ export default async function handler(req, res) {
 
     try {
         // ─────────────────────── PARTNER (token) surface ───────────────────────
-        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account'].includes(action)) {
+        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account', 'get_agency_overview'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
             const cf = await getCfConfig();
@@ -280,6 +280,58 @@ export default async function handler(req, res) {
                         sub_partners: subPartners,
                         affiliates: { count: 0, sample: [] }
                     }
+                });
+            }
+
+            // Agency Home: the owner's "see all" view — aggregate roll-up across every
+            // sub-account, the sub-account list with per-sub counts, and the team.
+            if (action === 'get_agency_overview') {
+                const portal = body.portal_id
+                    ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
+                    : await findPortalForPerson(personId);
+                if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+                const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
+                if (!mem) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
+                const role = mem.role || 'admin';
+                const canManage = role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+
+                let { data: subs } = await supabase.from('agency_sub_accounts').select('id, company_id, name, status').eq('portal_id', portal.id).order('created_at', { ascending: true });
+                subs = subs || [];
+                if (role === 'sub_partner') {
+                    const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
+                    subs = subs.filter(s => granted.includes(s.id));
+                }
+
+                let totalMerchants = 0, totalPartnerIds = 0, totalSubAgents = 0;
+                const subList = [];
+                for (const s of subs) {
+                    let mCount = 0, pidCount = 0, saCount = 0;
+                    if (s.company_id) {
+                        const { data: ags } = await supabase.from('agents').select('id').eq('company_id', s.company_id);
+                        const agentUuids = (ags || []).map(a => a.id);
+                        let compIdents = [];
+                        if (agentUuids.length) { const { data: ids } = await supabase.from('agent_identifiers').select('id, id_string').in('agent_id', agentUuids); compIdents = ids || []; }
+                        pidCount = compIdents.length;
+                        const idStrings = compIdents.map(i => i.id_string);
+                        if (idStrings.length) { const { count } = await supabase.from('merchants').select('id', { count: 'exact', head: true }).in('agent_id', idStrings); mCount = count || 0; }
+                        const parentIdentIds = compIdents.map(i => i.id);
+                        if (parentIdentIds.length) { const { count } = await supabase.from('agent_identifiers').select('id', { count: 'exact', head: true }).in('parent_config_id', parentIdentIds); saCount = count || 0; }
+                    }
+                    totalMerchants += mCount; totalPartnerIds += pidCount; totalSubAgents += saCount;
+                    subList.push({ id: s.id, name: s.name, type: s.company_id ? 'company' : 'client', company_id: s.company_id, merchants: mCount, partner_ids: pidCount, sub_agents: saCount });
+                }
+
+                const { data: dom } = await supabase.from('portal_brands').select('host, ssl_status, active').eq('portal_id', portal.id).eq('added_by_partner', true).maybeSingle();
+                return res.status(200).json({
+                    success: true,
+                    agency: {
+                        portal_id: portal.id, relationship_id: portal.relationship_id, agency_name: portal.agency_name,
+                        agency_enabled: portal.agency_enabled === true, domain: dom || null,
+                        my_role: role, can_manage: canManage
+                    },
+                    kpis: { sub_accounts: subs.length, merchants: totalMerchants, partner_ids: totalPartnerIds, sub_agents: totalSubAgents },
+                    sub_accounts: subList,
+                    members: await loadMembers(portal.id)
                 });
             }
 

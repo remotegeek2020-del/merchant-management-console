@@ -129,8 +129,8 @@ function domainStatus(a){
 window.enterAgency = function(portalId, subId){
     localStorage.setItem('pp_active_portal', portalId || '');
     localStorage.setItem('pp_active_sub_account', subId || '');
-    // A specific sub-account opens its CRM workspace; "open agency" (no sub) → dashboard.
-    window.location.href = subId ? ('/partner/sub-account?sub=' + encodeURIComponent(subId)) : '/partner/dashboard';
+    // A specific sub-account opens its CRM workspace; "open agency" (no sub) → Agency Home.
+    window.location.href = subId ? ('/partner/sub-account?sub=' + encodeURIComponent(subId)) : ('/partner/agency?portal=' + encodeURIComponent(portalId));
 };
 window.enterCompany = function(companyId){
     localStorage.setItem('pp_active_portal', '');

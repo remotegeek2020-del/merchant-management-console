@@ -300,15 +300,16 @@
         if (agSel) agSel.onchange = function(){
             localStorage.setItem('pp_active_portal', this.value);
             localStorage.setItem('pp_active_sub_account', ''); // reset sub on agency change
-            paintSwitcher();
             window.dispatchEvent(new CustomEvent('pp-context-change'));
+            window.location.href = '/partner/agency?portal=' + encodeURIComponent(this.value);
         };
         var subSel = document.getElementById('ppSwSub');
         if (subSel) subSel.onchange = function(){
             localStorage.setItem('pp_active_sub_account', this.value);
             window.dispatchEvent(new CustomEvent('pp-context-change'));
-            // Selecting a specific sub-account opens its CRM workspace.
+            // Specific sub-account → its CRM workspace; "All sub-accounts" → Agency Home.
             if (this.value) window.location.href = '/partner/sub-account?sub=' + encodeURIComponent(this.value);
+            else window.location.href = '/partner/agency?portal=' + encodeURIComponent(localStorage.getItem('pp_active_portal') || '');
         };
     }
     function injectAgencySwitcher(){

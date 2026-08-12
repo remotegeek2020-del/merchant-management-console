@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agency | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --teal:#0d9488; --teal-dark:#0f766e; --teal-bg:#f0fdfa;
+            --navy:#001e3c; --border:#e2e8f0; --surface:#f8fafc;
+            --text:#0a1628; --secondary:#475569; --muted:#94a3b8;
+            --green-bg:#dcfce7; --green-text:#166534; --amber-bg:#fef3c7; --amber-text:#92400e;
+            --purple-bg:#ede9fe; --purple-text:#6d28d9;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.06); --shadow-md:0 4px 16px rgba(0,0,0,0.07);
+        }
+        body { margin:0; font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+        .sidebar { position:fixed; top:0; left:0; width:240px; height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:100; box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px; filter:brightness(0) invert(1); display:block; margin-bottom:16px; }
+        .sidebar-partner { display:flex; align-items:center; gap:10px; }
+        .sidebar-avatar { width:36px; height:36px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:white; }
+        .sidebar-name { font-size:13px; font-weight:700; color:white; }
+        .sidebar-tag { font-size:10px; color:rgba(255,255,255,0.4); }
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
+        .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); text-decoration:none; cursor:pointer; border:none; background:none; width:100%; font-family:inherit; }
+        .nav-item:hover { background:rgba(255,255,255,0.08); color:white; }
+        .nav-item.active { background:var(--teal); color:white; }
+        .nav-item .material-icons { font-size:20px; }
+        .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+        .main { margin-left:240px; min-height:100vh; }
+        .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .content { padding:24px 28px; max-width:1150px; }
+        .crumb { font-size:12px; color:var(--muted); margin-bottom:4px; }
+        .crumb a { color:var(--teal); text-decoration:none; font-weight:700; }
+        .hero { background:linear-gradient(135deg,var(--navy),#00355f); color:white; border-radius:20px; padding:24px 26px; margin-bottom:22px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+        .hero-left { display:flex; align-items:center; gap:16px; }
+        .hero-icon { width:56px; height:56px; border-radius:15px; background:rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; }
+        .hero-icon .material-icons { font-size:30px; }
+        .hero h2 { margin:0 0 4px; font-size:1.5rem; font-weight:800; }
+        .rel { font-family:'DM Mono',monospace; font-size:12px; background:rgba(255,255,255,0.15); padding:2px 10px; border-radius:6px; font-weight:700; }
+        .dstatus { font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:5px; margin-top:6px; color:rgba(255,255,255,0.75); }
+        .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+        .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+        .kpi { background:white; border:1px solid var(--border); border-radius:14px; padding:16px 18px; box-shadow:var(--shadow-sm); }
+        .kpi-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px; display:flex; align-items:center; gap:5px; }
+        .kpi-value { font-size:1.7rem; font-weight:800; font-family:'DM Mono',monospace; line-height:1; }
+        .section-label { font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin:22px 0 12px; display:flex; align-items:center; justify-content:space-between; }
+        .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+        .sa-card { background:white; border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow-sm); cursor:pointer; transition:box-shadow .2s, transform .1s; border-top:4px solid var(--teal); }
+        .sa-card.client { border-top-color:#cbd5e1; }
+        .sa-card:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+        .sa-name { font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; }
+        .sa-name .material-icons { font-size:18px; color:var(--teal); }
+        .sa-stats { display:flex; gap:14px; margin-top:12px; }
+        .sa-stat b { font-family:'DM Mono',monospace; font-size:15px; display:block; }
+        .sa-stat span { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; }
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:9px; font-size:12px; font-weight:700; font-family:inherit; cursor:pointer; border:none; text-decoration:none; }
+        .btn-teal { background:var(--teal); color:white; } .btn-teal:hover { background:var(--teal-dark); }
+        .btn-outline { background:white; color:var(--secondary); border:1px solid var(--border); }
+        .panel { background:white; border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow-sm); padding:16px 18px; }
+        .member-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9; }
+        .member-row:last-child { border-bottom:none; }
+        .role-badge { font-size:10px; font-weight:800; padding:2px 9px; border-radius:99px; text-transform:uppercase; letter-spacing:0.4px; }
+        .role-owner { background:var(--purple-bg); color:var(--purple-text); }
+        .role-admin { background:#f1f5f9; color:#475569; }
+        .role-sub { background:var(--amber-bg); color:var(--amber-text); }
+        .empty { padding:40px; text-align:center; color:var(--muted); }
+        .empty .material-icons { font-size:40px; opacity:0.3; display:block; margin:0 auto 8px; }
+        @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
+        @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-tag">Partner Portal</div></div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
+        <a class="nav-item active" href="#"><span class="material-icons">apartment</span> Agency</a>
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+    <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;">PayProTec Partner Portal v1.0</div>
+</div>
+
+<div class="main">
+    <div class="topbar">
+        <a href="/partner/home" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Back to Home</a>
+        <div style="font-size:1.1rem;font-weight:800;">Agency Home</div>
+    </div>
+    <div class="content" id="content"><div style="color:var(--muted);padding:40px;">Loading agency…</div></div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+const portalId = new URLSearchParams(location.search).get('portal') || localStorage.getItem('pp_active_portal') || '';
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function initials(n){ return (String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
+
+function domainLine(ag){
+    if (!ag.agency_enabled) return '<span class="dstatus"><span class="dot" style="background:#cbd5e1;"></span> White-label off</span>';
+    var d = ag.domain;
+    if (d && d.ssl_status==='active') return '<span class="dstatus"><span class="dot" style="background:#22c55e;"></span> '+esc(d.host)+' · Live</span>';
+    if (d) return '<span class="dstatus"><span class="dot" style="background:#f59e0b;"></span> '+esc(d.host)+' · setting up</span>';
+    return '<span class="dstatus"><span class="dot" style="background:#f59e0b;"></span> No domain yet</span>';
+}
+window.enterSub = function(subId){ localStorage.setItem('pp_active_portal', portalId); localStorage.setItem('pp_active_sub_account', subId); location.href='/partner/sub-account?sub='+encodeURIComponent(subId); };
+
+async function openCreateSub(){
+    var comps = [];
+    try { var r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'my_companies',token:token,portal_id:portalId})}).then(x=>x.json()); if(r&&r.success) comps=r.companies||[]; } catch(e){}
+    var opts = comps.map(function(c){ return '<option value="'+esc(c.company_id)+'">'+esc(c.company_name)+'</option>'; }).join('');
+    var html =
+      '<div style="text-align:left;font-size:13px;">'
+      +'<label style="font-weight:700;display:block;margin-bottom:6px;">Sub-account type</label>'
+      +'<select id="scType" class="swal2-select" style="width:100%;margin:0 0 12px;" onchange="document.getElementById(\'scCompanyWrap\').style.display=this.value===\'company\'?\'block\':\'none\';document.getElementById(\'scNameWrap\').style.display=this.value===\'client\'?\'block\':\'none\';">'
+      +'<option value="company">One of my companies</option><option value="client">New client (not a PayProTec partner)</option></select>'
+      +'<div id="scCompanyWrap">'+(comps.length?'<label style="font-weight:700;display:block;margin-bottom:6px;">Company</label><select id="scCompany" class="swal2-select" style="width:100%;margin:0;">'+opts+'</select>':'<div style="color:#94a3b8;">All companies added, or none available. Use “New client”.</div>')+'</div>'
+      +'<div id="scNameWrap" style="display:none;"><label style="font-weight:700;display:block;margin-bottom:6px;">Client name</label><input id="scName" class="swal2-input" style="width:100%;margin:0;" placeholder="e.g. Downtown Diner"></div></div>';
+    var res = await Swal.fire({ title:'New sub-account', html:html, showCancelButton:true, confirmButtonText:'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){ var t=document.getElementById('scType').value; if(t==='company'){ var el=document.getElementById('scCompany'); if(!el||!el.value){Swal.showValidationMessage('No company available — use New client.');return false;} return {company_id:el.value}; } var nm=(document.getElementById('scName').value||'').trim(); if(!nm){Swal.showValidationMessage('Enter a client name.');return false;} return {name:nm}; } });
+    if(!res.isConfirmed) return;
+    var cr = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action:'create_sub_account',token:token,portal_id:portalId},res.value))}).then(x=>x.json());
+    if(!cr||!cr.success){ Swal.fire('Error',(cr&&cr.message)||'Could not create.','error'); return; }
+    load();
+}
+
+async function load(){
+    if (!portalId){ document.getElementById('content').innerHTML='<div class="empty"><span class="material-icons">apartment</span>No agency selected. Go to <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</div>'; return; }
+    var r;
+    try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_agency_overview',token:token,portal_id:portalId})}).then(x=>x.json()); }
+    catch(e){ r=null; }
+    if (!r || !r.success){
+        if (r && /session/i.test(r.message||'')){ localStorage.clear(); location.href='/partner'; return; }
+        document.getElementById('content').innerHTML='<div class="empty"><span class="material-icons">error_outline</span>'+esc((r&&r.message)||'Could not load agency.')+'</div>'; return;
+    }
+    localStorage.setItem('pp_active_portal', portalId);
+    localStorage.removeItem('pp_active_sub_account');
+    var ag = r.agency, k = r.kpis;
+    var title = ag.agency_name || ag.relationship_id || 'My Agency';
+    document.getElementById('sidebarName').textContent = title;
+    document.getElementById('sidebarAvatar').textContent = initials(title);
+
+    var subCards = (r.sub_accounts||[]).map(function(s){
+        return '<div class="sa-card '+(s.type==='client'?'client':'')+'" onclick="enterSub(\''+s.id+'\')">'
+          +'<div class="sa-name"><span class="material-icons">'+(s.type==='company'?'business':'person')+'</span>'+esc(s.name)+'</div>'
+          +'<div class="sa-stats">'
+          +'<div class="sa-stat"><b>'+s.merchants.toLocaleString()+'</b><span>Merchants</span></div>'
+          +'<div class="sa-stat"><b>'+s.partner_ids+'</b><span>Partner IDs</span></div>'
+          +'<div class="sa-stat"><b>'+s.sub_agents+'</b><span>Sub-Agents</span></div>'
+          +'</div></div>';
+    }).join('') || '<div class="empty"><span class="material-icons">workspaces</span>No sub-accounts yet.'+(ag.can_manage?' Add your first below.':'')+'</div>';
+
+    var memberRows = (r.members||[]).map(function(m){
+        var badge = m.role==='owner' ? '<span class="role-badge role-owner">'+(m.is_primary?'★ ':'')+'Owner'+(m.ownership_percent!=null?' · '+m.ownership_percent+'%':'')+'</span>'
+                  : m.role==='sub_partner' ? '<span class="role-badge role-sub">Sub-partner</span>'
+                  : '<span class="role-badge role-admin">Admin</span>';
+        return '<div class="member-row"><div><div style="font-weight:700;font-size:13px;">'+esc(m.full_name||m.email||'—')+'</div><div style="font-size:11px;color:var(--muted);">'+esc(m.email||'')+'</div></div>'+badge+'</div>';
+    }).join('') || '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No team yet.</div>';
+
+    document.getElementById('content').innerHTML =
+      '<div class="crumb"><a href="/partner/home">Home</a> › Agency</div>'
+      +'<div class="hero"><div class="hero-left"><div class="hero-icon"><span class="material-icons">apartment</span></div>'
+      +'<div><h2>'+esc(title)+' <span class="rel">'+esc(ag.relationship_id||'')+'</span></h2>'+domainLine(ag)+'</div></div>'
+      +(ag.can_manage?'<a class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:white;border-color:rgba(255,255,255,0.25);" href="/partner/settings"><span class="material-icons" style="font-size:16px;">settings</span> Agency Settings</a>':'')
+      +'</div>'
+      +'<div class="kpi-grid">'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">workspaces</span> Sub-Accounts</div><div class="kpi-value">'+k.sub_accounts+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">storefront</span> Merchants</div><div class="kpi-value">'+k.merchants.toLocaleString()+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">badge</span> Partner IDs</div><div class="kpi-value">'+k.partner_ids+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Agents</div><div class="kpi-value">'+k.sub_agents+'</div></div>'
+      +'</div>'
+      +'<div class="section-label"><span>Sub-Accounts</span>'+(ag.can_manage?'<button class="btn btn-teal" onclick="openCreateSub()"><span class="material-icons" style="font-size:15px;">add</span> Add sub-account</button>':'')+'</div>'
+      +'<div class="grid">'+subCards+'</div>'
+      +'<div class="section-label"><span>Team &amp; Ownership</span></div>'
+      +'<div class="panel">'+memberRows+(ag.can_manage?'<div style="margin-top:10px;font-size:11px;color:var(--muted);">Manage owners, admins and % on the staff dashboard, or your Settings.</div>':'')+'</div>';
+}
+
+function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ localStorage.clear(); location.href='/partner'; }); }
+window.addEventListener('pp-context-change', function(){
+    var p = localStorage.getItem('pp_active_portal') || '';
+    var s = localStorage.getItem('pp_active_sub_account') || '';
+    if (s) { location.href='/partner/sub-account?sub='+s; return; }
+    if (p && p !== portalId) location.href='/partner/agency?portal='+p;
+});
+load();
+</script>
+<script src="/js/partner-nav.js"></script>
+</body>
+</html>
