@@ -36,6 +36,42 @@ async function getCfConfig() {
 }
 function cfConfigured(cf) { return !!(cf && cf.token && cf.zone); }
 
+// ── Vercel config (env-first, then encrypted app_config) ─────────────────────
+// So partner-connected domains auto-register with the Vercel project (Vercel routes by
+// Host and 404s unknown domains). Needs a token with access to the project.
+async function getVercelConfig() {
+    const token = process.env.VERCEL_TOKEN || await getConfigValue('VERCEL_TOKEN');
+    const project = process.env.VERCEL_PROJECT_ID || await getConfigValue('VERCEL_PROJECT_ID');
+    const team = process.env.VERCEL_TEAM_ID || await getConfigValue('VERCEL_TEAM_ID') || '';
+    return { token, project, team };
+}
+function vercelConfigured(v) { return !!(v && v.token && v.project); }
+async function vercelFetch(v, path, opts = {}) {
+    const teamQ = v.team ? (path.indexOf('?') >= 0 ? '&' : '?') + 'teamId=' + encodeURIComponent(v.team) : '';
+    const res = await fetch('https://api.vercel.com' + path + teamQ, {
+        ...opts,
+        headers: { 'Authorization': 'Bearer ' + v.token, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+    });
+    let json = null; try { json = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, json };
+}
+// Register a domain with the Vercel project (idempotent — 409 = already added).
+async function vercelAddDomain(host) {
+    const v = await getVercelConfig();
+    if (!vercelConfigured(v)) return { skipped: true };
+    const r = await vercelFetch(v, `/v10/projects/${v.project}/domains`, { method: 'POST', body: JSON.stringify({ name: host }) });
+    if (r.ok) return { ok: true };
+    const code = r.json && r.json.error && r.json.error.code;
+    if (r.status === 409 || code === 'domain_already_in_use' || code === 'domain_already_exists') return { ok: true, existed: true };
+    return { ok: false, message: (r.json && r.json.error && r.json.error.message) || 'Vercel add failed' };
+}
+async function vercelRemoveDomain(host) {
+    const v = await getVercelConfig();
+    if (!vercelConfigured(v)) return { skipped: true };
+    try { await vercelFetch(v, `/v9/projects/${v.project}/domains/${encodeURIComponent(host)}`, { method: 'DELETE' }); } catch (e) {}
+    return { ok: true };
+}
+
 async function cfFetch(cf, path, opts = {}) {
     const res = await fetch(CF_API + path, {
         ...opts,
@@ -652,7 +688,10 @@ export default async function handler(req, res) {
                 BRAND_FIELDS.forEach(f => { row[f] = portal[f] || null; });
                 if (taken) await supabase.from('portal_brands').update(row).eq('id', taken.id);
                 else await supabase.from('portal_brands').upsert(row, { onConflict: 'host' });
-                return res.status(200).json({ success: true, host, cname_target: cf.target, status: d.phase, verification: row.verification });
+                // Auto-register the domain with Vercel so it serves the host (best-effort).
+                let vercel = null;
+                try { const vr = await vercelAddDomain(host); if (!vr.skipped) vercel = vr.ok ? 'added' : 'error'; } catch (e) {}
+                return res.status(200).json({ success: true, host, cname_target: cf.target, status: d.phase, verification: row.verification, vercel });
             }
 
             if (action === 'refresh_domain') {
@@ -671,6 +710,7 @@ export default async function handler(req, res) {
                 const { data: brand } = await supabase.from('portal_brands').select('*').eq('portal_id', portal.id).eq('added_by_partner', true).order('created_at', { ascending: false }).maybeSingle();
                 if (!brand) return res.status(200).json({ success: true });
                 if (brand.cf_hostname_id && cfConfigured(cf)) { try { await cfDeleteHostname(cf, brand.cf_hostname_id); } catch (e) {} }
+                try { await vercelRemoveDomain(brand.host); } catch (e) {}
                 await supabase.from('portal_brands').delete().eq('id', brand.id);
                 return res.status(200).json({ success: true });
             }
@@ -684,11 +724,14 @@ export default async function handler(req, res) {
 
         if (action === 'cf_config_get') {
             const cf = await getCfConfig();
+            const v = await getVercelConfig();
             return res.status(200).json({
                 success: true,
                 configured: cfConfigured(cf),
                 zone_set: !!cf.zone, token_set: !!cf.token,
-                cname_target: cf.target || ''
+                cname_target: cf.target || '',
+                vercel_configured: vercelConfigured(v), vercel_token_set: !!v.token,
+                vercel_project: v.project || '', vercel_team: v.team || ''
             });
         }
         if (action === 'cf_config_set') {
@@ -696,6 +739,10 @@ export default async function handler(req, res) {
             if (typeof c.token === 'string' && c.token && !/^\*+$/.test(c.token)) await setConfigValue('CF_API_TOKEN', c.token.trim(), actor.userid || 'admin');
             if (typeof c.zone === 'string') await setConfigValue('CF_ZONE_ID', c.zone.trim(), actor.userid || 'admin');
             if (typeof c.target === 'string') await setConfigValue('CF_CNAME_TARGET', normHost(c.target), actor.userid || 'admin');
+            // Vercel (optional) — auto-registers partner domains with the Vercel project.
+            if (typeof c.vercel_token === 'string' && c.vercel_token && !/^\*+$/.test(c.vercel_token)) await setConfigValue('VERCEL_TOKEN', c.vercel_token.trim(), actor.userid || 'admin');
+            if (typeof c.vercel_project === 'string') await setConfigValue('VERCEL_PROJECT_ID', c.vercel_project.trim(), actor.userid || 'admin');
+            if (typeof c.vercel_team === 'string') await setConfigValue('VERCEL_TEAM_ID', c.vercel_team.trim(), actor.userid || 'admin');
             const cf = await getCfConfig();
             return res.status(200).json({ success: true, configured: cfConfigured(cf), cname_target: cf.target || '' });
         }
