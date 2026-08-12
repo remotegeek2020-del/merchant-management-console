@@ -1,5 +1,25 @@
 // Shared partner sidebar nav badge polling + notification bell.
 // Include on every partner page after site-config.js.
+
+// GUARD (runs on EVERY partner page, before any page's validate/logout): make
+// localStorage.clear() preserve the co-resident STAFF session keys. The many partner
+// pages each call localStorage.clear() on auth-fail/logout — during "Login As"
+// impersonation that would wipe the staff session too (both get logged out). This
+// keeps staff signed in no matter which partner page clears.
+(function () {
+    if (!window.location.pathname.startsWith('/partner')) return;
+    if (localStorage.__ppClearPatched) return;
+    var _clear = localStorage.clear.bind(localStorage);
+    var KEEP = ['pp_userid', 'pp_session_token', 'pp_device_token'];
+    localStorage.clear = function () {
+        var saved = {};
+        KEEP.forEach(function (k) { var v = localStorage.getItem(k); if (v != null) saved[k] = v; });
+        _clear();
+        Object.keys(saved).forEach(function (k) { localStorage.setItem(k, saved[k]); });
+    };
+    try { Object.defineProperty(localStorage, '__ppClearPatched', { value: true }); } catch (e) {}
+})();
+
 (function () {
     var token = localStorage.getItem('pp_partner_token');
     var myId = localStorage.getItem('pp_partner_id');
