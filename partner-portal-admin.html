@@ -121,6 +121,7 @@
     <button class="tab" id="pt-tiers" onclick="ppTab('tiers')"><span class="material-icons" style="font-size:16px;">leaderboard</span> Leaderboard</button>
     <button class="tab" id="pt-automation" onclick="ppTab('automation')"><span class="material-icons" style="font-size:16px;">bolt</span> Automation</button>
     <button class="tab" id="pt-brand" onclick="ppTab('brand')"><span class="material-icons" style="font-size:16px;">badge</span> Branding</button>
+    <button class="tab" id="pt-domains" onclick="ppTab('domains')"><span class="material-icons" style="font-size:16px;">public</span> White-Label Domains</button>
   </div>
 
   <!-- CERTIFICATES & AWARDS -->
@@ -388,6 +389,61 @@
       <div id="auto-run-result" style="margin-top:12px;"></div>
     </div>
   </div>
+
+  <!-- WHITE-LABEL DOMAINS -->
+  <div id="ppc-domains" class="pp-panel" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div><b>White-label partner domains</b><div class="muted" style="font-size:12px;margin-top:2px;max-width:720px;">Map a partner's own domain (e.g. <code>app.korepayments.com</code>) to their branded Partner Portal. The partner points a CNAME at your SSL-for-SaaS target; once active, visiting their domain shows their logo, colors and name. One brand per partner. Preview any brand without DNS at <code>?brand=&lt;host&gt;</code>.</div></div>
+        <button class="btn btn-p" onclick="wlNew()"><span class="material-icons" style="font-size:16px;">add</span> Add domain</button>
+      </div>
+      <div id="wl-list" style="margin-top:14px;"><div class="empty">Loading…</div></div>
+    </div>
+
+    <!-- editor -->
+    <div id="wl-editor" class="card" style="display:none;max-width:680px;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <b id="wl-ed-title">New domain</b>
+        <button class="btn btn-n" onclick="wlCancel()">Close</button>
+      </div>
+      <input type="hidden" id="wl-id">
+      <label class="cl">Domain (host) *</label>
+      <input id="wl-host" class="ci" placeholder="app.korepayments.com" style="max-width:360px;">
+      <label class="cl">Partner</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input id="wl-partner-q" class="ci" placeholder="Search partner by name/email…" style="max-width:300px;" oninput="wlPartnerSearch()">
+        <span id="wl-partner-pick" class="muted" style="font-size:12px;"></span>
+      </div>
+      <div id="wl-partner-res" style="margin:4px 0;"></div>
+      <input type="hidden" id="wl-partner-id">
+      <label class="cl">Portal name</label>
+      <input id="wl-name" class="ci" placeholder="Kore Payments" style="max-width:360px;">
+      <label class="cl">Logo URL</label>
+      <input id="wl-logo" class="ci" placeholder="https://…/logo.png">
+      <label class="cl">Favicon URL</label>
+      <input id="wl-favicon" class="ci" placeholder="https://…/favicon.png">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div><label class="cl">Primary color</label><input id="wl-primary" class="ci" type="color" value="#0d9488" style="width:70px;height:40px;padding:2px;"></div>
+        <div><label class="cl">Dark / sidebar</label><input id="wl-dark" class="ci" type="color" value="#001e3c" style="width:70px;height:40px;padding:2px;"></div>
+        <div><label class="cl">Accent (hover)</label><input id="wl-accent" class="ci" type="color" value="#0f766e" style="width:70px;height:40px;padding:2px;"></div>
+      </div>
+      <label class="cl">Tagline</label>
+      <input id="wl-tagline" class="ci" placeholder="Optional">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;"><label class="cl">Support email</label><input id="wl-supemail" class="ci" placeholder="support@…"></div>
+        <div style="flex:1;min-width:200px;"><label class="cl">Support phone</label><input id="wl-supphone" class="ci" placeholder="Optional"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;cursor:pointer;"><input type="checkbox" id="wl-active" checked> Active</label>
+      <div style="margin-top:14px;display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-p" onclick="wlSave(this)"><span class="material-icons" style="font-size:16px;">save</span> Save domain</button>
+        <a id="wl-preview" class="btn btn-n" target="_blank" style="display:none;"><span class="material-icons" style="font-size:16px;">visibility</span> Preview</a>
+        <span id="wl-msg" style="font-size:12px;"></span>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <b>DNS setup for the partner:</b> add a CNAME record for <code id="wl-dns-host">their host</code> → your SSL-for-SaaS target (e.g. <code>whitelabel.mypayprotec.com</code>). SSL is issued automatically once the CNAME resolves.
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="/js/certificate-render.js"></script>
@@ -395,15 +451,16 @@
 // ── Top-level tab switching ───────────────────────────────────────────────────
 var _ppLoaded={};
 function ppTab(which){
-  var tabs=['cert','journey','sections','tiers','automation','brand'];
+  var tabs=['cert','journey','sections','tiers','automation','brand','domains'];
   tabs.forEach(function(t){
     var el=document.getElementById('ppc-'+t); if(el) el.style.display = (t===which)?'':'none';
   });
   document.querySelectorAll('.tabs .tab').forEach(function(b){ b.classList.remove('on'); });
-  var map={cert:'pt-cert',journey:'pt-journey',sections:'pt-sections',tiers:'pt-tiers',automation:'pt-automation',brand:'pt-brand'};
+  var map={cert:'pt-cert',journey:'pt-journey',sections:'pt-sections',tiers:'pt-tiers',automation:'pt-automation',brand:'pt-brand',domains:'pt-domains'};
   var btn=document.getElementById(map[which]); if(btn) btn.classList.add('on');
   if(which==='cert'){ if(!certsLoaded) certsLoad(); }
   else if(which==='automation'){ if(!autoLoaded) autoLoad(); }
+  else if(which==='domains'){ if(!wlLoaded) wlLoad(); }
   else { if(!_ppLoaded.settings) ppLoad(); else ppRender(which); }
 }
 // ── PARTNER CERTIFICATES (multi-design) ───────────────────────────────────────
@@ -936,6 +993,108 @@ async function autoRun(btn){
     +'<div class="muted" style="font-size:12px;margin:4px 0;">Scanned '+ (s.scanned||0) +' partners · <b style="color:#0f766e;">'+(s.issued||0)+'</b> new certificate(s) issued.</div>'
     +(per?'<ul style="margin:6px 0 0;padding-left:18px;font-size:12px;">'+per+'</ul>':'')+'</div>';
   if(document.getElementById('aw-body') && document.getElementById('aw-body').style.display!=='none') awLoad(true);
+}
+
+// ── WHITE-LABEL DOMAINS ───────────────────────────────────────────────────────
+var wlLoaded=false, wlBrands=[];
+function wlApi(b){ return fetch('/api/brand',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify(b)}).then(function(r){return r.json();}); }
+function wlEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+async function wlLoad(){
+  wlLoaded=true;
+  var box=document.getElementById('wl-list');
+  var r=await wlApi({action:'list'});
+  if(!r.success){ box.innerHTML='<div style="color:#dc2626;">'+wlEsc(r.message||'Failed to load.')+'</div>'; wlLoaded=false; return; }
+  wlBrands=r.brands||[];
+  if(!wlBrands.length){ box.innerHTML='<div class="empty">No white-label domains yet. Click “Add domain” to map a partner’s domain.</div>'; return; }
+  box.innerHTML='<div style="display:grid;gap:8px;">'+wlBrands.map(function(b){
+    var sw=function(c){return '<span style="display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;border:1px solid #cbd5e1;background:'+(c||'#fff')+';"></span>';};
+    var status = b.active===false ? '<span style="color:#94a3b8;">Inactive</span>' : '<span style="color:#0f766e;">Active</span>';
+    return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;">'
+      +'<div style="min-width:220px;"><b>'+wlEsc(b.host)+'</b> &nbsp;'+status
+      +'<div class="muted" style="font-size:12px;">'+wlEsc(b.name||'(no name)')+' · '+sw(b.color_primary)+' '+sw(b.color_dark)+'</div></div>'
+      +'<div style="display:flex;gap:8px;">'
+        +'<a class="btn btn-n" href="/partner/dashboard.html?brand='+encodeURIComponent(b.host)+'" target="_blank"><span class="material-icons" style="font-size:16px;">visibility</span> Preview</a>'
+        +'<button class="btn btn-n" onclick="wlEdit(\''+b.id+'\')">Edit</button>'
+        +'<button class="btn btn-n" style="color:#dc2626;" onclick="wlDelete(\''+b.id+'\',\''+wlEsc(b.host)+'\')">Delete</button>'
+      +'</div></div>';
+  }).join('')+'</div>';
+}
+function wlNew(){ wlFill({}); }
+function wlEdit(id){ var b=wlBrands.filter(function(x){return String(x.id)===String(id);})[0]; if(b) wlFill(b); }
+function wlFill(b){
+  document.getElementById('wl-editor').style.display='';
+  document.getElementById('wl-ed-title').textContent=b.id?('Edit '+(b.host||'')):'New domain';
+  document.getElementById('wl-id').value=b.id||'';
+  document.getElementById('wl-host').value=b.host||'';
+  document.getElementById('wl-partner-id').value=b.partner_id||'';
+  document.getElementById('wl-partner-pick').textContent=b.partner_id?('Partner linked'):'';
+  document.getElementById('wl-partner-q').value='';
+  document.getElementById('wl-partner-res').innerHTML='';
+  document.getElementById('wl-name').value=b.name||'';
+  document.getElementById('wl-logo').value=b.logo_url||'';
+  document.getElementById('wl-favicon').value=b.favicon_url||'';
+  document.getElementById('wl-primary').value=b.color_primary||'#0d9488';
+  document.getElementById('wl-dark').value=b.color_dark||'#001e3c';
+  document.getElementById('wl-accent').value=b.color_accent||'#0f766e';
+  document.getElementById('wl-tagline').value=b.tagline||'';
+  document.getElementById('wl-supemail').value=b.support_email||'';
+  document.getElementById('wl-supphone').value=b.support_phone||'';
+  document.getElementById('wl-active').checked=b.active!==false;
+  document.getElementById('wl-msg').textContent='';
+  wlSyncPreview();
+  document.getElementById('wl-editor').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function wlSyncPreview(){
+  var host=(document.getElementById('wl-host').value||'').trim();
+  var pv=document.getElementById('wl-preview');
+  document.getElementById('wl-dns-host').textContent=host||'their host';
+  if(host){ pv.style.display=''; pv.href='/partner/dashboard.html?brand='+encodeURIComponent(host); } else pv.style.display='none';
+}
+document.getElementById('wl-host') && document.getElementById('wl-host').addEventListener('input', wlSyncPreview);
+function wlCancel(){ document.getElementById('wl-editor').style.display='none'; }
+var _wlSearchT=null;
+function wlPartnerSearch(){
+  clearTimeout(_wlSearchT);
+  var q=document.getElementById('wl-partner-q').value.trim();
+  if(q.length<2){ document.getElementById('wl-partner-res').innerHTML=''; return; }
+  _wlSearchT=setTimeout(async function(){
+    var r=await fetch('/api/certificates',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('pp_session_token')||'')},body:JSON.stringify({action:'search_partners',query:q})}).then(function(x){return x.json();});
+    var list=(r.partners||r.results||[]);
+    document.getElementById('wl-partner-res').innerHTML=list.length? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">'+list.slice(0,12).map(function(p){
+      var nm=p.full_name||p.name||p.email||'Partner';
+      return '<button type="button" class="btn btn-n" style="font-size:12px;" onclick="wlPickPartner(\''+p.id+'\',\''+wlEsc(nm).replace(/\'/g,"")+'\')">'+wlEsc(nm)+'</button>';
+    }).join('')+'</div>' : '<div class="muted" style="font-size:12px;">No matches.</div>';
+  },250);
+}
+function wlPickPartner(id,nm){ document.getElementById('wl-partner-id').value=id; document.getElementById('wl-partner-pick').textContent='✓ '+nm; document.getElementById('wl-partner-res').innerHTML=''; }
+async function wlSave(btn){
+  var host=(document.getElementById('wl-host').value||'').trim();
+  if(!host){ document.getElementById('wl-msg').innerHTML='<span style="color:#dc2626;">Host is required.</span>'; return; }
+  btn.disabled=true;
+  var brand={
+    id:document.getElementById('wl-id').value||undefined,
+    host:host, partner_id:document.getElementById('wl-partner-id').value||null,
+    name:document.getElementById('wl-name').value||null,
+    logo_url:document.getElementById('wl-logo').value||null,
+    favicon_url:document.getElementById('wl-favicon').value||null,
+    color_primary:document.getElementById('wl-primary').value||null,
+    color_dark:document.getElementById('wl-dark').value||null,
+    color_accent:document.getElementById('wl-accent').value||null,
+    tagline:document.getElementById('wl-tagline').value||null,
+    support_email:document.getElementById('wl-supemail').value||null,
+    support_phone:document.getElementById('wl-supphone').value||null,
+    active:document.getElementById('wl-active').checked
+  };
+  var r=await wlApi({action:'upsert',brand:brand});
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('wl-msg').innerHTML='<span style="color:#dc2626;">'+wlEsc(r.message||'Save failed.')+'</span>'; return; }
+  document.getElementById('wl-msg').innerHTML='<span style="color:#0f766e;">Saved ✓</span>';
+  wlLoaded=false; await wlLoad();
+}
+async function wlDelete(id,host){
+  if(!confirm('Delete white-label domain '+host+'? The partner’s portal reverts to the default PayProTec look.')) return;
+  var r=await wlApi({action:'delete',id:id});
+  if(r.success){ wlLoaded=false; wlLoad(); document.getElementById('wl-editor').style.display='none'; }
 }
 
 // Start on the Certificates tab.
