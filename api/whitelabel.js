@@ -128,22 +128,20 @@ async function loadMembers(portalId) {
     if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
     return list.map(m => ({
         id: m.id, person_id: m.person_id, role: m.role, is_primary: m.is_primary === true,
+        ownership_percent: (m.ownership_percent === null || m.ownership_percent === undefined) ? null : Number(m.ownership_percent),
         full_name: (people[m.person_id] || {}).full_name || null,
         email: (people[m.person_id] || {}).email || null
     })).sort((a, b) => (b.is_primary - a.is_primary) || (a.role === b.role ? 0 : a.role === 'owner' ? -1 : 1));
 }
 
-// Keep partner_portals.owner_person_id pointing at the primary owner (denormalized).
-async function syncPrimaryOwner(portalId) {
-    const { data: prim } = await supabase.from('partner_portal_members').select('person_id').eq('portal_id', portalId).eq('is_primary', true).maybeSingle();
-    let ownerId = prim ? prim.person_id : null;
-    if (!ownerId) {
-        // No primary flagged — fall back to any owner, else null.
-        const { data: anyOwner } = await supabase.from('partner_portal_members').select('person_id').eq('portal_id', portalId).eq('role', 'owner').limit(1).maybeSingle();
-        ownerId = anyOwner ? anyOwner.person_id : null;
-    }
-    await supabase.from('partner_portals').update({ owner_person_id: ownerId, updated_at: new Date().toISOString() }).eq('id', portalId);
-    return ownerId;
+// Ensure exactly one primary owner exists (does NOT touch owner_person_id, which is
+// the stable ANCHOR = the partner this agency belongs to, used for lookup).
+async function ensureOnePrimary(portalId) {
+    const { data: owners } = await supabase.from('partner_portal_members').select('id, is_primary').eq('portal_id', portalId).eq('role', 'owner');
+    const list = owners || [];
+    if (!list.length) return;
+    if (list.some(o => o.is_primary)) return;
+    await supabase.from('partner_portal_members').update({ is_primary: true }).eq('id', list[0].id);
 }
 
 // Resolve a portal from either an explicit portal_id or an owner's person_id.
@@ -312,7 +310,7 @@ export default async function handler(req, res) {
                     const { data: anyPrimary } = await supabase.from('partner_portal_members').select('id').eq('portal_id', portal.id).eq('is_primary', true).maybeSingle();
                     await supabase.from('partner_portal_members').insert({ portal_id: portal.id, person_id: personId, role: 'owner', is_primary: !anyPrimary, added_by: actor.userid || 'admin' });
                 }
-                await syncPrimaryOwner(portal.id);
+                await ensureOnePrimary(portal.id);
             }
             // If revoking, deactivate any live custom domain so the brand stops resolving.
             if (!enabled) {
@@ -350,17 +348,39 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, portal_id: portal.id, relationship_id: portal.relationship_id, members: await loadMembers(portal.id) });
         }
 
+        // Parse an optional ownership percentage (0–100, or null to clear).
+        const parsePct = (v) => {
+            if (v === '' || v === null || v === undefined) return null;
+            const n = Number(v);
+            if (!isFinite(n) || n < 0 || n > 100) return undefined; // undefined = invalid
+            return n;
+        };
+
         if (action === 'add_member') {
-            const portal = await resolvePortal(body);
-            if (!portal) return res.status(404).json({ success: false, message: 'Agency not found — grant agency access first.' });
             if (!body.member_person_id) return res.status(400).json({ success: false, message: 'member_person_id required.' });
+            // Recording ownership shouldn't require white-label first — auto-create the
+            // agency (anchored to the partner) if it doesn't exist yet.
+            let portal = await resolvePortal(body);
+            if (!portal && body.person_id) portal = await ensurePortal(body.person_id, body.agency_name || null);
+            if (!portal) return res.status(404).json({ success: false, message: 'Could not resolve the agency.' });
             const role = body.role === 'owner' ? 'owner' : 'admin';
-            const { error } = await supabase.from('partner_portal_members').upsert(
-                { portal_id: portal.id, person_id: body.member_person_id, role, added_by: actor.userid || 'admin' },
-                { onConflict: 'portal_id,person_id' });
+            const pct = parsePct(body.ownership_percent);
+            if (pct === undefined) return res.status(400).json({ success: false, message: 'Ownership % must be between 0 and 100.' });
+            const row = { portal_id: portal.id, person_id: body.member_person_id, role, added_by: actor.userid || 'admin' };
+            if (role === 'owner') row.ownership_percent = pct; else row.ownership_percent = null;
+            const { error } = await supabase.from('partner_portal_members').upsert(row, { onConflict: 'portal_id,person_id' });
             if (error) return res.status(500).json({ success: false, message: 'Could not add member.' });
-            await syncPrimaryOwner(portal.id);
-            return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+            await ensureOnePrimary(portal.id);
+            return res.status(200).json({ success: true, portal_id: portal.id, relationship_id: portal.relationship_id, members: await loadMembers(portal.id) });
+        }
+
+        if (action === 'set_ownership_percent') {
+            const { data: m } = await supabase.from('partner_portal_members').select('*').eq('id', body.member_id).maybeSingle();
+            if (!m) return res.status(404).json({ success: false, message: 'Member not found.' });
+            const pct = parsePct(body.ownership_percent);
+            if (pct === undefined) return res.status(400).json({ success: false, message: 'Ownership % must be between 0 and 100.' });
+            await supabase.from('partner_portal_members').update({ ownership_percent: pct }).eq('id', m.id);
+            return res.status(200).json({ success: true, portal_id: m.portal_id, members: await loadMembers(m.portal_id) });
         }
 
         if (action === 'set_member_role') {
@@ -369,9 +389,11 @@ export default async function handler(req, res) {
             const role = body.role === 'owner' ? 'owner' : 'admin';
             // Demoting the primary owner is not allowed — transfer primary first.
             if (m.is_primary && role !== 'owner') return res.status(400).json({ success: false, message: 'Transfer the primary owner before demoting this person.' });
-            await supabase.from('partner_portal_members').update({ role }).eq('id', m.id);
-            await syncPrimaryOwner(m.portal_id);
-            return res.status(200).json({ success: true, members: await loadMembers(m.portal_id) });
+            const patch = { role };
+            if (role === 'admin') patch.ownership_percent = null; // admins hold no stake
+            await supabase.from('partner_portal_members').update(patch).eq('id', m.id);
+            await ensureOnePrimary(m.portal_id);
+            return res.status(200).json({ success: true, portal_id: m.portal_id, members: await loadMembers(m.portal_id) });
         }
 
         if (action === 'set_primary_owner') {
@@ -383,8 +405,7 @@ export default async function handler(req, res) {
             await supabase.from('partner_portal_members').upsert(
                 { portal_id: portal.id, person_id: body.member_person_id, role: 'owner', is_primary: true, added_by: actor.userid || 'admin' },
                 { onConflict: 'portal_id,person_id' });
-            await syncPrimaryOwner(portal.id);
-            return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+            return res.status(200).json({ success: true, portal_id: portal.id, members: await loadMembers(portal.id) });
         }
 
         if (action === 'remove_member') {
@@ -392,8 +413,8 @@ export default async function handler(req, res) {
             if (!m) return res.status(200).json({ success: true });
             if (m.is_primary) return res.status(400).json({ success: false, message: 'Cannot remove the primary owner. Transfer primary ownership first.' });
             await supabase.from('partner_portal_members').delete().eq('id', m.id);
-            await syncPrimaryOwner(m.portal_id);
-            return res.status(200).json({ success: true, members: await loadMembers(m.portal_id) });
+            await ensureOnePrimary(m.portal_id);
+            return res.status(200).json({ success: true, portal_id: m.portal_id, members: await loadMembers(m.portal_id) });
         }
 
         // All agency portals + their domains (management overview).
@@ -412,6 +433,7 @@ export default async function handler(req, res) {
                 (mem || []).forEach(m => {
                     (membersByPortal[m.portal_id] = membersByPortal[m.portal_id] || []).push({
                         person_id: m.person_id, role: m.role, is_primary: m.is_primary === true,
+                        ownership_percent: (m.ownership_percent === null || m.ownership_percent === undefined) ? null : Number(m.ownership_percent),
                         full_name: (people[m.person_id] || {}).full_name || null,
                         email: (people[m.person_id] || {}).email || null
                     });
