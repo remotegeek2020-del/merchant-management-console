@@ -134,6 +134,81 @@
             <button class="btn btn-teal" onclick="changePassword()"><span class="material-icons" style="font-size:16px;">lock_reset</span> Update Password</button>
         </div>
 
+        <!-- WHITE-LABEL CRM / CUSTOM DOMAIN -->
+        <div class="settings-section" id="whitelabelSection">
+            <div class="section-title" style="display:flex;align-items:center;gap:8px;"><span class="material-icons" style="font-size:18px;color:#0d9488;">public</span> Your White-Label CRM</div>
+            <div class="section-sub">Run this portal as your own branded CRM on your own domain. Your sub-partners log in here too — each sees only their own accounts.</div>
+
+            <div id="wlLoading" style="text-align:center;padding:16px;color:var(--muted);font-size:13px;">Loading…</div>
+
+            <div id="wlBody" style="display:none;">
+                <!-- Relationship ID + agency name -->
+                <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+                    <div style="flex:1;min-width:180px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
+                        <div style="font-size:10px;font-weight:800;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Relationship ID</div>
+                        <div id="wlRelId" style="font-family:'DM Mono',monospace;font-size:16px;font-weight:800;color:var(--primary);">—</div>
+                    </div>
+                    <div style="flex:2;min-width:220px;">
+                        <label>Agency / Brand Name</label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="text" id="wlAgencyName" placeholder="e.g. Kore Payments" style="margin-bottom:0;flex:1;">
+                            <button class="btn btn-outline" onclick="wlSaveAgency(this)" style="white-space:nowrap;">Save</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom domain -->
+                <div id="wlNoDomain">
+                    <div id="wlNotReady" style="display:none;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:12px;color:#92400e;margin-bottom:12px;">
+                        Custom domains aren't enabled yet. Please contact support to turn on white-label domains for your portal.
+                    </div>
+                    <label>Connect your domain</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input type="text" id="wlHost" placeholder="app.yourbrand.com" style="margin-bottom:0;flex:1;min-width:200px;">
+                        <button class="btn btn-teal" id="wlAddBtn" onclick="wlAddDomain(this)" style="white-space:nowrap;"><span class="material-icons" style="font-size:16px;">add_link</span> Connect Domain</button>
+                    </div>
+                    <div class="section-sub" style="margin-top:8px;">Use a subdomain you control (e.g. <code>app.</code> or <code>portal.</code>). You'll add one DNS record; SSL is issued automatically.</div>
+                </div>
+
+                <!-- Active/pending domain card -->
+                <div id="wlDomainCard" style="display:none;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-top:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span class="material-icons" style="color:#0d9488;">language</span>
+                            <div>
+                                <div id="wlDomainHost" style="font-weight:800;font-size:15px;">—</div>
+                                <div id="wlStatusBadge" style="font-size:11px;font-weight:800;margin-top:2px;"></div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-outline" onclick="wlRefresh(this)"><span class="material-icons" style="font-size:16px;">refresh</span> Check status</button>
+                            <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="wlRemove(this)">Remove</button>
+                        </div>
+                    </div>
+                    <!-- DNS instructions -->
+                    <div id="wlDns" style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
+                        <div style="font-size:12px;font-weight:800;color:var(--secondary);margin-bottom:8px;">Add this DNS record at your domain provider</div>
+                        <div style="overflow-x:auto;">
+                          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px;">
+                            <thead><tr style="text-align:left;color:var(--muted);">
+                                <th style="padding:6px 8px;font-weight:700;">Type</th><th style="padding:6px 8px;font-weight:700;">Name / Host</th><th style="padding:6px 8px;font-weight:700;">Value / Target</th>
+                            </tr></thead>
+                            <tbody>
+                              <tr style="background:#f8fafc;">
+                                <td style="padding:8px;font-family:'DM Mono',monospace;font-weight:700;">CNAME</td>
+                                <td id="wlDnsName" style="padding:8px;font-family:'DM Mono',monospace;"></td>
+                                <td id="wlDnsTarget" style="padding:8px;font-family:'DM Mono',monospace;"></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <div id="wlDcvWrap" style="display:none;margin-top:10px;font-size:12px;color:var(--secondary);"></div>
+                        <div class="section-sub" style="margin-top:10px;">After adding the record, DNS + SSL can take a few minutes to a few hours. Click <strong>Check status</strong> to refresh. When it turns <strong>Live</strong>, your branded portal is reachable at your domain.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- API KEYS -->
         <div class="settings-section">
             <div class="section-title">API Keys</div>
@@ -724,12 +799,83 @@ async function disconnectEmail(provider) {
     }
 })();
 
+// ── WHITE-LABEL CRM / CUSTOM DOMAIN ───────────────────────────────────────────
+function wlApi(b){ return fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token},b))}).then(r=>r.json()); }
+function wlEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function wlStatusLabel(st){
+    var map={active:['Live','#059669','#ecfdf5'],ssl_pending:['Issuing SSL…','#b45309','#fffbeb'],dns_pending:['Waiting for DNS','#b45309','#fffbeb'],pending:['Pending','#b45309','#fffbeb']};
+    var m=map[st]||map.pending; return '<span style="padding:2px 10px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>';
+}
+function wlRenderDomain(d, target){
+    var noDom=document.getElementById('wlNoDomain'), card=document.getElementById('wlDomainCard');
+    if(!d){ noDom.style.display=''; card.style.display='none'; return; }
+    noDom.style.display='none'; card.style.display='';
+    document.getElementById('wlDomainHost').textContent=d.host;
+    document.getElementById('wlStatusBadge').innerHTML=wlStatusLabel(d.status);
+    document.getElementById('wlDnsName').textContent=d.host;
+    document.getElementById('wlDnsTarget').textContent=target||'(set by support)';
+    // Optional DCV/ownership record if Cloudflare requires a TXT.
+    var dcvWrap=document.getElementById('wlDcvWrap'); var v=d.verification||{};
+    var extra=[];
+    (v.dcv||[]).forEach(function(r){ if(r.txt_name&&r.txt_value) extra.push('TXT · <b>'+wlEsc(r.txt_name)+'</b> → <span style="font-family:DM Mono,monospace;">'+wlEsc(r.txt_value)+'</span>'); });
+    if(v.ownership&&v.ownership.name&&v.ownership.value) extra.push('TXT · <b>'+wlEsc(v.ownership.name)+'</b> → <span style="font-family:DM Mono,monospace;">'+wlEsc(v.ownership.value)+'</span>');
+    if(extra.length){ dcvWrap.style.display=''; dcvWrap.innerHTML='<b>Also add for SSL verification:</b><br>'+extra.join('<br>'); }
+    else { dcvWrap.style.display='none'; dcvWrap.innerHTML=''; }
+    document.getElementById('wlDns').style.display = d.status==='active' ? 'none' : '';
+}
+var _wlTarget='';
+async function wlLoad(){
+    var r=await wlApi({action:'my_domain'});
+    // Agency access is granted per-partner by PayProTec. If it's off, hide the
+    // whole section — only selected partners run their own white-label CRM.
+    if(!r.success || !r.agency_enabled){ document.getElementById('whitelabelSection').style.display='none'; return; }
+    document.getElementById('wlLoading').style.display='none';
+    document.getElementById('wlBody').style.display='';
+    document.getElementById('wlRelId').textContent=r.relationship_id||'—';
+    document.getElementById('wlAgencyName').value=r.agency_name||'';
+    _wlTarget=r.cname_target||'';
+    document.getElementById('wlNotReady').style.display = r.cloudflare_ready ? 'none' : '';
+    document.getElementById('wlAddBtn').disabled = !r.cloudflare_ready;
+    wlRenderDomain(r.domain, _wlTarget);
+}
+async function wlSaveAgency(btn){
+    btn.disabled=true;
+    var r=await wlApi({action:'set_agency_name',agency_name:document.getElementById('wlAgencyName').value});
+    btn.disabled=false;
+    if(r.success) Swal.fire({icon:'success',title:'Saved',timer:1000,showConfirmButton:false});
+}
+async function wlAddDomain(btn){
+    var host=(document.getElementById('wlHost').value||'').trim();
+    if(!host) return;
+    btn.disabled=true;
+    var r=await wlApi({action:'add_domain',host:host});
+    btn.disabled=false;
+    if(!r.success){ Swal.fire({icon:'error',title:'Could not connect domain',text:r.message||'Please try again.'}); return; }
+    Swal.fire({icon:'success',title:'Domain connected',text:'Add the DNS record shown, then click Check status.',timer:2200,showConfirmButton:false});
+    wlRenderDomain({host:r.host,status:r.status,verification:r.verification}, r.cname_target||_wlTarget);
+}
+async function wlRefresh(btn){
+    btn.disabled=true;
+    var r=await wlApi({action:'refresh_domain'});
+    btn.disabled=false;
+    if(!r.success){ Swal.fire({icon:'error',title:'Error',text:r.message||'Please try again.'}); return; }
+    wlRenderDomain({host:r.host,status:r.status,verification:r.verification,active:r.active}, _wlTarget);
+    if(r.status==='active') Swal.fire({icon:'success',title:'Your domain is live! 🎉',timer:1800,showConfirmButton:false});
+}
+async function wlRemove(btn){
+    var c=await Swal.fire({icon:'warning',title:'Remove domain?',text:'Your portal will no longer be reachable at this domain.',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    var r=await wlApi({action:'remove_domain'});
+    if(r.success) wlRenderDomain(null,_wlTarget);
+}
+
 window.onload = async function() {
     await init();
     loadApiKeys();
     loadWebhooks();
     loadApiUsage();
     loadEmailConnections();
+    wlLoad();
 };
 </script>
 <script src="/js/brand.js"></script>

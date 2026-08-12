@@ -2250,6 +2250,7 @@ async function submitOnboarding() {
                 // Trigger data loads
                 loadScorecard(personId);
                 loadNotes(personId, p.hl_id);
+                wlAgencyInit(personId);
             },
             html: `
                <div id="modal-content-container" style="text-align:left;">
@@ -2275,10 +2276,17 @@ async function submitOnboarding() {
                 <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? fmtDateInput(p.enrolled_at) : ''}')">edit</span>
             </div>
             ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
-            <button id="branded-toggle-btn" onclick="toggleBrandedPartner('${p.id}', ${!!p.is_branded})"
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <button id="branded-toggle-btn" onclick="toggleBrandedPartner('${p.id}', ${!!p.is_branded})"
                 style="margin-top:8px;padding:5px 12px;border-radius:99px;font-size:11px;font-weight:800;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;${p.is_branded ? 'background:linear-gradient(135deg,#004990,#0369a1);color:white;' : 'background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;'}">
                 🏷️ ${p.is_branded ? 'Branded Partner' : 'Mark as Branded'}
-            </button>
+              </button>
+              <button id="agency-toggle-btn" onclick="toggleAgencyAccess('${p.id}')" title="White-label agency access: run the portal as their own branded CRM on their own domain"
+                style="margin-top:8px;padding:5px 12px;border-radius:99px;font-size:11px;font-weight:800;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">
+                🌐 …
+              </button>
+              <span id="agency-rel-id" style="margin-top:8px;font-family:monospace;font-size:10px;color:#6d28d9;"></span>
+            </div>
         </div>
                         <div id="summary-stats" style="text-align:right;">
                             <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">Loading...</div>
@@ -2540,6 +2548,56 @@ window.toggleBrandedPartner = async function(personId, currentlyBranded) {
             openPartnerDetails(personId);
         } else { Swal.fire('Error', 'Could not update branded status.', 'error'); }
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
+};
+
+// --- FEATURE: WHITE-LABEL AGENCY ACCESS (per-partner) ---
+// Grants/revokes a partner's own white-label CRM (their own domain + brand,
+// sub-partners scoped underneath). Only selected partners get this.
+window._wlAgency = {};
+function _wlAgHdrs() { return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') }; }
+function _wlAgPaint(personId) {
+    var st = window._wlAgency[personId] || {};
+    var btn = document.getElementById('agency-toggle-btn');
+    var rel = document.getElementById('agency-rel-id');
+    if (!btn) return;
+    btn.disabled = false;
+    if (st.agency_enabled) {
+        btn.style.background = 'linear-gradient(135deg,#0d9488,#0f766e)'; btn.style.color = 'white'; btn.style.border = 'none';
+        btn.innerHTML = '🌐 Agency Access ON';
+    } else {
+        btn.style.background = '#f1f5f9'; btn.style.color = '#64748b'; btn.style.border = '1px solid #e2e8f0';
+        btn.innerHTML = '🌐 Grant Agency Access';
+    }
+    if (rel) {
+        var bits = [];
+        if (st.relationship_id) bits.push(st.relationship_id);
+        if (st.domain && st.domain.host) bits.push(st.domain.host + (st.domain.ssl_status === 'active' ? ' · Live' : ' · pending'));
+        rel.textContent = bits.join(' · ');
+    }
+}
+window.wlAgencyInit = async function(personId) {
+    try {
+        var r = await fetch('/api/whitelabel', { method: 'POST', headers: _wlAgHdrs(), body: JSON.stringify({ action: 'get_agency_access', person_id: personId }) }).then(x => x.json());
+        window._wlAgency[personId] = r && r.success ? r : { agency_enabled: false };
+    } catch (e) { window._wlAgency[personId] = { agency_enabled: false }; }
+    _wlAgPaint(personId);
+};
+window.toggleAgencyAccess = async function(personId) {
+    var st = window._wlAgency[personId] || {};
+    var turningOn = !st.agency_enabled;
+    if (!turningOn) {
+        var c = await Swal.fire({ icon: 'warning', title: 'Revoke agency access?', text: 'Their custom domain will stop resolving and the white-label CRM section disappears from their settings.', showCancelButton: true, confirmButtonText: 'Revoke', confirmButtonColor: '#dc2626' });
+        if (!c.isConfirmed) return;
+    }
+    var btn = document.getElementById('agency-toggle-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '🌐 …'; }
+    try {
+        var r = await fetch('/api/whitelabel', { method: 'POST', headers: _wlAgHdrs(), body: JSON.stringify({ action: 'set_agency_access', person_id: personId, enabled: turningOn }) }).then(x => x.json());
+        if (!r || !r.success) { Swal.fire('Error', (r && r.message) || 'Could not update agency access.', 'error'); _wlAgPaint(personId); return; }
+        window._wlAgency[personId] = Object.assign({}, st, { agency_enabled: r.agency_enabled, relationship_id: r.relationship_id });
+        _wlAgPaint(personId);
+        if (turningOn) Swal.fire({ icon: 'success', title: 'Agency access granted', html: 'Relationship ID <b>' + (r.relationship_id || '') + '</b>. They can now connect their domain in Settings → Your White-Label CRM.', timer: 2600, showConfirmButton: false });
+    } catch (e) { Swal.fire('Error', e.message, 'error'); _wlAgPaint(personId); }
 };
 
 // --- FEATURE: QUICK ADD ID TO PARTNER ---
