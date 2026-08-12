@@ -550,10 +550,19 @@ export default async function handler(req, res) {
             }
 
             if (action === 'set_agency_name') {
-                const portal = await getPortal(personId);
-                if (!portal || portal.agency_enabled !== true) return res.status(403).json({ success: false, message: 'Agency access is not enabled.' });
+                // Resolve the agency by portal_id (god/any managed agency) or the person's own.
+                const god = await isGod(personId);
+                let portal = body.portal_id
+                    ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
+                    : await getPortal(personId);
+                if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+                if (!god) {
+                    const { data: mem } = await supabase.from('partner_portal_members').select('role, is_primary, full_access').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
+                    const canManage = mem && (mem.role === 'admin' || (mem.role === 'owner' && (mem.is_primary === true || mem.full_access === true)));
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can rename the agency.' });
+                }
                 await supabase.from('partner_portals').update({ agency_name: (body.agency_name || '').trim() || null, updated_at: new Date().toISOString() }).eq('id', portal.id);
-                return res.status(200).json({ success: true });
+                return res.status(200).json({ success: true, agency_name: (body.agency_name || '').trim() || null });
             }
 
             if (action === 'add_domain') {

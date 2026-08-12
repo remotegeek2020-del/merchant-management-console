@@ -86,9 +86,8 @@
     </div>
     <nav class="sidebar-nav">
         <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
-        <a class="nav-item active" href="#"><span class="material-icons">apartment</span> Agency</a>
-        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
-        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <a class="nav-item active" href="#"><span class="material-icons">apartment</span> Agency Home</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Agency Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -166,11 +165,12 @@ async function load(){
     }).join('') || '<div class="empty"><span class="material-icons">workspaces</span>No sub-accounts yet.'+(ag.can_manage?' Add your first below.':'')+'</div>';
 
     window._agencyCanManage = ag.can_manage;
+    window._agencyName = ag.agency_name || '';
 
     document.getElementById('content').innerHTML =
       '<div class="crumb"><a href="/partner/home">Home</a> › Agency</div>'
       +'<div class="hero"><div class="hero-left"><div class="hero-icon"><span class="material-icons">apartment</span></div>'
-      +'<div><h2>'+esc(title)+' <span class="rel">'+esc(ag.relationship_id||'')+'</span></h2>'+domainLine(ag)+'</div></div>'
+      +'<div><h2>'+esc(title)+(ag.can_manage?' <span class="material-icons" title="Rename agency" onclick="renameAgency()" style="font-size:17px;cursor:pointer;opacity:0.7;vertical-align:middle;">edit</span>':'')+' <span class="rel">'+esc(ag.relationship_id||'')+'</span></h2>'+domainLine(ag)+'</div></div>'
       +(ag.can_manage?'<a class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:white;border-color:rgba(255,255,255,0.25);" href="/partner/settings"><span class="material-icons" style="font-size:16px;">settings</span> Agency Settings</a>':'')
       +'</div>'
       +'<div class="kpi-grid">'
@@ -267,6 +267,14 @@ window.revokeMember = async function(memberId){
     await _teamApi({action:'agency_revoke', member_id:memberId});
 };
 
+window.renameAgency = async function(){
+    var cur = (window._agencyName)||'';
+    var res = await Swal.fire({ title:'Agency name', input:'text', inputValue:cur, inputPlaceholder:'e.g. Devvly Payments', showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#0d9488' });
+    if(!res.isConfirmed) return;
+    var r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_agency_name',token:token,portal_id:portalId,agency_name:res.value||''})}).then(x=>x.json());
+    if(r&&r.success){ Swal.fire({icon:'success',title:'Saved',timer:900,showConfirmButton:false}); load(); }
+    else Swal.fire('Error',(r&&r.message)||'Could not save.','error');
+};
 function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ localStorage.clear(); location.href='/partner'; }); }
 window.addEventListener('pp-context-change', function(){
     var p = localStorage.getItem('pp_active_portal') || '';

@@ -85,7 +85,7 @@
     </div>
     <nav class="sidebar-nav">
         <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
-        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency Home</a>
         <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
@@ -177,7 +177,10 @@ async function load(){
     }
     DATA = r;
     localStorage.setItem('pp_active_sub_account', subId);
-    if (r.agency) localStorage.setItem('pp_active_portal', r.agency.portal_id);
+    if (r.agency) {
+        localStorage.setItem('pp_active_portal', r.agency.portal_id);
+        var nba = document.getElementById('navBackAgency'); if (nba) nba.href = '/partner/agency?portal=' + encodeURIComponent(r.agency.portal_id);
+    }
     var sa = r.sub_account, o = r.objects;
     var agencyName = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'Agency';
     document.getElementById('content').innerHTML =

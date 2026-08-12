@@ -366,11 +366,21 @@
     function init() {
         injectImpersonationBanner();
         injectBadges();
-        injectAgencySwitcher();
-        injectHomeNav();
-        injectResidualsNav();
-        injectLeaderboardNav();
-        injectPosLeadNav();
+        // Two distinct zones so navigation doesn't bleed together:
+        //  - Agency zone (home/agency/sub-account): curated own sidebars + the agency
+        //    switcher (on agency/sub-account). No person-level nav injected here.
+        //  - Standard portal (dashboard/merchants/etc.): person-level nav, NO switcher
+        //    (so it never yanks you into an agency screen unexpectedly).
+        var path = window.location.pathname;
+        var isAgencyZone = path.indexOf('/partner/home') === 0 || path.indexOf('/partner/agency') === 0 || path.indexOf('/partner/sub-account') === 0;
+        if (isAgencyZone) {
+            if (path.indexOf('/partner/agency') === 0 || path.indexOf('/partner/sub-account') === 0) injectAgencySwitcher();
+        } else {
+            injectHomeNav();
+            injectResidualsNav();
+            injectLeaderboardNav();
+            injectPosLeadNav();
+        }
         injectNotificationBell();
         injectBrandedBadge();
         applySections();
