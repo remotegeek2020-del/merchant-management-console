@@ -266,8 +266,81 @@
             }).catch(function () {});
     }
 
+    // ── Persistent agency + sub-account switcher (top bar, every partner page) ──
+    // Lets multi-agency / multi-sub-account partners flip context without going back
+    // to Home. Selection is stored in localStorage (pp_active_portal / _sub_account);
+    // the CRM layer reads it for per-context scoping.
+    var _swAgencies = null;
+    function swEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+    function renderSubOptions(agency){
+        var active = localStorage.getItem('pp_active_sub_account') || '';
+        var opts = '<option value="">All sub-accounts</option>';
+        (agency && agency.sub_accounts || []).forEach(function(s){
+            opts += '<option value="'+swEsc(s.id)+'"'+(s.id===active?' selected':'')+'>'+swEsc(s.name)+(s.type==='client'?' (client)':'')+'</option>';
+        });
+        return opts;
+    }
+    function swSelStyle(){ return 'font-family:inherit;font-size:12px;font-weight:700;color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;max-width:190px;cursor:pointer;outline:none;'; }
+    function paintSwitcher(){
+        var box = document.getElementById('ppAgencySwitcher');
+        if (!box || !_swAgencies) return;
+        var activePortal = localStorage.getItem('pp_active_portal') || (_swAgencies[0] && _swAgencies[0].portal_id) || '';
+        var agency = _swAgencies.find(function(a){ return a.portal_id === activePortal; }) || _swAgencies[0];
+        if (agency) localStorage.setItem('pp_active_portal', agency.portal_id);
+        var agencyOpts = _swAgencies.map(function(a){
+            var label = a.agency_name || a.relationship_id || 'Agency';
+            return '<option value="'+swEsc(a.portal_id)+'"'+(a.portal_id===(agency&&agency.portal_id)?' selected':'')+'>'+swEsc(label)+'</option>';
+        }).join('');
+        var hasSubs = agency && (agency.sub_accounts||[]).length;
+        box.innerHTML =
+            '<span class="material-icons" style="font-size:18px;color:#0d9488;">workspaces</span>'
+          + '<select id="ppSwAgency" title="Switch agency" style="'+swSelStyle()+'">'+agencyOpts+'</select>'
+          + (hasSubs ? '<span style="color:#cbd5e1;">/</span><select id="ppSwSub" title="Switch sub-account" style="'+swSelStyle()+'">'+renderSubOptions(agency)+'</select>' : '');
+        var agSel = document.getElementById('ppSwAgency');
+        if (agSel) agSel.onchange = function(){
+            localStorage.setItem('pp_active_portal', this.value);
+            localStorage.setItem('pp_active_sub_account', ''); // reset sub on agency change
+            paintSwitcher();
+            window.dispatchEvent(new CustomEvent('pp-context-change'));
+        };
+        var subSel = document.getElementById('ppSwSub');
+        if (subSel) subSel.onchange = function(){
+            localStorage.setItem('pp_active_sub_account', this.value);
+            window.dispatchEvent(new CustomEvent('pp-context-change'));
+        };
+    }
+    function injectAgencySwitcher(){
+        if (!token) return;
+        if (document.getElementById('ppAgencySwitcher')) return;
+        var topbar = document.querySelector('.topbar');
+        var box = document.createElement('div');
+        box.id = 'ppAgencySwitcher';
+        box.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        if (topbar) {
+            topbar.insertBefore(box, topbar.firstChild);
+        } else {
+            var main = document.querySelector('.main') || document.body;
+            var bar = document.createElement('div');
+            bar.style.cssText = 'background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;position:sticky;top:0;z-index:60;';
+            bar.appendChild(box);
+            main.insertBefore(bar, main.firstChild);
+        }
+        fetch('/api/whitelabel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_my_agencies', token: token }) })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                var agencies = (d && d.success && d.agencies) || [];
+                // Only worth showing if there's something to switch between.
+                var switchable = agencies.length > 1 || agencies.some(function(a){ return (a.sub_accounts||[]).length > 0; });
+                if (!switchable) { var b = document.getElementById('ppAgencySwitcher'); if (b) { if (!topbar && b.parentNode) b.parentNode.remove(); else b.remove(); } return; }
+                _swAgencies = agencies;
+                paintSwitcher();
+            })
+            .catch(function(){});
+    }
+
     function init() {
         injectBadges();
+        injectAgencySwitcher();
         injectHomeNav();
         injectResidualsNav();
         injectLeaderboardNav();
