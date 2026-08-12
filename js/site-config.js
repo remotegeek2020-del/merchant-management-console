@@ -30,11 +30,15 @@
 // Auto-attach session token to all /api/ calls and handle 401 session expiry globally
 (function () {
     const EXEMPT = ['/api/login', '/api/partner-auth', '/api/setup-password', '/api/partner-data'];
+    // Partner portal pages must NEVER use the staff-token auto-attach / staff-401 logout.
+    // Otherwise, when a staff session co-resides in localStorage (during "Login As"
+    // impersonation), a partner-page 401 would clear ALL keys and log out both sides.
+    const onPartnerPage = window.location.pathname.startsWith('/partner');
     const _fetch = window.fetch.bind(window);
     window.fetch = function (url, opts) {
         opts = opts ? Object.assign({}, opts) : {};
         const urlStr = typeof url === 'string' ? url : (url?.url || '');
-        const needsToken = urlStr.startsWith('/api/') && !EXEMPT.some(e => urlStr.startsWith(e));
+        const needsToken = !onPartnerPage && urlStr.startsWith('/api/') && !EXEMPT.some(e => urlStr.startsWith(e));
         let sentStaffToken = false;
         if (needsToken) {
             const token = localStorage.getItem('pp_session_token');
