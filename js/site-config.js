@@ -33,7 +33,10 @@
     // Partner portal pages must NEVER use the staff-token auto-attach / staff-401 logout.
     // Otherwise, when a staff session co-resides in localStorage (during "Login As"
     // impersonation), a partner-page 401 would clear ALL keys and log out both sides.
-    const onPartnerPage = window.location.pathname.startsWith('/partner');
+    // IMPORTANT: match the partner PORTAL only ('/partner' or '/partner/…'), NOT staff
+    // pages like '/partners-dashboard' (which also begins with '/partner').
+    const _pfx = window.location.pathname;
+    const onPartnerPage = _pfx === '/partner' || _pfx.indexOf('/partner/') === 0;
     const _fetch = window.fetch.bind(window);
     window.fetch = function (url, opts) {
         opts = opts ? Object.assign({}, opts) : {};

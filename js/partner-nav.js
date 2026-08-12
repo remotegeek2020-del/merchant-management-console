@@ -7,7 +7,8 @@
 // impersonation that would wipe the staff session too (both get logged out). This
 // keeps staff signed in no matter which partner page clears.
 (function () {
-    if (!window.location.pathname.startsWith('/partner')) return;
+    var _p = window.location.pathname;
+    if (!(_p === '/partner' || _p.indexOf('/partner/') === 0)) return; // portal only, not /partners-dashboard
     // Impersonation tabs are already isolated by pp-session.js (partner keys live in
     // sessionStorage); don't re-patch clear here.
     if (sessionStorage.getItem('pp_imp_mode') === '1') return;
@@ -26,7 +27,8 @@
 (function () {
     var token = localStorage.getItem('pp_partner_token');
     var myId = localStorage.getItem('pp_partner_id');
-    if (!token || !window.location.pathname.startsWith('/partner')) return;
+    var _pp = window.location.pathname;
+    if (!token || !(_pp === '/partner' || _pp.indexOf('/partner/') === 0)) return;
 
     // Shared session-expiry guard: a 401 from a PARTNER-authenticated endpoint
     // means the partner session expired — clear and re-login. IMPORTANT: only

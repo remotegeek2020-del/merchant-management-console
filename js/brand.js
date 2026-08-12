@@ -9,7 +9,7 @@
 //   • Sub-brands (per company, for partners with 2+ companies) can be applied
 //     on top via window.applyCompanyBrand(sub) — used by the company switcher.
 (function () {
-    if (!/^\/partner/.test(window.location.pathname)) return;
+    if (!/^\/partner(\/|$)/.test(window.location.pathname)) return; // portal only, not /partners-dashboard
 
     function qp(name) {
         try { return new URLSearchParams(window.location.search).get(name); } catch (e) { return null; }
