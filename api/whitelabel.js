@@ -700,6 +700,28 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, configured: cfConfigured(cf), cname_target: cf.target || '' });
         }
 
+        // Live Cloudflare-for-SaaS diagnostics: is the Fallback Origin configured & active,
+        // and what does CF say about each custom hostname (status, SSL, validation errors)?
+        if (action === 'cf_diagnostics') {
+            const cf = await getCfConfig();
+            if (!cfConfigured(cf)) return res.status(200).json({ success: true, configured: false });
+            const fo = await cfFetch(cf, `/zones/${cf.zone}/custom_hostnames/fallback_origin`, { method: 'GET' });
+            const list = await cfFetch(cf, `/zones/${cf.zone}/custom_hostnames?per_page=50`, { method: 'GET' });
+            const foRes = (fo.json && fo.json.result) || null;
+            const hostnames = ((list.json && list.json.result) || []).map(h => ({
+                hostname: h.hostname, status: h.status,
+                ssl_status: h.ssl && h.ssl.status, ssl_method: h.ssl && h.ssl.method,
+                ssl_errors: (h.ssl && h.ssl.validation_errors || []).map(e => e.message),
+                verification_errors: h.verification_errors || []
+            }));
+            return res.status(200).json({
+                success: true, configured: true, cname_target: cf.target || '',
+                fallback_origin: foRes ? { origin: foRes.origin, status: foRes.status, errors: foRes.errors || [] } : null,
+                fallback_error: fo.ok ? null : ((fo.json && fo.json.errors && fo.json.errors[0] && fo.json.errors[0].message) || 'not set'),
+                hostnames
+            });
+        }
+
         // Grant / revoke a partner's white-label agency access (staff, per-partner).
         if (action === 'set_agency_access') {
             const personId = body.person_id;
