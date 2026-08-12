@@ -78,15 +78,23 @@ function distillCf(rec, target) {
     return { cf_status: status, ssl_status: sslStatus, phase, cname_target: target, dcv, ownership: own };
 }
 
-// The companies that belong to an agency = the companies of its OWNER members.
-// Returns { company_id: company_name }.
+// The companies that belong to an agency = the companies of its OWNER members
+// (plus the anchor owner). Returns { company_id: company_name }. Two-step lookup (no
+// embedded FK join) for reliability.
 async function agencyCompanies(portalId) {
     const { data: owners } = await supabase.from('partner_portal_members').select('person_id').eq('portal_id', portalId).eq('role', 'owner');
-    const ownerIds = [...new Set((owners || []).map(o => o.person_id).filter(Boolean))];
+    const ownerIds = (owners || []).map(o => o.person_id).filter(Boolean);
+    const { data: pp } = await supabase.from('partner_portals').select('owner_person_id').eq('id', portalId).maybeSingle();
+    if (pp && pp.owner_person_id) ownerIds.push(pp.owner_person_id);
+    const uniqOwners = [...new Set(ownerIds)];
     const map = {};
-    if (!ownerIds.length) return map;
-    const { data: ags } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').in('parent_agent_id', ownerIds);
-    (ags || []).forEach(a => { if (a.company_id) map[a.company_id] = (a.companies && a.companies.company_name) || 'Company'; });
+    if (!uniqOwners.length) return map;
+    const { data: ags } = await supabase.from('agents').select('company_id').in('parent_agent_id', uniqOwners);
+    const cids = [...new Set((ags || []).map(a => a.company_id).filter(Boolean))];
+    if (!cids.length) return map;
+    const { data: comps } = await supabase.from('companies').select('id, company_name').in('id', cids);
+    (comps || []).forEach(c => { map[c.id] = c.company_name || 'Company'; });
+    cids.forEach(cid => { if (!map[cid]) map[cid] = 'Company'; });
     return map;
 }
 
