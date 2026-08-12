@@ -78,6 +78,18 @@ function distillCf(rec, target) {
     return { cf_status: status, ssl_status: sslStatus, phase, cname_target: target, dcv, ownership: own };
 }
 
+// The companies that belong to an agency = the companies of its OWNER members.
+// Returns { company_id: company_name }.
+async function agencyCompanies(portalId) {
+    const { data: owners } = await supabase.from('partner_portal_members').select('person_id').eq('portal_id', portalId).eq('role', 'owner');
+    const ownerIds = [...new Set((owners || []).map(o => o.person_id).filter(Boolean))];
+    const map = {};
+    if (!ownerIds.length) return map;
+    const { data: ags } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').in('parent_agent_id', ownerIds);
+    (ags || []).forEach(a => { if (a.company_id) map[a.company_id] = (a.companies && a.companies.company_name) || 'Company'; });
+    return map;
+}
+
 // Read-only fetch of a partner's portal (no creation — avoids burning a
 // Relationship ID for partners who merely open their Settings page).
 async function getPortal(personId) {
@@ -327,10 +339,8 @@ export default async function handler(req, res) {
                 const canManage = role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
 
                 if (action === 'my_companies') {
-                    // The person's PayProTec companies not yet added as a sub-account here.
-                    const { data: myAgents } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').eq('parent_agent_id', personId);
-                    const owned = {};
-                    (myAgents || []).forEach(a => { if (a.company_id) owned[a.company_id] = (a.companies && a.companies.company_name) || 'Company'; });
+                    // The AGENCY's companies (its owners' book) not yet added as a sub-account.
+                    const owned = await agencyCompanies(portal.id);
                     const { data: existing } = await supabase.from('agency_sub_accounts').select('company_id').eq('portal_id', portal.id).not('company_id', 'is', null);
                     const taken = new Set((existing || []).map(e => e.company_id));
                     const companies = Object.keys(owned).filter(cid => !taken.has(cid)).map(cid => ({ company_id: cid, company_name: owned[cid] }));
@@ -347,10 +357,10 @@ export default async function handler(req, res) {
                     const companyId = body.company_id || null;
                     let name = (body.name || '').trim();
                     if (companyId) {
-                        // Linking a PayProTec company — verify the person actually owns it, name from company.
-                        const { data: comp } = await supabase.from('companies').select('id, company_name').eq('id', companyId).maybeSingle();
-                        if (!comp) return res.status(400).json({ success: false, message: 'Company not found.' });
-                        if (!name) name = comp.company_name;
+                        // Linking a company — must be one of the agency's (owners') companies.
+                        const agComps = await agencyCompanies(portal.id);
+                        if (!agComps[companyId]) return res.status(400).json({ success: false, message: 'That company is not part of this agency.' });
+                        if (!name) name = agComps[companyId];
                         const { data: dup } = await supabase.from('agency_sub_accounts').select('id').eq('portal_id', portal.id).eq('company_id', companyId).maybeSingle();
                         if (dup) return res.status(409).json({ success: false, message: 'That company is already a sub-account here.' });
                     } else {
