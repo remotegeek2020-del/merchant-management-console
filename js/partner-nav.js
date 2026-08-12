@@ -202,7 +202,7 @@
                 var a = document.createElement('a');
                 a.className = 'nav-item';
                 a.href = '/partner/home';
-                a.innerHTML = '<span class="material-icons">hub</span> CRM';
+                a.innerHTML = '<span class="material-icons">apartment</span> Agency';
                 nav.insertBefore(a, nav.firstChild);
             })
             .catch(function () {});

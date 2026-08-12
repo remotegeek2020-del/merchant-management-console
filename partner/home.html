@@ -162,7 +162,7 @@ function agencyCard(a){
       +'<div>'+roleBadge(a)+' <span class="muted-note">· '+((a.sub_accounts||[]).length)+' sub-account'+((a.sub_accounts||[]).length===1?'':'s')+'</span></div>'
       +subAccountList(a)
       +'<div class="card-foot">'+domainStatus(a)
-      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\'\')">Open CRM <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
+      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\'\')">Open Agency <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
 function standaloneCard(c){
