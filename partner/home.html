@@ -95,7 +95,7 @@
             <div class="hero-avatar" id="heroAvatar">?</div>
             <div>
                 <h2 id="heroName">Welcome</h2>
-                <p id="heroSub">Your agencies and companies, all in one place.</p>
+                <p id="heroSub">Your partner portal and CRM — pick where to work.</p>
             </div>
         </div>
         <div id="hubBody"><div class="muted-note">Loading your workspace…</div></div>
@@ -162,7 +162,7 @@ function agencyCard(a){
       +'<div>'+roleBadge(a)+' <span class="muted-note">· '+((a.sub_accounts||[]).length)+' sub-account'+((a.sub_accounts||[]).length===1?'':'s')+'</span></div>'
       +subAccountList(a)
       +'<div class="card-foot">'+domainStatus(a)
-      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\'\')">Open agency <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
+      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\'\')">Open CRM <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
 function standaloneCard(c){
@@ -231,24 +231,19 @@ async function loadHub(){
 
     var owned = (r.agencies||[]).filter(function(a){ return a.is_owner; });
     var accessed = (r.agencies||[]).filter(function(a){ return !a.is_owner; });
-    var companies = r.companies || [];
 
-    var html = '';
-    if (owned.length){
-        html += '<div class="section-label"><span class="material-icons" style="font-size:15px;">verified</span> Your Agencies</div>';
-        html += '<div class="grid">'+owned.map(agencyCard).join('')+'</div>';
-    }
-    if (accessed.length){
-        html += '<div class="section-label"><span class="material-icons" style="font-size:15px;">key</span> Agencies You Can Access</div>';
-        html += '<div class="grid">'+accessed.map(agencyCard).join('')+'</div>';
-    }
-    if (companies.length){
-        html += '<div class="section-label"><span class="material-icons" style="font-size:15px;">business</span> Your Companies</div>';
-        html += '<div class="grid">'+companies.map(standaloneCard).join('')+'</div>';
-    }
-    if (!owned.length && !accessed.length && !companies.length){
-        html = '<div class="empty"><span class="material-icons">workspaces</span>No agencies or companies yet.</div>';
-    }
+    // Switcher: your normal Partner Portal, plus any CRM you own / were granted.
+    var portalCard = '<div class="card" style="border-top:4px solid var(--navy);">'
+      +'<div class="card-top"><div class="card-title">My Partner Portal</div></div>'
+      +'<div class="muted-note" style="margin:6px 0 2px;">Your standard partner account — merchants, residuals, POS leads.</div>'
+      +'<div class="card-foot"><span class="status" style="color:#64748b;"><span class="dot" style="background:#334155;"></span>Standard access</span>'
+      +'<button class="btn btn-teal" onclick="window.location.href=\'/partner/dashboard\'">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div></div>';
+
+    var html = '<div class="section-label"><span class="material-icons" style="font-size:15px;">grid_view</span> Choose where to work</div>'
+             + '<div class="grid">' + portalCard
+             + owned.map(agencyCard).join('')
+             + accessed.map(agencyCard).join('')
+             + '</div>';
     document.getElementById('hubBody').innerHTML = html;
 }
 

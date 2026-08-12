@@ -187,16 +187,25 @@
         tag.parentNode.insertBefore(badge, tag.nextSibling);
     }
 
-    // Inject "Home" (the launchpad / agency hub) at the top of the sidebar on every
-    // partner page, so multi-agency/multi-company partners always have their hub.
-    function injectHomeNav() {
+    // Additive CRM entry: a "CRM" link at the top of the STANDARD portal sidebar, shown
+    // ONLY to partners who have white-label access (branded owners, or sub-partners the
+    // owner granted). Regular partners never see it — their portal is unchanged.
+    function maybeInjectCrmNav() {
         var nav = document.querySelector('.sidebar-nav');
         if (!nav || nav.querySelector('a[href="/partner/home"]')) return;
-        var a = document.createElement('a');
-        a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/home') !== -1 ? ' active' : '');
-        a.href = '/partner/home';
-        a.innerHTML = '<span class="material-icons">home</span> Home';
-        nav.insertBefore(a, nav.firstChild);
+        fetch('/api/whitelabel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_my_agencies', token: token }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                var agencies = (d && d.success && d.agencies) || [];
+                if (!agencies.length) return; // no white-label access → nothing added
+                if (nav.querySelector('a[href="/partner/home"]')) return;
+                var a = document.createElement('a');
+                a.className = 'nav-item';
+                a.href = '/partner/home';
+                a.innerHTML = '<span class="material-icons">hub</span> CRM';
+                nav.insertBefore(a, nav.firstChild);
+            })
+            .catch(function () {});
     }
 
     // Add the "My Prime49" nav item on every partner page (after My Merchants),
@@ -376,10 +385,10 @@
         if (isAgencyZone) {
             if (path.indexOf('/partner/agency') === 0 || path.indexOf('/partner/sub-account') === 0) injectAgencySwitcher();
         } else {
-            injectHomeNav();
             injectResidualsNav();
             injectLeaderboardNav();
             injectPosLeadNav();
+            maybeInjectCrmNav();
         }
         injectNotificationBell();
         injectBrandedBadge();
