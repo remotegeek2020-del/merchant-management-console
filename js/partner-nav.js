@@ -187,6 +187,18 @@
         tag.parentNode.insertBefore(badge, tag.nextSibling);
     }
 
+    // Inject "Home" (the launchpad / agency hub) at the top of the sidebar on every
+    // partner page, so multi-agency/multi-company partners always have their hub.
+    function injectHomeNav() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (!nav || nav.querySelector('a[href="/partner/home"]')) return;
+        var a = document.createElement('a');
+        a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/home') !== -1 ? ' active' : '');
+        a.href = '/partner/home';
+        a.innerHTML = '<span class="material-icons">home</span> Home';
+        nav.insertBefore(a, nav.firstChild);
+    }
+
     // Add the "My Prime49" nav item on every partner page (after My Merchants),
     // so the sidebar stays consistent without editing all page files.
     function injectResidualsNav() {
@@ -256,6 +268,7 @@
 
     function init() {
         injectBadges();
+        injectHomeNav();
         injectResidualsNav();
         injectLeaderboardNav();
         injectPosLeadNav();

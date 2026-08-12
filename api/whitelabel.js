@@ -192,10 +192,61 @@ export default async function handler(req, res) {
 
     try {
         // ─────────────────────── PARTNER (token) surface ───────────────────────
-        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name'].includes(action)) {
+        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
             const cf = await getCfConfig();
+
+            // The launchpad: every agency this person belongs to (owned + accessed) with
+            // their role and the companies they can see there, plus their standalone
+            // (non-white-labeled) companies — everything in one place.
+            if (action === 'get_my_agencies') {
+                const { data: person } = await supabase.from('persons').select('id, full_name, email').eq('id', personId).maybeSingle();
+                const { data: memberships } = await supabase.from('partner_portal_members').select('*').eq('person_id', personId);
+                const portalIds = [...new Set((memberships || []).map(m => m.portal_id))];
+
+                let portals = [], acRows = [], domains = {}, companyNames = {};
+                if (portalIds.length) {
+                    const [pRes, acRes, dRes] = await Promise.all([
+                        supabase.from('partner_portals').select('*').in('id', portalIds),
+                        supabase.from('agency_companies').select('portal_id, company_id').in('portal_id', portalIds),
+                        supabase.from('portal_brands').select('portal_id, host, ssl_status, active').eq('added_by_partner', true).in('portal_id', portalIds)
+                    ]);
+                    portals = pRes.data || []; acRows = acRes.data || [];
+                    (dRes.data || []).forEach(d => { if (!domains[d.portal_id]) domains[d.portal_id] = d; });
+                    const cids = [...new Set(acRows.map(r => r.company_id))];
+                    if (cids.length) { const { data } = await supabase.from('companies').select('id, company_name').in('id', cids); (data || []).forEach(c => companyNames[c.id] = c.company_name); }
+                }
+
+                const agencies = portals.map(p => {
+                    const mem = (memberships || []).find(m => m.portal_id === p.id) || {};
+                    const role = mem.role || 'admin';
+                    const isOwner = role === 'owner';
+                    const canManage = isOwner && (mem.is_primary === true || mem.full_access === true);
+                    let comps = acRows.filter(r => r.portal_id === p.id).map(r => ({ company_id: r.company_id, company_name: companyNames[r.company_id] || 'Company' }));
+                    // Sub-partner: nothing until explicitly granted (scope.company_ids).
+                    if (role === 'sub_partner') {
+                        const granted = (mem.scope && Array.isArray(mem.scope.company_ids)) ? mem.scope.company_ids : [];
+                        comps = comps.filter(c => granted.includes(c.company_id));
+                    }
+                    return {
+                        portal_id: p.id, relationship_id: p.relationship_id, agency_name: p.agency_name,
+                        agency_enabled: p.agency_enabled === true,
+                        my_role: role, is_primary: mem.is_primary === true, full_access: mem.full_access === true,
+                        is_owner: isOwner, can_manage: canManage,
+                        domain: domains[p.id] || null, companies: comps
+                    };
+                });
+
+                // Standalone: the person's own companies not under any of their agencies.
+                const { data: myAgents } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').eq('parent_agent_id', personId);
+                const owned = {};
+                (myAgents || []).forEach(a => { if (a.company_id) owned[a.company_id] = (a.companies && a.companies.company_name) || 'Company'; });
+                const inAgency = new Set(acRows.map(r => r.company_id));
+                const standalone = Object.keys(owned).filter(cid => !inAgency.has(cid)).map(cid => ({ company_id: cid, company_name: owned[cid] }));
+
+                return res.status(200).json({ success: true, person: person || null, agencies, standalone_companies: standalone });
+            }
 
             if (action === 'my_domain') {
                 const portal = await getPortal(personId);
