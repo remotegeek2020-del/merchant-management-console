@@ -2574,13 +2574,10 @@ window.loginAsPartner = async function(personId) {
             body: JSON.stringify({ action: 'admin_login_as', person_id: personId })
         }).then(function(x){ return x.json(); });
         if (!r || !r.success) { Swal.fire('Error', (r && r.message) || 'Could not start session.', 'error'); return; }
-        // Same-origin localStorage: seed the partner token, then open the portal.
-        localStorage.setItem('pp_partner_token', r.token);
-        localStorage.setItem('pp_partner_id', r.partner.id);
-        localStorage.setItem('pp_impersonating', r.partner.name || nm);
-        localStorage.removeItem('pp_active_portal');
-        localStorage.removeItem('pp_active_sub_account');
-        window.open('/partner/home', '_blank');
+        // Hand off the impersonation via URL → the new tab isolates it in sessionStorage
+        // (pp-session.js), so it never touches this staff session's localStorage.
+        var url = '/partner/home?imp=' + encodeURIComponent(r.token) + '&pid=' + encodeURIComponent(r.partner.id) + '&as=' + encodeURIComponent(r.partner.name || nm);
+        window.open(url, '_blank');
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
 };
 

@@ -8,6 +8,9 @@
 // keeps staff signed in no matter which partner page clears.
 (function () {
     if (!window.location.pathname.startsWith('/partner')) return;
+    // Impersonation tabs are already isolated by pp-session.js (partner keys live in
+    // sessionStorage); don't re-patch clear here.
+    if (sessionStorage.getItem('pp_imp_mode') === '1') return;
     if (localStorage.__ppClearPatched) return;
     var _clear = localStorage.clear.bind(localStorage);
     var KEEP = ['pp_userid', 'pp_session_token', 'pp_device_token'];
@@ -388,7 +391,9 @@
         document.body.appendChild(bar);
         document.body.style.paddingTop = '30px';
         document.getElementById('ppExitImp').onclick = function () {
-            window.ppClearPartnerSession(); // keep the staff session intact
+            // Isolated impersonation tab → end it via the shim (clears sessionStorage only).
+            if (window.ppExitImpersonation) { window.ppExitImpersonation(); return; }
+            window.ppClearPartnerSession(); // legacy path: keep the staff session intact
             window.location.href = '/partners-dashboard';
         };
     }
