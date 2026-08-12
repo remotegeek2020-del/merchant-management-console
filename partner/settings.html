@@ -831,6 +831,8 @@ async function wlLoad(){
     if(!r.success || !r.agency_enabled){ document.getElementById('whitelabelSection').style.display='none'; return; }
     document.getElementById('wlLoading').style.display='none';
     document.getElementById('wlBody').style.display='';
+    // Deep-link from "Agency Settings" → scroll to this section once it's shown.
+    if(location.hash === '#whitelabelSection'){ try{ document.getElementById('whitelabelSection').scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){} }
     document.getElementById('wlRelId').textContent=r.relationship_id||'—';
     document.getElementById('wlAgencyName').value=r.agency_name||'';
     _wlTarget=r.cname_target||'';
