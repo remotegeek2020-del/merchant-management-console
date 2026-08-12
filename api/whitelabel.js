@@ -144,10 +144,31 @@ async function ensureOnePrimary(portalId) {
     await supabase.from('partner_portal_members').update({ is_primary: true }).eq('id', list[0].id);
 }
 
-// Resolve a portal from either an explicit portal_id or an owner's person_id.
+// Find the agency a person belongs to — by MEMBERSHIP, so co-owners see the same
+// shared agency on each other's profiles (mutual ownership). Prefers the agency they
+// anchor (their own company), then any agency they co-own / admin.
+async function findPortalForPerson(personId) {
+    if (!personId) return null;
+    // 1. Their own anchored agency.
+    const { data: anchored } = await supabase.from('partner_portals').select('*').eq('owner_person_id', personId).maybeSingle();
+    if (anchored) return anchored;
+    // 2. An agency they are a member of (co-owner or admin), primary membership first.
+    const { data: mem } = await supabase.from('partner_portal_members')
+        .select('portal_id, is_primary, role').eq('person_id', personId)
+        .order('is_primary', { ascending: false });
+    if (mem && mem.length) {
+        // Prefer a membership where they're an owner.
+        const owned = mem.find(x => x.role === 'owner') || mem[0];
+        const { data } = await supabase.from('partner_portals').select('*').eq('id', owned.portal_id).maybeSingle();
+        return data || null;
+    }
+    return null;
+}
+
+// Resolve a portal from an explicit portal_id, else the person's agency (by membership).
 async function resolvePortal(body) {
     if (body.portal_id) { const { data } = await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle(); return data || null; }
-    if (body.person_id) { const { data } = await supabase.from('partner_portals').select('*').eq('owner_person_id', body.person_id).maybeSingle(); return data || null; }
+    if (body.person_id) return findPortalForPerson(body.person_id);
     return null;
 }
 
@@ -300,8 +321,13 @@ export default async function handler(req, res) {
             const personId = body.person_id;
             if (!personId) return res.status(400).json({ success: false, message: 'person_id required.' });
             const enabled = body.enabled === true || body.enabled === 'true';
-            // Create the portal (with a Relationship ID) on first grant so it's ready to use.
-            const portal = await ensurePortal(personId, body.agency_name || null);
+            // Toggle the SHARED agency this person belongs to (co-owner or anchor). Only
+            // create a new one (anchored to them) if they don't belong to any yet.
+            let portal = await findPortalForPerson(personId);
+            if (!portal) {
+                if (!enabled) return res.status(200).json({ success: true, agency_enabled: false, relationship_id: null });
+                portal = await ensurePortal(personId, body.agency_name || null);
+            }
             await supabase.from('partner_portals').update({ agency_enabled: enabled, updated_at: new Date().toISOString() }).eq('id', portal.id);
             // Seed the granted partner as the primary owner (idempotent).
             if (enabled) {
@@ -323,22 +349,39 @@ export default async function handler(req, res) {
         if (action === 'get_agency_access') {
             const personId = body.person_id;
             if (!personId) return res.status(400).json({ success: false, message: 'person_id required.' });
-            // The portal this person OWNS (their own agency), if any.
-            const { data: portal } = await supabase.from('partner_portals').select('*').eq('owner_person_id', personId).maybeSingle();
+            // The agency this person belongs to (their own, or one they co-own) — shared,
+            // so co-owners reflect each other's ownership on both profiles.
+            const portal = await findPortalForPerson(personId);
             let domain = null, members = [];
             if (portal) {
                 const { data: b } = await supabase.from('portal_brands').select('host, ssl_status, active').eq('portal_id', portal.id).eq('added_by_partner', true).maybeSingle();
                 domain = b || null;
                 members = await loadMembers(portal.id);
             }
+            const isAnchor = !!(portal && portal.owner_person_id === personId);
             return res.status(200).json({
                 success: true,
                 agency_enabled: !!(portal && portal.agency_enabled),
                 portal_id: portal ? portal.id : null,
                 relationship_id: portal ? portal.relationship_id : null,
                 agency_name: portal ? portal.agency_name : null,
+                is_anchor: isAnchor,
                 domain, members
             });
+        }
+
+        // Server-side people search for the owner/admin picker (searches ALL partners,
+        // not just what the dashboard has loaded client-side).
+        if (action === 'search_people') {
+            const q = String(body.q || '').trim();
+            if (q.length < 2) return res.status(200).json({ success: true, people: [] });
+            const like = `%${q.replace(/[%_]/g, '')}%`;
+            const { data } = await supabase.from('persons')
+                .select('id, full_name, email')
+                .or(`full_name.ilike.${like},email.ilike.${like}`)
+                .order('full_name', { ascending: true })
+                .limit(12);
+            return res.status(200).json({ success: true, people: data || [] });
         }
 
         // ── Owners & admins management (staff) ──────────────────────────────────

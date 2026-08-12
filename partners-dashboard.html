@@ -2641,22 +2641,41 @@ window.wlToggleAddPct = function(){
     var pct = document.getElementById('wlMemPct');
     if(pct) pct.style.display = (role==='admin') ? 'none' : '';
 };
-window.wlMemSearch = function(personId){
-    var q = (document.getElementById('wlMemSearch').value||'').trim().toLowerCase();
+var _wlSearchTimer = null, _wlSearchSeq = 0;
+function _wlRenderResults(personId, people){
     var box = document.getElementById('wlMemResults');
+    if(!box) return;
     var st = window._wlAgency[personId] || {};
     var taken = new Set((st.members||[]).map(function(m){return m.person_id;}));
-    if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
-    var pool = (typeof allPartners!=='undefined'?allPartners:[]).filter(function(p){
-        if(taken.has(p.id)) return false;
-        return (p.name||'').toLowerCase().indexOf(q)>=0 || (p.email||'').toLowerCase().indexOf(q)>=0;
-    }).slice(0,8);
+    var pool = (people||[]).filter(function(p){ return !taken.has(p.id); }).slice(0,10);
     if(!pool.length){ box.style.display='block'; box.innerHTML='<div style="padding:8px 10px;font-size:12px;color:#94a3b8;">No matches</div>'; return; }
     box.style.display='block';
     box.innerHTML = pool.map(function(p){
+        var nm = p.full_name || p.name || '';
         return '<div onclick="wlAddMember(\''+personId+'\',\''+p.id+'\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12px;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'white\'">'
-          +'<div style="font-weight:700;">'+_wlEsc(p.name||'')+'</div><div style="color:#94a3b8;">'+_wlEsc(p.email||'')+'</div></div>';
+          +'<div style="font-weight:700;">'+_wlEsc(nm)+'</div><div style="color:#94a3b8;">'+_wlEsc(p.email||'')+'</div></div>';
     }).join('');
+}
+window.wlMemSearch = function(personId){
+    var q = (document.getElementById('wlMemSearch').value||'').trim();
+    var box = document.getElementById('wlMemResults');
+    if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+    // Instant client-side matches from the loaded list…
+    var ql = q.toLowerCase();
+    var local = (typeof allPartners!=='undefined'?allPartners:[]).filter(function(p){
+        return (p.name||'').toLowerCase().indexOf(ql)>=0 || (p.email||'').toLowerCase().indexOf(ql)>=0;
+    }).map(function(p){ return { id:p.id, full_name:p.name, email:p.email }; });
+    _wlRenderResults(personId, local);
+    // …then authoritative server search across ALL partners (debounced).
+    var seq = ++_wlSearchSeq;
+    clearTimeout(_wlSearchTimer);
+    _wlSearchTimer = setTimeout(async function(){
+        try{
+            var r = await fetch('/api/whitelabel', { method:'POST', headers:_wlAgHdrs(), body: JSON.stringify({ action:'search_people', q:q }) }).then(x=>x.json());
+            if(seq!==_wlSearchSeq) return; // stale
+            if(r && r.success) _wlRenderResults(personId, r.people);
+        }catch(e){}
+    }, 220);
 };
 async function _wlMemApi(personId, body){
     var r = await fetch('/api/whitelabel', { method:'POST', headers:_wlAgHdrs(), body: JSON.stringify(body) }).then(x=>x.json());
