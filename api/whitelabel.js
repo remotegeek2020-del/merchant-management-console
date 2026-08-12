@@ -755,6 +755,10 @@ export default async function handler(req, res) {
             const fo = await cfFetch(cf, `/zones/${cf.zone}/custom_hostnames/fallback_origin`, { method: 'GET' });
             const list = await cfFetch(cf, `/zones/${cf.zone}/custom_hostnames?per_page=50`, { method: 'GET' });
             const foRes = (fo.json && fo.json.result) || null;
+            // If listing custom hostnames fails auth, the token/zone pair is wrong — that's
+            // a different (and more fundamental) problem than "no fallback origin."
+            const authBad = !list.ok && [400, 401, 403].indexOf(list.status) >= 0;
+            const authMsg = authBad ? ((list.json && list.json.errors && list.json.errors[0] && list.json.errors[0].message) || ('HTTP ' + list.status)) : null;
             const hostnames = ((list.json && list.json.result) || []).map(h => ({
                 hostname: h.hostname, status: h.status,
                 ssl_status: h.ssl && h.ssl.status, ssl_method: h.ssl && h.ssl.method,
@@ -763,6 +767,7 @@ export default async function handler(req, res) {
             }));
             return res.status(200).json({
                 success: true, configured: true, cname_target: cf.target || '',
+                auth_error: authMsg,
                 fallback_origin: foRes ? { origin: foRes.origin, status: foRes.status, errors: foRes.errors || [] } : null,
                 fallback_error: fo.ok ? null : ((fo.json && fo.json.errors && fo.json.errors[0] && fo.json.errors[0].message) || 'not set'),
                 hostnames
