@@ -105,6 +105,8 @@
 <script>
 const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
+// Clear only partner keys (preserve a co-resident staff session for Login As).
+function ppClearPartner(){ ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){localStorage.removeItem(k);}); }
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function initials(name){ return (String(name||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
@@ -219,7 +221,7 @@ async function loadHub(){
     try { r = await fetch('/api/whitelabel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_my_agencies', token: token }) }).then(x=>x.json()); }
     catch(e){ r = null; }
     if (!r || !r.success) {
-        if (r && /session/i.test(r.message||'')) { localStorage.clear(); window.location.href='/partner'; return; }
+        if (r && /session/i.test(r.message||'')) { ppClearPartner(); window.location.href='/partner'; return; }
         document.getElementById('hubBody').innerHTML = '<div class="empty"><span class="material-icons">error_outline</span>Could not load your workspace.</div>';
         return;
     }
@@ -249,7 +251,7 @@ async function loadHub(){
 
 function handleLogout(){
     fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'logout', token }) })
-      .finally(function(){ localStorage.clear(); window.location.href='/partner'; });
+      .finally(function(){ ppClearPartner(); window.location.href='/partner'; });
 }
 
 loadHub();

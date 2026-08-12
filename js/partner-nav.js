@@ -12,6 +12,11 @@
     // notification bell hitting /api/merchants) — those must NOT log the partner
     // out. (Mirrors the staff guard, which only logs out when its own token was
     // actually rejected.)
+    // Clear ONLY partner-session keys — never localStorage.clear(), which would also wipe
+    // the staff session (pp_session_token) that shares this origin (breaks Login As).
+    window.ppClearPartnerSession = function () {
+        ['pp_partner_token', 'pp_partner_id', 'pp_impersonating', 'pp_active_portal', 'pp_active_sub_account', 'pp_active_company'].forEach(function (k) { localStorage.removeItem(k); });
+    };
     (function () {
         var PARTNER_APIS = ['/api/partner-auth', '/api/partner-data', '/api/community', '/api/courses', '/api/pos'];
         var _fetch = window.fetch, redirected = false;
@@ -22,7 +27,7 @@
                     var isPartnerApi = PARTNER_APIS.some(function (p) { return url.indexOf(p) !== -1; });
                     if (res.status === 401 && isPartnerApi && !redirected) {
                         redirected = true;
-                        localStorage.clear();
+                        window.ppClearPartnerSession();
                         window.location.href = '/partner';
                     }
                 } catch (e) {}
@@ -363,11 +368,7 @@
         document.body.appendChild(bar);
         document.body.style.paddingTop = '30px';
         document.getElementById('ppExitImp').onclick = function () {
-            localStorage.removeItem('pp_partner_token');
-            localStorage.removeItem('pp_partner_id');
-            localStorage.removeItem('pp_impersonating');
-            localStorage.removeItem('pp_active_portal');
-            localStorage.removeItem('pp_active_sub_account');
+            window.ppClearPartnerSession(); // keep the staff session intact
             window.location.href = '/partners-dashboard';
         };
     }

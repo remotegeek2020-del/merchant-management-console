@@ -105,6 +105,7 @@
 <script>
 const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
+function ppClearPartner(){ ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){localStorage.removeItem(k);}); }
 const portalId = new URLSearchParams(location.search).get('portal') || localStorage.getItem('pp_active_portal') || '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
@@ -144,7 +145,7 @@ async function load(){
     try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_agency_overview',token:token,portal_id:portalId})}).then(x=>x.json()); }
     catch(e){ r=null; }
     if (!r || !r.success){
-        if (r && /session/i.test(r.message||'')){ localStorage.clear(); location.href='/partner'; return; }
+        if (r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
         document.getElementById('content').innerHTML='<div class="empty"><span class="material-icons">error_outline</span>'+esc((r&&r.message)||'Could not load agency.')+'</div>'; return;
     }
     localStorage.setItem('pp_active_portal', portalId);
@@ -275,7 +276,7 @@ window.renameAgency = async function(){
     if(r&&r.success){ Swal.fire({icon:'success',title:'Saved',timer:900,showConfirmButton:false}); load(); }
     else Swal.fire('Error',(r&&r.message)||'Could not save.','error');
 };
-function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ localStorage.clear(); location.href='/partner'; }); }
+function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ ppClearPartner(); location.href='/partner'; }); }
 window.addEventListener('pp-context-change', function(){
     var p = localStorage.getItem('pp_active_portal') || '';
     var s = localStorage.getItem('pp_active_sub_account') || '';
