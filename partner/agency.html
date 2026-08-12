@@ -88,7 +88,7 @@
     <nav class="sidebar-nav">
         <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
         <a class="nav-item active" href="#"><span class="material-icons">apartment</span> Agency Home</a>
-        <a class="nav-item" href="/partner/settings#whitelabelSection"><span class="material-icons">settings</span> Agency Settings</a>
+        <a class="nav-item" id="navAgencySettings" href="/partner/agency-settings"><span class="material-icons">settings</span> Agency Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -173,7 +173,7 @@ async function load(){
       '<div class="crumb"><a href="/partner/home">Home</a> › Agency</div>'
       +'<div class="hero"><div class="hero-left"><div class="hero-icon"><span class="material-icons">apartment</span></div>'
       +'<div><h2>'+esc(title)+(ag.can_manage?' <span class="material-icons" title="Rename agency" onclick="renameAgency()" style="font-size:17px;cursor:pointer;opacity:0.7;vertical-align:middle;">edit</span>':'')+' <span class="rel">'+esc(ag.relationship_id||'')+'</span></h2>'+domainLine(ag)+'</div></div>'
-      +(ag.can_manage?'<a class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:white;border-color:rgba(255,255,255,0.25);" href="/partner/settings#whitelabelSection"><span class="material-icons" style="font-size:16px;">settings</span> Agency Settings</a>':'')
+      +(ag.can_manage?'<a class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:white;border-color:rgba(255,255,255,0.25);" href="/partner/agency-settings?portal='+encodeURIComponent(portalId)+'"><span class="material-icons" style="font-size:16px;">settings</span> Agency Settings</a>':'')
       +'</div>'
       +'<div class="kpi-grid">'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">workspaces</span> Sub-Accounts</div><div class="kpi-value">'+k.sub_accounts+'</div></div>'

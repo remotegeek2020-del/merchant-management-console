@@ -90,6 +90,18 @@ async function agencyCompanies(portalId) {
     return map;
 }
 
+// Agency branding fields (kept on partner_portals; mirrored to each domain's brand row).
+const BRAND_FIELDS = ['logo_url', 'favicon_url', 'color_primary', 'color_dark', 'color_accent', 'support_email'];
+// Push the agency's branding onto every custom-domain brand row so the live white-label
+// portal (resolved by host from portal_brands) reflects it.
+async function syncBrandingToDomains(portalId, agencyName) {
+    const { data: portal } = await supabase.from('partner_portals').select('*').eq('id', portalId).maybeSingle();
+    if (!portal) return;
+    const patch = { name: agencyName || portal.agency_name || null, updated_at: new Date().toISOString() };
+    BRAND_FIELDS.forEach(f => { patch[f] = portal[f] || null; });
+    await supabase.from('portal_brands').update(patch).eq('portal_id', portalId).eq('added_by_partner', true);
+}
+
 // Read-only fetch of a partner's portal (no creation — avoids burning a
 // Relationship ID for partners who merely open their Settings page).
 async function getPortal(personId) {
@@ -429,7 +441,8 @@ export default async function handler(req, res) {
 
             // ── Sub-account self-service (owners + admins; co-owners need full_access) ──
             if (['list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
-                 'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke'].includes(action)) {
+                 'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke',
+                 'get_agency_branding', 'save_agency_branding'].includes(action)) {
                 const portal = body.portal_id
                     ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
                     : await findPortalForPerson(personId);
@@ -439,6 +452,30 @@ export default async function handler(req, res) {
                 if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
                 const role = god ? 'owner' : (mem.role || 'admin');
                 const canManage = god || role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+
+                // ── White-label branding (owners/admins/god) ──
+                if (action === 'get_agency_branding') {
+                    const { data: full } = await supabase.from('partner_portals').select('*').eq('id', portal.id).maybeSingle();
+                    const { data: dom } = await supabase.from('portal_brands').select('host, ssl_status, active').eq('portal_id', portal.id).eq('added_by_partner', true).maybeSingle();
+                    const branding = {};
+                    BRAND_FIELDS.forEach(f => { branding[f] = (full && full[f]) || ''; });
+                    return res.status(200).json({
+                        success: true, can_manage: canManage,
+                        relationship_id: full.relationship_id, agency_name: full.agency_name || '',
+                        agency_enabled: full.agency_enabled === true, domain: dom || null,
+                        branding
+                    });
+                }
+                if (action === 'save_agency_branding') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can edit branding.' });
+                    const b = body.branding || {};
+                    const patch = { updated_at: new Date().toISOString() };
+                    if (typeof body.agency_name === 'string') patch.agency_name = body.agency_name.trim() || null;
+                    BRAND_FIELDS.forEach(f => { if (f in b) patch[f] = (b[f] || '').trim() || null; });
+                    await supabase.from('partner_portals').update(patch).eq('id', portal.id);
+                    await syncBrandingToDomains(portal.id, patch.agency_name);
+                    return res.status(200).json({ success: true });
+                }
 
                 // ── Team & visibility grants (owners/admins) ──
                 if (action === 'agency_team') {
@@ -601,6 +638,8 @@ export default async function handler(req, res) {
                     ssl_status: d.phase, verification: { cf_status: d.cf_status, ssl_status: d.ssl_status, dcv: d.dcv, ownership: d.ownership },
                     cname_target: cf.target, active: false, updated_at: new Date().toISOString()
                 };
+                // Seed the new domain with the agency's existing branding.
+                BRAND_FIELDS.forEach(f => { row[f] = portal[f] || null; });
                 if (taken) await supabase.from('portal_brands').update(row).eq('id', taken.id);
                 else await supabase.from('portal_brands').upsert(row, { onConflict: 'host' });
                 return res.status(200).json({ success: true, host, cname_target: cf.target, status: d.phase, verification: row.verification });

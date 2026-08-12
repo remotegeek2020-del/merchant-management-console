@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="/js/pp-session.js"></script>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agency Settings | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--teal:#0d9488;--teal-dark:#0f766e;--teal-bg:#f0fdfa;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--purple-bg:#ede9fe;--purple-text:#6d28d9;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);--shadow-md:0 4px 16px rgba(0,0,0,0.07);}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+        .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,0.15);}
+        .sidebar-header{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo{height:28px;filter:brightness(0) invert(1);display:block;margin-bottom:16px;}
+        .sidebar-partner{display:flex;align-items:center;gap:10px;}
+        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:white;}
+        .sidebar-name{font-size:13px;font-weight:700;color:white;}
+        .sidebar-tag{font-size:10px;color:rgba(255,255,255,0.4);}
+        .sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;border:none;background:none;width:100%;font-family:inherit;}
+        .nav-item:hover{background:rgba(255,255,255,0.08);color:white;}
+        .nav-item.active{background:var(--teal);color:white;}
+        .nav-item .material-icons{font-size:20px;}
+        .nav-divider{height:1px;background:rgba(255,255,255,0.08);margin:8px 0;}
+        .main{margin-left:240px;min-height:100vh;}
+        .topbar{background:white;padding:16px 28px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+        .content{padding:24px 28px;max-width:820px;}
+        .crumb{font-size:12px;color:var(--muted);margin-bottom:10px;}
+        .crumb a{color:var(--teal);text-decoration:none;font-weight:700;}
+        .card{background:white;border:1px solid var(--border);border-radius:16px;padding:22px 24px;box-shadow:var(--shadow-sm);margin-bottom:20px;}
+        .card-title{font-size:15px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:8px;}
+        .card-sub{font-size:12px;color:var(--muted);margin:0 0 18px;}
+        label{display:block;font-size:11px;font-weight:700;color:var(--secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+        input[type=text],input[type=email],input[type=url]{width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;color:var(--text);background:#f8fafc;outline:none;margin-bottom:14px;}
+        input:focus{border-color:var(--teal);background:white;box-shadow:0 0 0 3px rgba(13,148,136,0.08);}
+        .row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+        .color-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+        .color-row input[type=color]{width:44px;height:38px;border:1px solid var(--border);border-radius:8px;padding:2px;background:white;cursor:pointer;}
+        .color-row input[type=text]{margin-bottom:0;flex:1;font-family:'DM Mono',monospace;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;border:none;text-decoration:none;}
+        .btn-teal{background:var(--teal);color:white;} .btn-teal:hover{background:var(--teal-dark);}
+        .btn-outline{background:white;color:var(--secondary);border:1px solid var(--border);}
+        .rel{font-family:'DM Mono',monospace;font-size:12px;color:var(--purple-text);background:var(--purple-bg);padding:2px 10px;border-radius:6px;font-weight:700;}
+        .logo-prev{height:40px;max-width:180px;object-fit:contain;background:#0b1f3a;border-radius:8px;padding:6px 10px;margin-bottom:12px;display:none;}
+        .status{font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;}
+        .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+        .muted{color:var(--muted);font-size:12px;}
+        table.dns{width:100%;border-collapse:collapse;font-size:12px;min-width:420px;}
+        table.dns th{text-align:left;color:var(--muted);font-weight:700;padding:6px 8px;}
+        table.dns td{padding:8px;font-family:'DM Mono',monospace;background:#f8fafc;}
+        .banner{padding:11px 14px;border-radius:10px;font-size:12px;margin-bottom:14px;}
+        @media(max-width:768px){.sidebar{transform:translateX(-100%);}.main{margin-left:0;}.content{padding:16px;}.row{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner"><div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-tag">Partner Portal</div></div></div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
+        <a class="nav-item" id="navAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency Home</a>
+        <a class="nav-item active" href="#"><span class="material-icons">settings</span> Agency Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+    <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;">PayProTec Partner Portal v1.0</div>
+</div>
+
+<div class="main">
+    <div class="topbar">
+        <a href="/partner/agency" id="backAgency" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Agency Home</a>
+        <div style="font-size:1.1rem;font-weight:800;">Agency Settings</div>
+    </div>
+    <div class="content" id="content"><div class="muted" style="padding:30px;">Loading…</div></div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+function ppClearPartner(){ ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){localStorage.removeItem(k);}); }
+const portalId = new URLSearchParams(location.search).get('portal') || localStorage.getItem('pp_active_portal') || '';
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function initials(n){ return (String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
+function api(b){ return fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token,portal_id:portalId},b))}).then(r=>r.json()); }
+
+var DATA=null, DOMAIN=null, CNAME='', CFREADY=false;
+
+async function load(){
+    if(!portalId){ document.getElementById('content').innerHTML='<div class="card"><div class="muted">No agency selected. Go to <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</div></div>'; return; }
+    var r = await api({action:'get_agency_branding'});
+    if(!r||!r.success){ if(r&&/session/i.test(r.message||'')){ppClearPartner();location.href='/partner';return;} document.getElementById('content').innerHTML='<div class="card"><div class="muted">'+esc((r&&r.message)||'Could not load.')+'</div></div>'; return; }
+    DATA=r;
+    // domain details (cname target, verification) via my_domain (owner-scoped)
+    try{ var d=await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'my_domain',token:token})}).then(x=>x.json()); if(d&&d.success){ DOMAIN=d.domain; CNAME=d.cname_target||''; CFREADY=!!d.cloudflare_ready; } }catch(e){}
+    if(r.domain && !DOMAIN) DOMAIN=r.domain;
+    render();
+}
+
+function render(){
+    var b=DATA.branding||{}; var cm=DATA.can_manage;
+    document.getElementById('sidebarName').textContent = DATA.agency_name || DATA.relationship_id || 'Agency';
+    document.getElementById('sidebarAvatar').textContent = initials(DATA.agency_name||'A');
+    var ag = '/partner/agency?portal='+encodeURIComponent(portalId);
+    document.getElementById('navAgency').href=ag; document.getElementById('backAgency').href=ag;
+
+    var brandingCard =
+      '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">palette</span> Branding</div>'
+      +'<div class="card-sub">How your white-label portal looks on your own domain.</div>'
+      +'<label>Agency / brand name</label><input id="fName" type="text" value="'+esc(DATA.agency_name||'')+'" placeholder="e.g. Devvly Payments" '+(cm?'':'disabled')+'>'
+      +'<label>Logo URL</label>'
+      +'<img id="logoPrev" class="logo-prev" src="'+esc(b.logo_url||'')+'" onload="this.style.display=\'block\'" onerror="this.style.display=\'none\'">'
+      +'<input id="fLogo" type="url" value="'+esc(b.logo_url||'')+'" placeholder="https://…/logo.png" oninput="var p=document.getElementById(\'logoPrev\');p.src=this.value;" '+(cm?'':'disabled')+'>'
+      +'<label>Favicon URL</label><input id="fFav" type="url" value="'+esc(b.favicon_url||'')+'" placeholder="https://…/favicon.png" '+(cm?'':'disabled')+'>'
+      +'<div class="row">'
+      +'<div><label>Primary color</label><div class="color-row"><input type="color" value="'+esc(b.color_primary||'#0d9488')+'" oninput="document.getElementById(\'fPrimary\').value=this.value" '+(cm?'':'disabled')+'><input id="fPrimary" type="text" value="'+esc(b.color_primary||'')+'" placeholder="#0d9488" '+(cm?'':'disabled')+'></div></div>'
+      +'<div><label>Dark / sidebar color</label><div class="color-row"><input type="color" value="'+esc(b.color_dark||'#001e3c')+'" oninput="document.getElementById(\'fDark\').value=this.value" '+(cm?'':'disabled')+'><input id="fDark" type="text" value="'+esc(b.color_dark||'')+'" placeholder="#001e3c" '+(cm?'':'disabled')+'></div></div>'
+      +'</div>'
+      +'<div class="row">'
+      +'<div><label>Accent color (optional)</label><div class="color-row"><input type="color" value="'+esc(b.color_accent||'#0f766e')+'" oninput="document.getElementById(\'fAccent\').value=this.value" '+(cm?'':'disabled')+'><input id="fAccent" type="text" value="'+esc(b.color_accent||'')+'" placeholder="#0f766e" '+(cm?'':'disabled')+'></div></div>'
+      +'<div><label>Support email (optional)</label><input id="fSupport" type="email" value="'+esc(b.support_email||'')+'" placeholder="help@yourbrand.com" '+(cm?'':'disabled')+'></div>'
+      +'</div>'
+      +(cm?'<button class="btn btn-teal" onclick="saveBranding(this)"><span class="material-icons" style="font-size:16px;">save</span> Save branding</button> <span class="muted" style="margin-left:8px;">Applies to your custom domain.</span>':'<div class="muted">Only owners and admins can edit branding.</div>')
+      +'</div>';
+
+    document.getElementById('content').innerHTML =
+      '<div class="crumb"><a href="/partner/home">Home</a> › <a href="'+ag+'">Agency</a> › Settings <span class="rel" style="margin-left:6px;">'+esc(DATA.relationship_id||'')+'</span></div>'
+      + brandingCard
+      + domainCard();
+}
+
+function domainCard(){
+    var cm=DATA.can_manage;
+    var inner;
+    if(!CFREADY){
+        inner='<div class="banner" style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;">Custom domains aren’t enabled yet on the platform. Contact support to turn on white-label domains.</div>';
+    } else if(!DOMAIN){
+        inner='<label>Connect your domain</label><div style="display:flex;gap:8px;flex-wrap:wrap;"><input id="fHost" type="text" placeholder="app.yourbrand.com" style="flex:1;min-width:200px;margin-bottom:0;" '+(cm?'':'disabled')+'>'
+          +(cm?'<button class="btn btn-teal" onclick="addDomain(this)"><span class="material-icons" style="font-size:16px;">add_link</span> Connect</button>':'')+'</div>'
+          +'<div class="muted" style="margin-top:8px;">Use a subdomain you control (e.g. <code>app.</code>). One DNS record; SSL is automatic.</div>';
+    } else {
+        var st=DOMAIN.ssl_status||DOMAIN.status;
+        var label = st==='active'?['Live','#059669','#22c55e']:(st==='ssl_pending'?['Issuing SSL…','#b45309','#f59e0b']:['Waiting for DNS','#b45309','#f59e0b']);
+        var v=DOMAIN.verification||{}; var dcv=[];
+        (v.dcv||[]).forEach(function(x){ if(x.txt_name&&x.txt_value) dcv.push('TXT · '+esc(x.txt_name)+' → '+esc(x.txt_value)); });
+        if(v.ownership&&v.ownership.name) dcv.push('TXT · '+esc(v.ownership.name)+' → '+esc(v.ownership.value));
+        inner='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'
+          +'<div><div style="font-weight:800;font-size:15px;">'+esc(DOMAIN.host)+'</div><div class="status" style="color:'+label[1]+';margin-top:3px;"><span class="dot" style="background:'+label[2]+';"></span>'+label[0]+'</div></div>'
+          +(cm?'<div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="refreshDomain(this)"><span class="material-icons" style="font-size:16px;">refresh</span> Check status</button><button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="removeDomain()">Remove</button></div>':'')+'</div>';
+        if(st!=='active'){
+            inner+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;"><div style="font-size:12px;font-weight:800;margin-bottom:8px;">Add this DNS record at your domain provider</div>'
+              +'<div style="overflow-x:auto;"><table class="dns"><thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>CNAME</td><td>'+esc(DOMAIN.host)+'</td><td>'+esc(CNAME||'(from support)')+'</td></tr></tbody></table></div>'
+              +(dcv.length?'<div class="muted" style="margin-top:10px;"><b>Also add for SSL:</b><br>'+dcv.join('<br>')+'</div>':'')+'</div>';
+        }
+    }
+    return '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">public</span> Custom Domain</div>'
+      +'<div class="card-sub">Run the portal on your own branded URL.</div>'+inner+'</div>';
+}
+
+window.saveBranding = async function(btn){
+    btn.disabled=true;
+    var branding={ logo_url:val('fLogo'), favicon_url:val('fFav'), color_primary:val('fPrimary'), color_dark:val('fDark'), color_accent:val('fAccent'), support_email:val('fSupport') };
+    var r=await api({action:'save_agency_branding', agency_name:val('fName'), branding:branding});
+    btn.disabled=false;
+    if(r&&r.success){ Swal.fire({icon:'success',title:'Saved',timer:1000,showConfirmButton:false}); }
+    else Swal.fire('Error',(r&&r.message)||'Could not save.','error');
+};
+function val(id){ var e=document.getElementById(id); return e?e.value:''; }
+window.addDomain = async function(btn){
+    var host=(val('fHost')||'').trim(); if(!host) return; btn.disabled=true;
+    var r=await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_domain',token:token,host:host})}).then(x=>x.json());
+    btn.disabled=false;
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not connect.','error'); return; }
+    DOMAIN={host:r.host,ssl_status:r.status,verification:r.verification}; CNAME=r.cname_target||CNAME; render();
+    Swal.fire({icon:'success',title:'Domain connected',text:'Add the DNS record shown, then Check status.',timer:2200,showConfirmButton:false});
+};
+window.refreshDomain = async function(btn){
+    btn.disabled=true;
+    var r=await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'refresh_domain',token:token})}).then(x=>x.json());
+    btn.disabled=false;
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Error.','error'); return; }
+    DOMAIN={host:r.host,ssl_status:r.status,verification:r.verification}; render();
+    if(r.status==='active') Swal.fire({icon:'success',title:'Your domain is live! 🎉',timer:1800,showConfirmButton:false});
+};
+window.removeDomain = async function(){
+    var c=await Swal.fire({icon:'warning',title:'Remove domain?',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'remove_domain',token:token})}).then(x=>x.json());
+    DOMAIN=null; render();
+};
+function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ ppClearPartner(); location.href='/partner'; }); }
+load();
+</script>
+<script src="/js/partner-nav.js"></script>
+</body>
+</html>
