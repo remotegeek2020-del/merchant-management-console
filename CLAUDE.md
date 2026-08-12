@@ -181,3 +181,104 @@ shows "Add ShipStation API keys to load stores". Selected store stored as `ships
 - New endpoint: `api/shipstation-webhook.js`
 - Verifies shared secret from query param or header
 - Matches `ss_order_id` → updates `shipstation_shipments` status
+
+---
+
+## Planned Feature: White-Label Partner CRM (multi-tenant) — DESIGN LOCKED, BUILD LATER
+
+**Status**: Tenancy foundation partially BUILT (Phase 2 commits on `claude/hey-hey-hey-hey-YuBH9`).
+Multi-agency switcher + home hub + CRM layer = designed & agreed, NOT yet built.
+Paused 2026-08-12 at user's request ("save to core memory, do it later").
+
+### The big vision (user-stated)
+Turn PayProTec **partner access → a white-label CRM** (opportunities/pipeline + core CRM
+objects). Lean & opinionated — "like HighLevel but direct to the point." Eliminate excess/
+unusable features. The tenancy model below IS the CRM's account model (not bolted on).
+
+### Core concept: memberships + roles + scope
+Everything (owners, co-owners, admins, sub-partners) is ONE primitive: a **person has
+memberships in agencies; each membership has a role; role + owner/admin-set scope decides
+what they see & do.**
+
+**Role ladder inside an agency:**
+| Role | Owns? | Access | Limits set by |
+| owner (primary/anchor) | yes | everything incl. domain/billing/team | — |
+| co-owner | yes (stake) | operate-only DEFAULT; primary can grant `full_access` per-membership | primary owner |
+| admin | no | full CRM admin, no ownership | owner |
+| sub-partner | no | scoped slice only (their own book within the agency) | owner + admins |
+
+### Key entities
+- **Agency** = the white-label tenant (one brand, one domain, one Relationship ID `REL-#####`),
+  owned by owner(s). **An agency can CONTAIN multiple companies** (Michelle: 1 white-label
+  covering all 4 of her companies — NOT one white-label per company).
+- **Company** = a business inside an agency. A person owns/accesses companies via memberships.
+- A person can belong to MULTIPLE agencies (own one + co-own/sub-partner in others).
+
+### Two DISTINCT switchers (different levels)
+1. **Internal company switcher** — between companies INSIDE one agency (Michelle's case:
+   4 companies, 1 white-label, switch internally). No agency switcher for her (1 agency only).
+2. **Agency switcher (SSO)** — between SEPARATE agencies a person belongs to (Dave's case:
+   his own Switch Two Save + Kevin's Care Payments where he's co-owner). Different owners.
+They stack: Dave's own agency could hold many companies (internal switcher) AND he can hop to
+Kevin's agency (agency switcher).
+
+### SSO (user requirement)
+ONE login / ONE password per person. On login resolve ALL memberships. Domains are just entry
+doors — same login works on any; switcher flips context with NO re-login.
+
+### Home page / launchpad (agreed)
+A hub shown after login: the person's profile + EVERYTHING they're associated with — their own
+agency (owner) with its companies, plus agencies they can access (co-owner/admin/sub-partner).
+Sits ABOVE both switchers; from here they enter one. Essential for multi-company/multi-agency
+people, harmless for single ones.
+
+### Worked examples (the canonical test cases)
+- **Kevin Lashley** — owns Care Payments Group (REL-100003, anchored to Kevin person id
+  `7def23ef-c528-4694-843d-96395d623e36`). Simple: 1 agency, no switcher.
+- **Dave Orologio** (`dabd87a7-2b60-41de-9732-7525a5673217`) — co-owner of Care Payments
+  (access, Kevin owns it) AND owns his own Switch Two Save. Gets the AGENCY switcher. Powers
+  differ per agency by role. THE canonical multi-agency SSO example.
+- **Michelle Malone** (`949d4970-4c24-4176-9560-0ae0543f7a2a`, REL-100001) — 4 companies, ONE
+  white-label covering all → INTERNAL company switcher only. NOT the Dave/Kevin case.
+- **Michelle as sub-partner in Kevin's agency** (hypothetical) — owner of her own agency AND a
+  scoped sub-partner in Kevin's; home page lists both; entering Kevin's shows only her granted
+  slice; can't touch his settings/other data.
+
+### OPEN decisions (confirmed intent, not yet finalized)
+1. Co-owner power: **per-owner choice** — default operate-only, primary owner can flip a
+   per-membership `full_access` boolean to promote a specific co-owner. (Schema TODO: add
+   `full_access` bool to partner_portal_members.)
+2. Sub-partner default scope: (asked, unanswered) — only their own merchants/book vs nothing-
+   until-granted. Who grants: owner + admins.
+3. Non-white-labeled companies in switcher: (asked, unanswered).
+4. CRM object list ("direct to the point"): opportunities/pipeline (big new piece), contacts
+   (unify leads/merchants), tasks/activities/notes (partly exist), lean per-agency dashboard.
+   Deliberately OMIT HighLevel bloat (funnels, sites, memberships, phone). Not yet finalized.
+
+### IMPORTANT model correction (supersedes earlier build)
+Current code keys the agency to a PERSON (partner_portals.owner_person_id, one per person) and
+shows ONE agency per person. The agreed model is: agency = white-label TENANT holding multiple
+COMPANIES; ownership/memberships attach at the right level; a person spans multiple agencies.
+The multi-agency array (`get_my_agencies`) + switchers + home hub are NOT built yet.
+
+### What IS already built (Phase 2 tenancy foundation, on branch + main)
+- DB: `partner_portals` (owner_person_id anchor, relationship_id REL-#####, agency_name,
+  agency_enabled, plan, status), `next_relationship_id()`, `partner_portal_members`
+  (portal_id, person_id, role owner|admin, is_primary, ownership_percent), portal_brands +
+  portal_id/cf_hostname_id/verification/added_by_partner cols.
+- `api/whitelabel.js`: partner custom-domain self-serve via Cloudflare for SaaS
+  (add/refresh/remove domain, my_domain); admin cf_config get/set (env-first then encrypted
+  app_config: CF_API_TOKEN/CF_ZONE_ID/CF_CNAME_TARGET), set/get_agency_access, list_portals,
+  members (get/add/set_role/set_primary/remove/set_ownership_percent), search_people.
+  `findPortalForPerson()` resolves the SHARED agency by membership (mutual co-ownership works —
+  Dave sees Kevin's agency). USER STILL NEEDS TO PASTE Cloudflare creds in Secret Dungeon.
+- `partner/settings.html`: "Your White-Label CRM" section (relationship id, agency name,
+  connect domain + DNS/CNAME + live SSL status); hidden unless agency access granted.
+- `partners-dashboard.html`: partner modal → "Grant Agency Access" toggle + "Company Ownership
+  & Team" panel (owners/admins, %, primary ★, add via server search). Always visible.
+- `secret-dungeon.html`: White-Label tab (Cloudflare config + agency portals overview w/ owners+%).
+
+### RESUME HERE (next session, when user is ready)
+Finalize open decisions #2-4, add `full_access` col, build `get_my_agencies` (array), the home
+hub, the two switchers, then the lean CRM layer (opportunities/pipeline first). Build tenancy
+CRM-READY (roles/scoping designed for opportunities/contacts/tasks, not just domains).
