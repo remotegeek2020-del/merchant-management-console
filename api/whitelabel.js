@@ -50,7 +50,9 @@ async function cfFetch(cf, path, opts = {}) {
 async function cfCreateHostname(cf, host) {
     const body = {
         hostname: host,
-        ssl: { method: 'http', type: 'dv', settings: { min_tls_version: '1.2' } }
+        // TXT DCV: the certificate validates via a DNS TXT record, so it does NOT require
+        // the origin to be reachable first (HTTP DCV does). More reliable for onboarding.
+        ssl: { method: 'txt', type: 'dv', settings: { min_tls_version: '1.2' } }
     };
     const r = await cfFetch(cf, `/zones/${cf.zone}/custom_hostnames`, { method: 'POST', body: JSON.stringify(body) });
     return r;
