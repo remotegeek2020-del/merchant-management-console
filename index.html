@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+    // White-label domains are partner-only: send their root to the partner login instead
+    // of the staff portal. Canonical PayProTec hosts keep the staff login.
+    (function () {
+        var h = location.hostname;
+        var CANON = ['portal.mypayprotec.com', 'app.mypayprotec.com', 'localhost', '127.0.0.1'];
+        var p = location.pathname;
+        if (CANON.indexOf(h) === -1 && (p === '/' || p === '/index.html')) {
+            location.replace('/partner' + location.search);
+        }
+    })();
+    </script>
     <link rel="icon" href="/api/favicon" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
