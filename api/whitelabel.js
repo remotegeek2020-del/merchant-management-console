@@ -294,7 +294,10 @@ export default async function handler(req, res) {
 
     try {
         // ─────────────────────── PARTNER (token) surface ───────────────────────
-        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account', 'get_agency_overview'].includes(action)) {
+        if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account', 'get_agency_overview',
+             'list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
+             'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke',
+             'get_agency_branding', 'save_agency_branding'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
             const cf = await getCfConfig();
