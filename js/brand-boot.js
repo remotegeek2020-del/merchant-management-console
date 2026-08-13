@@ -8,6 +8,8 @@
 // Canonical PayProTec hosts are left completely untouched (default look).
 (function () {
     try {
+        // The PayProTec Portal world opts out of brand theming entirely.
+        if (document.documentElement.getAttribute('data-pp-world') === 'portal') return;
         var CANON = ['portal.mypayprotec.com', 'app.mypayprotec.com', 'localhost', '127.0.0.1'];
         var host = location.hostname;
         if (CANON.indexOf(host) !== -1) return; // canonical → always PayProTec, no changes

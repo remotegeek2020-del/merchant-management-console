@@ -10,6 +10,11 @@
 //     on top via window.applyCompanyBrand(sub) — used by the company switcher.
 (function () {
     if (!/^\/partner(\/|$)/.test(window.location.pathname)) return; // portal only, not /partners-dashboard
+    // The "PayProTec Portal" world (dashboard, merchants, residuals, …) stays
+    // PayProTec-branded even on a white-label domain — only the Agency + CRM
+    // worlds carry the partner's brand. Those PayProTec-world pages tag
+    // <html data-pp-world="portal"> to opt out of theming.
+    if (document.documentElement.getAttribute('data-pp-world') === 'portal') return;
 
     function qp(name) {
         try { return new URLSearchParams(window.location.search).get(name); } catch (e) { return null; }

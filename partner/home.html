@@ -3,6 +3,7 @@
 <head>
     <script src="/js/pp-session.js?v=20260812b"></script>
     <script src="/js/brand-boot.js?v=20260812b"></script>
+    <script src="/js/world-transition.js?v=20260812b"></script>
     <link rel="icon" href="/api/favicon" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -147,17 +148,19 @@ function domainStatus(a){
 // Entering an agency (optionally a specific sub-account) stores the active context for
 // the CRM (switcher-ready), then lands on the dashboard. Per-context scoping lands with
 // the CRM layer.
+function ppGo(url){ (window.ppWorldGo || function(u){ window.location.href = u; })(url); }
 window.enterAgency = function(portalId, subId){
     localStorage.setItem('pp_active_portal', portalId || '');
     localStorage.setItem('pp_active_sub_account', subId || '');
-    // A specific sub-account opens its CRM workspace; "open agency" (no sub) → Agency Home.
-    window.location.href = subId ? ('/partner/sub-account?sub=' + encodeURIComponent(subId)) : ('/partner/agency?portal=' + encodeURIComponent(portalId));
+    // A specific sub-account opens its CRM workspace (a different world → flash);
+    // "open agency" (no sub) stays in the agency world.
+    ppGo(subId ? ('/partner/sub-account?sub=' + encodeURIComponent(subId)) : ('/partner/agency?portal=' + encodeURIComponent(portalId)));
 };
 window.enterCompany = function(companyId){
     localStorage.setItem('pp_active_portal', '');
     localStorage.setItem('pp_active_sub_account', '');
     localStorage.setItem('pp_active_company', companyId || '');
-    window.location.href = '/partner/dashboard';
+    ppGo('/partner/dashboard');
 };
 
 // LEVEL 2 — the AGENCY (branded office). A container that "caters" the CRMs:
@@ -278,7 +281,7 @@ async function loadHub(){
       +'<div class="card-top"><div class="card-title">PayProTec Portal</div></div>'
       +'<div class="muted-note" style="margin:6px 0 2px;">Your standard partner account — merchants, residuals, POS leads.</div>'
       +'<div class="card-foot"><span class="status" style="color:#64748b;"><span class="dot" style="background:#334155;"></span>Standard access</span>'
-      +'<button class="btn btn-teal" onclick="window.location.href=\'/partner/dashboard\'">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div></div>';
+      +'<button class="btn btn-teal" onclick="ppGo(\'/partner/dashboard\')">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div></div>';
 
     // Three levels: Partner Portal (standalone) · Agency (container) · CRMs (nested inside).
     var html = '<div class="section-label"><span class="material-icons" style="font-size:15px;">grid_view</span> Choose where to work</div>'
