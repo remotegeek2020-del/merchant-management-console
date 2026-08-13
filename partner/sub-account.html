@@ -243,7 +243,16 @@ async function load(){
         var nba = document.getElementById('navBackAgency'); if (nba) nba.href = agUrl;
         var bta = document.getElementById('backToAgency'); if (bta) bta.href = agUrl;
     }
+    // Hide left-menu sections this member isn't permitted to see (owners/agency
+    // admins get {} → everything; others hide any area explicitly set false).
+    var perms = r.my_permissions || {};
+    var AREA_OF = { contacts:'contacts', opportunities:'opportunities', conversations:'conversations', calendars:'calendars', forms:'forms', reporting:'reporting', settings:'crm_settings' };
+    document.querySelectorAll('.nav-item[data-section]').forEach(function(a){
+        var area = AREA_OF[a.getAttribute('data-section')];
+        if (area && perms[area] === false) a.style.display = 'none';
+    });
     var initial = new URLSearchParams(location.search).get('section') || 'contacts';
+    if (AREA_OF[initial] && perms[AREA_OF[initial]] === false) initial = 'dashboard';
     showSection(initial);
 }
 

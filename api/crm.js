@@ -58,10 +58,10 @@ export default async function handler(req, res) {
         if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
 
         // Authorize by a contact row's own sub_account_id (for id-based mutations).
-        async function contactAccess(contactId) {
+        async function contactAccess(contactId, area) {
             const { data: c } = await supabase.from('crm_contacts').select('*').eq('id', contactId).maybeSingle();
             if (!c) return null;
-            const acc = await subAccess(personId, c.sub_account_id);
+            const acc = await subAccess(personId, c.sub_account_id, area);
             if (!acc) return null;
             return { contact: c, portal_id: acc.portal_id };
         }
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'create_contact') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const f = body.contact || {};
             const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, created_by: personId };
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'update_contact') {
-            const ca = await contactAccess(body.id);
+            const ca = await contactAccess(body.id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const f = body.contact || {};
             const patch = {};
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'delete_contact') {
-            const ca = await contactAccess(body.id);
+            const ca = await contactAccess(body.id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             await supabase.from('crm_contacts').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
@@ -147,7 +147,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'set_contact_tags') {
-            const ca = await contactAccess(body.contact_id);
+            const ca = await contactAccess(body.contact_id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const applied = await applyTags(body.contact_id, ca.contact.sub_account_id, body.tag_ids || []);
             return res.status(200).json({ success: true, tag_ids: applied });
@@ -155,7 +155,7 @@ export default async function handler(req, res) {
 
         // ── CONTACT RECORD (detail + notes + tasks) ──────────────────────────
         if (action === 'get_contact') {
-            const ca = await contactAccess(body.id);
+            const ca = await contactAccess(body.id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const cid = body.id;
             const [tagsRes, oppsRes, notesRes, tasksRes, msgsRes, apptsRes] = await Promise.all([
@@ -171,7 +171,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'add_note') {
-            const ca = await contactAccess(body.contact_id);
+            const ca = await contactAccess(body.contact_id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const bodyText = (body.body || '').trim();
             if (!bodyText) return res.status(400).json({ success: false, message: 'Note is empty.' });
@@ -182,14 +182,14 @@ export default async function handler(req, res) {
         if (action === 'delete_note') {
             const { data: n } = await supabase.from('crm_notes').select('contact_id').eq('id', body.id).maybeSingle();
             if (!n) return res.status(404).json({ success: false, message: 'Note not found.' });
-            const ca = await contactAccess(n.contact_id);
+            const ca = await contactAccess(n.contact_id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_notes').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
         }
 
         if (action === 'add_task') {
-            const ca = await contactAccess(body.contact_id);
+            const ca = await contactAccess(body.contact_id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const title = (body.title || '').trim();
             if (!title) return res.status(400).json({ success: false, message: 'Task title required.' });
@@ -200,7 +200,7 @@ export default async function handler(req, res) {
         if (action === 'update_task') {
             const { data: t } = await supabase.from('crm_tasks').select('*').eq('id', body.id).maybeSingle();
             if (!t) return res.status(404).json({ success: false, message: 'Task not found.' });
-            const acc = await subAccess(personId, t.sub_account_id);
+            const acc = await subAccess(personId, t.sub_account_id, 'contacts');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             const patch = {};
             if ('title' in body && (body.title || '').trim()) patch.title = body.title.trim();
@@ -213,17 +213,17 @@ export default async function handler(req, res) {
         if (action === 'delete_task') {
             const { data: t } = await supabase.from('crm_tasks').select('sub_account_id').eq('id', body.id).maybeSingle();
             if (!t) return res.status(404).json({ success: false, message: 'Task not found.' });
-            const acc = await subAccess(personId, t.sub_account_id);
+            const acc = await subAccess(personId, t.sub_account_id, 'contacts');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_tasks').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
         }
 
         // ── OPPORTUNITIES / PIPELINE ─────────────────────────────────────────
-        async function oppAccess(oppId) {
+        async function oppAccess(oppId, area) {
             const { data: o } = await supabase.from('crm_opportunities').select('*').eq('id', oppId).maybeSingle();
             if (!o) return null;
-            const acc = await subAccess(personId, o.sub_account_id);
+            const acc = await subAccess(personId, o.sub_account_id, area);
             if (!acc) return null;
             return { opp: o, portal_id: acc.portal_id };
         }
@@ -256,7 +256,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'create_opportunity') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const o = body.opp || {};
             const title = (o.title || '').trim();
@@ -279,7 +279,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'update_opportunity') {
-            const oa = await oppAccess(body.id);
+            const oa = await oppAccess(body.id, 'opportunities');
             if (!oa) return res.status(403).json({ success: false, message: 'No access to this deal.' });
             const o = body.opp || {};
             const patch = {};
@@ -297,7 +297,7 @@ export default async function handler(req, res) {
 
         // Drag a deal to another stage; status follows the stage's won/lost flag.
         if (action === 'move_opportunity') {
-            const oa = await oppAccess(body.id);
+            const oa = await oppAccess(body.id, 'opportunities');
             if (!oa) return res.status(403).json({ success: false, message: 'No access to this deal.' });
             const { data: stage } = await supabase.from('crm_pipeline_stages').select('*').eq('id', body.stage_id).maybeSingle();
             if (!stage || stage.sub_account_id !== oa.opp.sub_account_id) return res.status(400).json({ success: false, message: 'Invalid stage.' });
@@ -310,7 +310,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'delete_opportunity') {
-            const oa = await oppAccess(body.id);
+            const oa = await oppAccess(body.id, 'opportunities');
             if (!oa) return res.status(403).json({ success: false, message: 'No access to this deal.' });
             await supabase.from('crm_opportunities').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
@@ -350,7 +350,7 @@ export default async function handler(req, res) {
         if (action === 'update_custom_field') {
             const { data: fld } = await supabase.from('crm_custom_fields').select('*').eq('id', body.id).maybeSingle();
             if (!fld) return res.status(404).json({ success: false, message: 'Field not found.' });
-            const acc = await subAccess(personId, fld.sub_account_id);
+            const acc = await subAccess(personId, fld.sub_account_id, 'crm_settings');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             const f = body.field || {};
             const patch = {};
@@ -367,7 +367,7 @@ export default async function handler(req, res) {
         if (action === 'delete_custom_field') {
             const { data: fld } = await supabase.from('crm_custom_fields').select('*').eq('id', body.id).maybeSingle();
             if (!fld) return res.status(404).json({ success: false, message: 'Field not found.' });
-            const acc = await subAccess(personId, fld.sub_account_id);
+            const acc = await subAccess(personId, fld.sub_account_id, 'crm_settings');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_custom_fields').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
@@ -377,7 +377,7 @@ export default async function handler(req, res) {
         if (action === 'update_tag') {
             const { data: tag } = await supabase.from('crm_tags').select('*').eq('id', body.id).maybeSingle();
             if (!tag) return res.status(404).json({ success: false, message: 'Tag not found.' });
-            const acc = await subAccess(personId, tag.sub_account_id);
+            const acc = await subAccess(personId, tag.sub_account_id, 'crm_settings');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             const patch = {};
             if ('name' in body && (body.name || '').trim()) patch.name = body.name.trim();
@@ -390,7 +390,7 @@ export default async function handler(req, res) {
         if (action === 'delete_tag') {
             const { data: tag } = await supabase.from('crm_tags').select('*').eq('id', body.id).maybeSingle();
             if (!tag) return res.status(404).json({ success: false, message: 'Tag not found.' });
-            const acc = await subAccess(personId, tag.sub_account_id);
+            const acc = await subAccess(personId, tag.sub_account_id, 'crm_settings');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_tags').delete().eq('id', body.id); // contact links cascade
             return res.status(200).json({ success: true });
@@ -398,7 +398,7 @@ export default async function handler(req, res) {
 
         // ── CONVERSATIONS (per-contact message/activity log) ─────────────────
         if (action === 'add_message') {
-            const ca = await contactAccess(body.contact_id);
+            const ca = await contactAccess(body.contact_id, 'conversations');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const text = (body.body || '').trim();
             if (!text) return res.status(400).json({ success: false, message: 'Message is empty.' });
@@ -411,7 +411,7 @@ export default async function handler(req, res) {
         if (action === 'delete_message') {
             const { data: m } = await supabase.from('crm_messages').select('contact_id').eq('id', body.id).maybeSingle();
             if (!m) return res.status(404).json({ success: false, message: 'Not found.' });
-            const ca = await contactAccess(m.contact_id);
+            const ca = await contactAccess(m.contact_id, 'conversations');
             if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_messages').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
@@ -442,7 +442,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, appointments: list.map(a => ({ ...a, contact: a.contact_id ? (cmap[a.contact_id] || null) : null })) });
         }
         if (action === 'create_appointment') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'calendars');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const a = body.appt || {};
             const title = (a.title || '').trim();
@@ -456,7 +456,7 @@ export default async function handler(req, res) {
         if (action === 'update_appointment') {
             const { data: ap } = await supabase.from('crm_appointments').select('*').eq('id', body.id).maybeSingle();
             if (!ap) return res.status(404).json({ success: false, message: 'Not found.' });
-            const acc = await subAccess(personId, ap.sub_account_id);
+            const acc = await subAccess(personId, ap.sub_account_id, 'calendars');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             const a = body.appt || {};
             const patch = {};
@@ -468,7 +468,7 @@ export default async function handler(req, res) {
         if (action === 'delete_appointment') {
             const { data: ap } = await supabase.from('crm_appointments').select('sub_account_id').eq('id', body.id).maybeSingle();
             if (!ap) return res.status(404).json({ success: false, message: 'Not found.' });
-            const acc = await subAccess(personId, ap.sub_account_id);
+            const acc = await subAccess(personId, ap.sub_account_id, 'calendars');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_appointments').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
@@ -515,7 +515,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, forms: data || [] });
         }
         if (action === 'create_form') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'forms');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const f = body.form || {};
             const name = (f.name || '').trim();
@@ -528,7 +528,7 @@ export default async function handler(req, res) {
         if (action === 'update_form') {
             const { data: form } = await supabase.from('crm_forms').select('*').eq('id', body.id).maybeSingle();
             if (!form) return res.status(404).json({ success: false, message: 'Form not found.' });
-            const acc = await subAccess(personId, form.sub_account_id);
+            const acc = await subAccess(personId, form.sub_account_id, 'forms');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             const f = body.form || {};
             const patch = {};
@@ -543,7 +543,7 @@ export default async function handler(req, res) {
         if (action === 'delete_form') {
             const { data: form } = await supabase.from('crm_forms').select('sub_account_id').eq('id', body.id).maybeSingle();
             if (!form) return res.status(404).json({ success: false, message: 'Form not found.' });
-            const acc = await subAccess(personId, form.sub_account_id);
+            const acc = await subAccess(personId, form.sub_account_id, 'forms');
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_forms').delete().eq('id', body.id);
             return res.status(200).json({ success: true });

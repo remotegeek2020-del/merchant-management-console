@@ -425,6 +425,7 @@ export default async function handler(req, res) {
                     sub_account: { id: sub.id, name: sub.name, type: sub.company_id ? 'company' : 'client', company_id: sub.company_id, company_name: companyName },
                     agency: portal ? { portal_id: portal.id, relationship_id: portal.relationship_id, agency_name: portal.agency_name } : null,
                     my_role: god ? 'god' : mem.role,
+                    my_permissions: (god || mem.role === 'owner') ? {} : (mem.permissions || {}),
                     objects: {
                         merchants,
                         partner_ids: { count: partnerIds.length, sample: partnerIds },
