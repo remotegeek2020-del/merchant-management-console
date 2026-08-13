@@ -35,6 +35,7 @@
         .nav-item.active { background:var(--teal); color:white; }
         .nav-item .material-icons { font-size:20px; }
         .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+        .nav-group-label { font-size:9px; font-weight:800; color:rgba(255,255,255,0.38); text-transform:uppercase; letter-spacing:0.7px; margin:14px 12px 5px; }
         .main { margin-left:240px; min-height:100vh; }
         .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
         .content { padding:24px 28px; max-width:1150px; }
@@ -88,10 +89,21 @@
         </div>
     </div>
     <nav class="sidebar-nav">
-        <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency</a>
-        <a class="nav-item active" href="#"><span class="material-icons">hub</span> CRM Workspace</a>
-        <a class="nav-item" id="navSubSettings" href="/partner/sub-account-settings"><span class="material-icons">settings</span> CRM Settings</a>
+        <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">arrow_back</span> Agency</a>
+        <div class="nav-group-label">CRM</div>
+        <a class="nav-item" data-section="dashboard" onclick="showSection('dashboard')"><span class="material-icons">dashboard</span> Dashboard</a>
+        <a class="nav-item" data-section="contacts" onclick="showSection('contacts')"><span class="material-icons">contacts</span> Contacts</a>
+        <a class="nav-item" data-section="opportunities" onclick="showSection('opportunities')"><span class="material-icons">trending_up</span> Opportunities</a>
+        <a class="nav-item" data-section="conversations" onclick="showSection('conversations')"><span class="material-icons">forum</span> Conversations</a>
+        <a class="nav-item" data-section="calendars" onclick="showSection('calendars')"><span class="material-icons">event</span> Calendars</a>
+        <a class="nav-item" data-section="automation" onclick="showSection('automation')"><span class="material-icons">bolt</span> Automation</a>
+        <a class="nav-item" data-section="reporting" onclick="showSection('reporting')"><span class="material-icons">insights</span> Reporting</a>
+        <div class="nav-group-label">Company Data</div>
+        <a class="nav-item" data-section="merchants" onclick="showSection('merchants')"><span class="material-icons">storefront</span> Merchants</a>
+        <a class="nav-item" data-section="partner_ids" onclick="showSection('partner_ids')"><span class="material-icons">badge</span> Partner IDs</a>
+        <a class="nav-item" data-section="sub_partners" onclick="showSection('sub_partners')"><span class="material-icons">account_tree</span> Sub-Partners</a>
         <div class="nav-divider"></div>
+        <a class="nav-item" data-section="settings" onclick="showSection('settings')"><span class="material-icons">settings</span> CRM Settings</a>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
     <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;" data-brand-replace>PayProTec Partner Portal v1.0</div>
@@ -100,11 +112,9 @@
 <div class="main">
     <div class="topbar">
         <a href="/partner/agency" id="backToAgency" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Agency</a>
-        <div style="font-size:1.1rem;font-weight:800;">CRM Workspace</div>
+        <div id="secTitle" style="font-size:1.1rem;font-weight:800;">CRM</div>
     </div>
-    <div class="content" id="content">
-        <div style="color:var(--muted);padding:40px;">Loading CRM…</div>
-    </div>
+    <div class="content"><div id="crmMain"><div style="color:var(--muted);padding:40px;">Loading CRM…</div></div></div>
 </div>
 
 <script>
@@ -158,46 +168,24 @@ function subPartnersPanel(){
     }).join('');
     return '<div class="panel"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-var PANELS = {
-    // ── CRM core (per-CRM) — built out later ──
-    opportunities: function(){ return emptyPanel('trending_up','Opportunities','Track deals through your pipeline stages for this CRM.', true); },
+var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', reporting:'Reporting', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
+var SECTIONS = {
+    dashboard: dashboardSection,
     contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
+    opportunities: function(){ return emptyPanel('trending_up','Opportunities','Track deals through your pipeline stages — a board of open, won and lost deals.', true); },
+    conversations: function(){ return emptyPanel('forum','Conversations','A unified inbox for two-way messaging with your contacts.', true); },
+    calendars: function(){ return emptyPanel('event','Calendars','Scheduling and appointment booking for this CRM.', true); },
     automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
-    forms: function(){ return emptyPanel('description','Forms','Capture leads and info with hosted forms for this CRM.', true); },
-    tags: function(){ return emptyPanel('sell','Tags','Organize and segment contacts and opportunities with tags.', true); },
-    // ── Portal / company data (retained) ──
+    reporting: function(){ return emptyPanel('insights','Reporting','Pipeline, activity and revenue analytics for this CRM.', true); },
     merchants: merchantsPanel,
     partner_ids: partnerIdsPanel,
-    sub_partners: subPartnersPanel
+    sub_partners: subPartnersPanel,
+    settings: function(){ return emptyPanel('settings','CRM Settings','Pipelines & stages, contact fields, automation rules, forms, tags and team visibility.', true); }
 };
-function showTab(key){
-    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.k===key); });
-    document.getElementById('panelWrap').innerHTML = PANELS[key]();
-}
-
-async function load(){
-    if (!subId){ document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">workspaces</span><h4>No CRM selected</h4><p>Pick one from <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</p></div>'; return; }
-    var r;
-    try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_sub_account',token:token,sub_account_id:subId})}).then(x=>x.json()); }
-    catch(e){ r=null; }
-    if (!r || !r.success){
-        if (r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
-        document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">error_outline</span><h4>Could not open CRM</h4><p>'+esc((r&&r.message)||'Please try again.')+'</p></div>';
-        return;
-    }
-    DATA = r;
-    localStorage.setItem('pp_active_sub_account', subId);
-    if (r.agency) {
-        localStorage.setItem('pp_active_portal', r.agency.portal_id);
-        var agUrl = '/partner/agency?portal=' + encodeURIComponent(r.agency.portal_id);
-        var nba = document.getElementById('navBackAgency'); if (nba) nba.href = agUrl;
-        var bta = document.getElementById('backToAgency'); if (bta) bta.href = agUrl;
-    }
-    var sa = r.sub_account, o = r.objects;
-    var agencyName = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'Agency';
-    document.getElementById('content').innerHTML =
-      '<div class="crumb"><a href="/partner/home">Home</a> › '+esc(agencyName)+'</div>'
-      +'<div class="sa-head"><div class="sa-icon"><span class="material-icons">'+(sa.type==='company'?'business':'person')+'</span></div>'
+function dashboardSection(){
+    if(!DATA) return '';
+    var sa=DATA.sub_account, o=DATA.objects;
+    return '<div class="sa-head"><div class="sa-icon"><span class="material-icons">'+(sa.type==='company'?'business':'person')+'</span></div>'
       +'<div><div class="sa-title">'+esc(sa.name)+'</div><span class="type-badge type-'+sa.type+'">'+(sa.type==='company'?'Company':'Client')+'</span></div></div>'
       +'<div class="kpi-grid">'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">storefront</span> Merchants</div><div class="kpi-value">'+o.merchants.count.toLocaleString()+'</div></div>'
@@ -205,22 +193,42 @@ async function load(){
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Partners</div><div class="kpi-value">'+o.sub_partners.count+'</div></div>'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">person_search</span> Leads</div><div class="kpi-value">'+o.leads.count+'</div></div>'
       +'</div>'
-      +'<div class="tab-group-label">CRM</div>'
-      +'<div class="tabs">'
-      +'<button class="tab" data-k="opportunities" onclick="showTab(\'opportunities\')"><span class="material-icons" style="font-size:16px;">trending_up</span> Opportunities</button>'
-      +'<button class="tab active" data-k="contacts" onclick="showTab(\'contacts\')"><span class="material-icons" style="font-size:16px;">contacts</span> Contacts</button>'
-      +'<button class="tab" data-k="automation" onclick="showTab(\'automation\')"><span class="material-icons" style="font-size:16px;">bolt</span> Automation</button>'
-      +'<button class="tab" data-k="forms" onclick="showTab(\'forms\')"><span class="material-icons" style="font-size:16px;">description</span> Forms</button>'
-      +'<button class="tab" data-k="tags" onclick="showTab(\'tags\')"><span class="material-icons" style="font-size:16px;">sell</span> Tags</button>'
-      +'</div>'
-      +'<div class="tab-group-label">Company Data</div>'
-      +'<div class="tabs">'
-      +'<button class="tab" data-k="merchants" onclick="showTab(\'merchants\')"><span class="material-icons" style="font-size:16px;">storefront</span> Merchants <span class="cnt">'+o.merchants.count.toLocaleString()+'</span></button>'
-      +'<button class="tab" data-k="partner_ids" onclick="showTab(\'partner_ids\')"><span class="material-icons" style="font-size:16px;">badge</span> Partner IDs <span class="cnt">'+o.partner_ids.count+'</span></button>'
-      +'<button class="tab" data-k="sub_partners" onclick="showTab(\'sub_partners\')"><span class="material-icons" style="font-size:16px;">account_tree</span> Sub-Partners <span class="cnt">'+o.sub_partners.count+'</span></button>'
-      +'</div><div id="panelWrap"></div>';
-    var nss = document.getElementById('navSubSettings'); if (nss) nss.href = '/partner/sub-account-settings?sub=' + encodeURIComponent(subId);
-    showTab('contacts');
+      +'<div class="panel"><div class="empty" style="padding:36px 24px;"><span class="material-icons">dashboard_customize</span><h4>Welcome to '+esc(sa.name)+'</h4><p>Use the left menu. Contacts is live; Opportunities, Conversations, Calendars, Automation and Reporting are on the way.</p></div></div>';
+}
+var ACTIVE_SECTION='';
+function showSection(key){
+    if(!SECTIONS[key]) key='dashboard';
+    ACTIVE_SECTION=key;
+    document.querySelectorAll('.nav-item[data-section]').forEach(function(a){ a.classList.toggle('active', a.getAttribute('data-section')===key); });
+    var st=document.getElementById('secTitle'); if(st) st.textContent=SECTION_TITLES[key]||'CRM';
+    var main=document.getElementById('crmMain'); if(main) main.innerHTML = SECTIONS[key]();
+    try{ history.replaceState(null,'', '/partner/sub-account?sub='+encodeURIComponent(subId)+'&section='+key); }catch(e){}
+}
+
+async function load(){
+    if (!subId){ document.getElementById('crmMain').innerHTML = '<div class="empty"><span class="material-icons">workspaces</span><h4>No CRM selected</h4><p>Pick one from <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</p></div>'; return; }
+    var r;
+    try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_sub_account',token:token,sub_account_id:subId})}).then(x=>x.json()); }
+    catch(e){ r=null; }
+    if (!r || !r.success){
+        if (r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+        document.getElementById('crmMain').innerHTML = '<div class="empty"><span class="material-icons">error_outline</span><h4>Could not open CRM</h4><p>'+esc((r&&r.message)||'Please try again.')+'</p></div>';
+        return;
+    }
+    DATA = r;
+    localStorage.setItem('pp_active_sub_account', subId);
+    var sa = r.sub_account;
+    document.getElementById('sidebarName').textContent = sa.name || 'CRM';
+    document.getElementById('sidebarAvatar').textContent = initials(sa.name || 'C');
+    var tagEl = document.querySelector('.sidebar-tag'); if (tagEl) tagEl.textContent = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'CRM';
+    if (r.agency) {
+        localStorage.setItem('pp_active_portal', r.agency.portal_id);
+        var agUrl = '/partner/agency?portal=' + encodeURIComponent(r.agency.portal_id);
+        var nba = document.getElementById('navBackAgency'); if (nba) nba.href = agUrl;
+        var bta = document.getElementById('backToAgency'); if (bta) bta.href = agUrl;
+    }
+    var initial = new URLSearchParams(location.search).get('section') || 'contacts';
+    showSection(initial);
 }
 
 function handleLogout(){
