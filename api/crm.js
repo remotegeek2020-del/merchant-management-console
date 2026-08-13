@@ -387,6 +387,48 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── FORMS (lead capture; public submit lives in api/crm-form.js) ─────
+        if (action === 'list_forms') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data } = await supabase.from('crm_forms').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: false });
+            return res.status(200).json({ success: true, forms: data || [] });
+        }
+        if (action === 'create_form') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const f = body.form || {};
+            const name = (f.name || '').trim();
+            if (!name) return res.status(400).json({ success: false, message: 'Form name required.' });
+            const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, name, fields: Array.isArray(f.fields) ? f.fields : [], submit_message: f.submit_message || undefined, redirect_url: f.redirect_url || null, created_by: personId };
+            const { data, error } = await supabase.from('crm_forms').insert(row).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not create form.' });
+            return res.status(200).json({ success: true, form: data });
+        }
+        if (action === 'update_form') {
+            const { data: form } = await supabase.from('crm_forms').select('*').eq('id', body.id).maybeSingle();
+            if (!form) return res.status(404).json({ success: false, message: 'Form not found.' });
+            const acc = await subAccess(personId, form.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const f = body.form || {};
+            const patch = {};
+            if ('name' in f && (f.name || '').trim()) patch.name = f.name.trim();
+            if ('fields' in f) patch.fields = Array.isArray(f.fields) ? f.fields : [];
+            if ('submit_message' in f) patch.submit_message = f.submit_message || null;
+            if ('redirect_url' in f) patch.redirect_url = f.redirect_url || null;
+            const { data, error } = await supabase.from('crm_forms').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not update form.' });
+            return res.status(200).json({ success: true, form: data });
+        }
+        if (action === 'delete_form') {
+            const { data: form } = await supabase.from('crm_forms').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!form) return res.status(404).json({ success: false, message: 'Form not found.' });
+            const acc = await subAccess(personId, form.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_forms').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
     } catch (e) {
         return res.status(500).json({ success: false, message: 'Server error.' });

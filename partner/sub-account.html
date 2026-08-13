@@ -111,6 +111,7 @@
         <a class="nav-item" data-section="conversations" onclick="showSection('conversations')"><span class="material-icons">forum</span> Conversations</a>
         <a class="nav-item" data-section="calendars" onclick="showSection('calendars')"><span class="material-icons">event</span> Calendars</a>
         <a class="nav-item" data-section="automation" onclick="showSection('automation')"><span class="material-icons">bolt</span> Automation</a>
+        <a class="nav-item" data-section="forms" onclick="showSection('forms')"><span class="material-icons">description</span> Forms</a>
         <a class="nav-item" data-section="reporting" onclick="showSection('reporting')"><span class="material-icons">insights</span> Reporting</a>
         <div class="nav-group-label">Company Data</div>
         <a class="nav-item" data-section="merchants" onclick="showSection('merchants')"><span class="material-icons">storefront</span> Merchants</a>
@@ -182,7 +183,7 @@ function subPartnersPanel(){
     }).join('');
     return '<div class="panel"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', reporting:'Reporting', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
+var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', forms:'Forms', reporting:'Reporting', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
 var SECTIONS = {
     dashboard: dashboardSection,
     contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
@@ -190,6 +191,7 @@ var SECTIONS = {
     conversations: function(){ return emptyPanel('forum','Conversations','A unified inbox for two-way messaging with your contacts.', true); },
     calendars: function(){ return emptyPanel('event','Calendars','Scheduling and appointment booking for this CRM.', true); },
     automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
+    forms: function(){ setTimeout(loadForms, 0); return '<div id="crmForms"><div class="empty"><span class="material-icons">description</span><h4>Loading forms…</h4></div></div>'; },
     reporting: function(){ return emptyPanel('insights','Reporting','Pipeline, activity and revenue analytics for this CRM.', true); },
     merchants: merchantsPanel,
     partner_ids: partnerIdsPanel,
@@ -420,6 +422,87 @@ window.cdDeleteTask=async function(id){ await crmApi({action:'delete_task',id:id
 window.cdAddNote=async function(){ var el=document.getElementById('cdNoteBody'); var b=(el.value||'').trim(); if(!b) return; var r=await crmApi({action:'add_note',contact_id:CURRENT_CONTACT.contact.id,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add note.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdDeleteNote=async function(id){ await crmApi({action:'delete_note',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdAddDeal=async function(){ if(!CRM_STAGES.length){ var pr=await crmApi({action:'get_pipeline',sub_account_id:subId}); CRM_STAGES=(pr&&pr.success&&pr.stages)||[]; } openDeal(null,{contact_id:CURRENT_CONTACT.contact.id}); };
+
+/* ── FORMS (lead capture; public page = /partner/form?f=ID) ─────────────────── */
+var CRM_FORMS = [];
+var STD_FORM_FIELDS = [
+    {key:'first_name',label:'First name',type:'text',standard:true},
+    {key:'last_name',label:'Last name',type:'text',standard:true},
+    {key:'email',label:'Email',type:'text',standard:true},
+    {key:'phone',label:'Phone',type:'text',standard:true},
+    {key:'company',label:'Company',type:'text',standard:true},
+    {key:'title',label:'Title',type:'text',standard:true}
+];
+function availableFormFields(){
+    return STD_FORM_FIELDS.concat(CRM_FIELDS.map(function(f){ return {key:f.field_key,label:f.label,type:f.type,options:f.options||[],standard:false}; }));
+}
+async function loadForms(){
+    var host=document.getElementById('crmForms'); if(!host) return;
+    var res=await Promise.all([ crmApi({action:'list_forms', sub_account_id:subId}), crmApi({action:'list_custom_fields', sub_account_id:subId, entity:'contact'}) ]);
+    if(res[0] && /session/i.test(res[0].message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    CRM_FORMS=(res[0] && res[0].success && res[0].forms)||[];
+    CRM_FIELDS=(res[1] && res[1].success && res[1].fields)||CRM_FIELDS;
+    renderForms();
+}
+function renderForms(){
+    var host=document.getElementById('crmForms'); if(!host) return;
+    var toolbar='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
+      +'<div style="font-size:12px;color:var(--muted);font-weight:600;">'+CRM_FORMS.length+' form'+(CRM_FORMS.length===1?'':'s')+'</div>'
+      +'<button onclick="openForm()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Create form</button></div>';
+    var inner;
+    if(!CRM_FORMS.length){ inner='<div class="panel"><div class="empty"><span class="material-icons">description</span><h4>No forms yet</h4><p>Create a lead-capture form; submissions become contacts in this CRM.</p></div></div>'; }
+    else {
+        inner=CRM_FORMS.map(function(f){
+            var link=location.origin+'/partner/form?f='+f.id;
+            return '<div class="panel" style="padding:14px 18px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'
+              +'<div><div style="font-weight:800;font-size:14px;">'+esc(f.name)+'</div><div style="font-size:11px;color:var(--muted);">'+((f.fields||[]).length)+' fields · '+(f.submissions||0)+' submissions</div></div>'
+              +'<div style="display:flex;gap:8px;align-items:center;">'
+              +'<button onclick="copyFormLink(\''+f.id+'\')" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">link</span> Copy link</button>'
+              +'<a href="'+esc(link)+'" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--teal);border:1px solid var(--teal);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;text-decoration:none;"><span class="material-icons" style="font-size:15px;">open_in_new</span> Open</a>'
+              +'<span class="material-icons" title="Edit" onclick="openForm(\''+f.id+'\')" style="font-size:18px;color:var(--muted);cursor:pointer;">edit</span>'
+              +'<span class="material-icons" title="Delete" onclick="deleteForm(\''+f.id+'\')" style="font-size:18px;color:#cbd5e1;cursor:pointer;">delete</span>'
+              +'</div></div></div>';
+        }).join('');
+    }
+    host.innerHTML=toolbar+inner;
+}
+window.copyFormLink=function(id){ var link=location.origin+'/partner/form?f='+id; try{ navigator.clipboard.writeText(link); Swal.fire({icon:'success',title:'Link copied',timer:900,showConfirmButton:false}); }catch(e){ Swal.fire('Link',link,'info'); } };
+window.openForm=async function(id){
+    var form = id ? CRM_FORMS.filter(function(x){return x.id===id;})[0] : null; form=form||{};
+    var chosen={}; (form.fields||[]).forEach(function(f){ chosen[f.key]={inc:true,req:!!f.required}; });
+    var avail=availableFormFields();
+    var fieldRows=avail.map(function(fd){
+        var c=chosen[fd.key]||{};
+        return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f1f5f9;">'
+          +'<label style="flex:1;display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;margin:0;"><input type="checkbox" class="ffInc" value="'+esc(fd.key)+'"'+(c.inc?' checked':'')+'> '+esc(fd.label)+(fd.standard?'':' <span style="font-size:10px;color:var(--muted);">(custom)</span>')+'</label>'
+          +'<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;margin:0;"><input type="checkbox" class="ffReq" data-key="'+esc(fd.key)+'"'+(c.req?' checked':'')+'> required</label></div>';
+    }).join('');
+    var html='<div style="text-align:left;max-height:62vh;overflow:auto;padding:2px 4px;">'
+      +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Form name</label><input id="fmName" class="swal2-input" style="margin:4px 0 12px;width:100%;height:38px;font-size:13px;" value="'+esc(form.name||'')+'">'
+      +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin:4px 2px 6px;">Fields to collect</div>'+fieldRows
+      +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:12px;display:block;">Thank-you message</label><textarea id="fmMsg" class="swal2-textarea" style="margin:4px 0 0;width:100%;font-size:13px;">'+esc(form.submit_message||'')+'</textarea>'
+      +'</div>';
+    var res=await Swal.fire({title:id?'Edit form':'New form', html:html, width:520, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){
+            var name=(document.getElementById('fmName').value||'').trim(); if(!name){ Swal.showValidationMessage('Enter a form name.'); return false; }
+            var reqMap={}; Array.prototype.slice.call(document.querySelectorAll('.ffReq')).forEach(function(x){ reqMap[x.getAttribute('data-key')]=x.checked; });
+            var byKey={}; avail.forEach(function(fd){ byKey[fd.key]=fd; });
+            var fields=Array.prototype.slice.call(document.querySelectorAll('.ffInc')).filter(function(x){return x.checked;}).map(function(x){ var fd=byKey[x.value]; return {key:fd.key,label:fd.label,type:fd.type,options:fd.options||[],standard:!!fd.standard,required:!!reqMap[fd.key]}; });
+            if(!fields.length){ Swal.showValidationMessage('Pick at least one field.'); return false; }
+            return {name:name, fields:fields, submit_message:document.getElementById('fmMsg').value||null};
+        }});
+    if(!res.isConfirmed) return;
+    var r = id ? await crmApi({action:'update_form', id:id, form:res.value}) : await crmApi({action:'create_form', sub_account_id:subId, form:res.value});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
+    await loadForms();
+};
+window.deleteForm=async function(id){
+    var c=await Swal.fire({icon:'warning',title:'Delete form?',text:'The public link will stop working. Existing contacts are kept.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    var r=await crmApi({action:'delete_form', id:id});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; }
+    await loadForms();
+};
 
 /* ── CUSTOM FIELDS (per-CRM definitions; values ride in contact.custom) ─────── */
 function customFieldInput(fld, val){

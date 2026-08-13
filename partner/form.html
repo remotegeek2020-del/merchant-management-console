@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="/js/brand-boot.js?v=20260812b"></script>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--teal:#0d9488;--teal-dark:#0f766e;--navy:#001e3c;--border:#e2e8f0;--text:#0a1628;--muted:#94a3b8;}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,var(--navy) 0%,var(--navy) 45%,var(--teal) 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;-webkit-font-smoothing:antialiased;}
+        .card{background:#fff;border-radius:22px;width:100%;max-width:460px;padding:36px 34px;box-shadow:0 40px 80px rgba(0,0,0,0.3);}
+        .logo{display:block;height:32px;margin:0 auto 22px;}
+        h1{font-size:1.4rem;font-weight:800;color:var(--text);margin:0 0 6px;text-align:center;}
+        .sub{font-size:13px;color:var(--muted);text-align:center;margin:0 0 22px;}
+        label{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:12px 2px 5px;}
+        input,select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;color:var(--text);background:#f8fafc;outline:none;}
+        input:focus,select,textarea:focus{border-color:var(--teal);background:#fff;box-shadow:0 0 0 3px rgba(13,148,136,0.1);}
+        .req{color:#dc2626;}
+        .cbrow{display:flex;align-items:center;gap:8px;margin-top:12px;}
+        .cbrow input{width:auto;}
+        .btn{width:100%;margin-top:20px;padding:13px;background:var(--teal);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+        .btn:hover{background:var(--teal-dark);} .btn:disabled{opacity:0.6;cursor:not-allowed;}
+        .msg{text-align:center;padding:20px 0;}
+        .msg .material-icons{font-size:52px;color:var(--teal);}
+        .err{color:#dc2626;font-size:12.5px;text-align:center;margin-top:10px;display:none;}
+        .foot{text-align:center;font-size:10px;color:var(--muted);margin-top:20px;}
+    </style>
+</head>
+<body>
+<div class="card" id="card"><div class="sub" style="padding:30px 0;">Loading…</div></div>
+<script>
+var formId = new URLSearchParams(location.search).get('f') || '';
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function api(b){ return fetch('/api/crm-form',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({form_id:formId},b))}).then(r=>r.json()); }
+var FORM=null;
+function fieldInput(f){
+    var id='ff_'+f.key, req=f.required?' required':'';
+    var lbl='<label>'+esc(f.label)+(f.required?' <span class="req">*</span>':'')+'</label>';
+    if(f.type==='textarea') return lbl+'<textarea id="'+id+'"'+req+'></textarea>';
+    if(f.type==='dropdown'){ var o='<option value=""></option>'+(f.options||[]).map(function(x){return '<option>'+esc(x)+'</option>';}).join(''); return lbl+'<select id="'+id+'"'+req+'>'+o+'</select>'; }
+    if(f.type==='checkbox') return '<div class="cbrow"><input type="checkbox" id="'+id+'"><label style="margin:0;text-transform:none;font-size:13px;font-weight:600;color:var(--text);">'+esc(f.label)+'</label></div>';
+    var t = f.key==='email'?'email':(f.key==='phone'?'tel':(f.type==='number'?'number':(f.type==='date'?'date':'text')));
+    return lbl+'<input type="'+t+'" id="'+id+'"'+req+'>';
+}
+async function boot(){
+    if(!formId){ document.getElementById('card').innerHTML='<div class="msg"><span class="material-icons">error_outline</span><h1>Form not found</h1></div>'; return; }
+    var r=await api({action:'get_form'});
+    if(!r||!r.success){ document.getElementById('card').innerHTML='<div class="msg"><span class="material-icons">error_outline</span><h1>Form unavailable</h1><p class="sub">'+esc((r&&r.message)||'')+'</p></div>'; return; }
+    FORM=r.form;
+    document.title=FORM.name||'Form';
+    var fieldsHtml=(FORM.fields||[]).map(fieldInput).join('');
+    document.getElementById('card').innerHTML=
+      '<img src="/api/brand-logo" class="logo" alt="">'
+      +'<h1>'+esc(FORM.name||'Get in touch')+'</h1><p class="sub">Fill in the form below and we’ll be in touch.</p>'
+      +'<div id="fields">'+fieldsHtml+'</div>'
+      +'<div class="err" id="err"></div>'
+      +'<button class="btn" id="submitBtn" onclick="submitForm()">Submit</button>'
+      +'<div class="foot">Powered by your CRM</div>';
+}
+async function submitForm(){
+    var btn=document.getElementById('submitBtn'), err=document.getElementById('err');
+    err.style.display='none';
+    var values={};
+    (FORM.fields||[]).forEach(function(f){ var e=document.getElementById('ff_'+f.key); if(!e) return; values[f.key]=(f.type==='checkbox')?(e.checked?'Yes':''):e.value; });
+    btn.disabled=true; btn.textContent='Submitting…';
+    var r=await api({action:'submit_form', values:values});
+    if(!r||!r.success){ err.textContent=(r&&r.message)||'Could not submit.'; err.style.display='block'; btn.disabled=false; btn.textContent='Submit'; return; }
+    if(r.redirect_url){ location.href=r.redirect_url; return; }
+    document.getElementById('card').innerHTML='<div class="msg"><span class="material-icons">check_circle</span><h1>Thank you!</h1><p class="sub">'+esc(r.message||'')+'</p></div>';
+}
+boot();
+</script>
+<script src="/js/brand.js?v=20260812b"></script>
+</body>
+</html>
