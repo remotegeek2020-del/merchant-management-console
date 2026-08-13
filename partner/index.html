@@ -20,7 +20,7 @@
             margin: 0; padding: 0;
             font-family: 'DM Sans', sans-serif;
             min-height: 100vh;
-            background: linear-gradient(135deg, #001e3c 0%, #0f3460 50%, #0d9488 100%);
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy) 45%, var(--teal) 100%);
             display: flex; align-items: center; justify-content: center;
             -webkit-font-smoothing: antialiased;
         }
@@ -119,14 +119,14 @@
             Sign In
         </button>
         <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:#94a3b8;font-size:12px;"><div style="flex:1;height:1px;background:#e2e8f0;"></div>or<div style="flex:1;height:1px;background:#e2e8f0;"></div></div>
-        <button class="btn" onclick="openMagic()" id="magicBtn" style="background:#fff;color:#0d9488;border:1.5px solid #0d9488;">
+        <button class="btn" onclick="openMagic()" id="magicBtn" style="background:#fff;color:var(--teal);border:1.5px solid var(--teal);">
             <span class="material-icons" style="font-size:18px;">auto_awesome</span>
             Email me a sign-in link
         </button>
         <span class="forgot" onclick="handleForgot()">Forgot your password?</span>
         <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;">
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Not a partner yet?</div>
-            <button class="btn" onclick="showLeadRegister()" style="background:#001e3c;color:#fff;">
+            <button class="btn" onclick="showLeadRegister()" style="background:var(--navy);color:#fff;">
                 <span class="material-icons" style="font-size:18px;">rocket_launch</span> Become a Partner
             </button>
         </div>
