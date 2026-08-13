@@ -165,7 +165,12 @@
     const existingLeadToken = localStorage.getItem('pp_lead_token');
     if (existingToken && !new URLSearchParams(window.location.search).get('magic')) {
         fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'validate', token: existingToken }) })
-            .then(r => r.json()).then(result => { if (result.success) window.location.href = '/partner/dashboard'; });
+            .then(r => r.json()).then(result => {
+                if (result.success) window.location.href = '/partner/dashboard';
+                else { // stale token → clear it so we show a clean login instead of bouncing
+                    ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){ localStorage.removeItem(k); });
+                }
+            }).catch(function(){});
     } else if (existingLeadToken && !new URLSearchParams(window.location.search).get('magic')) {
         fetch('/api/lead-portal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'lead_validate', token: existingLeadToken }) })
             .then(r => r.json()).then(result => { if (result.success && result.lead) routeLead(result.lead); });
