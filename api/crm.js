@@ -21,19 +21,26 @@ async function isGod(personId) {
     const { data } = await supabase.from('persons').select('is_portal_god').eq('id', personId).maybeSingle();
     return !!(data && data.is_portal_god);
 }
-// Returns { sub, portal_id } if the person may use this CRM, else null.
-async function subAccess(personId, subId) {
+// Returns { sub, portal_id, role, permissions } if the person may use this CRM
+// (optionally restricted to a permission `area`), else null.
+//   • owner / god → full
+//   • agency_admin → every CRM in the agency (subject to explicit per-area deny)
+//   • crm_admin → only CRMs in scope.sub_account_ids (subject to per-area deny)
+async function subAccess(personId, subId, area) {
     if (!subId) return null;
     const { data: sub } = await supabase.from('agency_sub_accounts').select('*').eq('id', subId).maybeSingle();
     if (!sub) return null;
-    if (await isGod(personId)) return { sub, portal_id: sub.portal_id };
+    if (await isGod(personId)) return { sub, portal_id: sub.portal_id, role: 'god', permissions: {} };
     const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', sub.portal_id).eq('person_id', personId).maybeSingle();
     if (!mem) return null;
-    if (mem.role === 'sub_partner') {
+    if (mem.role === 'crm_admin' || mem.role === 'sub_partner') {
         const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
         if (!granted.includes(sub.id)) return null;
     }
-    return { sub, portal_id: sub.portal_id };
+    const perms = mem.permissions || {};
+    // Owners see all; everyone else is denied an area only if it's explicitly false.
+    if (area && mem.role !== 'owner' && perms[area] === false) return null;
+    return { sub, portal_id: sub.portal_id, role: mem.role, permissions: perms };
 }
 
 const CONTACT_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'company', 'title', 'source', 'status', 'notes'];
@@ -61,7 +68,7 @@ export default async function handler(req, res) {
 
         // ── CONTACTS ─────────────────────────────────────────────────────────
         if (action === 'list_contacts') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const { data: contacts } = await supabase.from('crm_contacts')
                 .select('*').eq('sub_account_id', body.sub_account_id)
@@ -222,7 +229,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'get_pipeline') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             // Lazily seed a default pipeline (New/Contacted/.../Won/Lost) on first view.
             const { data: pid } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
@@ -232,7 +239,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'list_opportunities') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const { data: opps } = await supabase.from('crm_opportunities')
                 .select('*').eq('sub_account_id', body.sub_account_id)
@@ -321,7 +328,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'create_custom_field') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'crm_settings');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const f = body.field || {};
             const label = (f.label || '').trim();
@@ -410,7 +417,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
         if (action === 'list_conversations') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const { data: msgs } = await supabase.from('crm_messages').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: false }).limit(500);
             const list = msgs || [];
@@ -425,7 +432,7 @@ export default async function handler(req, res) {
 
         // ── CALENDARS (appointments) ─────────────────────────────────────────
         if (action === 'list_appointments') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'calendars');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const { data: appts } = await supabase.from('crm_appointments').select('*').eq('sub_account_id', body.sub_account_id).order('starts_at', { ascending: true }).limit(1000);
             const list = appts || [];
@@ -469,7 +476,7 @@ export default async function handler(req, res) {
 
         // ── REPORTING (aggregates from this CRM's own data) ──────────────────
         if (action === 'get_report') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'reporting');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const sub = body.sub_account_id;
             const [contactsC, oppsRes, stagesRes, tasksRes, formsRes] = await Promise.all([
@@ -502,7 +509,7 @@ export default async function handler(req, res) {
 
         // ── FORMS (lead capture; public submit lives in api/crm-form.js) ─────
         if (action === 'list_forms') {
-            const acc = await subAccess(personId, body.sub_account_id);
+            const acc = await subAccess(personId, body.sub_account_id, 'forms');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const { data } = await supabase.from('crm_forms').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: false });
             return res.status(200).json({ success: true, forms: data || [] });

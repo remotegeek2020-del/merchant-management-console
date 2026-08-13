@@ -15,6 +15,7 @@
 //   CF_CNAME_TARGET(the fallback-origin hostname partners CNAME to, e.g. whitelabel.mypayprotec.com)
 
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { loadActor, isAdminRole } from './_access.js';
 import { getConfigValue, setConfigValue } from './api-config.js';
@@ -195,6 +196,49 @@ async function validatePartner(token) {
     return data.person_id;
 }
 
+// ── Team RBAC helpers ────────────────────────────────────────────────────────
+const PERM_AREAS_AGENCY = ['team', 'agency_settings', 'sub_accounts'];
+const PERM_AREAS_CRM = ['contacts', 'opportunities', 'conversations', 'calendars', 'forms', 'reporting', 'crm_settings'];
+const ALL_PERM_KEYS = PERM_AREAS_AGENCY.concat(PERM_AREAS_CRM);
+// Roles a requester may assign. Owners (and god) can make owners; agency admins
+// can only make agency/CRM admins; anyone else cannot manage the team.
+function assignableRoles(requesterRole, god) {
+    if (god || requesterRole === 'owner') return ['owner', 'agency_admin', 'crm_admin'];
+    if (requesterRole === 'agency_admin') return ['agency_admin', 'crm_admin'];
+    return [];
+}
+// Keep only known permission keys as booleans; sensible defaults per role.
+function sanitizePerms(perms, role) {
+    const out = {};
+    const p = perms && typeof perms === 'object' ? perms : {};
+    if (role === 'owner') { ALL_PERM_KEYS.forEach(k => out[k] = true); return out; }
+    const keys = role === 'agency_admin' ? ALL_PERM_KEYS : PERM_AREAS_CRM;
+    keys.forEach(k => { out[k] = (k in p) ? !!p[k] : true; });
+    // agency admins default agency-level OFF unless explicitly granted
+    if (role === 'agency_admin') PERM_AREAS_AGENCY.forEach(k => { out[k] = (k in p) ? !!p[k] : false; });
+    return out;
+}
+async function sendInviteEmail(email, agencyName, url, roleLabel) {
+    if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[AGENCY INVITE] ${email} -> ${url}`); return; }
+    try {
+        const { ServerClient } = await import('postmark');
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        await client.sendEmail({
+            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+            To: email,
+            Subject: `You've been invited to ${agencyName}`,
+            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
+                <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">You're invited to ${agencyName}</h2>
+                <p style="color:#475569;line-height:1.6;margin-bottom:24px;">You've been invited to join <strong>${agencyName}</strong> as ${roleLabel}. Click below to set up your account and get started.</p>
+                <div style="text-align:center;margin:28px 0;"><a href="${url}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Accept Invite →</a></div>
+                <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This invite expires in 7 days. If you weren't expecting it, you can ignore this email.</p>
+            </div>`,
+            TextBody: `You've been invited to ${agencyName} as ${roleLabel}. Accept: ${url}`,
+            MessageStream: 'outbound'
+        });
+    } catch (e) { console.error('[AGENCY INVITE] Email failed:', e.message); }
+}
+
 // ── Agency membership (owners + admins) ──────────────────────────────────────
 // Load a portal's members with person names, owners first, primary owner on top.
 async function loadMembers(portalId) {
@@ -206,7 +250,7 @@ async function loadMembers(portalId) {
     return list.map(m => ({
         id: m.id, person_id: m.person_id, role: m.role, is_primary: m.is_primary === true,
         full_access: m.full_access === true,
-        scope: m.scope || {},
+        scope: m.scope || {}, permissions: m.permissions || {},
         sub_account_ids: (m.scope && Array.isArray(m.scope.sub_account_ids)) ? m.scope.sub_account_ids : [],
         ownership_percent: (m.ownership_percent === null || m.ownership_percent === undefined) ? null : Number(m.ownership_percent),
         full_name: (people[m.person_id] || {}).full_name || null,
@@ -296,7 +340,7 @@ export default async function handler(req, res) {
         // ─────────────────────── PARTNER (token) surface ───────────────────────
         if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account', 'get_agency_overview',
              'list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
-             'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke',
+             'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke', 'agency_update_member', 'agency_invite', 'agency_revoke_invite',
              'get_agency_branding', 'save_agency_branding', 'get_brand_upload_url'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
@@ -328,7 +372,7 @@ export default async function handler(req, res) {
                 const god = await isGod(personId);
                 const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', sub.portal_id).eq('person_id', personId).maybeSingle();
                 if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not have access to this sub-account.' });
-                if (!god && mem.role === 'sub_partner') {
+                if (!god && mem.role === 'crm_admin') {
                     const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
                     if (!granted.includes(sub.id)) return res.status(403).json({ success: false, message: 'This sub-account is outside your granted access.' });
                 }
@@ -401,12 +445,12 @@ export default async function handler(req, res) {
                 const god = await isGod(personId);
                 const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
                 if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
-                const role = god ? 'god' : (mem.role || 'admin');
-                const canManage = god || role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+                const role = god ? 'god' : (mem.role || 'agency_admin');
+                const canManage = god || role === 'owner' || role === 'agency_admin';
 
                 let { data: subs } = await supabase.from('agency_sub_accounts').select('id, company_id, name, status').eq('portal_id', portal.id).order('created_at', { ascending: true });
                 subs = subs || [];
-                if (!god && role === 'sub_partner') {
+                if (!god && role === 'crm_admin') {
                     const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
                     subs = subs.filter(s => granted.includes(s.id));
                 }
@@ -475,12 +519,12 @@ export default async function handler(req, res) {
 
                 const agencies = portals.map(p => {
                     const mem = god ? { role: 'owner', full_access: true } : ((memberships || []).find(m => m.portal_id === p.id) || {});
-                    const role = mem.role || 'admin';
+                    const role = mem.role || 'agency_admin';
                     const isOwner = role === 'owner';
-                    const canManage = god || role === 'admin' || (isOwner && (mem.is_primary === true || mem.full_access === true));
+                    const canManage = god || isOwner || role === 'agency_admin';
                     let subs = subRows.filter(r => r.portal_id === p.id).map(r => ({ id: r.id, name: r.name, company_id: r.company_id, type: r.company_id ? 'company' : 'client' }));
                     // Sub-partner: nothing until explicitly granted (scope.sub_account_ids).
-                    if (!god && role === 'sub_partner') {
+                    if (!god && role === 'crm_admin') {
                         const granted = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : [];
                         subs = subs.filter(s => granted.includes(s.id));
                     }
@@ -504,7 +548,7 @@ export default async function handler(req, res) {
 
             // ── Sub-account self-service (owners + admins; co-owners need full_access) ──
             if (['list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
-                 'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke',
+                 'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke', 'agency_update_member', 'agency_invite', 'agency_revoke_invite',
                  'get_agency_branding', 'save_agency_branding'].includes(action)) {
                 const portal = body.portal_id
                     ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
@@ -513,8 +557,8 @@ export default async function handler(req, res) {
                 const god = await isGod(personId);
                 const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
                 if (!mem && !god) return res.status(403).json({ success: false, message: 'You do not belong to this agency.' });
-                const role = god ? 'owner' : (mem.role || 'admin');
-                const canManage = god || role === 'admin' || (role === 'owner' && (mem.is_primary === true || mem.full_access === true));
+                const role = god ? 'owner' : (mem.role || 'agency_admin');
+                const canManage = god || role === 'owner' || role === 'agency_admin';
 
                 // ── White-label branding (owners/admins/god) ──
                 if (action === 'get_agency_branding') {
@@ -540,34 +584,61 @@ export default async function handler(req, res) {
                     return res.status(200).json({ success: true });
                 }
 
-                // ── Team & visibility grants (owners/admins) ──
+                // ── Team & RBAC (owners + agency admins) ──
                 if (action === 'agency_team') {
                     const members = await loadMembers(portal.id);
                     const memberPids = new Set(members.map(m => m.person_id));
                     const candidates = (await agencySubAgents(portal.id)).filter(p => !memberPids.has(p.id));
                     const { data: subs } = await supabase.from('agency_sub_accounts').select('id, company_id, name').eq('portal_id', portal.id).order('created_at', { ascending: true });
-                    return res.status(200).json({ success: true, can_manage: canManage, members, candidates, sub_accounts: (subs || []).map(s => ({ id: s.id, name: s.name, type: s.company_id ? 'company' : 'client' })) });
+                    const { data: invites } = await supabase.from('agency_invites').select('*').eq('portal_id', portal.id).eq('status', 'pending').order('created_at', { ascending: false });
+                    return res.status(200).json({
+                        success: true, can_manage: canManage, is_owner: god || role === 'owner', my_role: role,
+                        assignable_roles: assignableRoles(role, god),
+                        members, candidates,
+                        sub_accounts: (subs || []).map(s => ({ id: s.id, name: s.name, type: s.company_id ? 'company' : 'client' })),
+                        invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], created_at: i.created_at })),
+                        perm_areas: { agency: PERM_AREAS_AGENCY, crm: PERM_AREAS_CRM }
+                    });
                 }
 
+                // Add an EXISTING person (sub-agent) as a member.
                 if (action === 'agency_grant') {
-                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can grant access.' });
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can manage the team.' });
                     if (!body.member_person_id) return res.status(400).json({ success: false, message: 'member_person_id required.' });
-                    // Don't touch owners via this flow.
+                    const allowed = assignableRoles(role, god);
+                    const grantRole = body.role;
+                    if (!allowed.includes(grantRole)) return res.status(403).json({ success: false, message: 'You cannot assign that role.' });
                     const { data: ex } = await supabase.from('partner_portal_members').select('id, role').eq('portal_id', portal.id).eq('person_id', body.member_person_id).maybeSingle();
-                    if (ex && ex.role === 'owner') return res.status(400).json({ success: false, message: 'That person is an owner already.' });
-                    const grantRole = body.role === 'admin' ? 'admin' : 'sub_partner';
-                    const scope = grantRole === 'sub_partner' ? { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } : {};
-                    await supabase.from('partner_portal_members').upsert(
-                        { portal_id: portal.id, person_id: body.member_person_id, role: grantRole, scope, added_by: personId },
-                        { onConflict: 'portal_id,person_id' });
+                    if (ex && ex.role === 'owner' && role !== 'owner' && !god) return res.status(403).json({ success: false, message: 'Only an owner can change an owner.' });
+                    const scope = grantRole === 'crm_admin' ? { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } : {};
+                    const row = { portal_id: portal.id, person_id: body.member_person_id, role: grantRole, scope, permissions: sanitizePerms(body.permissions, grantRole), added_by: personId };
+                    if (grantRole === 'owner') row.is_primary = false;
+                    await supabase.from('partner_portal_members').upsert(row, { onConflict: 'portal_id,person_id' });
                     return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
                 }
 
+                // Change a member's role / scope / granular permissions.
+                if (action === 'agency_update_member') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can manage the team.' });
+                    const { data: m } = await supabase.from('partner_portal_members').select('*').eq('id', body.member_id).eq('portal_id', portal.id).maybeSingle();
+                    if (!m) return res.status(404).json({ success: false, message: 'Member not found.' });
+                    if (m.role === 'owner' && role !== 'owner' && !god) return res.status(403).json({ success: false, message: 'Only an owner can change an owner.' });
+                    const newRole = body.role || m.role;
+                    if (newRole !== m.role && !assignableRoles(role, god).includes(newRole)) return res.status(403).json({ success: false, message: 'You cannot assign that role.' });
+                    const patch = { role: newRole };
+                    if (newRole === 'crm_admin') patch.scope = { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : ((m.scope && m.scope.sub_account_ids) || []) };
+                    else patch.scope = {};
+                    patch.permissions = sanitizePerms(body.permissions !== undefined ? body.permissions : m.permissions, newRole);
+                    await supabase.from('partner_portal_members').update(patch).eq('id', m.id);
+                    return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+                }
+
+                // Legacy: adjust a CRM admin's sub-account scope only.
                 if (action === 'agency_set_scope') {
                     if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can change access.' });
                     const { data: m } = await supabase.from('partner_portal_members').select('*').eq('id', body.member_id).eq('portal_id', portal.id).maybeSingle();
                     if (!m) return res.status(404).json({ success: false, message: 'Member not found.' });
-                    if (m.role === 'owner') return res.status(400).json({ success: false, message: 'Owners see everything.' });
+                    if (m.role === 'owner' || m.role === 'agency_admin') return res.status(400).json({ success: false, message: 'That member already sees all CRMs.' });
                     await supabase.from('partner_portal_members').update({ scope: { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } }).eq('id', m.id);
                     return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
                 }
@@ -576,9 +647,42 @@ export default async function handler(req, res) {
                     if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can revoke access.' });
                     const { data: m } = await supabase.from('partner_portal_members').select('role').eq('id', body.member_id).eq('portal_id', portal.id).maybeSingle();
                     if (!m) return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
-                    if (m.role === 'owner') return res.status(400).json({ success: false, message: 'Remove owners from the staff dashboard.' });
+                    if (m.role === 'owner' && role !== 'owner' && !god) return res.status(403).json({ success: false, message: 'Only an owner can remove an owner.' });
                     await supabase.from('partner_portal_members').delete().eq('id', body.member_id).eq('portal_id', portal.id);
                     return res.status(200).json({ success: true, members: await loadMembers(portal.id) });
+                }
+
+                // Invite someone by email. If a partner already exists with that email
+                // they're added directly; otherwise an invite email is sent.
+                if (action === 'agency_invite') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can invite.' });
+                    const email = (body.email || '').trim().toLowerCase();
+                    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ success: false, message: 'Enter a valid email.' });
+                    const allowed = assignableRoles(role, god);
+                    const grantRole = allowed.includes(body.role) ? body.role : null;
+                    if (!grantRole || grantRole === 'owner') return res.status(400).json({ success: false, message: 'Invite as agency admin or CRM admin.' });
+                    const scope = grantRole === 'crm_admin' ? { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } : {};
+                    const permissions = sanitizePerms(body.permissions, grantRole);
+                    const { data: existing } = await supabase.from('persons').select('id').ilike('email', email).limit(1);
+                    if (existing && existing.length) {
+                        await supabase.from('partner_portal_members').upsert({ portal_id: portal.id, person_id: existing[0].id, role: grantRole, scope, permissions, added_by: personId }, { onConflict: 'portal_id,person_id' });
+                        return res.status(200).json({ success: true, added: true, members: await loadMembers(portal.id) });
+                    }
+                    const token = crypto.randomBytes(24).toString('hex');
+                    const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+                    await supabase.from('agency_invites').insert({ portal_id: portal.id, email, role: grantRole, scope, permissions, invited_by: personId, token, expires_at: expires });
+                    const { data: pr } = await supabase.from('partner_portals').select('agency_name').eq('id', portal.id).maybeSingle();
+                    const acceptUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?invite=${token}`;
+                    await sendInviteEmail(email, (pr && pr.agency_name) || 'the agency', acceptUrl, grantRole === 'agency_admin' ? 'an Agency Admin' : 'a CRM Admin');
+                    const { data: invites } = await supabase.from('agency_invites').select('*').eq('portal_id', portal.id).eq('status', 'pending').order('created_at', { ascending: false });
+                    return res.status(200).json({ success: true, invited: true, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], created_at: i.created_at })) });
+                }
+
+                if (action === 'agency_revoke_invite') {
+                    if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can manage invites.' });
+                    await supabase.from('agency_invites').update({ status: 'revoked' }).eq('id', body.invite_id).eq('portal_id', portal.id);
+                    const { data: invites } = await supabase.from('agency_invites').select('*').eq('portal_id', portal.id).eq('status', 'pending').order('created_at', { ascending: false });
+                    return res.status(200).json({ success: true, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], created_at: i.created_at })) });
                 }
 
                 if (action === 'my_companies') {
@@ -658,7 +762,7 @@ export default async function handler(req, res) {
                 if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
                 if (!god) {
                     const { data: mem } = await supabase.from('partner_portal_members').select('role, is_primary, full_access').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
-                    const canManage = mem && (mem.role === 'admin' || (mem.role === 'owner' && (mem.is_primary === true || mem.full_access === true)));
+                    const canManage = mem && (mem.role === 'owner' || mem.role === 'agency_admin');
                     if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can rename the agency.' });
                 }
                 await supabase.from('partner_portals').update({ agency_name: (body.agency_name || '').trim() || null, updated_at: new Date().toISOString() }).eq('id', portal.id);
@@ -899,7 +1003,7 @@ export default async function handler(req, res) {
             let portal = await resolvePortal(body);
             if (!portal && body.person_id) portal = await ensurePortal(body.person_id, body.agency_name || null);
             if (!portal) return res.status(404).json({ success: false, message: 'Could not resolve the agency.' });
-            const role = body.role === 'owner' ? 'owner' : 'admin';
+            const role = body.role === 'owner' ? 'owner' : 'agency_admin';
             const pct = parsePct(body.ownership_percent);
             if (pct === undefined) return res.status(400).json({ success: false, message: 'Ownership % must be between 0 and 100.' });
             const row = { portal_id: portal.id, person_id: body.member_person_id, role, added_by: actor.userid || 'admin' };
@@ -922,11 +1026,11 @@ export default async function handler(req, res) {
         if (action === 'set_member_role') {
             const { data: m } = await supabase.from('partner_portal_members').select('*').eq('id', body.member_id).maybeSingle();
             if (!m) return res.status(404).json({ success: false, message: 'Member not found.' });
-            const role = body.role === 'owner' ? 'owner' : 'admin';
+            const role = body.role === 'owner' ? 'owner' : 'agency_admin';
             // Demoting the primary owner is not allowed — transfer primary first.
             if (m.is_primary && role !== 'owner') return res.status(400).json({ success: false, message: 'Transfer the primary owner before demoting this person.' });
             const patch = { role };
-            if (role === 'admin') patch.ownership_percent = null; // admins hold no stake
+            if (role !== 'owner') patch.ownership_percent = null; // admins hold no stake
             await supabase.from('partner_portal_members').update(patch).eq('id', m.id);
             await ensureOnePrimary(m.portal_id);
             return res.status(200).json({ success: true, portal_id: m.portal_id, members: await loadMembers(m.portal_id) });
@@ -980,7 +1084,7 @@ export default async function handler(req, res) {
                 return {
                     ...p,
                     owners: mem.filter(m => m.role === 'owner'),
-                    admins: mem.filter(m => m.role === 'admin'),
+                    admins: mem.filter(m => m.role === 'agency_admin' || m.role === 'crm_admin'),
                     domains: brands.filter(b => b.portal_id === p.id)
                 };
             });

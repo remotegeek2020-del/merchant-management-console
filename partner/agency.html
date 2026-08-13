@@ -189,13 +189,13 @@ async function load(){
     loadTeam();
 }
 
-// ── TEAM & VISIBILITY GRANTS (owners/admins grant scoped access to sub-agents) ──
+// ── TEAM & RBAC (owners + agency admins) ──
 var _team = null;
-function scopeSummary(m){
-    if (m.role !== 'sub_partner') return '';
-    var n = (m.sub_account_ids||[]).length;
-    return '<span style="font-size:11px;color:var(--muted);margin-left:8px;">'+(n? n+' CRM'+(n>1?'s':'') : 'no access yet')+'</span>';
-}
+var PERM_LABELS = { team:'Manage team', agency_settings:'Agency settings & branding', sub_accounts:'Create / remove CRMs', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', forms:'Forms', reporting:'Reporting', crm_settings:'CRM settings' };
+function roleLabel(r){ return r==='owner'?'Owner':r==='agency_admin'?'Agency Admin':r==='crm_admin'?'CRM Admin':r; }
+function roleBadge(m){ var cls=m.role==='owner'?'role-owner':m.role==='agency_admin'?'role-admin':'role-sub'; return '<span class="role-badge '+cls+'">'+(m.role==='owner'&&m.is_primary?'★ ':'')+roleLabel(m.role)+'</span>'; }
+function memScope(m){ if(m.role!=='crm_admin') return '<span style="font-size:11px;color:var(--muted);margin-left:8px;">all CRMs</span>'; var n=(m.sub_account_ids||[]).length; return '<span style="font-size:11px;color:var(--muted);margin-left:8px;">'+(n? n+' CRM'+(n>1?'s':''):'no CRMs yet')+'</span>'; }
+
 async function loadTeam(){
     var r;
     try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'agency_team',token:token,portal_id:portalId})}).then(x=>x.json()); }
@@ -209,65 +209,87 @@ function renderTeam(){
     var el = document.getElementById('teamPanel'); if(!el) return;
     var cm = _team.can_manage;
     var rows = (_team.members||[]).map(function(m){
-        var badge = m.role==='owner' ? '<span class="role-badge role-owner">'+(m.is_primary?'★ ':'')+'Owner'+(m.ownership_percent!=null?' · '+m.ownership_percent+'%':'')+'</span>'
-                  : m.role==='sub_partner' ? '<span class="role-badge role-sub">Sub-partner</span>'
-                  : '<span class="role-badge role-admin">Admin</span>';
-        var actions = (cm && m.role!=='owner')
-            ? '<div style="display:flex;gap:8px;">'+(m.role==='sub_partner'?'<a href="#" onclick="editScope(\''+m.id+'\');return false;" style="color:var(--teal);font-weight:700;text-decoration:none;font-size:12px;">Edit access</a>':'')+'<a href="#" onclick="revokeMember(\''+m.id+'\');return false;" style="color:#dc2626;font-weight:700;text-decoration:none;font-size:12px;">Revoke</a></div>'
+        var canEdit = cm && (m.role!=='owner' || _team.is_owner);
+        var actions = canEdit
+            ? '<div style="display:flex;gap:10px;"><a href="#" onclick="openMember(\''+m.id+'\');return false;" style="color:var(--teal);font-weight:700;text-decoration:none;font-size:12px;">Edit</a><a href="#" onclick="revokeMember(\''+m.id+'\');return false;" style="color:#dc2626;font-weight:700;text-decoration:none;font-size:12px;">Remove</a></div>'
             : '';
-        return '<div class="member-row"><div><div style="font-weight:700;font-size:13px;">'+esc(m.full_name||m.email||'—')+scopeSummary(m)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(m.email||'')+'</div></div><div style="display:flex;align-items:center;gap:12px;">'+badge+actions+'</div></div>';
-    }).join('') || '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No team yet.</div>';
+        return '<div class="member-row"><div><div style="font-weight:700;font-size:13px;">'+esc(m.full_name||m.email||'—')+memScope(m)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(m.email||'')+'</div></div><div style="display:flex;align-items:center;gap:12px;">'+roleBadge(m)+actions+'</div></div>';
+    }).join('') || '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No team members yet.</div>';
 
-    var grant = '';
-    if (cm) {
-        if ((_team.candidates||[]).length) {
-            var opts = _team.candidates.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.full_name||c.email||c.id)+'</option>'; }).join('');
-            grant = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;">'
-              +'<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Grant portal access to a sub-agent</div>'
-              +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
-              +'<select id="grantPerson" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">'+opts+'</select>'
-              +'<select id="grantRole" onchange="document.getElementById(\'grantScopeWrap\').style.display=this.value===\'sub_partner\'?\'block\':\'none\';" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;"><option value="sub_partner">Sub-partner (scoped)</option><option value="admin">Admin (full agency)</option></select>'
-              +'<button class="btn btn-teal" onclick="doGrant()"><span class="material-icons" style="font-size:15px;">person_add</span> Grant</button></div>'
-              +'<div id="grantScopeWrap" style="margin-top:10px;">'+scopeChecks('grantScope',[])+'</div></div>';
-        } else {
-            grant = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;font-size:12px;color:var(--muted);">No sub-agents available to grant. Sub-agents tied to this agency’s partner IDs appear here.</div>';
-        }
-    }
-    el.innerHTML = rows + grant;
-}
-function scopeChecks(idPrefix, selected){
-    var sel = new Set(selected||[]);
-    var boxes = (_team.sub_accounts||[]).map(function(s){
-        return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" class="'+idPrefix+'-cb" value="'+esc(s.id)+'"'+(sel.has(s.id)?' checked':'')+'> '+esc(s.name)+'</label>';
-    }).join('') || '<span style="font-size:12px;color:var(--muted);">No CRMs to scope to yet.</span>';
-    return '<div style="font-size:11px;font-weight:700;color:var(--secondary);margin-bottom:6px;">Which CRMs can they see?</div>'+boxes;
-}
-function collectScope(idPrefix){
-    return Array.prototype.slice.call(document.querySelectorAll('.'+idPrefix+'-cb')).filter(function(c){return c.checked;}).map(function(c){return c.value;});
+    var invites = (_team.invites||[]).length ? ('<div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9;"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Pending invites</div>'
+        + _team.invites.map(function(i){ return '<div class="member-row"><div><div style="font-weight:700;font-size:13px;">'+esc(i.email)+'</div><div style="font-size:11px;color:var(--muted);">Invited as '+roleLabel(i.role)+'</div></div>'+(cm?'<a href="#" onclick="revokeInvite(\''+i.id+'\');return false;" style="color:#dc2626;font-weight:700;text-decoration:none;font-size:12px;">Cancel</a>':'')+'</div>'; }).join('')
+        + '</div>') : '';
+
+    var addBtn = cm ? '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9;"><button class="btn btn-teal" onclick="openMember()"><span class="material-icons" style="font-size:15px;">person_add</span> Add member</button></div>' : '';
+    el.innerHTML = rows + invites + addBtn;
 }
 async function _teamApi(body){
     var r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token,portal_id:portalId},body))}).then(x=>x.json());
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Action failed.','error'); return null; }
-    if(r.members){ _team.members = r.members; loadTeam(); } // reload to refresh candidates too
+    loadTeam();
     return r;
 }
-window.doGrant = async function(){
-    var pid = (document.getElementById('grantPerson')||{}).value;
-    var role = (document.getElementById('grantRole')||{}).value;
-    if(!pid) return;
-    var scope = role==='sub_partner' ? collectScope('grantScope') : [];
-    await _teamApi({action:'agency_grant', member_person_id:pid, role:role, sub_account_ids:scope});
-};
-window.editScope = async function(memberId){
-    var m = (_team.members||[]).find(function(x){return x.id===memberId;}); if(!m) return;
-    var res = await Swal.fire({ title:'Edit access', html:'<div style="text-align:left;">'+scopeChecks('editScope', m.sub_account_ids||[])+'</div>', showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#0d9488', focusConfirm:false, preConfirm:function(){ return collectScope('editScope'); } });
+// Dynamic visibility inside the member modal.
+window.mToggleSource = function(){ var v=(document.getElementById('mSource')||{}).value; var ex=document.getElementById('mExistingWrap'), iv=document.getElementById('mInviteWrap'); if(ex) ex.style.display=v==='existing'?'block':'none'; if(iv) iv.style.display=v==='invite'?'block':'none'; };
+window.mOnRole = function(){ var r=(document.getElementById('mRole')||{}).value; var scope=document.getElementById('mCrmScope'); if(scope) scope.style.display=(r==='crm_admin')?'block':'none'; var ag=document.getElementById('mAgencyPerms'); if(ag) ag.style.display=(r==='crm_admin')?'none':'block'; var owner=(r==='owner'); document.querySelectorAll('.mPerm').forEach(function(x){ x.disabled=owner; if(owner) x.checked=true; }); };
+window.openMember = async function(memberId){
+    var m = memberId ? (_team.members||[]).find(function(x){return x.id===memberId;}) : null;
+    var editing = !!m;
+    var roles = (_team.assignable_roles||[]).slice();
+    if (editing && !roles.includes(m.role)) roles.unshift(m.role);
+    if (!roles.length){ Swal.fire('Not allowed','You cannot manage the team.','info'); return; }
+    var curRole = editing ? m.role : (roles.indexOf('crm_admin')>=0?'crm_admin':roles[0]);
+    var roleOpts = roles.map(function(r){return '<option value="'+r+'"'+(r===curRole?' selected':'')+'>'+roleLabel(r)+'</option>';}).join('');
+    var lbl=function(t){return '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.4px;margin:12px 2px 6px;">'+t+'</div>';};
+
+    var candOpts = (_team.candidates||[]).map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.full_name||c.email||c.id)+'</option>'; }).join('');
+    var sourceBlock = editing ? '' :
+        lbl('Add')+'<select id="mSource" class="swal2-select" onchange="mToggleSource()" style="width:100%;margin:0;">'
+          +(candOpts?'<option value="existing">Existing sub-agent</option>':'')+'<option value="invite">Invite by email</option></select>'
+          +'<div id="mExistingWrap"'+(candOpts?'':' style="display:none;"')+'><select id="mPerson" class="swal2-select" style="width:100%;margin:8px 0 0;">'+candOpts+'</select></div>'
+          +'<div id="mInviteWrap" style="display:none;"><input id="mEmail" class="swal2-input" placeholder="name@company.com" style="width:100%;margin:8px 0 0;"></div>';
+
+    var crmChecks = (_team.sub_accounts||[]).map(function(s){ var on=editing && (m.sub_account_ids||[]).indexOf(s.id)>=0; return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" class="mCrm" value="'+esc(s.id)+'"'+(on?' checked':'')+'> '+esc(s.name)+'</label>'; }).join('') || '<span style="font-size:12px;color:var(--muted);">No CRMs yet.</span>';
+    var permBox=function(area){ var checked; if(editing){ checked = (PERM_AGENCY.indexOf(area)>=0) ? (m.permissions&&m.permissions[area]===true) : !(m.permissions&&m.permissions[area]===false); } else { checked = PERM_AGENCY.indexOf(area)<0; } return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" class="mPerm" data-key="'+area+'"'+(checked?' checked':'')+'> '+PERM_LABELS[area]+'</label>'; };
+    var PERM_AGENCY=(_team.perm_areas&&_team.perm_areas.agency)||['team','agency_settings','sub_accounts'];
+    var PERM_CRM=(_team.perm_areas&&_team.perm_areas.crm)||['contacts','opportunities','conversations','calendars','forms','reporting','crm_settings'];
+    // permBox closure references PERM_AGENCY; ensure defined before use by re-declaring via hoist — define first:
+    window.__PERM_AGENCY=PERM_AGENCY;
+    var html='<div style="text-align:left;max-height:64vh;overflow:auto;padding:2px 4px;">'
+      + sourceBlock
+      + lbl('Role')+'<select id="mRole" class="swal2-select" onchange="mOnRole()" style="width:100%;margin:0;">'+roleOpts+'</select>'
+      + '<div id="mCrmScope">'+lbl('Which CRMs can they access?')+crmChecks+'</div>'
+      + '<div id="mAgencyPerms">'+lbl('Agency permissions')+PERM_AGENCY.map(permBox).join('')+'</div>'
+      + lbl('CRM permissions')+PERM_CRM.map(permBox).join('')
+      + '</div>';
+    var res = await Swal.fire({ title: editing?'Edit member':'Add member', html:html, width:560, showCancelButton:true, confirmButtonText: editing?'Save':'Add', confirmButtonColor:'#0d9488', focusConfirm:false,
+        didOpen:function(){ mToggleSource(); mOnRole(); },
+        preConfirm:function(){
+            var role=document.getElementById('mRole').value;
+            var perms={}; document.querySelectorAll('.mPerm').forEach(function(x){ perms[x.getAttribute('data-key')]=x.checked; });
+            var scope=Array.prototype.slice.call(document.querySelectorAll('.mCrm')).filter(function(x){return x.checked;}).map(function(x){return x.value;});
+            if(role==='crm_admin' && !scope.length){ Swal.showValidationMessage('Pick at least one CRM for a CRM admin.'); return false; }
+            if(editing) return {mode:'edit', role:role, permissions:perms, sub_account_ids:scope};
+            var src=document.getElementById('mSource').value;
+            if(src==='existing'){ var pid=(document.getElementById('mPerson')||{}).value; if(!pid){Swal.showValidationMessage('Pick a person.');return false;} return {mode:'grant', member_person_id:pid, role:role, permissions:perms, sub_account_ids:scope}; }
+            var email=(document.getElementById('mEmail').value||'').trim(); if(!email){Swal.showValidationMessage('Enter an email.');return false;} return {mode:'invite', email:email, role:role, permissions:perms, sub_account_ids:scope};
+        }});
     if(!res.isConfirmed) return;
-    await _teamApi({action:'agency_set_scope', member_id:memberId, sub_account_ids:res.value});
+    var v=res.value, out=null;
+    if(v.mode==='edit') out=await _teamApi({action:'agency_update_member', member_id:memberId, role:v.role, permissions:v.permissions, sub_account_ids:v.sub_account_ids});
+    else if(v.mode==='grant') out=await _teamApi({action:'agency_grant', member_person_id:v.member_person_id, role:v.role, permissions:v.permissions, sub_account_ids:v.sub_account_ids});
+    else out=await _teamApi({action:'agency_invite', email:v.email, role:v.role, permissions:v.permissions, sub_account_ids:v.sub_account_ids});
+    if(out && out.invited) Swal.fire({icon:'success',title:'Invite sent',timer:1400,showConfirmButton:false});
 };
 window.revokeMember = async function(memberId){
-    var c = await Swal.fire({icon:'warning',title:'Revoke access?',showCancelButton:true,confirmButtonText:'Revoke',confirmButtonColor:'#dc2626'});
+    var c = await Swal.fire({icon:'warning',title:'Remove member?',text:'They lose access to this agency.',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
     if(!c.isConfirmed) return;
     await _teamApi({action:'agency_revoke', member_id:memberId});
+};
+window.revokeInvite = async function(inviteId){
+    var c = await Swal.fire({icon:'warning',title:'Cancel invite?',showCancelButton:true,confirmButtonText:'Cancel invite',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    await _teamApi({action:'agency_revoke_invite', invite_id:inviteId});
 };
 
 window.renameAgency = async function(){

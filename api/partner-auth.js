@@ -146,6 +146,44 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, token, partner: { id: person.id, name: person.full_name, email: person.email } });
         }
 
+        // ── AGENCY INVITE: verify + accept (team members from outside the program) ──
+        if (action === 'verify_invite') {
+            const { token } = req.body;
+            const { data: inv } = await supabase.from('agency_invites').select('*').eq('token', token).eq('status', 'pending').maybeSingle();
+            if (!inv || (inv.expires_at && new Date(inv.expires_at) < new Date())) return res.status(400).json({ success: false, message: 'This invite is invalid or has expired.' });
+            const { data: portal } = await supabase.from('partner_portals').select('agency_name').eq('id', inv.portal_id).maybeSingle();
+            const { data: existing } = await supabase.from('persons').select('id, portal_password_set').ilike('email', inv.email).limit(1);
+            const hasAccount = !!(existing && existing.length && existing[0].portal_password_set);
+            return res.status(200).json({ success: true, invite: { email: inv.email, role: inv.role, agency_name: (portal && portal.agency_name) || 'the agency', has_account: hasAccount } });
+        }
+
+        if (action === 'accept_invite') {
+            const { token, full_name, password } = req.body;
+            const { data: inv } = await supabase.from('agency_invites').select('*').eq('token', token).eq('status', 'pending').maybeSingle();
+            if (!inv || (inv.expires_at && new Date(inv.expires_at) < new Date())) return res.status(400).json({ success: false, message: 'This invite is invalid or has expired.' });
+            let personId;
+            const { data: existing } = await supabase.from('persons').select('id, portal_password_set').ilike('email', inv.email).limit(1);
+            if (existing && existing.length) {
+                personId = existing[0].id;
+                if (!existing[0].portal_password_set) {
+                    if (!password || String(password).length < 8) return res.status(400).json({ success: false, message: 'Choose a password (at least 8 characters).' });
+                    const patch = { password_hash: await hashPassword(password), portal_password_set: true, is_portal_active: true };
+                    if (full_name) patch.full_name = full_name;
+                    await supabase.from('persons').update(patch).eq('id', personId);
+                }
+            } else {
+                if (!password || String(password).length < 8) return res.status(400).json({ success: false, message: 'Choose a password (at least 8 characters).' });
+                const { data: np, error } = await supabase.from('persons').insert({ full_name: full_name || inv.email.split('@')[0], email: inv.email.toLowerCase(), password_hash: await hashPassword(password), portal_password_set: true, is_portal_active: true }).select('id').single();
+                if (error || !np) return res.status(500).json({ success: false, message: 'Could not create your account.' });
+                personId = np.id;
+            }
+            await supabase.from('partner_portal_members').upsert({ portal_id: inv.portal_id, person_id: personId, role: inv.role, scope: inv.scope || {}, permissions: inv.permissions || {}, added_by: inv.invited_by }, { onConflict: 'portal_id,person_id' });
+            await supabase.from('agency_invites').update({ status: 'accepted', accepted_person_id: personId }).eq('id', inv.id);
+            const sess = await createSession(personId, req);
+            const { data: person } = await supabase.from('persons').select('full_name, email').eq('id', personId).maybeSingle();
+            return res.status(200).json({ success: true, token: sess, partner: { id: personId, name: (person && person.full_name) || '', email: (person && person.email) || inv.email } });
+        }
+
         if (action === 'validate') {
             const { token } = req.body;
             const personId = await validateSession(token);

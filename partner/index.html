@@ -200,8 +200,44 @@
     const inviteToken = params.get('token');
     const mode = params.get('mode');
     const magicToken = params.get('magic');
+    const agencyInvite = params.get('invite');
     if (magicToken) { consumeMagicLink(magicToken); }
+    else if (agencyInvite) { handleAgencyInvite(agencyInvite); }
     else if (inviteToken) showSetupForm(inviteToken, mode);
+
+    // Accept an agency team invite (from api/whitelabel.js agency_invite email).
+    async function handleAgencyInvite(token) {
+        let v;
+        try { v = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'verify_invite', token }) }).then(r => r.json()); }
+        catch (e) { v = null; }
+        if (!v || !v.success) { Swal.fire({ icon: 'error', title: 'Invite not valid', text: (v && v.message) || 'This invite is invalid or has expired.', confirmButtonColor: '#0d9488' }); return; }
+        const inv = v.invite;
+        const roleLabel = inv.role === 'agency_admin' ? 'Agency Admin' : 'CRM Admin';
+        const needSetup = !inv.has_account;
+        const html = '<div style="text-align:left;font-size:13px;color:#475569;">You’re joining <b>' + inv.agency_name + '</b> as <b>' + roleLabel + '</b> (' + inv.email + ').</div>'
+            + (needSetup
+                ? '<input id="invName" class="swal2-input" placeholder="Your full name" style="margin-top:14px;">'
+                  + '<input id="invPass" type="password" class="swal2-input" placeholder="Create a password (min 8 chars)">'
+                : '<div style="margin-top:12px;font-size:12px;color:#94a3b8;">You already have an account — accepting will add this agency to it.</div>');
+        const res = await Swal.fire({
+            title: 'Accept invite', html, showCancelButton: true, confirmButtonText: 'Accept & continue', confirmButtonColor: '#0d9488', focusConfirm: false,
+            preConfirm: function () {
+                if (!needSetup) return {};
+                const name = (document.getElementById('invName').value || '').trim();
+                const pass = document.getElementById('invPass').value || '';
+                if (!name) { Swal.showValidationMessage('Enter your name.'); return false; }
+                if (pass.length < 8) { Swal.showValidationMessage('Password must be at least 8 characters.'); return false; }
+                return { full_name: name, password: pass };
+            }
+        });
+        if (!res.isConfirmed) { window.history.replaceState({}, '', '/partner'); return; }
+        const r = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ action: 'accept_invite', token }, res.value)) }).then(x => x.json());
+        if (!r || !r.success) { Swal.fire({ icon: 'error', title: 'Could not accept', text: (r && r.message) || 'Please try again.', confirmButtonColor: '#0d9488' }); return; }
+        localStorage.setItem('pp_partner_token', r.token);
+        if (r.partner) { localStorage.setItem('pp_partner_id', r.partner.id); localStorage.setItem('pp_partner_name', r.partner.name || ''); }
+        window.history.replaceState({}, '', '/partner');
+        landAfterLogin();
+    }
 
     async function consumeMagicLink(token) {
         Swal.fire({ title: 'Signing you in…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });

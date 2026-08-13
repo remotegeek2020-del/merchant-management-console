@@ -410,3 +410,26 @@ then Tags management tab, Forms, Automation. Enforcement stays code-side (servic
   need real email/SMS/scheduling providers to go beyond manual logging). Flagged to user as next
   dedicated build.
 - All CRM tables isolated by sub_account_id + access-gated (agency member/god; sub-partner scope).
+
+## Team RBAC + Invites 2026-08-13
+Roles (partner_portal_members.role): **owner** | **agency_admin** | **crm_admin**
+(migration `agency_team_rbac` remapped legacy admin→agency_admin, sub_partner→crm_admin;
+added `permissions jsonb`; created `agency_invites`).
+- owner = superior (god = developer). Owners can add owners; owners+agency_admins manage the
+  team and can add agency_admin/crm_admin (NOT owner). crm_admin can't manage the team.
+- agency_admin = access to ALL CRMs in the agency. crm_admin = only scope.sub_account_ids CRMs.
+- Granular per-member `permissions` jsonb. Areas: agency = team/agency_settings/sub_accounts
+  (default OFF for agency_admin); CRM = contacts/opportunities/conversations/calendars/forms/
+  reporting/crm_settings (default ON). Owners = all. Enforced in crm.js subAccess(personId,sub,area):
+  owner bypasses; others denied an area only if permissions[area]===false. CRM section entry reads
+  pass their area; per-mutation area enforcement is a follow-up (UI hides sections they lack).
+- api/whitelabel.js: agency_team (members+invites+candidates+subs+assignable_roles+perm_areas),
+  agency_grant (add existing person), agency_update_member (role/scope/permissions),
+  agency_set_scope (legacy), agency_revoke, agency_invite (existing partner → add; else email
+  invite via Postmark), agency_revoke_invite. Helpers assignableRoles/sanitizePerms/sendInviteEmail.
+- Invites (#8): people NOT in the program get an emailed link `/partner?invite=<token>`.
+  api/partner-auth.js verify_invite/accept_invite (creates/links person, sets password, adds
+  membership from invite, logs in). partner/index.html handleAgencyInvite() accept flow.
+- agency.html Team panel rebuilt: member list with role badges + CRM scope, Add member modal
+  (existing sub-agent OR invite by email; role; CRM scope for crm_admin; granular permission
+  toggles), pending invites with cancel, edit/remove.
