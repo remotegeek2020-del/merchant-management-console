@@ -268,7 +268,7 @@
         try {
             const res = await fetch('/api/partner-auth', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'login', email, password: pass })
+                body: JSON.stringify({ action: 'login', email, password: pass, host: location.hostname })
             });
             const result = await res.json();
             if (result.success) {

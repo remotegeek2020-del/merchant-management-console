@@ -40,9 +40,9 @@
     // drop the brightness(0) invert(1) filter that whitens the PayProTec mark.
     function applyLogos(url) {
         if (!url) return;
-        document.querySelectorAll('.sidebar-logo, .topbar-logo').forEach(function (img) {
-            img.src = url;
-            img.style.filter = 'none';
+        // .logo = the partner LOGIN page mark; .sidebar-logo/.topbar-logo = in-app.
+        document.querySelectorAll('.sidebar-logo, .topbar-logo, .logo, [data-brand-logo]').forEach(function (img) {
+            if (img.tagName === 'IMG') { img.src = url; img.style.filter = 'none'; }
         });
     }
 

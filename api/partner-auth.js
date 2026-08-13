@@ -54,6 +54,20 @@ function sha256(v) {
     return crypto.createHash('sha256').update(String(v)).digest('hex');
 }
 
+// Branded-domain access gate: on a white-label host, only members of THAT agency may log
+// in. Canonical PayProTec hosts (and unknown hosts) impose no restriction — everyone can
+// always use portal.mypayprotec.com/partner.
+async function agencyHostGate(host, personId) {
+    const h = String(host || '').toLowerCase().replace(/^www\./, '').trim();
+    const CANON = ['', 'portal.mypayprotec.com', 'app.mypayprotec.com', 'localhost', '127.0.0.1'];
+    if (CANON.indexOf(h) >= 0) return { ok: true };
+    const { data: brand } = await supabase.from('portal_brands').select('portal_id, name').eq('host', h).maybeSingle();
+    if (!brand || !brand.portal_id) return { ok: true }; // not a known agency domain → no gate
+    const { data: mem } = await supabase.from('partner_portal_members').select('id').eq('portal_id', brand.portal_id).eq('person_id', personId).maybeSingle();
+    if (mem) return { ok: true };
+    return { ok: false, name: brand.name || 'this agency' };
+}
+
 // Shared magic-link email body.
 async function sendMagicEmail(person, magicUrl) {
     if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[MAGIC LINK] ${person.email} -> ${magicUrl}`); return; }
@@ -124,6 +138,9 @@ export default async function handler(req, res) {
             if (!person.is_portal_active) return res.status(403).json({ success: false, message: 'Your portal access is not yet activated. Check your email for an invite.' });
             if (!person.portal_password_set) return res.status(403).json({ success: false, message: 'Please complete your account setup using the invite link sent to your email.' });
             if (!await verifyPassword(password, person.password_hash)) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+            // Branded-domain gate: on a white-label host, only that agency's members may sign in.
+            const gate = await agencyHostGate(req.body.host, person.id);
+            if (!gate.ok) return res.status(403).json({ success: false, message: 'This portal is for ' + (gate.name || 'this agency') + '. Please sign in at portal.mypayprotec.com/partner.' });
             const token = await createSession(person.id, req);
             await supabase.from('persons').update({ last_portal_login: new Date().toISOString() }).eq('id', person.id);
             return res.status(200).json({ success: true, token, partner: { id: person.id, name: person.full_name, email: person.email } });
