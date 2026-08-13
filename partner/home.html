@@ -99,7 +99,7 @@
     </div>
     <nav class="sidebar-nav">
         <a class="nav-item active" href="/partner/home"><span class="material-icons">home</span> Home</a>
-        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> My Portal</a>
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> PayProTec Portal</a>
         <a class="nav-item" id="navSettings" href="/partner/agency-settings"><span class="material-icons">settings</span> Agency Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
@@ -274,7 +274,7 @@ async function loadHub(){
 
     // The Partner Portal is SEPARATE from the agency — your standard partner account.
     var portalCard = '<div class="card" style="border-top:4px solid var(--navy);">'
-      +'<div class="card-top"><div class="card-title">My Partner Portal</div></div>'
+      +'<div class="card-top"><div class="card-title">PayProTec Portal</div></div>'
       +'<div class="muted-note" style="margin:6px 0 2px;">Your standard partner account — merchants, residuals, POS leads.</div>'
       +'<div class="card-foot"><span class="status" style="color:#64748b;"><span class="dot" style="background:#334155;"></span>Standard access</span>'
       +'<button class="btn btn-teal" onclick="window.location.href=\'/partner/dashboard\'">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div></div>';
@@ -295,6 +295,8 @@ function handleLogout(){
 
 loadHub();
 </script>
+<script src="/js/pp-transition.js?v=20260812b"></script>
+<script src="/js/brand.js?v=20260812b"></script>
 <script src="/js/partner-nav.js?v=20260812b"></script>
 </body>
 </html>

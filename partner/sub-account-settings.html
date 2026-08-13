@@ -105,6 +105,8 @@ async function load(){
 function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ ppClearPartner(); location.href='/partner'; }); }
 load();
 </script>
+<script src="/js/pp-transition.js?v=20260812b"></script>
+<script src="/js/brand.js?v=20260812b"></script>
 <script src="/js/partner-nav.js?v=20260812b"></script>
 </body>
 </html>

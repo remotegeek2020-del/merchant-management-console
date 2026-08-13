@@ -166,7 +166,7 @@
     if (existingToken && !new URLSearchParams(window.location.search).get('magic')) {
         fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'validate', token: existingToken }) })
             .then(r => r.json()).then(result => {
-                if (result.success) window.location.href = '/partner/dashboard';
+                if (result.success) landAfterLogin();
                 else { // stale token → clear it so we show a clean login instead of bouncing
                     ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){ localStorage.removeItem(k); });
                 }
@@ -179,6 +179,18 @@
     // Send a signed-in prospect to onboarding (if unfinished) or their home.
     function routeLead(lead) {
         window.location.href = lead.onboarding_completed ? '/lead/home' : '/lead/onboarding';
+    }
+
+    // Where a signed-in partner lands: BRANDED partners (any agency access —
+    // owner, co-owner, admin or granted sub-partner) go to the Agency home
+    // launchpad; everyone else goes to the standard PayProTec portal.
+    async function landAfterLogin() {
+        try {
+            const t = localStorage.getItem('pp_partner_token');
+            const r = await fetch('/api/whitelabel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_my_agencies', token: t }) }).then(x => x.json());
+            if (r && r.success && (r.agencies || []).length) { window.location.href = '/partner/home'; return; }
+        } catch (e) {}
+        window.location.href = '/partner/dashboard';
     }
 
     // Check for invite/reset token in URL
@@ -200,7 +212,7 @@
                 localStorage.setItem('pp_partner_id', result.partner.id);
                 // Clean the token out of the URL/history before leaving.
                 window.history.replaceState({}, '', '/partner');
-                window.location.href = '/partner/dashboard';
+                landAfterLogin();
             } else {
                 Swal.fire({ icon: 'error', title: 'Link not valid', text: result.message || 'Please request a new sign-in link.', confirmButtonColor: '#0d9488' });
             }
@@ -280,7 +292,7 @@
                 localStorage.setItem('pp_partner_token', result.token);
                 localStorage.setItem('pp_partner_name', result.partner.name);
                 localStorage.setItem('pp_partner_id', result.partner.id);
-                window.location.href = '/partner/dashboard';
+                await landAfterLogin();
                 return;
             }
             // Not a partner? Try a prospect (Lead Portal) account with the same
@@ -450,8 +462,8 @@
                 localStorage.setItem('pp_partner_token', result.token);
                 localStorage.setItem('pp_partner_name', result.partner.name);
                 localStorage.setItem('pp_partner_id', result.partner.id);
-                await Swal.fire({ icon: 'success', title: 'Welcome!', text: 'Your account is ready. Taking you to your dashboard...', timer: 2000, showConfirmButton: false, confirmButtonColor: '#0d9488' });
-                window.location.href = '/partner/dashboard';
+                await Swal.fire({ icon: 'success', title: 'Welcome!', text: 'Your account is ready. Taking you in...', timer: 2000, showConfirmButton: false, confirmButtonColor: '#0d9488' });
+                await landAfterLogin();
             } else {
                 Swal.fire({ icon: 'error', title: 'Setup Failed', text: result.message, confirmButtonColor: '#0d9488' });
                 btn.disabled = false;
