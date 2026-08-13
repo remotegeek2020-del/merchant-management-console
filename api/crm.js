@@ -37,6 +37,10 @@ async function subAccess(personId, subId) {
 }
 
 const CONTACT_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'company', 'title', 'source', 'status', 'notes'];
+const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'dropdown', 'checkbox'];
+function slugify(s) {
+    return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || ('f_' + Math.random().toString(36).slice(2, 8));
+}
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
@@ -84,6 +88,7 @@ export default async function handler(req, res) {
             const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, created_by: personId };
             CONTACT_FIELDS.forEach(k => { row[k] = (f[k] === '' || f[k] === undefined) ? null : f[k]; });
             if (!row.status) row.status = 'active';
+            if (body.custom && typeof body.custom === 'object') row.custom = body.custom;
             const { data, error } = await supabase.from('crm_contacts').insert(row).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not create contact.' });
             if (Array.isArray(body.tag_ids)) await applyTags(data.id, data.sub_account_id, body.tag_ids);
@@ -96,6 +101,7 @@ export default async function handler(req, res) {
             const f = body.contact || {};
             const patch = {};
             CONTACT_FIELDS.forEach(k => { if (k in f) patch[k] = f[k] === '' ? null : f[k]; });
+            if (body.custom && typeof body.custom === 'object') patch.custom = body.custom;
             const { data, error } = await supabase.from('crm_contacts').update(patch).eq('id', body.id).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not update contact.' });
             if (Array.isArray(body.tag_ids)) await applyTags(body.id, ca.contact.sub_account_id, body.tag_ids);
@@ -138,6 +144,86 @@ export default async function handler(req, res) {
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const applied = await applyTags(body.contact_id, ca.contact.sub_account_id, body.tag_ids || []);
             return res.status(200).json({ success: true, tag_ids: applied });
+        }
+
+        // ── CUSTOM FIELD DEFINITIONS ─────────────────────────────────────────
+        if (action === 'list_custom_fields') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const entity = body.entity || 'contact';
+            const { data } = await supabase.from('crm_custom_fields')
+                .select('*').eq('sub_account_id', body.sub_account_id).eq('entity', entity)
+                .order('position', { ascending: true }).order('created_at', { ascending: true });
+            return res.status(200).json({ success: true, fields: data || [] });
+        }
+
+        if (action === 'create_custom_field') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const f = body.field || {};
+            const label = (f.label || '').trim();
+            if (!label) return res.status(400).json({ success: false, message: 'Field label required.' });
+            const type = FIELD_TYPES.includes(f.type) ? f.type : 'text';
+            const entity = body.entity || 'contact';
+            let key = slugify(f.field_key || label);
+            // ensure unique key within this CRM/entity
+            const { data: existing } = await supabase.from('crm_custom_fields').select('field_key').eq('sub_account_id', body.sub_account_id).eq('entity', entity);
+            const used = new Set((existing || []).map(x => x.field_key));
+            if (used.has(key)) { let i = 2; while (used.has(key + '_' + i)) i++; key = key + '_' + i; }
+            const options = Array.isArray(f.options) ? f.options.filter(Boolean).map(String) : [];
+            const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, entity, label, field_key: key, type, options, required: !!f.required, position: Number(f.position) || 0 };
+            const { data, error } = await supabase.from('crm_custom_fields').insert(row).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not create field.' });
+            return res.status(200).json({ success: true, field: data });
+        }
+
+        if (action === 'update_custom_field') {
+            const { data: fld } = await supabase.from('crm_custom_fields').select('*').eq('id', body.id).maybeSingle();
+            if (!fld) return res.status(404).json({ success: false, message: 'Field not found.' });
+            const acc = await subAccess(personId, fld.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const f = body.field || {};
+            const patch = {};
+            if ('label' in f) patch.label = (f.label || '').trim() || fld.label;
+            if ('type' in f && FIELD_TYPES.includes(f.type)) patch.type = f.type;
+            if ('options' in f) patch.options = Array.isArray(f.options) ? f.options.filter(Boolean).map(String) : [];
+            if ('required' in f) patch.required = !!f.required;
+            if ('position' in f) patch.position = Number(f.position) || 0;
+            const { data, error } = await supabase.from('crm_custom_fields').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not update field.' });
+            return res.status(200).json({ success: true, field: data });
+        }
+
+        if (action === 'delete_custom_field') {
+            const { data: fld } = await supabase.from('crm_custom_fields').select('*').eq('id', body.id).maybeSingle();
+            if (!fld) return res.status(404).json({ success: false, message: 'Field not found.' });
+            const acc = await subAccess(personId, fld.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_custom_fields').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+
+        // ── TAG MANAGEMENT (rename / recolor / delete) ───────────────────────
+        if (action === 'update_tag') {
+            const { data: tag } = await supabase.from('crm_tags').select('*').eq('id', body.id).maybeSingle();
+            if (!tag) return res.status(404).json({ success: false, message: 'Tag not found.' });
+            const acc = await subAccess(personId, tag.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const patch = {};
+            if ('name' in body && (body.name || '').trim()) patch.name = body.name.trim();
+            if ('color' in body) patch.color = body.color || null;
+            const { data, error } = await supabase.from('crm_tags').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not update tag (name may already exist).' });
+            return res.status(200).json({ success: true, tag: data });
+        }
+
+        if (action === 'delete_tag') {
+            const { data: tag } = await supabase.from('crm_tags').select('*').eq('id', body.id).maybeSingle();
+            if (!tag) return res.status(404).json({ success: false, message: 'Tag not found.' });
+            const acc = await subAccess(personId, tag.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_tags').delete().eq('id', body.id); // contact links cascade
+            return res.status(200).json({ success: true });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });

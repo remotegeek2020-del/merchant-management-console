@@ -362,3 +362,20 @@ CRM-READY (roles/scoping designed for opportunities/contacts/tasks, not just dom
 
 ### RESUME: build Opportunities next (pipeline board + deals) reusing api/crm.js access gate;
 then Tags management tab, Forms, Automation. Enforcement stays code-side (service role), RLS optional later.
+
+### CRM update 2026-08-13 (later): left side-menu + Custom Fields + Tags manager
+- `partner/sub-account.html` is now a HighLevel-style CRM with a LEFT SIDE MENU (in-page
+  section switching, `?section=` deep-link): Dashboard, Contacts (live), Opportunities,
+  Conversations, Calendars, Automation, Reporting (placeholders) + Company Data group
+  (Merchants/Partner IDs/Sub-Partners, live) + CRM Settings + Sign Out. "Agency" steps up.
+- Phase 4 DONE — Custom Fields + Tags manager (migration `crm_custom_fields`):
+  `crm_custom_fields` (sub_account_id, entity 'contact', label, field_key slug, type
+  text|textarea|number|date|dropdown|checkbox, options jsonb, required, position). Values ride
+  in `crm_contacts.custom` jsonb keyed by field_key.
+  - `api/crm.js`: list/create/update/delete_custom_field, update_tag, delete_tag; contact
+    create/update now persist `custom`.
+  - UI: contact modal renders custom fields dynamically; CRM Settings section has Custom Fields
+    + Tags management panels (add/edit/delete, tag color).
+- PHASING agreed: 1 Contacts✅ · 2 Opportunities/Pipeline · 3 Contact record (notes/tasks/
+  timeline) · 4 Custom fields+Tags✅ · 5 Forms · 6+ Conversations/Calendars/Automation/Reporting.
+  NEXT (recommended): Phase 2 Opportunities/Pipeline board (schema + default pipeline seeder ready).
