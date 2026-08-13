@@ -326,3 +326,39 @@ CRM-READY (roles/scoping designed for opportunities/contacts/tasks, not just dom
   "🔑 Login As" button + impersonation banner (partner-nav.js). Dev test acct:
   devtest@mypayprotec.com / DevTest#2026 (full_access co-owner of REL-100001). Michelle's
   REL-100001 seeded as populated test agency (4 company sub-accounts).
+
+---
+
+## CRM Layer (per sub-account, HighLevel-style) — Phase 1 STARTED 2026-08-13
+
+### Model (confirmed): 1 agency per partner (`partner_portals`), MANY CRMs per agency
+- A **CRM = one `agency_sub_accounts` row** (the HighLevel "sub-account/location").
+  `agency_sub_accounts`: id, portal_id→partner_portals (the agency), company_id (nullable,
+  a linked PayProTec company) OR free-form name, status, created_by.
+- Full data isolation: **every CRM table carries `sub_account_id`** (FK→agency_sub_accounts,
+  ON DELETE CASCADE) = the tenant key (like HL `locationId`), plus `portal_id` denormalized for
+  agency-wide roll-ups. CRM A's contacts/opportunities never mix with CRM B's. Scales across all
+  branded agencies.
+- Access gate (mirrors whitelabel.js `get_sub_account`): member of the owning agency
+  (partner_portal_members) OR portal god; sub-partners must have the CRM in `scope.sub_account_ids`.
+
+### DB migration `crm_layer_phase1` (APPLIED)
+- `crm_contacts` (sub_account_id, portal_id, first/last/email/phone/company/title/source/status,
+  owner_person_id, notes, custom jsonb, created_by, timestamps + updated_at trigger)
+- `crm_tags` (unique per CRM by lower(name)) + `crm_contact_tags` (join)
+- `crm_pipelines` + `crm_pipeline_stages` (is_won/is_lost flags)
+- `crm_opportunities` (pipeline_id, stage_id, contact_id, title, value_cents, currency, status
+  open|won|lost|abandoned, owner_person_id, expected_close_date, position, custom jsonb, timestamps)
+- fn `crm_ensure_default_pipeline(sub_account_id)` → lazily seeds a default "Sales Pipeline"
+  (New/Contacted/Qualified/Proposal/Won/Lost) on first opportunities view.
+
+### Files
+- `api/crm.js` (NEW): partner-token API, all actions sub_account_id-scoped + access-gated.
+  DONE: list_contacts (q filter + tags), create_contact, update_contact, delete_contact,
+  list_tags, create_tag, set_contact_tags. TODO: opportunities/pipeline actions.
+- `partner/sub-account.html`: Contacts tab is LIVE (search, add/edit modal with tag
+  checkboxes + inline new-tag, delete). Default tab = Contacts. Opportunities/Automation/
+  Forms/Tags tabs still COMING SOON placeholders.
+
+### RESUME: build Opportunities next (pipeline board + deals) reusing api/crm.js access gate;
+then Tags management tab, Forms, Automation. Enforcement stays code-side (service role), RLS optional later.

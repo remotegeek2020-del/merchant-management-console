@@ -161,7 +161,7 @@ function subPartnersPanel(){
 var PANELS = {
     // ── CRM core (per-CRM) — built out later ──
     opportunities: function(){ return emptyPanel('trending_up','Opportunities','Track deals through your pipeline stages for this CRM.', true); },
-    contacts: function(){ return emptyPanel('contacts','Contacts','Your unified contact list — leads, merchants and people for this CRM.', true); },
+    contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
     automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
     forms: function(){ return emptyPanel('description','Forms','Capture leads and info with hosted forms for this CRM.', true); },
     tags: function(){ return emptyPanel('sell','Tags','Organize and segment contacts and opportunities with tags.', true); },
@@ -207,8 +207,8 @@ async function load(){
       +'</div>'
       +'<div class="tab-group-label">CRM</div>'
       +'<div class="tabs">'
-      +'<button class="tab active" data-k="opportunities" onclick="showTab(\'opportunities\')"><span class="material-icons" style="font-size:16px;">trending_up</span> Opportunities</button>'
-      +'<button class="tab" data-k="contacts" onclick="showTab(\'contacts\')"><span class="material-icons" style="font-size:16px;">contacts</span> Contacts</button>'
+      +'<button class="tab" data-k="opportunities" onclick="showTab(\'opportunities\')"><span class="material-icons" style="font-size:16px;">trending_up</span> Opportunities</button>'
+      +'<button class="tab active" data-k="contacts" onclick="showTab(\'contacts\')"><span class="material-icons" style="font-size:16px;">contacts</span> Contacts</button>'
       +'<button class="tab" data-k="automation" onclick="showTab(\'automation\')"><span class="material-icons" style="font-size:16px;">bolt</span> Automation</button>'
       +'<button class="tab" data-k="forms" onclick="showTab(\'forms\')"><span class="material-icons" style="font-size:16px;">description</span> Forms</button>'
       +'<button class="tab" data-k="tags" onclick="showTab(\'tags\')"><span class="material-icons" style="font-size:16px;">sell</span> Tags</button>'
@@ -220,12 +220,111 @@ async function load(){
       +'<button class="tab" data-k="sub_partners" onclick="showTab(\'sub_partners\')"><span class="material-icons" style="font-size:16px;">account_tree</span> Sub-Partners <span class="cnt">'+o.sub_partners.count+'</span></button>'
       +'</div><div id="panelWrap"></div>';
     var nss = document.getElementById('navSubSettings'); if (nss) nss.href = '/partner/sub-account-settings?sub=' + encodeURIComponent(subId);
-    showTab('opportunities');
+    showTab('contacts');
 }
 
 function handleLogout(){
     fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).finally(function(){ ppClearPartner(); location.href='/partner'; });
 }
+
+/* ── CONTACTS (per-CRM, isolated by sub_account_id) ─────────────────────────── */
+var CRM_CONTACTS = [], CRM_TAGS = [], CRM_Q = '';
+function crmApi(b){ return fetch('/api/crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(r=>r.json()); }
+function cName(c){ return ((c.first_name||'')+' '+(c.last_name||'')).trim() || c.email || c.phone || 'Unnamed'; }
+function tagChip(t){ var col=t.color||'#e2e8f0'; return '<span style="display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:'+col+'22;color:'+shade(col)+';border:1px solid '+col+'55;margin:2px 3px 0 0;">'+esc(t.name)+'</span>'; }
+function shade(hex){ return /^#/.test(hex)?hex:'#475569'; }
+
+async function loadContacts(){
+    var host = document.getElementById('crmContacts'); if(!host) return;
+    var results = await Promise.all([
+        crmApi({action:'list_contacts', sub_account_id:subId}),
+        crmApi({action:'list_tags', sub_account_id:subId})
+    ]);
+    var cr = results[0], tr = results[1];
+    if(cr && /session/i.test(cr.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    CRM_CONTACTS = (cr && cr.success && cr.contacts) || [];
+    CRM_TAGS = (tr && tr.success && tr.tags) || [];
+    renderContacts();
+}
+function renderContacts(){
+    var host = document.getElementById('crmContacts'); if(!host) return;
+    var q = CRM_Q.toLowerCase();
+    var list = !q ? CRM_CONTACTS : CRM_CONTACTS.filter(function(c){ return [c.first_name,c.last_name,c.email,c.phone,c.company].some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;}); });
+    var toolbar = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">'
+      +'<div style="position:relative;flex:1;min-width:220px;"><span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px;">search</span>'
+      +'<input id="crmSearch" value="'+esc(CRM_Q)+'" oninput="CRM_Q=this.value;renderContacts();document.getElementById(\'crmSearch\').focus();" placeholder="Search contacts…" style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;"></div>'
+      +'<div style="font-size:12px;color:var(--muted);font-weight:600;">'+list.length+' contact'+(list.length===1?'':'s')+'</div>'
+      +'<button onclick="openContact()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">person_add</span> Add contact</button>'
+      +'</div>';
+    var inner;
+    if(!list.length){
+        inner = '<div class="panel"><div class="empty"><span class="material-icons">contacts</span><h4>'+(CRM_Q?'No matches':'No contacts yet')+'</h4><p>'+(CRM_Q?'Try a different search.':'Add your first contact to this CRM.')+'</p></div></div>';
+    } else {
+        var rows = list.map(function(c){
+            var tags = (c.tags||[]).map(tagChip).join('') || '<span style="color:var(--muted);font-size:11px;">—</span>';
+            return '<tr style="cursor:pointer;" onclick="openContact(\''+c.id+'\')">'
+              +'<td style="font-weight:700;">'+esc(cName(c))+(c.company?'<div style="font-weight:400;color:var(--muted);font-size:11px;">'+esc(c.company)+'</div>':'')+'</td>'
+              +'<td style="color:var(--secondary);">'+esc(c.email||'—')+'</td>'
+              +'<td class="mono">'+esc(c.phone||'—')+'</td>'
+              +'<td>'+tags+'</td>'
+              +'<td style="text-align:right;" onclick="event.stopPropagation();"><span class="material-icons" title="Edit" onclick="openContact(\''+c.id+'\')" style="font-size:17px;color:var(--muted);cursor:pointer;">edit</span> <span class="material-icons" title="Delete" onclick="deleteContact(\''+c.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></td></tr>';
+        }).join('');
+        inner = '<div class="panel"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Tags</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    }
+    host.innerHTML = toolbar + inner;
+}
+function tagCheckboxes(selectedIds){
+    var sel = {}; (selectedIds||[]).forEach(function(id){ sel[id]=1; });
+    var boxes = CRM_TAGS.map(function(t){
+        return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 10px 6px 0;cursor:pointer;"><input type="checkbox" class="crmTagCb" value="'+t.id+'"'+(sel[t.id]?' checked':'')+'> '+esc(t.name)+'</label>';
+    }).join('') || '<span style="font-size:12px;color:#94a3b8;">No tags yet.</span>';
+    return '<div id="crmTagBox" style="text-align:left;">'+boxes+'</div>'
+      +'<div style="display:flex;gap:6px;margin-top:8px;"><input id="crmNewTag" placeholder="New tag" class="swal2-input" style="margin:0;flex:1;height:36px;font-size:13px;"><button type="button" class="swal2-confirm swal2-styled" style="background:#64748b;margin:0;padding:6px 12px;font-size:12px;" onclick="addTagInModal()">Add tag</button></div>';
+}
+window.addTagInModal = async function(){
+    var el = document.getElementById('crmNewTag'); var name=(el&&el.value||'').trim(); if(!name) return;
+    var r = await crmApi({action:'create_tag', sub_account_id:subId, name:name});
+    if(!r||!r.success){ return; }
+    if(!CRM_TAGS.some(function(t){return t.id===r.tag.id;})) CRM_TAGS.push(r.tag);
+    var box=document.getElementById('crmTagBox');
+    if(box){ var lbl=document.createElement('label'); lbl.style.cssText='display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 10px 6px 0;cursor:pointer;'; lbl.innerHTML='<input type="checkbox" class="crmTagCb" value="'+r.tag.id+'" checked> '+esc(r.tag.name); box.appendChild(lbl); }
+    el.value='';
+};
+window.openContact = async function(id){
+    var c = id ? CRM_CONTACTS.filter(function(x){return x.id===id;})[0] : null;
+    c = c || {};
+    var selTags = (c.tags||[]).map(function(t){return t.id;});
+    var f = function(label,key,type){ return '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">'+label+'</label><input id="cf_'+key+'" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(c[key]||'')+'"'+(type?' type="'+type+'"':'')+'>'; };
+    var html = '<div style="max-height:60vh;overflow:auto;padding:2px 4px;">'
+      +'<div style="display:flex;gap:10px;">'+'<div style="flex:1;">'+f('First name','first_name')+'</div><div style="flex:1;">'+f('Last name','last_name')+'</div></div>'
+      +f('Email','email','email')+f('Phone','phone')+f('Company','company')+f('Title','title')+f('Source','source')
+      +'<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">Notes</label><textarea id="cf_notes" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;">'+esc(c.notes||'')+'</textarea>'
+      +'<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:12px 2px 6px;">Tags</label>'+tagCheckboxes(selTags)
+      +'</div>';
+    var res = await Swal.fire({
+        title: id?'Edit contact':'New contact', html:html, width:520, showCancelButton:true,
+        confirmButtonText: id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){
+            var g=function(k){ var e=document.getElementById('cf_'+k); return e?e.value.trim():''; };
+            var tag_ids = Array.prototype.slice.call(document.querySelectorAll('.crmTagCb')).filter(function(x){return x.checked;}).map(function(x){return x.value;});
+            var contact={first_name:g('first_name'),last_name:g('last_name'),email:g('email'),phone:g('phone'),company:g('company'),title:g('title'),source:g('source'),notes:g('notes')};
+            if(!contact.first_name && !contact.last_name && !contact.email && !contact.phone){ Swal.showValidationMessage('Enter at least a name, email or phone.'); return false; }
+            return {contact:contact, tag_ids:tag_ids};
+        }
+    });
+    if(!res.isConfirmed) return;
+    var payload = Object.assign({sub_account_id:subId, tag_ids:res.value.tag_ids, contact:res.value.contact}, id?{action:'update_contact', id:id}:{action:'create_contact'});
+    var r = await crmApi(payload);
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
+    await loadContacts();
+};
+window.deleteContact = async function(id){
+    var c = await Swal.fire({icon:'warning',title:'Delete contact?',text:'This removes the contact from this CRM.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    var r = await crmApi({action:'delete_contact', id:id});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; }
+    await loadContacts();
+};
 // Re-load if the top-bar switcher changes the active sub-account.
 window.addEventListener('pp-context-change', function(){
     var s = localStorage.getItem('pp_active_sub_account') || '';
