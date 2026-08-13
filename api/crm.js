@@ -387,6 +387,39 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── REPORTING (aggregates from this CRM's own data) ──────────────────
+        if (action === 'get_report') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const sub = body.sub_account_id;
+            const [contactsC, oppsRes, stagesRes, tasksRes, formsRes] = await Promise.all([
+                supabase.from('crm_contacts').select('id', { count: 'exact', head: true }).eq('sub_account_id', sub),
+                supabase.from('crm_opportunities').select('stage_id,status,value_cents').eq('sub_account_id', sub),
+                supabase.from('crm_pipeline_stages').select('id,name,position,is_won,is_lost').eq('sub_account_id', sub).order('position', { ascending: true }),
+                supabase.from('crm_tasks').select('done,due_date').eq('sub_account_id', sub),
+                supabase.from('crm_forms').select('submissions').eq('sub_account_id', sub)
+            ]);
+            const opps = oppsRes.data || [], stages = stagesRes.data || [], tasks = tasksRes.data || [];
+            const sum = (arr) => arr.reduce((s, o) => s + (o.value_cents || 0), 0);
+            const openO = opps.filter(o => o.status === 'open'), wonO = opps.filter(o => o.status === 'won'), lostO = opps.filter(o => o.status === 'lost');
+            const today = new Date(new Date().toDateString());
+            const by_stage = stages.map(st => { const d = opps.filter(o => o.stage_id === st.id); return { name: st.name, is_won: st.is_won, is_lost: st.is_lost, count: d.length, value_cents: sum(d) }; });
+            return res.status(200).json({
+                success: true,
+                report: {
+                    contacts: contactsC.count || 0,
+                    opps_total: opps.length,
+                    open_count: openO.length, open_value_cents: sum(openO),
+                    won_count: wonO.length, won_value_cents: sum(wonO),
+                    lost_count: lostO.length,
+                    tasks_open: tasks.filter(t => !t.done).length,
+                    tasks_overdue: tasks.filter(t => !t.done && t.due_date && new Date(t.due_date) < today).length,
+                    form_submissions: (formsRes.data || []).reduce((s, f) => s + (f.submissions || 0), 0),
+                    by_stage
+                }
+            });
+        }
+
         // ── FORMS (lead capture; public submit lives in api/crm-form.js) ─────
         if (action === 'list_forms') {
             const acc = await subAccess(personId, body.sub_account_id);

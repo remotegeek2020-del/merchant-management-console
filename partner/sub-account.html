@@ -192,7 +192,7 @@ var SECTIONS = {
     calendars: function(){ return emptyPanel('event','Calendars','Scheduling and appointment booking for this CRM.', true); },
     automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
     forms: function(){ setTimeout(loadForms, 0); return '<div id="crmForms"><div class="empty"><span class="material-icons">description</span><h4>Loading forms…</h4></div></div>'; },
-    reporting: function(){ return emptyPanel('insights','Reporting','Pipeline, activity and revenue analytics for this CRM.', true); },
+    reporting: function(){ setTimeout(loadReport, 0); return '<div id="crmReport"><div class="empty"><span class="material-icons">insights</span><h4>Loading reporting…</h4></div></div>'; },
     merchants: merchantsPanel,
     partner_ids: partnerIdsPanel,
     sub_partners: subPartnersPanel,
@@ -503,6 +503,36 @@ window.deleteForm=async function(id){
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; }
     await loadForms();
 };
+
+/* ── REPORTING ─────────────────────────────────────────────────────────────── */
+async function loadReport(){
+    var host=document.getElementById('crmReport'); if(!host) return;
+    var r=await crmApi({action:'get_report', sub_account_id:subId});
+    if(r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    if(!r||!r.success){ host.innerHTML=emptyPanel('insights','Reporting',(r&&r.message)||'Could not load.', false); return; }
+    var d=r.report;
+    var tile=function(label,val,icon,color){ return '<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;'+(color?'color:'+color+';':'')+'">'+icon+'</span> '+label+'</div><div class="kpi-value"'+(color?' style="color:'+color+';"':'')+'>'+val+'</div></div>'; };
+    var tiles='<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">'
+      +tile('Contacts', d.contacts.toLocaleString(), 'contacts')
+      +tile('Open deals', d.open_count+' · '+money(d.open_value_cents/100), 'trending_up')
+      +tile('Won', money(d.won_value_cents/100), 'emoji_events', '#166534')
+      +tile('Form leads', d.form_submissions.toLocaleString(), 'description')
+      +'</div>'
+      +'<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-top:0;">'
+      +tile('Won deals', d.won_count, 'check_circle', '#166534')
+      +tile('Lost deals', d.lost_count, 'cancel', '#b91c1c')
+      +tile('Tasks open', d.tasks_open, 'task_alt')
+      +tile('Overdue', d.tasks_overdue, 'schedule', d.tasks_overdue?'#b91c1c':'')
+      +'</div>';
+    var maxV=Math.max.apply(null,[1].concat((d.by_stage||[]).map(function(s){return s.value_cents;})));
+    var bars=(d.by_stage||[]).map(function(s){
+        var pct=Math.round((s.value_cents/maxV)*100);
+        var col=s.is_won?'#22c55e':(s.is_lost?'#ef4444':'var(--teal)');
+        return '<div style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span style="font-weight:700;">'+esc(s.name)+' <span style="color:var(--muted);font-weight:500;">· '+s.count+'</span></span><span class="mono" style="font-weight:700;">'+money(s.value_cents/100)+'</span></div>'
+          +'<div style="height:9px;background:#f1f5f9;border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:99px;"></div></div></div>';
+    }).join('') || '<div style="font-size:13px;color:var(--muted);">No pipeline data yet.</div>';
+    host.innerHTML=tiles+'<div class="panel" style="padding:18px 20px;margin-top:6px;"><div style="font-weight:800;font-size:14px;margin-bottom:14px;">Pipeline by stage</div>'+bars+'</div>';
+}
 
 /* ── CUSTOM FIELDS (per-CRM definitions; values ride in contact.custom) ─────── */
 function customFieldInput(fld, val){
