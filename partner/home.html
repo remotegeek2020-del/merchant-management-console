@@ -64,6 +64,24 @@
         .muted-note { font-size:12px; color:var(--muted); }
         .empty { background:white; border:1px dashed var(--border); border-radius:16px; padding:40px; text-align:center; color:var(--muted); }
         .empty .material-icons { font-size:40px; opacity:0.3; display:block; margin:0 auto 8px; }
+        /* 3-level launcher: Partner Portal (standalone) · Agency (container) · CRMs (nested) */
+        .launch { display:flex; flex-direction:column; gap:22px; }
+        .portal-solo { max-width:360px; }
+        .agency-block { background:white; border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow-sm); overflow:hidden; }
+        .agency-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 20px; background:linear-gradient(135deg,#f8fafc,#f0fdfa); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+        .agency-head-left { display:flex; align-items:center; gap:12px; }
+        .agency-ico { width:44px; height:44px; border-radius:12px; background:var(--teal-bg); color:var(--teal); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .agency-ico .material-icons { font-size:24px; }
+        .agency-title { font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .agency-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .btn-outline { background:white; color:var(--secondary); border:1px solid var(--border); }
+        .crm-wrap { padding:16px 20px 20px; }
+        .crm-wrap-label { font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.7px; margin:0 0 12px; }
+        .crm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+        .crm-card { border:1px solid var(--border); border-top:4px solid var(--teal); border-radius:14px; padding:16px; display:flex; flex-direction:column; background:white; transition:box-shadow .2s, transform .1s; }
+        .crm-card:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+        .add-crm { border:1.5px dashed var(--border); border-radius:14px; padding:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--muted); cursor:pointer; font-weight:700; font-size:13px; min-height:118px; text-align:center; }
+        .add-crm:hover { border-color:var(--teal); color:var(--teal); background:var(--teal-bg); }
         @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
     </style>
 </head>
@@ -141,32 +159,41 @@ window.enterCompany = function(companyId){
     window.location.href = '/partner/dashboard';
 };
 
-// The AGENCY management card — the branded office itself. It "caters" the CRMs:
-// branding/domain (Settings), team & visibility, and creating new sub-accounts.
-// It is NOT a place you "open"; the CRMs (sub-accounts) below are.
-function agencyManageCard(a){
+// LEVEL 2 — the AGENCY (branded office). A container that "caters" the CRMs:
+// its header carries branding/domain + Settings/Team; its body nests the CRMs.
+function agencyBlock(a){
     var title = a.agency_name || 'Unnamed agency';
     var n = (a.sub_accounts||[]).length;
-    return '<div class="card agency">'
-      +'<div class="card-top"><div class="card-title">'+esc(title)+'</div><span class="rel">'+esc(a.relationship_id||'')+'</span></div>'
-      +'<div>'+roleBadge(a)+' <span class="muted-note">· '+n+' CRM'+(n===1?'':'s')+'</span></div>'
-      +'<div style="margin:10px 0 2px;">'+domainStatus(a)+'</div>'
-      +'<div class="card-foot" style="flex-wrap:wrap;gap:8px;">'
+    var head =
+      '<div class="agency-head">'
+      +'<div class="agency-head-left"><div class="agency-ico"><span class="material-icons">apartment</span></div>'
+      +'<div><div class="agency-title">'+esc(title)+' <span class="rel">'+esc(a.relationship_id||'')+'</span></div>'
+      +'<div style="margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+roleBadge(a)+' <span class="muted-note">· '+n+' CRM'+(n===1?'':'s')+'</span> '+domainStatus(a)+'</div></div></div>'
+      +'<div class="agency-actions">'
       +(a.can_manage?'<a class="btn btn-outline" href="/partner/agency-settings?portal='+a.portal_id+'"><span class="material-icons" style="font-size:15px;">settings</span> Settings</a>':'')
       +'<a class="btn btn-outline" href="/partner/agency?portal='+a.portal_id+'"><span class="material-icons" style="font-size:15px;">groups</span> Team</a>'
-      +(a.can_manage?'<button class="btn btn-teal" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add CRM</button>':'')
-      +'</div>'
-      +'</div>';
+      +'</div></div>';
+
+    // LEVEL 3 — the CRMs (sub-accounts) nested inside this agency.
+    var cards = (a.sub_accounts||[]).map(function(s){ return crmCard(s, a); }).join('');
+    var addTile = a.can_manage
+      ? '<div class="add-crm" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:26px;">add_circle</span>Add CRM sub-account</div>'
+      : '';
+    if (!n && !a.can_manage) cards = '<div class="muted-note" style="padding:6px 2px;">No CRM sub-accounts yet.</div>';
+
+    return '<div class="agency-block">'+head
+      +'<div class="crm-wrap"><div class="crm-wrap-label">CRM sub-accounts</div>'
+      +'<div class="crm-grid">'+cards+addTile+'</div></div></div>';
 }
 
 // A CRM = one sub-account inside the agency. This is what you open to work.
 function crmCard(s, a){
     var del = a.can_manage ? '<span class="material-icons" title="Remove CRM" onclick="event.stopPropagation();removeSub(\''+a.portal_id+'\',\''+s.id+'\')" style="font-size:16px;color:#cbd5e1;cursor:pointer;">close</span>' : '';
-    return '<div class="card" style="border-top:4px solid var(--teal);">'
-      +'<div class="card-top"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);vertical-align:middle;margin-right:4px;">hub</span>'+esc(s.name)+'</div>'+del+'</div>'
-      +'<div class="muted-note" style="margin:6px 0 2px;">CRM · '+esc(a.agency_name||a.relationship_id||'Agency')+(s.type==='client'?' · Client':' · Company')+'</div>'
-      +'<div class="card-foot"><span class="status" style="color:var(--teal);"><span class="dot" style="background:var(--teal);"></span>CRM workspace</span>'
-      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')">Open sub account <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
+    return '<div class="crm-card">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+      +'<div style="font-size:14px;font-weight:800;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:17px;color:var(--teal);">hub</span>'+esc(s.name)+'</div>'+del+'</div>'
+      +'<div class="muted-note" style="margin:6px 0 14px;">CRM · '+(s.type==='client'?'Client':'Company')+'</div>'
+      +'<div style="margin-top:auto;"><button class="btn btn-teal" style="width:100%;justify-content:center;" onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')">Open sub account <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
 function standaloneCard(c){
@@ -252,15 +279,12 @@ async function loadHub(){
       +'<div class="card-foot"><span class="status" style="color:#64748b;"><span class="dot" style="background:#334155;"></span>Standard access</span>'
       +'<button class="btn btn-teal" onclick="window.location.href=\'/partner/dashboard\'">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div></div>';
 
-    // Grid: [Partner Portal] · [Agency (management)] · [CRM per sub-account]…
-    var cards = [portalCard];
-    agencies.forEach(function(a){
-        cards.push(agencyManageCard(a));
-        (a.sub_accounts||[]).forEach(function(s){ cards.push(crmCard(s, a)); });
-    });
-
+    // Three levels: Partner Portal (standalone) · Agency (container) · CRMs (nested inside).
     var html = '<div class="section-label"><span class="material-icons" style="font-size:15px;">grid_view</span> Choose where to work</div>'
-             + '<div class="grid">' + cards.join('') + '</div>';
+             + '<div class="launch">'
+             +   '<div class="portal-solo">' + portalCard + '</div>'
+             +   agencies.map(agencyBlock).join('')
+             + '</div>';
     document.getElementById('hubBody').innerHTML = html;
 }
 
