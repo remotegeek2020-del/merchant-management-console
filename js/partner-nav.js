@@ -221,6 +221,9 @@
     // ONLY to partners who have white-label access (branded owners, or sub-partners the
     // owner granted). Regular partners never see it — their portal is unchanged.
     function maybeInjectCrmNav() {
+        // Only the PayProTec Portal world gets the "Agency" jump-in link. Inside the
+        // agency/CRM worlds the sidebar already carries the right nav, so skip.
+        if (/^\/partner\/(home|agency|agency-settings|sub-account|sub-account-settings)(\/|$)/.test(window.location.pathname)) return;
         var nav = document.querySelector('.sidebar-nav');
         if (!nav || nav.querySelector('a[href="/partner/home"]')) return;
         fetch('/api/whitelabel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_my_agencies', token: token }) })
