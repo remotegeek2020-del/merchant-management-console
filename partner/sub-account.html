@@ -88,8 +88,8 @@
         </div>
     </div>
     <nav class="sidebar-nav">
-        <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
-        <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency Home</a>
+        <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency</a>
+        <a class="nav-item active" href="#"><span class="material-icons">hub</span> CRM Workspace</a>
         <a class="nav-item" id="navSubSettings" href="/partner/sub-account-settings"><span class="material-icons">settings</span> Sub-account Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
@@ -99,7 +99,7 @@
 
 <div class="main">
     <div class="topbar">
-        <a href="/partner/home" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Back to Home</a>
+        <a href="/partner/agency" id="backToAgency" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Agency</a>
         <div style="font-size:1.1rem;font-weight:800;">CRM Workspace</div>
     </div>
     <div class="content" id="content">
@@ -189,7 +189,9 @@ async function load(){
     localStorage.setItem('pp_active_sub_account', subId);
     if (r.agency) {
         localStorage.setItem('pp_active_portal', r.agency.portal_id);
-        var nba = document.getElementById('navBackAgency'); if (nba) nba.href = '/partner/agency?portal=' + encodeURIComponent(r.agency.portal_id);
+        var agUrl = '/partner/agency?portal=' + encodeURIComponent(r.agency.portal_id);
+        var nba = document.getElementById('navBackAgency'); if (nba) nba.href = agUrl;
+        var bta = document.getElementById('backToAgency'); if (bta) bta.href = agUrl;
     }
     var sa = r.sub_account, o = r.objects;
     var agencyName = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'Agency';
