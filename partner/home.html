@@ -102,7 +102,6 @@
     <nav class="sidebar-nav">
         <a class="nav-item active" href="/partner/home"><span class="material-icons">home</span> Home</a>
         <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> PayProTec Portal</a>
-        <a class="nav-item" id="navSettings" href="/partner/agency-settings"><span class="material-icons">settings</span> Agency Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -181,12 +180,12 @@ function agencyBlock(a){
     // LEVEL 3 — the CRMs (sub-accounts) nested inside this agency.
     var cards = (a.sub_accounts||[]).map(function(s){ return crmCard(s, a); }).join('');
     var addTile = a.can_manage
-      ? '<div class="add-crm" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:26px;">add_circle</span>Add CRM sub-account</div>'
+      ? '<div class="add-crm" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:26px;">add_circle</span>Add CRM</div>'
       : '';
-    if (!n && !a.can_manage) cards = '<div class="muted-note" style="padding:6px 2px;">No CRM sub-accounts yet.</div>';
+    if (!n && !a.can_manage) cards = '<div class="muted-note" style="padding:6px 2px;">No CRMs yet.</div>';
 
     return '<div class="agency-block">'+head
-      +'<div class="crm-wrap"><div class="crm-wrap-label">CRM sub-accounts</div>'
+      +'<div class="crm-wrap"><div class="crm-wrap-label">CRMs</div>'
       +'<div class="crm-grid">'+cards+addTile+'</div></div></div>';
 }
 
@@ -197,7 +196,7 @@ function crmCard(s, a){
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
       +'<div style="font-size:14px;font-weight:800;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:17px;color:var(--teal);">hub</span>'+esc(s.name)+'</div>'+del+'</div>'
       +'<div class="muted-note" style="margin:6px 0 14px;">CRM · '+(s.type==='client'?'Client':'Company')+'</div>'
-      +'<div style="margin-top:auto;"><button class="btn btn-teal" style="width:100%;justify-content:center;" onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')">Open sub account <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
+      +'<div style="margin-top:auto;"><button class="btn btn-teal" style="width:100%;justify-content:center;" onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')">Open CRM <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
 function standaloneCard(c){
@@ -216,7 +215,7 @@ window.openCreateSub = async function(portalId){
     var opts = comps.map(function(c){ return '<option value="'+esc(c.company_id)+'">'+esc(c.company_name)+'</option>'; }).join('');
     var html =
       '<div style="text-align:left;font-size:13px;">'
-      +'<label style="font-weight:700;display:block;margin-bottom:6px;">Sub-account type</label>'
+      +'<label style="font-weight:700;display:block;margin-bottom:6px;">CRM type</label>'
       +'<select id="scType" class="swal2-select" style="width:100%;margin:0 0 12px;" onchange="document.getElementById(\'scCompanyWrap\').style.display=this.value===\'company\'?\'block\':\'none\';document.getElementById(\'scNameWrap\').style.display=this.value===\'client\'?\'block\':\'none\';">'
       +'<option value="company">One of my companies</option>'
       +'<option value="client">New client (not a PayProTec partner)</option>'
@@ -228,7 +227,7 @@ window.openCreateSub = async function(portalId){
       +'<div id="scNameWrap" style="display:none;"><label style="font-weight:700;display:block;margin-bottom:6px;">Client name</label><input id="scName" class="swal2-input" style="width:100%;margin:0;" placeholder="e.g. Downtown Diner"></div>'
       +'</div>';
     var res = await Swal.fire({
-        title:'New sub-account', html:html, showCancelButton:true, confirmButtonText:'Create', confirmButtonColor:'#0d9488',
+        title:'New CRM', html:html, showCancelButton:true, confirmButtonText:'Create', confirmButtonColor:'#0d9488',
         focusConfirm:false,
         preConfirm:function(){
             var type=document.getElementById('scType').value;
@@ -243,7 +242,7 @@ window.openCreateSub = async function(portalId){
     loadHub();
 };
 window.removeSub = async function(portalId, subId){
-    var c = await Swal.fire({icon:'warning',title:'Remove sub-account?',text:'This removes it from the agency (the underlying company/partner record is untouched).',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
+    var c = await Swal.fire({icon:'warning',title:'Remove CRM?',text:'This removes it from the agency (the underlying company/partner record is untouched).',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
     if(!c.isConfirmed) return;
     await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_sub_account',token:token,portal_id:portalId,sub_account_id:subId})}).then(x=>x.json());
     loadHub();
@@ -268,13 +267,9 @@ async function loadHub(){
     var accessed = (r.agencies||[]).filter(function(a){ return !a.is_owner; });
     var agencies = owned.concat(accessed);
 
-    // Point the sidebar "Agency Settings" at the first agency you can manage.
+    // Remember the active agency for context (Settings/Team live on each agency card).
     var manageable = agencies.filter(function(a){ return a.can_manage; })[0] || agencies[0];
-    if (manageable) {
-        localStorage.setItem('pp_active_portal', manageable.portal_id);
-        var ns = document.getElementById('navSettings');
-        if (ns) ns.href = '/partner/agency-settings?portal=' + encodeURIComponent(manageable.portal_id);
-    }
+    if (manageable) localStorage.setItem('pp_active_portal', manageable.portal_id);
 
     // The Partner Portal is SEPARATE from the agency — your standard partner account.
     var portalCard = '<div class="card" style="border-top:4px solid var(--navy);">'

@@ -7,7 +7,7 @@
     <link rel="icon" href="/api/favicon" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sub-Account | PayProTec Partner Portal</title>
+    <title>CRM Workspace | PayProTec Partner Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -90,7 +90,7 @@
     <nav class="sidebar-nav">
         <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency</a>
         <a class="nav-item active" href="#"><span class="material-icons">hub</span> CRM Workspace</a>
-        <a class="nav-item" id="navSubSettings" href="/partner/sub-account-settings"><span class="material-icons">settings</span> Sub-account Settings</a>
+        <a class="nav-item" id="navSubSettings" href="/partner/sub-account-settings"><span class="material-icons">settings</span> CRM Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -103,7 +103,7 @@
         <div style="font-size:1.1rem;font-weight:800;">CRM Workspace</div>
     </div>
     <div class="content" id="content">
-        <div style="color:var(--muted);padding:40px;">Loading sub-account…</div>
+        <div style="color:var(--muted);padding:40px;">Loading CRM…</div>
     </div>
 </div>
 
@@ -176,13 +176,13 @@ function showTab(key){
 }
 
 async function load(){
-    if (!subId){ document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">workspaces</span><h4>No sub-account selected</h4><p>Pick one from <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</p></div>'; return; }
+    if (!subId){ document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">workspaces</span><h4>No CRM selected</h4><p>Pick one from <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</p></div>'; return; }
     var r;
     try { r = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_sub_account',token:token,sub_account_id:subId})}).then(x=>x.json()); }
     catch(e){ r=null; }
     if (!r || !r.success){
         if (r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
-        document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">error_outline</span><h4>Could not open sub-account</h4><p>'+esc((r&&r.message)||'Please try again.')+'</p></div>';
+        document.getElementById('content').innerHTML = '<div class="empty"><span class="material-icons">error_outline</span><h4>Could not open CRM</h4><p>'+esc((r&&r.message)||'Please try again.')+'</p></div>';
         return;
     }
     DATA = r;

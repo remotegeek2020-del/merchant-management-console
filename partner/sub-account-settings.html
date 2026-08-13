@@ -7,7 +7,7 @@
     <link rel="icon" href="/api/favicon" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sub-account Settings | PayProTec Partner Portal</title>
+    <title>CRM Settings | PayProTec Partner Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -54,7 +54,7 @@
     <nav class="sidebar-nav">
         <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency</a>
         <a class="nav-item" id="navSub" href="/partner/sub-account"><span class="material-icons">hub</span> CRM Workspace</a>
-        <a class="nav-item active" href="#"><span class="material-icons">settings</span> Sub-account Settings</a>
+        <a class="nav-item active" href="#"><span class="material-icons">settings</span> CRM Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -64,7 +64,7 @@
 <div class="main">
     <div class="topbar">
         <a href="#" id="backSub" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Back to CRM</a>
-        <div style="font-size:1.1rem;font-weight:800;">Sub-account Settings</div>
+        <div style="font-size:1.1rem;font-weight:800;">CRM Settings</div>
     </div>
     <div class="content" id="content"><div class="muted" style="padding:30px;">Loading…</div></div>
 </div>
@@ -78,7 +78,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){retur
 function initials(n){ return (String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
 
 async function load(){
-    if(!subId){ document.getElementById('content').innerHTML='<div class="card"><div class="muted">No sub-account selected. Go to <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</div></div>'; return; }
+    if(!subId){ document.getElementById('content').innerHTML='<div class="card"><div class="muted">No CRM selected. Go to <a href="/partner/home" style="color:var(--teal);font-weight:700;">Home</a>.</div></div>'; return; }
     var subUrl='/partner/sub-account?sub='+encodeURIComponent(subId);
     document.getElementById('navSub').href=subUrl; document.getElementById('backSub').href=subUrl;
     var r;

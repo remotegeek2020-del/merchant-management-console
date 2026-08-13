@@ -128,12 +128,12 @@ async function openCreateSub(){
     var opts = comps.map(function(c){ return '<option value="'+esc(c.company_id)+'">'+esc(c.company_name)+'</option>'; }).join('');
     var html =
       '<div style="text-align:left;font-size:13px;">'
-      +'<label style="font-weight:700;display:block;margin-bottom:6px;">Sub-account type</label>'
+      +'<label style="font-weight:700;display:block;margin-bottom:6px;">CRM type</label>'
       +'<select id="scType" class="swal2-select" style="width:100%;margin:0 0 12px;" onchange="document.getElementById(\'scCompanyWrap\').style.display=this.value===\'company\'?\'block\':\'none\';document.getElementById(\'scNameWrap\').style.display=this.value===\'client\'?\'block\':\'none\';">'
       +'<option value="company">One of my companies</option><option value="client">New client (not a PayProTec partner)</option></select>'
       +'<div id="scCompanyWrap">'+(comps.length?'<label style="font-weight:700;display:block;margin-bottom:6px;">Company</label><select id="scCompany" class="swal2-select" style="width:100%;margin:0;">'+opts+'</select>':'<div style="color:#94a3b8;">All companies added, or none available. Use “New client”.</div>')+'</div>'
       +'<div id="scNameWrap" style="display:none;"><label style="font-weight:700;display:block;margin-bottom:6px;">Client name</label><input id="scName" class="swal2-input" style="width:100%;margin:0;" placeholder="e.g. Downtown Diner"></div></div>';
-    var res = await Swal.fire({ title:'New sub-account', html:html, showCancelButton:true, confirmButtonText:'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+    var res = await Swal.fire({ title:'New CRM', html:html, showCancelButton:true, confirmButtonText:'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
         preConfirm:function(){ var t=document.getElementById('scType').value; if(t==='company'){ var el=document.getElementById('scCompany'); if(!el||!el.value){Swal.showValidationMessage('No company available — use New client.');return false;} return {company_id:el.value}; } var nm=(document.getElementById('scName').value||'').trim(); if(!nm){Swal.showValidationMessage('Enter a client name.');return false;} return {name:nm}; } });
     if(!res.isConfirmed) return;
     var cr = await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action:'create_sub_account',token:token,portal_id:portalId},res.value))}).then(x=>x.json());
@@ -165,7 +165,7 @@ async function load(){
           +'<div class="sa-stat"><b>'+s.partner_ids+'</b><span>Partner IDs</span></div>'
           +'<div class="sa-stat"><b>'+s.sub_agents+'</b><span>Sub-Agents</span></div>'
           +'</div></div>';
-    }).join('') || '<div class="empty"><span class="material-icons">workspaces</span>No sub-accounts yet.'+(ag.can_manage?' Add your first below.':'')+'</div>';
+    }).join('') || '<div class="empty"><span class="material-icons">workspaces</span>No CRMs yet.'+(ag.can_manage?' Add your first below.':'')+'</div>';
 
     window._agencyCanManage = ag.can_manage;
     window._agencyName = ag.agency_name || '';
@@ -177,12 +177,12 @@ async function load(){
       +(ag.can_manage?'<a class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:white;border-color:rgba(255,255,255,0.25);" href="/partner/agency-settings?portal='+encodeURIComponent(portalId)+'"><span class="material-icons" style="font-size:16px;">settings</span> Agency Settings</a>':'')
       +'</div>'
       +'<div class="kpi-grid">'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">workspaces</span> Sub-Accounts</div><div class="kpi-value">'+k.sub_accounts+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">workspaces</span> CRMs</div><div class="kpi-value">'+k.sub_accounts+'</div></div>'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">storefront</span> Merchants</div><div class="kpi-value">'+k.merchants.toLocaleString()+'</div></div>'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">badge</span> Partner IDs</div><div class="kpi-value">'+k.partner_ids+'</div></div>'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Agents</div><div class="kpi-value">'+k.sub_agents+'</div></div>'
       +'</div>'
-      +'<div class="section-label"><span>Sub-Accounts</span>'+(ag.can_manage?'<button class="btn btn-teal" onclick="openCreateSub()"><span class="material-icons" style="font-size:15px;">add</span> Add sub-account</button>':'')+'</div>'
+      +'<div class="section-label"><span>CRMs</span>'+(ag.can_manage?'<button class="btn btn-teal" onclick="openCreateSub()"><span class="material-icons" style="font-size:15px;">add</span> Add CRM</button>':'')+'</div>'
       +'<div class="grid">'+subCards+'</div>'
       +'<div class="section-label"><span>Team &amp; Visibility</span></div>'
       +'<div class="panel" id="teamPanel"><div style="color:var(--muted);font-size:13px;">Loading team…</div></div>';
@@ -194,7 +194,7 @@ var _team = null;
 function scopeSummary(m){
     if (m.role !== 'sub_partner') return '';
     var n = (m.sub_account_ids||[]).length;
-    return '<span style="font-size:11px;color:var(--muted);margin-left:8px;">'+(n? n+' sub-account'+(n>1?'s':'') : 'no access yet')+'</span>';
+    return '<span style="font-size:11px;color:var(--muted);margin-left:8px;">'+(n? n+' CRM'+(n>1?'s':'') : 'no access yet')+'</span>';
 }
 async function loadTeam(){
     var r;
@@ -239,8 +239,8 @@ function scopeChecks(idPrefix, selected){
     var sel = new Set(selected||[]);
     var boxes = (_team.sub_accounts||[]).map(function(s){
         return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:0 12px 6px 0;"><input type="checkbox" class="'+idPrefix+'-cb" value="'+esc(s.id)+'"'+(sel.has(s.id)?' checked':'')+'> '+esc(s.name)+'</label>';
-    }).join('') || '<span style="font-size:12px;color:var(--muted);">No sub-accounts to scope to yet.</span>';
-    return '<div style="font-size:11px;font-weight:700;color:var(--secondary);margin-bottom:6px;">Which sub-accounts can they see?</div>'+boxes;
+    }).join('') || '<span style="font-size:12px;color:var(--muted);">No CRMs to scope to yet.</span>';
+    return '<div style="font-size:11px;font-weight:700;color:var(--secondary);margin-bottom:6px;">Which CRMs can they see?</div>'+boxes;
 }
 function collectScope(idPrefix){
     return Array.prototype.slice.call(document.querySelectorAll('.'+idPrefix+'-cb')).filter(function(c){return c.checked;}).map(function(c){return c.value;});
