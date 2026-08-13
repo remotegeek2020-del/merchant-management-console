@@ -82,7 +82,7 @@
     <nav class="sidebar-nav">
         <a class="nav-item active" href="/partner/home"><span class="material-icons">home</span> Home</a>
         <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> My Portal</a>
-        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <a class="nav-item" id="navSettings" href="/partner/agency-settings"><span class="material-icons">settings</span> Agency Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -141,31 +141,32 @@ window.enterCompany = function(companyId){
     window.location.href = '/partner/dashboard';
 };
 
-function subAccountList(a){
-    var subs = a.sub_accounts || [];
-    var rows = subs.map(function(s){
-        var icon = s.type === 'company' ? 'business' : 'person';
-        var del = a.can_manage ? '<span class="material-icons" title="Remove" onclick="event.stopPropagation();removeSub(\''+a.portal_id+'\',\''+s.id+'\')" style="font-size:15px;color:#cbd5e1;cursor:pointer;">close</span>' : '';
-        return '<div onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')" style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:9px;cursor:pointer;background:white;" onmouseover="this.style.borderColor=\'#99f6e4\'" onmouseout="this.style.borderColor=\'#e2e8f0\'">'
-          +'<span class="material-icons" style="font-size:16px;color:var(--teal);">'+icon+'</span>'
-          +'<span style="flex:1;font-size:12px;font-weight:600;">'+esc(s.name)+'</span>'
-          +(s.type==='client'?'<span class="chip" style="font-size:9px;">Client</span>':'')+del+'</div>';
-    }).join('');
-    if (!subs.length) rows = '<div class="muted-note" style="padding:4px 0;">No sub-accounts yet.</div>';
-    var addBtn = a.can_manage
-        ? '<button class="btn btn-outline" style="margin-top:8px;font-size:12px;padding:6px 10px;" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add sub-account</button>'
-        : '';
-    return '<div style="display:flex;flex-direction:column;gap:6px;margin:12px 0;">'+rows+'</div>'+addBtn;
-}
-
-function agencyCard(a){
+// The AGENCY management card — the branded office itself. It "caters" the CRMs:
+// branding/domain (Settings), team & visibility, and creating new sub-accounts.
+// It is NOT a place you "open"; the CRMs (sub-accounts) below are.
+function agencyManageCard(a){
     var title = a.agency_name || 'Unnamed agency';
+    var n = (a.sub_accounts||[]).length;
     return '<div class="card agency">'
       +'<div class="card-top"><div class="card-title">'+esc(title)+'</div><span class="rel">'+esc(a.relationship_id||'')+'</span></div>'
-      +'<div>'+roleBadge(a)+' <span class="muted-note">· '+((a.sub_accounts||[]).length)+' sub-account'+((a.sub_accounts||[]).length===1?'':'s')+'</span></div>'
-      +subAccountList(a)
-      +'<div class="card-foot">'+domainStatus(a)
-      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\'\')">Open Agency <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
+      +'<div>'+roleBadge(a)+' <span class="muted-note">· '+n+' CRM'+(n===1?'':'s')+'</span></div>'
+      +'<div style="margin:10px 0 2px;">'+domainStatus(a)+'</div>'
+      +'<div class="card-foot" style="flex-wrap:wrap;gap:8px;">'
+      +(a.can_manage?'<a class="btn btn-outline" href="/partner/agency-settings?portal='+a.portal_id+'"><span class="material-icons" style="font-size:15px;">settings</span> Settings</a>':'')
+      +'<a class="btn btn-outline" href="/partner/agency?portal='+a.portal_id+'"><span class="material-icons" style="font-size:15px;">groups</span> Team</a>'
+      +(a.can_manage?'<button class="btn btn-teal" onclick="openCreateSub(\''+a.portal_id+'\')"><span class="material-icons" style="font-size:15px;">add</span> Add CRM</button>':'')
+      +'</div>'
+      +'</div>';
+}
+
+// A CRM = one sub-account inside the agency. This is what you open to work.
+function crmCard(s, a){
+    var del = a.can_manage ? '<span class="material-icons" title="Remove CRM" onclick="event.stopPropagation();removeSub(\''+a.portal_id+'\',\''+s.id+'\')" style="font-size:16px;color:#cbd5e1;cursor:pointer;">close</span>' : '';
+    return '<div class="card" style="border-top:4px solid var(--teal);">'
+      +'<div class="card-top"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);vertical-align:middle;margin-right:4px;">hub</span>'+esc(s.name)+'</div>'+del+'</div>'
+      +'<div class="muted-note" style="margin:6px 0 2px;">CRM · '+esc(a.agency_name||a.relationship_id||'Agency')+(s.type==='client'?' · Client':' · Company')+'</div>'
+      +'<div class="card-foot"><span class="status" style="color:var(--teal);"><span class="dot" style="background:var(--teal);"></span>CRM workspace</span>'
+      +'<button class="btn btn-teal" onclick="enterAgency(\''+a.portal_id+'\',\''+s.id+'\')">Open sub account <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div>'
       +'</div>';
 }
 function standaloneCard(c){
@@ -234,19 +235,32 @@ async function loadHub(){
 
     var owned = (r.agencies||[]).filter(function(a){ return a.is_owner; });
     var accessed = (r.agencies||[]).filter(function(a){ return !a.is_owner; });
+    var agencies = owned.concat(accessed);
 
-    // Switcher: your normal Partner Portal, plus any CRM you own / were granted.
+    // Point the sidebar "Agency Settings" at the first agency you can manage.
+    var manageable = agencies.filter(function(a){ return a.can_manage; })[0] || agencies[0];
+    if (manageable) {
+        localStorage.setItem('pp_active_portal', manageable.portal_id);
+        var ns = document.getElementById('navSettings');
+        if (ns) ns.href = '/partner/agency-settings?portal=' + encodeURIComponent(manageable.portal_id);
+    }
+
+    // The Partner Portal is SEPARATE from the agency — your standard partner account.
     var portalCard = '<div class="card" style="border-top:4px solid var(--navy);">'
       +'<div class="card-top"><div class="card-title">My Partner Portal</div></div>'
       +'<div class="muted-note" style="margin:6px 0 2px;">Your standard partner account — merchants, residuals, POS leads.</div>'
       +'<div class="card-foot"><span class="status" style="color:#64748b;"><span class="dot" style="background:#334155;"></span>Standard access</span>'
       +'<button class="btn btn-teal" onclick="window.location.href=\'/partner/dashboard\'">Open <span class="material-icons" style="font-size:16px;">arrow_forward</span></button></div></div>';
 
+    // Grid: [Partner Portal] · [Agency (management)] · [CRM per sub-account]…
+    var cards = [portalCard];
+    agencies.forEach(function(a){
+        cards.push(agencyManageCard(a));
+        (a.sub_accounts||[]).forEach(function(s){ cards.push(crmCard(s, a)); });
+    });
+
     var html = '<div class="section-label"><span class="material-icons" style="font-size:15px;">grid_view</span> Choose where to work</div>'
-             + '<div class="grid">' + portalCard
-             + owned.map(agencyCard).join('')
-             + accessed.map(agencyCard).join('')
-             + '</div>';
+             + '<div class="grid">' + cards.join('') + '</div>';
     document.getElementById('hubBody').innerHTML = html;
 }
 

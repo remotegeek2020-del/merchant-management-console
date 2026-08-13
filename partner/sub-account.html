@@ -49,6 +49,7 @@
         .kpi { background:white; border:1px solid var(--border); border-radius:14px; padding:16px 18px; box-shadow:var(--shadow-sm); }
         .kpi-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px; display:flex; align-items:center; gap:5px; }
         .kpi-value { font-size:1.6rem; font-weight:800; font-family:'DM Mono',monospace; line-height:1; }
+        .tab-group-label { font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.7px; margin:6px 2px 8px; }
         .tabs { display:flex; gap:4px; background:#f1f5f9; border-radius:12px; padding:4px; margin-bottom:18px; flex-wrap:wrap; }
         .tab { flex:1; min-width:120px; padding:9px 6px; border:none; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; background:transparent; color:var(--secondary); font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
         .tab.active { background:white; color:var(--teal); box-shadow:var(--shadow-sm); }
@@ -87,7 +88,7 @@
     <nav class="sidebar-nav">
         <a class="nav-item" href="/partner/home"><span class="material-icons">home</span> Home</a>
         <a class="nav-item" id="navBackAgency" href="/partner/agency"><span class="material-icons">apartment</span> Agency Home</a>
-        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <a class="nav-item" id="navSubSettings" href="/partner/sub-account-settings"><span class="material-icons">settings</span> Sub-account Settings</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -156,11 +157,16 @@ function subPartnersPanel(){
     return '<div class="panel"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 var PANELS = {
+    // ── CRM core (per-CRM) — built out later ──
+    opportunities: function(){ return emptyPanel('trending_up','Opportunities','Track deals through your pipeline stages for this CRM.', true); },
+    contacts: function(){ return emptyPanel('contacts','Contacts','Your unified contact list — leads, merchants and people for this CRM.', true); },
+    automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
+    forms: function(){ return emptyPanel('description','Forms','Capture leads and info with hosted forms for this CRM.', true); },
+    tags: function(){ return emptyPanel('sell','Tags','Organize and segment contacts and opportunities with tags.', true); },
+    // ── Portal / company data (retained) ──
     merchants: merchantsPanel,
     partner_ids: partnerIdsPanel,
-    sub_partners: subPartnersPanel,
-    leads: function(){ return emptyPanel('person_search','No leads yet','Capture and track leads for this sub-account here.', true); },
-    affiliates: function(){ return emptyPanel('handshake','No affiliates yet','Track affiliates and their referrals here.', true); }
+    sub_partners: subPartnersPanel
 };
 function showTab(key){
     document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.k===key); });
@@ -195,14 +201,22 @@ async function load(){
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Partners</div><div class="kpi-value">'+o.sub_partners.count+'</div></div>'
       +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">person_search</span> Leads</div><div class="kpi-value">'+o.leads.count+'</div></div>'
       +'</div>'
+      +'<div class="tab-group-label">CRM</div>'
       +'<div class="tabs">'
-      +'<button class="tab active" data-k="merchants" onclick="showTab(\'merchants\')"><span class="material-icons" style="font-size:16px;">storefront</span> Merchants <span class="cnt">'+o.merchants.count.toLocaleString()+'</span></button>'
+      +'<button class="tab active" data-k="opportunities" onclick="showTab(\'opportunities\')"><span class="material-icons" style="font-size:16px;">trending_up</span> Opportunities</button>'
+      +'<button class="tab" data-k="contacts" onclick="showTab(\'contacts\')"><span class="material-icons" style="font-size:16px;">contacts</span> Contacts</button>'
+      +'<button class="tab" data-k="automation" onclick="showTab(\'automation\')"><span class="material-icons" style="font-size:16px;">bolt</span> Automation</button>'
+      +'<button class="tab" data-k="forms" onclick="showTab(\'forms\')"><span class="material-icons" style="font-size:16px;">description</span> Forms</button>'
+      +'<button class="tab" data-k="tags" onclick="showTab(\'tags\')"><span class="material-icons" style="font-size:16px;">sell</span> Tags</button>'
+      +'</div>'
+      +'<div class="tab-group-label">Company Data</div>'
+      +'<div class="tabs">'
+      +'<button class="tab" data-k="merchants" onclick="showTab(\'merchants\')"><span class="material-icons" style="font-size:16px;">storefront</span> Merchants <span class="cnt">'+o.merchants.count.toLocaleString()+'</span></button>'
       +'<button class="tab" data-k="partner_ids" onclick="showTab(\'partner_ids\')"><span class="material-icons" style="font-size:16px;">badge</span> Partner IDs <span class="cnt">'+o.partner_ids.count+'</span></button>'
       +'<button class="tab" data-k="sub_partners" onclick="showTab(\'sub_partners\')"><span class="material-icons" style="font-size:16px;">account_tree</span> Sub-Partners <span class="cnt">'+o.sub_partners.count+'</span></button>'
-      +'<button class="tab" data-k="leads" onclick="showTab(\'leads\')"><span class="material-icons" style="font-size:16px;">person_search</span> Leads <span class="cnt">'+o.leads.count+'</span></button>'
-      +'<button class="tab" data-k="affiliates" onclick="showTab(\'affiliates\')"><span class="material-icons" style="font-size:16px;">handshake</span> Affiliates <span class="cnt">'+o.affiliates.count+'</span></button>'
       +'</div><div id="panelWrap"></div>';
-    showTab('merchants');
+    var nss = document.getElementById('navSubSettings'); if (nss) nss.href = '/partner/sub-account-settings?sub=' + encodeURIComponent(subId);
+    showTab('opportunities');
 }
 
 function handleLogout(){
