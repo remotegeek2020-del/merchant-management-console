@@ -90,7 +90,7 @@
         .deal-meta { font-size:11px; color:var(--muted); margin-top:4px; }
         .stage-won .col-title { color:var(--green-text); } .stage-lost .col-title { color:#b91c1c; }
         @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
-        @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
+        @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .cd-grid{grid-template-columns:1fr !important;} }
     </style>
 </head>
 <body>
@@ -250,7 +250,9 @@ function handleLogout(){
 }
 
 /* ── CONTACTS (per-CRM, isolated by sub_account_id) ─────────────────────────── */
-var CRM_CONTACTS = [], CRM_TAGS = [], CRM_FIELDS = [], CRM_Q = '';
+var CRM_CONTACTS = [], CRM_TAGS = [], CRM_FIELDS = [], CRM_Q = '', CURRENT_CONTACT = null;
+function fmtDate(s){ if(!s) return ''; try{ return new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return s; } }
+function fmtDateTime(s){ if(!s) return ''; try{ return new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return s; } }
 function crmApi(b){ return fetch('/api/crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(r=>r.json()); }
 function cName(c){ return ((c.first_name||'')+' '+(c.last_name||'')).trim() || c.email || c.phone || 'Unnamed'; }
 function tagChip(t){ var col=t.color||'#e2e8f0'; return '<span style="display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:'+col+'22;color:'+shade(col)+';border:1px solid '+col+'55;margin:2px 3px 0 0;">'+esc(t.name)+'</span>'; }
@@ -286,7 +288,7 @@ function renderContacts(){
     } else {
         var rows = list.map(function(c){
             var tags = (c.tags||[]).map(tagChip).join('') || '<span style="color:var(--muted);font-size:11px;">—</span>';
-            return '<tr style="cursor:pointer;" onclick="openContact(\''+c.id+'\')">'
+            return '<tr style="cursor:pointer;" onclick="openContactDetail(\''+c.id+'\')">'
               +'<td style="font-weight:700;">'+esc(cName(c))+(c.company?'<div style="font-weight:400;color:var(--muted);font-size:11px;">'+esc(c.company)+'</div>':'')+'</td>'
               +'<td style="color:var(--secondary);">'+esc(c.email||'—')+'</td>'
               +'<td class="mono">'+esc(c.phone||'—')+'</td>'
@@ -348,7 +350,8 @@ window.openContact = async function(id){
     var payload = Object.assign({sub_account_id:subId, tag_ids:res.value.tag_ids, contact:res.value.contact, custom:res.value.custom}, id?{action:'update_contact', id:id}:{action:'create_contact'});
     var r = await crmApi(payload);
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
-    await loadContacts();
+    if(id && CURRENT_CONTACT && CURRENT_CONTACT.contact && id===CURRENT_CONTACT.contact.id && document.querySelector('#crmContacts .panel')){ openContactDetail(id); }
+    else { await loadContacts(); }
 };
 window.deleteContact = async function(id){
     var c = await Swal.fire({icon:'warning',title:'Delete contact?',text:'This removes the contact from this CRM.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
@@ -357,6 +360,66 @@ window.deleteContact = async function(id){
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; }
     await loadContacts();
 };
+
+/* ── CONTACT RECORD (detail: info + custom fields + tags + notes + tasks + deals) ── */
+window.openContactDetail = async function(id){
+    var host=document.getElementById('crmContacts'); if(!host) return;
+    host.innerHTML='<div class="empty"><span class="material-icons">person</span><h4>Loading…</h4></div>';
+    var r=await crmApi({action:'get_contact', id:id});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not load contact.','error'); renderContacts(); return; }
+    CURRENT_CONTACT=r; renderContactDetail();
+};
+function renderContactDetail(){
+    var host=document.getElementById('crmContacts'); if(!host||!CURRENT_CONTACT) return;
+    var c=CURRENT_CONTACT.contact, opps=CURRENT_CONTACT.opportunities||[], notes=CURRENT_CONTACT.notes||[], tasks=CURRENT_CONTACT.tasks||[];
+    var cv=c.custom||{};
+    var row=function(label,val){ return val?('<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #f6f8fb;"><div style="width:82px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;flex-shrink:0;">'+label+'</div><div style="font-size:13px;font-weight:600;word-break:break-word;">'+esc(val)+'</div></div>'):''; };
+    var customRows=CRM_FIELDS.map(function(fd){ var v=cv[fd.field_key]; if(fd.type==='checkbox') v=v?'Yes':''; return row(fd.label, v); }).join('');
+    var tags=(c.tags||[]).map(tagChip).join('')||'<span style="color:var(--muted);font-size:11px;">No tags</span>';
+    var infoCard='<div class="panel" style="padding:18px;">'
+      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><div class="sa-icon" style="width:46px;height:46px;border-radius:50%;"><span class="material-icons">person</span></div>'
+      +'<div><div style="font-size:16px;font-weight:800;">'+esc(cName(c))+'</div>'+(c.company?'<div style="font-size:12px;color:var(--muted);">'+esc(c.company)+'</div>':'')+'</div></div>'
+      +row('Email',c.email)+row('Phone',c.phone)+row('Company',c.company)+row('Title',c.title)+row('Source',c.source)+customRows
+      +'<div style="margin-top:10px;">'+tags+'</div>'
+      +'<button onclick="openContact(\''+c.id+'\')" style="margin-top:14px;width:100%;justify-content:center;display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">edit</span> Edit contact</button>'
+      +'</div>';
+
+    var taskItems=tasks.map(function(t){
+        var overdue = !t.done && t.due_date && new Date(t.due_date) < new Date(new Date().toDateString());
+        return '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid #f6f8fb;">'
+          +'<input type="checkbox"'+(t.done?' checked':'')+' onchange="cdToggleTask(\''+t.id+'\',this.checked)" style="margin-top:2px;cursor:pointer;">'
+          +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;'+(t.done?'text-decoration:line-through;color:var(--muted);':'')+'">'+esc(t.title)+'</div>'
+          +(t.due_date?'<div style="font-size:11px;color:'+(overdue?'#b91c1c':'var(--muted)')+';font-weight:600;">Due '+fmtDate(t.due_date)+(overdue?' · overdue':'')+'</div>':'')+'</div>'
+          +'<span class="material-icons" title="Delete" onclick="cdDeleteTask(\''+t.id+'\')" style="font-size:16px;color:#cbd5e1;cursor:pointer;">delete</span></div>';
+    }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No tasks yet.</div>';
+    var tasksCard='<div class="panel" style="padding:16px 18px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:8px;">Tasks</div>'
+      +'<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;"><input id="cdTaskTitle" placeholder="Add a task…" style="flex:1;min-width:150px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;" onkeydown="if(event.key===\'Enter\')cdAddTask();"><input id="cdTaskDue" type="date" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"><button onclick="cdAddTask()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;">Add</button></div>'
+      +taskItems+'</div>';
+
+    var noteItems=notes.map(function(n){
+        return '<div style="padding:9px 0;border-bottom:1px solid #f6f8fb;"><div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">'+esc(n.body)+'</div>'
+          +'<div style="display:flex;justify-content:space-between;margin-top:4px;"><span style="font-size:11px;color:var(--muted);">'+fmtDateTime(n.created_at)+'</span><span class="material-icons" title="Delete" onclick="cdDeleteNote(\''+n.id+'\')" style="font-size:15px;color:#cbd5e1;cursor:pointer;">delete</span></div></div>';
+    }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No notes yet.</div>';
+    var notesCard='<div class="panel" style="padding:16px 18px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:8px;">Notes</div>'
+      +'<div style="display:flex;gap:6px;margin-bottom:8px;"><textarea id="cdNoteBody" placeholder="Write a note…" style="flex:1;min-height:38px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;resize:vertical;"></textarea><button onclick="cdAddNote()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;align-self:flex-start;">Add</button></div>'
+      +noteItems+'</div>';
+
+    var dealItems=opps.map(function(o){
+        var st=(CRM_STAGES.filter(function(s){return s.id===o.stage_id;})[0]||{}).name||o.status;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;" onclick="openDeal(\''+o.id+'\')"><div><div style="font-size:13px;font-weight:700;">'+esc(o.title)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(st||'')+'</div></div><div class="mono" style="font-weight:800;color:var(--teal);">'+money((o.value_cents||0)/100)+'</div></div>';
+    }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No deals yet.</div>';
+    var dealsCard='<div class="panel" id="cdDeals" style="padding:16px 18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;">Deals</div><button onclick="cdAddDeal()" style="background:#fff;color:var(--teal);border:1px solid var(--teal);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;">+ Add deal</button></div>'+dealItems+'</div>';
+
+    host.innerHTML='<div style="margin-bottom:14px;"><a onclick="renderContacts()" style="display:inline-flex;align-items:center;gap:5px;color:var(--teal);font-weight:700;font-size:13px;cursor:pointer;"><span class="material-icons" style="font-size:17px;">arrow_back</span> Contacts</a></div>'
+      +'<div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;" class="cd-grid">'
+      +'<div>'+infoCard+'</div><div>'+tasksCard+notesCard+dealsCard+'</div></div>';
+}
+window.cdAddTask=async function(){ var el=document.getElementById('cdTaskTitle'),du=document.getElementById('cdTaskDue'); var t=(el.value||'').trim(); if(!t) return; var r=await crmApi({action:'add_task',contact_id:CURRENT_CONTACT.contact.id,title:t,due_date:du.value||null}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add task.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdToggleTask=async function(id,done){ await crmApi({action:'update_task',id:id,done:done}); openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdDeleteTask=async function(id){ await crmApi({action:'delete_task',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdAddNote=async function(){ var el=document.getElementById('cdNoteBody'); var b=(el.value||'').trim(); if(!b) return; var r=await crmApi({action:'add_note',contact_id:CURRENT_CONTACT.contact.id,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add note.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdDeleteNote=async function(id){ await crmApi({action:'delete_note',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdAddDeal=async function(){ if(!CRM_STAGES.length){ var pr=await crmApi({action:'get_pipeline',sub_account_id:subId}); CRM_STAGES=(pr&&pr.success&&pr.stages)||[]; } openDeal(null,{contact_id:CURRENT_CONTACT.contact.id}); };
 
 /* ── CUSTOM FIELDS (per-CRM definitions; values ride in contact.custom) ─────── */
 function customFieldInput(fld, val){
@@ -507,8 +570,9 @@ async function moveDeal(id, stageId){
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not move deal.','error'); loadOpps(); return; }
     if(r.opportunity) o.status = r.opportunity.status;
 }
-window.openDeal = async function(id){
+window.openDeal = async function(id, prefill){
     var o = id ? CRM_OPPS.filter(function(x){return x.id===id;})[0] : null; o=o||{};
+    if(!id && prefill && prefill.contact_id) o={contact_id:prefill.contact_id};
     var lab=function(t){ return '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">'+t+'</label>'; };
     var contactOpts = '<option value="">— none —</option>'+CRM_CONTACTS.map(function(c){return '<option value="'+c.id+'"'+(o.contact_id===c.id?' selected':'')+'>'+esc(cName(c))+'</option>';}).join('');
     var stageOpts = CRM_STAGES.map(function(s){return '<option value="'+s.id+'"'+(o.stage_id===s.id?' selected':'')+'>'+esc(s.name)+'</option>';}).join('');
@@ -527,7 +591,8 @@ window.openDeal = async function(id){
     if(!res.isConfirmed) return;
     var r = id ? await crmApi({action:'update_opportunity', id:id, opp:res.value}) : await crmApi({action:'create_opportunity', sub_account_id:subId, opp:res.value});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
-    await loadOpps();
+    if(document.getElementById('crmOpps')) await loadOpps();
+    if(document.getElementById('cdDeals') && CURRENT_CONTACT) openContactDetail(CURRENT_CONTACT.contact.id);
 };
 window.deleteDeal = async function(id){
     Swal.close();

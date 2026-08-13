@@ -146,6 +146,70 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, tag_ids: applied });
         }
 
+        // ── CONTACT RECORD (detail + notes + tasks) ──────────────────────────
+        if (action === 'get_contact') {
+            const ca = await contactAccess(body.id);
+            if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
+            const cid = body.id;
+            const [tagsRes, oppsRes, notesRes, tasksRes] = await Promise.all([
+                supabase.from('crm_contact_tags').select('crm_tags(id,name,color)').eq('contact_id', cid),
+                supabase.from('crm_opportunities').select('*').eq('contact_id', cid).order('created_at', { ascending: false }),
+                supabase.from('crm_notes').select('*').eq('contact_id', cid).order('created_at', { ascending: false }),
+                supabase.from('crm_tasks').select('*').eq('contact_id', cid).order('done', { ascending: true }).order('due_date', { ascending: true }).order('created_at', { ascending: false })
+            ]);
+            const tags = (tagsRes.data || []).map(t => t.crm_tags).filter(Boolean);
+            return res.status(200).json({ success: true, contact: { ...ca.contact, tags }, opportunities: oppsRes.data || [], notes: notesRes.data || [], tasks: tasksRes.data || [] });
+        }
+
+        if (action === 'add_note') {
+            const ca = await contactAccess(body.contact_id);
+            if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
+            const bodyText = (body.body || '').trim();
+            if (!bodyText) return res.status(400).json({ success: false, message: 'Note is empty.' });
+            const { data, error } = await supabase.from('crm_notes').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, body: bodyText, created_by: personId }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not add note.' });
+            return res.status(200).json({ success: true, note: data });
+        }
+        if (action === 'delete_note') {
+            const { data: n } = await supabase.from('crm_notes').select('contact_id').eq('id', body.id).maybeSingle();
+            if (!n) return res.status(404).json({ success: false, message: 'Note not found.' });
+            const ca = await contactAccess(n.contact_id);
+            if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_notes').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'add_task') {
+            const ca = await contactAccess(body.contact_id);
+            if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
+            const title = (body.title || '').trim();
+            if (!title) return res.status(400).json({ success: false, message: 'Task title required.' });
+            const { data, error } = await supabase.from('crm_tasks').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, title, due_date: body.due_date || null, created_by: personId }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not add task.' });
+            return res.status(200).json({ success: true, task: data });
+        }
+        if (action === 'update_task') {
+            const { data: t } = await supabase.from('crm_tasks').select('*').eq('id', body.id).maybeSingle();
+            if (!t) return res.status(404).json({ success: false, message: 'Task not found.' });
+            const acc = await subAccess(personId, t.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const patch = {};
+            if ('title' in body && (body.title || '').trim()) patch.title = body.title.trim();
+            if ('due_date' in body) patch.due_date = body.due_date || null;
+            if ('done' in body) { patch.done = !!body.done; patch.done_at = body.done ? new Date().toISOString() : null; }
+            const { data, error } = await supabase.from('crm_tasks').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not update task.' });
+            return res.status(200).json({ success: true, task: data });
+        }
+        if (action === 'delete_task') {
+            const { data: t } = await supabase.from('crm_tasks').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!t) return res.status(404).json({ success: false, message: 'Task not found.' });
+            const acc = await subAccess(personId, t.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_tasks').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+
         // ── OPPORTUNITIES / PIPELINE ─────────────────────────────────────────
         async function oppAccess(oppId) {
             const { data: o } = await supabase.from('crm_opportunities').select('*').eq('id', oppId).maybeSingle();
