@@ -75,6 +75,20 @@
         .empty h4 { margin:0 0 4px; color:var(--secondary); font-size:15px; }
         .empty p { margin:0; font-size:13px; }
         .soon { display:inline-block; margin-top:10px; font-size:11px; font-weight:800; background:#f1f5f9; color:#64748b; padding:3px 10px; border-radius:99px; letter-spacing:0.5px; }
+        /* Pipeline board */
+        .board { display:flex; gap:12px; overflow-x:auto; padding-bottom:10px; align-items:flex-start; }
+        .col { background:#f1f5f9; border-radius:14px; padding:10px; min-width:250px; width:250px; flex-shrink:0; }
+        .col.drop { outline:2px dashed var(--teal); outline-offset:-4px; background:var(--teal-bg); }
+        .col-head { display:flex; justify-content:space-between; align-items:center; padding:4px 6px 10px; }
+        .col-title { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.4px; }
+        .col-sum { font-size:10px; color:var(--muted); font-weight:700; }
+        .col-body { min-height:24px; }
+        .deal { background:white; border:1px solid var(--border); border-radius:11px; padding:10px 11px; margin-bottom:8px; box-shadow:var(--shadow-sm); cursor:grab; }
+        .deal:hover { box-shadow:var(--shadow-md); }
+        .deal-title { font-size:13px; font-weight:700; }
+        .deal-val { font-size:12px; font-weight:800; color:var(--teal); font-family:'DM Mono',monospace; white-space:nowrap; }
+        .deal-meta { font-size:11px; color:var(--muted); margin-top:4px; }
+        .stage-won .col-title { color:var(--green-text); } .stage-lost .col-title { color:#b91c1c; }
         @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
         @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
     </style>
@@ -172,7 +186,7 @@ var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities
 var SECTIONS = {
     dashboard: dashboardSection,
     contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
-    opportunities: function(){ return emptyPanel('trending_up','Opportunities','Track deals through your pipeline stages — a board of open, won and lost deals.', true); },
+    opportunities: function(){ setTimeout(loadOpps, 0); return '<div id="crmOpps"><div class="empty"><span class="material-icons">trending_up</span><h4>Loading pipeline…</h4></div></div>'; },
     conversations: function(){ return emptyPanel('forum','Conversations','A unified inbox for two-way messaging with your contacts.', true); },
     calendars: function(){ return emptyPanel('event','Calendars','Scheduling and appointment booking for this CRM.', true); },
     automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
@@ -435,6 +449,93 @@ window.deleteTag = async function(id){
     var r=await crmApi({action:'delete_tag', id:id});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; }
     await loadCrmSettings();
+};
+
+/* ── OPPORTUNITIES / PIPELINE (drag-and-drop board) ────────────────────────── */
+var CRM_STAGES = [], CRM_OPPS = [], _dragId = null;
+async function loadOpps(){
+    var host = document.getElementById('crmOpps'); if(!host) return;
+    var res = await Promise.all([
+        crmApi({action:'get_pipeline', sub_account_id:subId}),
+        crmApi({action:'list_opportunities', sub_account_id:subId}),
+        crmApi({action:'list_contacts', sub_account_id:subId})
+    ]);
+    if(res[0] && /session/i.test(res[0].message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    CRM_STAGES = (res[0] && res[0].success && res[0].stages) || [];
+    CRM_OPPS = (res[1] && res[1].success && res[1].opportunities) || [];
+    CRM_CONTACTS = (res[2] && res[2].success && res[2].contacts) || CRM_CONTACTS;
+    renderBoard();
+}
+function oppContactName(o){ return o.contact ? cName(o.contact) : ''; }
+function renderBoard(){
+    var host = document.getElementById('crmOpps'); if(!host) return;
+    var total = CRM_OPPS.reduce(function(s,o){return s+(o.value_cents||0);},0)/100;
+    var toolbar = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
+      +'<div style="font-size:12px;color:var(--muted);font-weight:600;">'+CRM_OPPS.length+' deal'+(CRM_OPPS.length===1?'':'s')+' · '+money(total)+' total</div>'
+      +'<button onclick="openDeal()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Add deal</button></div>';
+    if(!CRM_STAGES.length){ host.innerHTML = toolbar+'<div class="panel"><div class="empty"><span class="material-icons">trending_up</span><h4>No pipeline</h4><p>Could not load the pipeline.</p></div></div>'; return; }
+    var cols = CRM_STAGES.map(function(st){
+        var deals = CRM_OPPS.filter(function(o){return o.stage_id===st.id;});
+        var sum = deals.reduce(function(s,o){return s+(o.value_cents||0);},0)/100;
+        var cards = deals.map(function(o){
+            return '<div class="deal" draggable="true" data-id="'+o.id+'" onclick="openDeal(\''+o.id+'\')">'
+              +'<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;"><div class="deal-title">'+esc(o.title)+'</div><div class="deal-val">'+money((o.value_cents||0)/100)+'</div></div>'
+              +(oppContactName(o)?'<div class="deal-meta"><span class="material-icons" style="font-size:12px;vertical-align:middle;">person</span> '+esc(oppContactName(o))+'</div>':'')
+              +'</div>';
+        }).join('') || '<div style="font-size:11px;color:var(--muted);padding:8px 6px;">No deals</div>';
+        var cls = st.is_won?'stage-won':(st.is_lost?'stage-lost':'');
+        return '<div class="col '+cls+'" data-stage="'+st.id+'"><div class="col-head"><div class="col-title">'+esc(st.name)+'</div><div class="col-sum">'+deals.length+' · '+money(sum)+'</div></div><div class="col-body">'+cards+'</div></div>';
+    }).join('');
+    host.innerHTML = toolbar + '<div class="board">'+cols+'</div>';
+    wireDnD();
+}
+function wireDnD(){
+    document.querySelectorAll('#crmOpps .deal').forEach(function(card){
+        card.addEventListener('dragstart', function(e){ _dragId=card.getAttribute('data-id'); e.dataTransfer.effectAllowed='move'; setTimeout(function(){card.style.opacity='0.4';},0); });
+        card.addEventListener('dragend', function(){ card.style.opacity='1'; });
+    });
+    document.querySelectorAll('#crmOpps .col').forEach(function(col){
+        col.addEventListener('dragover', function(e){ e.preventDefault(); col.classList.add('drop'); });
+        col.addEventListener('dragleave', function(){ col.classList.remove('drop'); });
+        col.addEventListener('drop', function(e){ e.preventDefault(); col.classList.remove('drop'); var sid=col.getAttribute('data-stage'); var id=_dragId; _dragId=null; if(id&&sid) moveDeal(id, sid); });
+    });
+}
+async function moveDeal(id, stageId){
+    var o = CRM_OPPS.filter(function(x){return x.id===id;})[0]; if(!o || o.stage_id===stageId) return;
+    o.stage_id = stageId; renderBoard(); // optimistic
+    var r = await crmApi({action:'move_opportunity', id:id, stage_id:stageId});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not move deal.','error'); loadOpps(); return; }
+    if(r.opportunity) o.status = r.opportunity.status;
+}
+window.openDeal = async function(id){
+    var o = id ? CRM_OPPS.filter(function(x){return x.id===id;})[0] : null; o=o||{};
+    var lab=function(t){ return '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">'+t+'</label>'; };
+    var contactOpts = '<option value="">— none —</option>'+CRM_CONTACTS.map(function(c){return '<option value="'+c.id+'"'+(o.contact_id===c.id?' selected':'')+'>'+esc(cName(c))+'</option>';}).join('');
+    var stageOpts = CRM_STAGES.map(function(s){return '<option value="'+s.id+'"'+(o.stage_id===s.id?' selected':'')+'>'+esc(s.name)+'</option>';}).join('');
+    var val = (o.value_cents!=null && o.value_cents!==undefined) ? (o.value_cents/100) : '';
+    var html = '<div style="text-align:left;max-height:60vh;overflow:auto;padding:2px 4px;">'
+      +lab('Deal title')+'<input id="dlTitle" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(o.title||'')+'">'
+      +lab('Value ($)')+'<input id="dlValue" type="number" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(val)+'">'
+      +lab('Contact')+'<select id="dlContact" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+contactOpts+'</select>'
+      +lab('Stage')+'<select id="dlStage" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+stageOpts+'</select>'
+      +lab('Expected close')+'<input id="dlClose" type="date" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(o.expected_close_date||'')+'">'
+      +lab('Notes')+'<textarea id="dlNotes" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;">'+esc(o.notes||'')+'</textarea>'
+      +(id?'<div style="margin-top:12px;text-align:left;"><a onclick="deleteDeal(\''+id+'\')" style="color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;">Delete deal</a></div>':'')
+      +'</div>';
+    var res = await Swal.fire({ title:id?'Edit deal':'New deal', html:html, width:480, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){ var t=(document.getElementById('dlTitle').value||'').trim(); if(!t){ Swal.showValidationMessage('Enter a deal title.'); return false; } return {title:t, value:document.getElementById('dlValue').value, contact_id:document.getElementById('dlContact').value||null, stage_id:document.getElementById('dlStage').value, expected_close_date:document.getElementById('dlClose').value||null, notes:document.getElementById('dlNotes').value}; }});
+    if(!res.isConfirmed) return;
+    var r = id ? await crmApi({action:'update_opportunity', id:id, opp:res.value}) : await crmApi({action:'create_opportunity', sub_account_id:subId, opp:res.value});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
+    await loadOpps();
+};
+window.deleteDeal = async function(id){
+    Swal.close();
+    var c = await Swal.fire({icon:'warning',title:'Delete deal?',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    var r = await crmApi({action:'delete_opportunity', id:id});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; }
+    await loadOpps();
 };
 // Re-load if the top-bar switcher changes the active sub-account.
 window.addEventListener('pp-context-change', function(){

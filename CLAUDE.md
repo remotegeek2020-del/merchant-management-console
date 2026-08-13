@@ -379,3 +379,13 @@ then Tags management tab, Forms, Automation. Enforcement stays code-side (servic
 - PHASING agreed: 1 Contacts✅ · 2 Opportunities/Pipeline · 3 Contact record (notes/tasks/
   timeline) · 4 Custom fields+Tags✅ · 5 Forms · 6+ Conversations/Calendars/Automation/Reporting.
   NEXT (recommended): Phase 2 Opportunities/Pipeline board (schema + default pipeline seeder ready).
+
+### CRM Phase 2 DONE 2026-08-13: Opportunities / Pipeline board
+- `api/crm.js`: get_pipeline (rpc crm_ensure_default_pipeline → pipeline+stages), list_opportunities
+  (joins contact), create/update/delete_opportunity, move_opportunity (drag → stage; status follows
+  stage is_won/is_lost). All sub_account_id-scoped + access-gated. value stored as value_cents.
+- `partner/sub-account.html` Opportunities section = drag-and-drop Kanban board (columns per stage,
+  deal cards show title/value/contact, per-stage count+sum, total). Add/edit deal modal (title,
+  value$, contact dropdown, stage, expected close, notes, delete). Optimistic move via move_opportunity.
+- REMAINING phases: 3 Contact record (notes/tasks/timeline) · 5 Forms · 6+ Conversations/Calendars/
+  Automation/Reporting.

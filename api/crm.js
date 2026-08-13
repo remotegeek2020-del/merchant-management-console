@@ -146,6 +146,103 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, tag_ids: applied });
         }
 
+        // ── OPPORTUNITIES / PIPELINE ─────────────────────────────────────────
+        async function oppAccess(oppId) {
+            const { data: o } = await supabase.from('crm_opportunities').select('*').eq('id', oppId).maybeSingle();
+            if (!o) return null;
+            const acc = await subAccess(personId, o.sub_account_id);
+            if (!acc) return null;
+            return { opp: o, portal_id: acc.portal_id };
+        }
+
+        if (action === 'get_pipeline') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            // Lazily seed a default pipeline (New/Contacted/.../Won/Lost) on first view.
+            const { data: pid } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
+            const { data: pipeline } = await supabase.from('crm_pipelines').select('*').eq('id', pid).maybeSingle();
+            const { data: stages } = await supabase.from('crm_pipeline_stages').select('*').eq('pipeline_id', pid).order('position', { ascending: true });
+            return res.status(200).json({ success: true, pipeline, stages: stages || [] });
+        }
+
+        if (action === 'list_opportunities') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: opps } = await supabase.from('crm_opportunities')
+                .select('*').eq('sub_account_id', body.sub_account_id)
+                .order('position', { ascending: true }).order('created_at', { ascending: true }).limit(2000);
+            const list = opps || [];
+            const cids = [...new Set(list.map(o => o.contact_id).filter(Boolean))];
+            const cmap = {};
+            if (cids.length) {
+                const { data: cs } = await supabase.from('crm_contacts').select('id, first_name, last_name, email, company').in('id', cids);
+                (cs || []).forEach(c => { cmap[c.id] = c; });
+            }
+            const withContact = list.map(o => ({ ...o, contact: o.contact_id ? (cmap[o.contact_id] || null) : null }));
+            return res.status(200).json({ success: true, opportunities: withContact });
+        }
+
+        if (action === 'create_opportunity') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const o = body.opp || {};
+            const title = (o.title || '').trim();
+            if (!title) return res.status(400).json({ success: false, message: 'Deal title required.' });
+            const { data: pid } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
+            let stageId = o.stage_id;
+            if (!stageId) { const { data: st } = await supabase.from('crm_pipeline_stages').select('id').eq('pipeline_id', pid).order('position').limit(1); stageId = st && st[0] && st[0].id; }
+            // place at the end of its stage
+            const { data: last } = await supabase.from('crm_opportunities').select('position').eq('sub_account_id', body.sub_account_id).eq('stage_id', stageId).order('position', { ascending: false }).limit(1);
+            const pos = (last && last[0] ? (last[0].position || 0) : 0) + 1;
+            const row = {
+                sub_account_id: body.sub_account_id, portal_id: acc.portal_id, pipeline_id: pid, stage_id: stageId,
+                contact_id: o.contact_id || null, title, value_cents: Math.round(Number(o.value || 0) * 100) || 0,
+                status: o.status || 'open', expected_close_date: o.expected_close_date || null, notes: o.notes || null,
+                position: pos, created_by: personId
+            };
+            const { data, error } = await supabase.from('crm_opportunities').insert(row).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not create deal.' });
+            return res.status(200).json({ success: true, opportunity: data });
+        }
+
+        if (action === 'update_opportunity') {
+            const oa = await oppAccess(body.id);
+            if (!oa) return res.status(403).json({ success: false, message: 'No access to this deal.' });
+            const o = body.opp || {};
+            const patch = {};
+            if ('title' in o) patch.title = (o.title || '').trim() || oa.opp.title;
+            if ('contact_id' in o) patch.contact_id = o.contact_id || null;
+            if ('value' in o) patch.value_cents = Math.round(Number(o.value || 0) * 100) || 0;
+            if ('stage_id' in o) patch.stage_id = o.stage_id || null;
+            if ('status' in o) patch.status = o.status;
+            if ('expected_close_date' in o) patch.expected_close_date = o.expected_close_date || null;
+            if ('notes' in o) patch.notes = o.notes === '' ? null : o.notes;
+            const { data, error } = await supabase.from('crm_opportunities').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not update deal.' });
+            return res.status(200).json({ success: true, opportunity: data });
+        }
+
+        // Drag a deal to another stage; status follows the stage's won/lost flag.
+        if (action === 'move_opportunity') {
+            const oa = await oppAccess(body.id);
+            if (!oa) return res.status(403).json({ success: false, message: 'No access to this deal.' });
+            const { data: stage } = await supabase.from('crm_pipeline_stages').select('*').eq('id', body.stage_id).maybeSingle();
+            if (!stage || stage.sub_account_id !== oa.opp.sub_account_id) return res.status(400).json({ success: false, message: 'Invalid stage.' });
+            const status = stage.is_won ? 'won' : (stage.is_lost ? 'lost' : 'open');
+            const patch = { stage_id: body.stage_id, status };
+            if (body.position != null) patch.position = Number(body.position) || 0;
+            const { data, error } = await supabase.from('crm_opportunities').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not move deal.' });
+            return res.status(200).json({ success: true, opportunity: data });
+        }
+
+        if (action === 'delete_opportunity') {
+            const oa = await oppAccess(body.id);
+            if (!oa) return res.status(403).json({ success: false, message: 'No access to this deal.' });
+            await supabase.from('crm_opportunities').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+
         // ── CUSTOM FIELD DEFINITIONS ─────────────────────────────────────────
         if (action === 'list_custom_fields') {
             const acc = await subAccess(personId, body.sub_account_id);
