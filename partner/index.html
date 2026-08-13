@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <script src="/js/pp-session.js?v=20260812b"></script>
+    <script src="/js/brand-boot.js?v=20260812b"></script>
     <link rel="icon" href="/api/favicon" />
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -95,7 +96,7 @@
 <body>
 
 <div class="card" id="loginCard">
-    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" data-brand-logo alt="Partner Portal">
+    <img src="/api/brand-logo" class="logo" data-brand-logo alt="Partner Portal">
     <div style="text-align:center;">
         <span class="portal-tag"><span class="material-icons" style="font-size:12px;">handshake</span> Partner Portal</span>
         <h1>Sign in</h1>
@@ -336,7 +337,7 @@
     function showSetupForm(token, mode) {
         const isReset = mode === 'reset';
         document.getElementById('loginCard').innerHTML = `
-            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+            <img src="/api/brand-logo" class="logo" alt="PayProTec">
             <div style="text-align:center;">
                 <span class="portal-tag"><span class="material-icons" style="font-size:12px;">${isReset ? 'lock_reset' : 'celebration'}</span> ${isReset ? 'Reset Password' : 'Account Setup'}</span>
                 <h1>${isReset ? 'New Password' : 'Welcome!'}</h1>
@@ -370,7 +371,7 @@
     // ── Prospect (Lead Portal) self-registration — inline on this same page ──
     function showLeadRegister() {
         document.getElementById('loginCard').innerHTML = `
-            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+            <img src="/api/brand-logo" class="logo" alt="PayProTec">
             <div style="text-align:center;">
                 <span class="portal-tag"><span class="material-icons" style="font-size:12px;">rocket_launch</span> Become a Partner</span>
                 <h1>Create your account</h1>

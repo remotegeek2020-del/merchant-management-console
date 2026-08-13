@@ -107,7 +107,14 @@
             body: JSON.stringify({ action: 'resolve', host: host })
         })
             .then(function (r) { return r.json(); })
-            .then(function (d) { if (d && d.brand) applyBrand(d.brand); })
+            .then(function (d) {
+                if (d && d.brand) {
+                    applyBrand(d.brand);
+                    // Cache for the next load so brand-boot.js can paint colors
+                    // instantly (keyed by the real hostname, not a ?brand= preview).
+                    try { localStorage.setItem('pp_brand:' + window.location.hostname, JSON.stringify(d.brand)); } catch (e) {}
+                }
+            })
             .catch(function () { /* brand is best-effort; default look on failure */ });
     }
 
