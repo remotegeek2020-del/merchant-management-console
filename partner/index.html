@@ -95,7 +95,7 @@
 <body>
 
 <div class="card" id="loginCard">
-    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" data-brand-logo alt="Partner Portal">
     <div style="text-align:center;">
         <span class="portal-tag"><span class="material-icons" style="font-size:12px;">handshake</span> Partner Portal</span>
         <h1>Sign in</h1>
@@ -124,7 +124,7 @@
             Email me a sign-in link
         </button>
         <span class="forgot" onclick="handleForgot()">Forgot your password?</span>
-        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;">
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;" data-hide-branded>
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Not a partner yet?</div>
             <button class="btn" onclick="showLeadRegister()" style="background:var(--navy);color:#fff;">
                 <span class="material-icons" style="font-size:18px;">rocket_launch</span> Become a Partner
@@ -133,8 +133,8 @@
     </div>
 
     <div class="footer-note">
-        PayProTec Partner Portal · Secure Access<br>
-        <span style="color:#cbd5e1;">Need access? Contact your PayProTec representative.</span>
+        <span data-brand-replace>PayProTec Partner Portal · Secure Access</span><br>
+        <span style="color:#cbd5e1;" data-brand-replace>Need access? Contact your PayProTec representative.</span>
     </div>
 </div>
 
@@ -241,7 +241,7 @@
         let icon, bg, color, title, msg;
         if (status === 'inactive') {
             icon = 'warning_amber'; bg = '#fef3c7'; color = '#b45309'; title = 'Not activated yet';
-            msg = 'Your portal access isn\'t activated. Please contact your PayProTec representative to get set up.';
+            msg = 'Your portal access isn\'t activated. Please contact your ' + ((window._portalBrand && window._portalBrand.name) || 'PayProTec') + ' representative to get set up.';
         } else if (status === 'sent') {
             icon = 'mark_email_read'; bg = 'var(--teal-light)'; color = 'var(--teal-dark)'; title = 'Check your email';
             msg = 'A sign-in link was sent to <b>' + safe + '</b>.<br><span style="color:var(--muted);font-size:12.5px;">Expires in 15 minutes · works once · check spam.</span>';

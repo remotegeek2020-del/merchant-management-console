@@ -114,10 +114,17 @@ function render(){
       '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">palette</span> Branding</div>'
       +'<div class="card-sub">How your white-label portal looks on your own domain.</div>'
       +'<label>Agency / brand name</label><input id="fName" type="text" value="'+esc(DATA.agency_name||'')+'" placeholder="e.g. Devvly Payments" '+(cm?'':'disabled')+'>'
-      +'<label>Logo URL</label>'
+      +'<label>Logo</label>'
       +'<img id="logoPrev" class="logo-prev" src="'+esc(b.logo_url||'')+'" onload="this.style.display=\'block\'" onerror="this.style.display=\'none\'">'
-      +'<input id="fLogo" type="url" value="'+esc(b.logo_url||'')+'" placeholder="https://…/logo.png" oninput="var p=document.getElementById(\'logoPrev\');p.src=this.value;" '+(cm?'':'disabled')+'>'
-      +'<label>Favicon URL</label><input id="fFav" type="url" value="'+esc(b.favicon_url||'')+'" placeholder="https://…/favicon.png" '+(cm?'':'disabled')+'>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
+      +'<input id="fLogo" type="url" value="'+esc(b.logo_url||'')+'" placeholder="Upload or paste a URL" oninput="var p=document.getElementById(\'logoPrev\');p.src=this.value;p.style.display=this.value?\'block\':\'none\';" style="flex:1;min-width:200px;margin-bottom:0;" '+(cm?'':'disabled')+'>'
+      +(cm?'<button class="btn btn-outline" type="button" onclick="document.getElementById(\'logoFile\').click()"><span class="material-icons" style="font-size:16px;">upload</span> Upload</button><input id="logoFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none" onchange="uploadBrandAsset(\'fLogo\',this,\'logoPrev\')">':'')
+      +'</div>'
+      +'<label>Favicon</label>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+      +'<input id="fFav" type="url" value="'+esc(b.favicon_url||'')+'" placeholder="Upload or paste a URL" style="flex:1;min-width:200px;margin-bottom:0;" '+(cm?'':'disabled')+'>'
+      +(cm?'<button class="btn btn-outline" type="button" onclick="document.getElementById(\'favFile\').click()"><span class="material-icons" style="font-size:16px;">upload</span> Upload</button><input id="favFile" type="file" accept="image/png,image/x-icon,image/svg+xml,image/vnd.microsoft.icon" style="display:none" onchange="uploadBrandAsset(\'fFav\',this,null)">':'')
+      +'</div><div style="height:14px;"></div>'
       +'<div class="row">'
       +'<div><label>Primary color</label><div class="color-row"><input type="color" value="'+esc(b.color_primary||'#0d9488')+'" oninput="document.getElementById(\'fPrimary\').value=this.value" '+(cm?'':'disabled')+'><input id="fPrimary" type="text" value="'+esc(b.color_primary||'')+'" placeholder="#0d9488" '+(cm?'':'disabled')+'></div></div>'
       +'<div><label>Dark / sidebar color</label><div class="color-row"><input type="color" value="'+esc(b.color_dark||'#001e3c')+'" oninput="document.getElementById(\'fDark\').value=this.value" '+(cm?'':'disabled')+'><input id="fDark" type="text" value="'+esc(b.color_dark||'')+'" placeholder="#001e3c" '+(cm?'':'disabled')+'></div></div>'
@@ -172,6 +179,28 @@ window.saveBranding = async function(btn){
     else Swal.fire('Error',(r&&r.message)||'Could not save.','error');
 };
 function val(id){ var e=document.getElementById(id); return e?e.value:''; }
+window.uploadBrandAsset = async function(fieldId, input, prevId){
+    var file = input.files && input.files[0]; if(!file) return;
+    if(file.size > 3*1024*1024){ Swal.fire('Too large','Please use an image under 3 MB.','warning'); input.value=''; return; }
+    var field = document.getElementById(fieldId);
+    var prev = prevId ? document.getElementById(prevId) : null;
+    var oldPh = field ? field.placeholder : '';
+    if(field){ field.disabled=true; field.placeholder='Uploading…'; }
+    try{
+        var s = await api({action:'get_brand_upload_url', file_type:file.type});
+        if(!s||!s.success||!s.upload_url) throw new Error((s&&s.message)||'Could not start upload.');
+        var put = await fetch(s.upload_url,{method:'PUT',headers:{'Content-Type':file.type,'x-upsert':'true'},body:file});
+        if(!put.ok) throw new Error('Upload failed ('+put.status+').');
+        if(field){ field.value=s.public_url; }
+        if(prev){ prev.src=s.public_url; prev.style.display='block'; }
+        Swal.fire({icon:'success',title:'Uploaded',text:'Click “Save branding” to apply.',timer:1400,showConfirmButton:false});
+    }catch(e){
+        Swal.fire('Upload error', e.message||'Could not upload the image.','error');
+    }finally{
+        if(field){ field.disabled=false; field.placeholder=oldPh; }
+        input.value='';
+    }
+};
 window.addDomain = async function(btn){
     var host=(val('fHost')||'').trim(); if(!host) return; btn.disabled=true;
     var r=await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_domain',token:token,host:host})}).then(x=>x.json());

@@ -297,10 +297,24 @@ export default async function handler(req, res) {
         if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account', 'get_agency_overview',
              'list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
              'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke',
-             'get_agency_branding', 'save_agency_branding'].includes(action)) {
+             'get_agency_branding', 'save_agency_branding', 'get_brand_upload_url'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
             const cf = await getCfConfig();
+
+            // Signed upload URL for a brand asset (logo/favicon) → public Supabase Storage
+            // (bucket file, not a DB blob). Unique path so re-uploads never clash.
+            if (action === 'get_brand_upload_url') {
+                const ALLOWED = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/svg+xml': 'svg', 'image/x-icon': 'ico', 'image/vnd.microsoft.icon': 'ico' };
+                const ext = ALLOWED[body.file_type];
+                if (!ext) return res.status(400).json({ success: false, message: 'Use PNG, JPG, WEBP, SVG or ICO.' });
+                const rand = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                const path = `brands/${personId}/${rand}.${ext}`;
+                const { data, error } = await supabase.storage.from('avatars').createSignedUploadUrl(path);
+                if (error) return res.status(500).json({ success: false, message: 'Could not start upload.' });
+                const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;
+                return res.status(200).json({ success: true, upload_url: data.signedUrl, public_url: publicUrl });
+            }
 
             // Open a sub-account's CRM workspace: its details + scoped object counts/data.
             // A sub-account is the CRM tenant that holds merchants, leads, sub-partners and

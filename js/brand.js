@@ -51,9 +51,21 @@
         // Sidebar footer version line ("PayProTec Partner Portal v1.0") + any element
         // opted-in via data-brand-name. Keep it conservative — don't rewrite body copy.
         document.querySelectorAll('[data-brand-name]').forEach(function (el) { el.textContent = name; });
+        // Opt-in copy that mentions "PayProTec": swap the mention for the brand name
+        // (keeps the surrounding sentence, e.g. "Contact your PayProTec representative").
+        document.querySelectorAll('[data-brand-replace]').forEach(function (el) {
+            if (!el.getAttribute('data-brand-orig')) el.setAttribute('data-brand-orig', el.textContent);
+            el.textContent = el.getAttribute('data-brand-orig').replace(/PayProTec/g, name);
+        });
         try {
             if (document.title) document.title = document.title.replace(/PayProTec/g, name);
         } catch (e) {}
+    }
+
+    // Elements that only make sense on the canonical PayProTec portal (e.g. the
+    // "Become a Partner" lead-signup CTA) are hidden once a brand is applied.
+    function hideBrandedOff() {
+        document.querySelectorAll('[data-hide-branded]').forEach(function (el) { el.style.display = 'none'; });
     }
 
     function applyBrand(b) {
@@ -66,6 +78,7 @@
         applyLogos(b.logo_url);
         applyFavicon(b.favicon_url);
         applyName(b.name);
+        hideBrandedOff();
         document.documentElement.setAttribute('data-branded', '1');
 
         // Re-apply logos shortly after: partner-nav.js / page scripts inject the
