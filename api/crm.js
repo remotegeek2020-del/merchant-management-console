@@ -151,14 +151,16 @@ export default async function handler(req, res) {
             const ca = await contactAccess(body.id);
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const cid = body.id;
-            const [tagsRes, oppsRes, notesRes, tasksRes] = await Promise.all([
+            const [tagsRes, oppsRes, notesRes, tasksRes, msgsRes, apptsRes] = await Promise.all([
                 supabase.from('crm_contact_tags').select('crm_tags(id,name,color)').eq('contact_id', cid),
                 supabase.from('crm_opportunities').select('*').eq('contact_id', cid).order('created_at', { ascending: false }),
                 supabase.from('crm_notes').select('*').eq('contact_id', cid).order('created_at', { ascending: false }),
-                supabase.from('crm_tasks').select('*').eq('contact_id', cid).order('done', { ascending: true }).order('due_date', { ascending: true }).order('created_at', { ascending: false })
+                supabase.from('crm_tasks').select('*').eq('contact_id', cid).order('done', { ascending: true }).order('due_date', { ascending: true }).order('created_at', { ascending: false }),
+                supabase.from('crm_messages').select('*').eq('contact_id', cid).order('created_at', { ascending: false }).limit(100),
+                supabase.from('crm_appointments').select('*').eq('contact_id', cid).order('starts_at', { ascending: false }).limit(50)
             ]);
             const tags = (tagsRes.data || []).map(t => t.crm_tags).filter(Boolean);
-            return res.status(200).json({ success: true, contact: { ...ca.contact, tags }, opportunities: oppsRes.data || [], notes: notesRes.data || [], tasks: tasksRes.data || [] });
+            return res.status(200).json({ success: true, contact: { ...ca.contact, tags }, opportunities: oppsRes.data || [], notes: notesRes.data || [], tasks: tasksRes.data || [], messages: msgsRes.data || [], appointments: apptsRes.data || [] });
         }
 
         if (action === 'add_note') {
@@ -384,6 +386,84 @@ export default async function handler(req, res) {
             const acc = await subAccess(personId, tag.sub_account_id);
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_tags').delete().eq('id', body.id); // contact links cascade
+            return res.status(200).json({ success: true });
+        }
+
+        // ── CONVERSATIONS (per-contact message/activity log) ─────────────────
+        if (action === 'add_message') {
+            const ca = await contactAccess(body.contact_id);
+            if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
+            const text = (body.body || '').trim();
+            if (!text) return res.status(400).json({ success: false, message: 'Message is empty.' });
+            const dir = body.direction === 'inbound' ? 'inbound' : 'outbound';
+            const chan = ['note', 'call', 'email', 'sms'].includes(body.channel) ? body.channel : 'note';
+            const { data, error } = await supabase.from('crm_messages').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, direction: dir, channel: chan, body: text, created_by: personId }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not log message.' });
+            return res.status(200).json({ success: true, message_row: data });
+        }
+        if (action === 'delete_message') {
+            const { data: m } = await supabase.from('crm_messages').select('contact_id').eq('id', body.id).maybeSingle();
+            if (!m) return res.status(404).json({ success: false, message: 'Not found.' });
+            const ca = await contactAccess(m.contact_id);
+            if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_messages').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'list_conversations') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: msgs } = await supabase.from('crm_messages').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: false }).limit(500);
+            const list = msgs || [];
+            const seen = {}; const threads = [];
+            list.forEach(m => { if (!seen[m.contact_id]) { seen[m.contact_id] = { contact_id: m.contact_id, last: m, count: 0 }; threads.push(seen[m.contact_id]); } seen[m.contact_id].count++; });
+            const cids = threads.map(t => t.contact_id);
+            const cmap = {};
+            if (cids.length) { const { data: cs } = await supabase.from('crm_contacts').select('id, first_name, last_name, email, company').in('id', cids); (cs || []).forEach(c => cmap[c.id] = c); }
+            threads.forEach(t => { t.contact = cmap[t.contact_id] || null; });
+            return res.status(200).json({ success: true, threads });
+        }
+
+        // ── CALENDARS (appointments) ─────────────────────────────────────────
+        if (action === 'list_appointments') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: appts } = await supabase.from('crm_appointments').select('*').eq('sub_account_id', body.sub_account_id).order('starts_at', { ascending: true }).limit(1000);
+            const list = appts || [];
+            const cids = [...new Set(list.map(a => a.contact_id).filter(Boolean))];
+            const cmap = {};
+            if (cids.length) { const { data: cs } = await supabase.from('crm_contacts').select('id, first_name, last_name, company').in('id', cids); (cs || []).forEach(c => cmap[c.id] = c); }
+            return res.status(200).json({ success: true, appointments: list.map(a => ({ ...a, contact: a.contact_id ? (cmap[a.contact_id] || null) : null })) });
+        }
+        if (action === 'create_appointment') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const a = body.appt || {};
+            const title = (a.title || '').trim();
+            if (!title) return res.status(400).json({ success: false, message: 'Title required.' });
+            if (!a.starts_at) return res.status(400).json({ success: false, message: 'Start time required.' });
+            const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, contact_id: a.contact_id || null, title, starts_at: a.starts_at, ends_at: a.ends_at || null, location: a.location || null, notes: a.notes || null, created_by: personId };
+            const { data, error } = await supabase.from('crm_appointments').insert(row).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not create appointment.' });
+            return res.status(200).json({ success: true, appointment: data });
+        }
+        if (action === 'update_appointment') {
+            const { data: ap } = await supabase.from('crm_appointments').select('*').eq('id', body.id).maybeSingle();
+            if (!ap) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, ap.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const a = body.appt || {};
+            const patch = {};
+            ['title', 'starts_at', 'ends_at', 'location', 'notes', 'status', 'contact_id'].forEach(k => { if (k in a) patch[k] = a[k] === '' ? null : a[k]; });
+            const { data, error } = await supabase.from('crm_appointments').update(patch).eq('id', body.id).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not update.' });
+            return res.status(200).json({ success: true, appointment: data });
+        }
+        if (action === 'delete_appointment') {
+            const { data: ap } = await supabase.from('crm_appointments').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!ap) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, ap.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_appointments').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
         }
 

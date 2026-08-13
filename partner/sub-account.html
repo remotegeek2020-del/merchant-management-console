@@ -188,9 +188,9 @@ var SECTIONS = {
     dashboard: dashboardSection,
     contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
     opportunities: function(){ setTimeout(loadOpps, 0); return '<div id="crmOpps"><div class="empty"><span class="material-icons">trending_up</span><h4>Loading pipeline…</h4></div></div>'; },
-    conversations: function(){ return emptyPanel('forum','Conversations','A unified inbox for two-way messaging with your contacts.', true); },
-    calendars: function(){ return emptyPanel('event','Calendars','Scheduling and appointment booking for this CRM.', true); },
-    automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers that run your CRM on autopilot.', true); },
+    conversations: function(){ setTimeout(loadConversations, 0); return '<div id="crmConv"><div class="empty"><span class="material-icons">forum</span><h4>Loading…</h4></div></div>'; },
+    calendars: function(){ setTimeout(loadCalendar, 0); return '<div id="crmCal"><div class="empty"><span class="material-icons">event</span><h4>Loading…</h4></div></div>'; },
+    automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers (e.g. “new form lead → add tag → create task”). This needs a workflow engine + triggers — building it next as a dedicated piece.', true); },
     forms: function(){ setTimeout(loadForms, 0); return '<div id="crmForms"><div class="empty"><span class="material-icons">description</span><h4>Loading forms…</h4></div></div>'; },
     reporting: function(){ setTimeout(loadReport, 0); return '<div id="crmReport"><div class="empty"><span class="material-icons">insights</span><h4>Loading reporting…</h4></div></div>'; },
     merchants: merchantsPanel,
@@ -252,7 +252,8 @@ function handleLogout(){
 }
 
 /* ── CONTACTS (per-CRM, isolated by sub_account_id) ─────────────────────────── */
-var CRM_CONTACTS = [], CRM_TAGS = [], CRM_FIELDS = [], CRM_Q = '', CURRENT_CONTACT = null;
+var CRM_CONTACTS = [], CRM_TAGS = [], CRM_FIELDS = [], CRM_Q = '', CURRENT_CONTACT = null, _pendingContactId = null;
+window.openContactFrom = function(id){ _pendingContactId = id; showSection('contacts'); };
 function fmtDate(s){ if(!s) return ''; try{ return new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return s; } }
 function fmtDateTime(s){ if(!s) return ''; try{ return new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return s; } }
 function crmApi(b){ return fetch('/api/crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(r=>r.json()); }
@@ -272,6 +273,7 @@ async function loadContacts(){
     CRM_CONTACTS = (cr && cr.success && cr.contacts) || [];
     CRM_TAGS = (tr && tr.success && tr.tags) || [];
     CRM_FIELDS = (fr && fr.success && fr.fields) || [];
+    if(_pendingContactId){ var pid=_pendingContactId; _pendingContactId=null; openContactDetail(pid); return; }
     renderContacts();
 }
 function renderContacts(){
@@ -406,6 +408,18 @@ function renderContactDetail(){
       +'<div style="display:flex;gap:6px;margin-bottom:8px;"><textarea id="cdNoteBody" placeholder="Write a note…" style="flex:1;min-height:38px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;resize:vertical;"></textarea><button onclick="cdAddNote()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;align-self:flex-start;">Add</button></div>'
       +noteItems+'</div>';
 
+    var msgs=CURRENT_CONTACT.messages||[];
+    var msgItems=msgs.map(function(m){
+        var icon=m.channel==='call'?'call':m.channel==='email'?'mail':m.channel==='sms'?'sms':'sticky_note_2';
+        return '<div style="padding:8px 0;border-bottom:1px solid #f6f8fb;"><div style="display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;color:var(--teal);">'+icon+'</span><span style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">'+esc(m.channel)+' · '+(m.direction==='inbound'?'in':'out')+'</span><span style="font-size:11px;color:var(--muted);margin-left:auto;">'+fmtDateTime(m.created_at)+'</span><span class="material-icons" title="Delete" onclick="cdDeleteMsg(\''+m.id+'\')" style="font-size:14px;color:#cbd5e1;cursor:pointer;margin-left:6px;">delete</span></div><div style="font-size:13px;white-space:pre-wrap;margin-top:3px;word-break:break-word;">'+esc(m.body)+'</div></div>';
+    }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No activity logged.</div>';
+    var convCard='<div class="panel" style="padding:16px 18px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:8px;">Conversation log</div>'
+      +'<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'
+      +'<select id="cdMsgChan" style="padding:8px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="sms">SMS</option></select>'
+      +'<select id="cdMsgDir" style="padding:8px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"><option value="outbound">Outbound</option><option value="inbound">Inbound</option></select>'
+      +'<input id="cdMsgBody" placeholder="Log an interaction…" style="flex:1;min-width:150px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;" onkeydown="if(event.key===\'Enter\')cdAddMsg();">'
+      +'<button onclick="cdAddMsg()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;">Log</button></div>'
+      +msgItems+'</div>';
     var dealItems=opps.map(function(o){
         var st=(CRM_STAGES.filter(function(s){return s.id===o.stage_id;})[0]||{}).name||o.status;
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;" onclick="openDeal(\''+o.id+'\')"><div><div style="font-size:13px;font-weight:700;">'+esc(o.title)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(st||'')+'</div></div><div class="mono" style="font-weight:800;color:var(--teal);">'+money((o.value_cents||0)/100)+'</div></div>';
@@ -414,8 +428,10 @@ function renderContactDetail(){
 
     host.innerHTML='<div style="margin-bottom:14px;"><a onclick="renderContacts()" style="display:inline-flex;align-items:center;gap:5px;color:var(--teal);font-weight:700;font-size:13px;cursor:pointer;"><span class="material-icons" style="font-size:17px;">arrow_back</span> Contacts</a></div>'
       +'<div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;" class="cd-grid">'
-      +'<div>'+infoCard+'</div><div>'+tasksCard+notesCard+dealsCard+'</div></div>';
+      +'<div>'+infoCard+'</div><div>'+tasksCard+convCard+notesCard+dealsCard+'</div></div>';
 }
+window.cdAddMsg=async function(){ var b=(document.getElementById('cdMsgBody').value||'').trim(); if(!b) return; var r=await crmApi({action:'add_message',contact_id:CURRENT_CONTACT.contact.id,channel:document.getElementById('cdMsgChan').value,direction:document.getElementById('cdMsgDir').value,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not log.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdDeleteMsg=async function(id){ await crmApi({action:'delete_message',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdAddTask=async function(){ var el=document.getElementById('cdTaskTitle'),du=document.getElementById('cdTaskDue'); var t=(el.value||'').trim(); if(!t) return; var r=await crmApi({action:'add_task',contact_id:CURRENT_CONTACT.contact.id,title:t,due_date:du.value||null}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add task.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdToggleTask=async function(id,done){ await crmApi({action:'update_task',id:id,done:done}); openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdDeleteTask=async function(id){ await crmApi({action:'delete_task',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
@@ -533,6 +549,77 @@ async function loadReport(){
     }).join('') || '<div style="font-size:13px;color:var(--muted);">No pipeline data yet.</div>';
     host.innerHTML=tiles+'<div class="panel" style="padding:18px 20px;margin-top:6px;"><div style="font-weight:800;font-size:14px;margin-bottom:14px;">Pipeline by stage</div>'+bars+'</div>';
 }
+
+/* ── CONVERSATIONS (recent threads; open a contact to log/view) ─────────────── */
+async function loadConversations(){
+    var host=document.getElementById('crmConv'); if(!host) return;
+    var r=await crmApi({action:'list_conversations', sub_account_id:subId});
+    if(r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    var threads=(r && r.success && r.threads)||[];
+    if(!threads.length){ host.innerHTML=emptyPanel('forum','No conversations yet','Log calls, emails, SMS and notes from a contact’s record — recent threads show up here.', false); return; }
+    var rows=threads.map(function(t){
+        var name=t.contact?cName(t.contact):'Unknown';
+        var last=t.last||{};
+        var icon=last.channel==='call'?'call':last.channel==='email'?'mail':last.channel==='sms'?'sms':'sticky_note_2';
+        var snip=last.body?esc(String(last.body).slice(0,90)):'';
+        return '<div onclick="openContactFrom(\''+t.contact_id+'\')" style="display:flex;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;">'
+          +'<span class="material-icons" style="color:var(--teal);">'+icon+'</span>'
+          +'<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">'+esc(name)+'</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+snip+'</div></div>'
+          +'<div style="font-size:11px;color:var(--muted);text-align:right;white-space:nowrap;">'+fmtDateTime(last.created_at)+'<div>'+t.count+' msg</div></div></div>';
+    }).join('');
+    host.innerHTML='<div class="panel">'+rows+'</div>';
+}
+
+/* ── CALENDARS (appointments) ──────────────────────────────────────────────── */
+var CRM_APPTS=[];
+function toLocalInput(iso){ try{ var d=new Date(iso); var p=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }catch(e){ return ''; } }
+async function loadCalendar(){
+    var host=document.getElementById('crmCal'); if(!host) return;
+    var res=await Promise.all([ crmApi({action:'list_appointments', sub_account_id:subId}), crmApi({action:'list_contacts', sub_account_id:subId}) ]);
+    if(res[0] && /session/i.test(res[0].message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    CRM_APPTS=(res[0] && res[0].success && res[0].appointments)||[];
+    CRM_CONTACTS=(res[1] && res[1].success && res[1].contacts)||CRM_CONTACTS;
+    renderCalendar();
+}
+function apptCard(a){
+    var c=a.contact?cName(a.contact):''; var done=a.status==='done'; var d=new Date(a.starts_at);
+    return '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid #f1f5f9;">'
+      +'<div style="text-align:center;min-width:48px;"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">'+d.toLocaleDateString(undefined,{month:'short'})+'</div><div style="font-size:18px;font-weight:800;line-height:1;">'+d.getDate()+'</div></div>'
+      +'<div style="flex:1;"><div style="font-weight:700;font-size:13px;'+(done?'text-decoration:line-through;color:var(--muted);':'')+'">'+esc(a.title)+'</div><div style="font-size:12px;color:var(--muted);">'+d.toLocaleString(undefined,{hour:'numeric',minute:'2-digit'})+(c?(' · '+esc(c)):'')+(a.location?(' · '+esc(a.location)):'')+'</div></div>'
+      +'<div style="display:flex;gap:6px;"><span class="material-icons" title="'+(done?'Reopen':'Mark done')+'" onclick="toggleAppt(\''+a.id+'\','+(!done)+')" style="font-size:18px;color:'+(done?'#22c55e':'#cbd5e1')+';cursor:pointer;">check_circle</span><span class="material-icons" title="Edit" onclick="openAppt(\''+a.id+'\')" style="font-size:17px;color:var(--muted);cursor:pointer;">edit</span><span class="material-icons" title="Delete" onclick="deleteAppt(\''+a.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></div></div>';
+}
+function renderCalendar(){
+    var host=document.getElementById('crmCal'); if(!host) return;
+    var today=new Date(new Date().toDateString());
+    var upcoming=CRM_APPTS.filter(function(a){ return a.status!=='cancelled' && new Date(a.starts_at)>=today; });
+    var past=CRM_APPTS.filter(function(a){ return a.status==='cancelled' || new Date(a.starts_at)<today; }).reverse();
+    var toolbar='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;"><div style="font-size:12px;color:var(--muted);font-weight:600;">'+upcoming.length+' upcoming</div><button onclick="openAppt()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Add appointment</button></div>';
+    var upHtml=upcoming.length?upcoming.map(apptCard).join(''):'<div style="font-size:13px;color:var(--muted);padding:6px 0;">No upcoming appointments.</div>';
+    var pastHtml=past.length?('<div style="margin-top:18px;"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 4px;">Past</div>'+past.slice(0,20).map(apptCard).join('')+'</div>'):'';
+    host.innerHTML=toolbar+'<div class="panel" style="padding:6px 18px 14px;">'+upHtml+pastHtml+'</div>';
+}
+window.openAppt=async function(id){
+    if(!CRM_CONTACTS.length){ var cr=await crmApi({action:'list_contacts', sub_account_id:subId}); CRM_CONTACTS=(cr&&cr.success&&cr.contacts)||[]; }
+    var a=id?CRM_APPTS.filter(function(x){return x.id===id;})[0]:null; a=a||{};
+    var lab=function(t){ return '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">'+t+'</label>'; };
+    var contactOpts='<option value="">— none —</option>'+CRM_CONTACTS.map(function(c){return '<option value="'+c.id+'"'+(a.contact_id===c.id?' selected':'')+'>'+esc(cName(c))+'</option>';}).join('');
+    var html='<div style="text-align:left;max-height:60vh;overflow:auto;padding:2px 4px;">'
+      +lab('Title')+'<input id="apTitle" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(a.title||'')+'">'
+      +lab('Date & time')+'<input id="apStart" type="datetime-local" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(a.starts_at?toLocalInput(a.starts_at):'')+'">'
+      +lab('Contact')+'<select id="apContact" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+contactOpts+'</select>'
+      +lab('Location')+'<input id="apLoc" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(a.location||'')+'">'
+      +lab('Notes')+'<textarea id="apNotes" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;">'+esc(a.notes||'')+'</textarea>'
+      +(id?'<div style="margin-top:10px;"><a onclick="deleteAppt(\''+id+'\')" style="color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;">Delete appointment</a></div>':'')
+      +'</div>';
+    var res=await Swal.fire({title:id?'Edit appointment':'New appointment', html:html, width:480, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){ var t=(document.getElementById('apTitle').value||'').trim(); var s=document.getElementById('apStart').value; if(!t){Swal.showValidationMessage('Enter a title.');return false;} if(!s){Swal.showValidationMessage('Pick a date & time.');return false;} return {title:t, starts_at:new Date(s).toISOString(), contact_id:document.getElementById('apContact').value||null, location:document.getElementById('apLoc').value||null, notes:document.getElementById('apNotes').value||null}; }});
+    if(!res.isConfirmed) return;
+    var r=id?await crmApi({action:'update_appointment', id:id, appt:res.value}):await crmApi({action:'create_appointment', sub_account_id:subId, appt:res.value});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
+    await loadCalendar();
+};
+window.toggleAppt=async function(id,done){ await crmApi({action:'update_appointment', id:id, appt:{status:done?'done':'scheduled'}}); await loadCalendar(); };
+window.deleteAppt=async function(id){ Swal.close(); var c=await Swal.fire({icon:'warning',title:'Delete appointment?',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; var r=await crmApi({action:'delete_appointment', id:id}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; } await loadCalendar(); };
 
 /* ── CUSTOM FIELDS (per-CRM definitions; values ride in contact.custom) ─────── */
 function customFieldInput(fld, val){

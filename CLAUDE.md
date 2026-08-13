@@ -389,3 +389,24 @@ then Tags management tab, Forms, Automation. Enforcement stays code-side (servic
   value$, contact dropdown, stage, expected close, notes, delete). Optimistic move via move_opportunity.
 - REMAINING phases: 3 Contact record (notes/tasks/timeline) · 5 Forms · 6+ Conversations/Calendars/
   Automation/Reporting.
+
+### CRM Phases 3/5/6 DONE 2026-08-13 (full sweep)
+- Phase 3 Contact record: crm_notes + crm_tasks (migration crm_notes_tasks). Contact click →
+  detail view: info+custom fields+tags, Tasks (add/complete/due/overdue/delete), Notes,
+  Conversation log (crm_messages), Deals (linked opps, inline add). api/crm.js: get_contact
+  (returns tags/opps/notes/tasks/messages/appointments), add/delete_note, add/update/delete_task.
+- Phase 5 Forms: crm_forms (migration). api/crm.js list/create/update/delete_form; api/crm-form.js
+  (PUBLIC get_form/submit_form → creates crm_contact, source 'Form: <name>'). partner/form.html
+  public themed page (/partner/form?f=ID). Forms section = builder (pick standard+custom fields,
+  required, thank-you msg) + copy link/open + submissions count.
+- Phase 6 Reporting: api/crm.js get_report (contacts, open/won/lost deal counts+values, tasks
+  open/overdue, form leads, pipeline-by-stage). Reporting section = KPI tiles + stage bars.
+- Conversations: crm_messages (migration crm_appointments_messages). add/delete_message,
+  list_conversations. Per-contact Conversation log card (note/call/email/sms, in/out); Conversations
+  section lists recent threads → openContactFrom() opens the contact record.
+- Calendars: crm_appointments. list/create/update/delete_appointment. Calendars section = upcoming/
+  past appointments, add/edit modal (title, datetime, contact, location, notes), mark done, delete.
+- Automation: STILL a placeholder — needs a workflow engine + triggers (and Conversations/Calendars
+  need real email/SMS/scheduling providers to go beyond manual logging). Flagged to user as next
+  dedicated build.
+- All CRM tables isolated by sub_account_id + access-gated (agency member/god; sub-partner scope).
