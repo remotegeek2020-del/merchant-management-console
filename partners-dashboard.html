@@ -2618,59 +2618,26 @@ window.wlAgencyInit = async function(personId) {
 // Owners & admins team manager (shown when agency access is ON).
 function _wlEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function _wlPctStr(v){ return (v===null||v===undefined) ? '' : (Math.round(Number(v)*100)/100)+'%'; }
-function _wlRenderMembers(personId){
-    var st = window._wlAgency[personId] || {};
+async function _wlRenderMembers(personId){
     var wrap = document.getElementById('agency-members-wrap');
     if(!wrap) return;
-    // Ownership is ALWAYS editable — independent of white-label/agency access.
     wrap.style.display='';
-    var members = st.members || [];
-    var owners = members.filter(function(m){return m.role==='owner';});
-    var totalPct = owners.reduce(function(s,m){return s + (m.ownership_percent||0);},0);
-    var anyPct = owners.some(function(m){return m.ownership_percent!=null;});
-
-    var rows = members.map(function(m){
-        var star = m.is_primary ? '<span title="Primary owner" style="color:#f59e0b;">★</span> ' : '';
-        var roleChip = m.role==='owner'
-            ? '<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#ede9fe;color:#6d28d9;">OWNER</span>'
-            : '<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#f1f5f9;color:#475569;">ADMIN</span>';
-        var pctCtl = m.role==='owner'
-            ? '<span style="display:inline-flex;align-items:center;gap:2px;"><input type="number" min="0" max="100" step="0.01" value="'+(m.ownership_percent==null?'':m.ownership_percent)+'" placeholder="%" onchange="wlSetPct(\''+personId+'\',\''+m.id+'\',this.value)" style="width:56px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;text-align:right;"><span style="color:#94a3b8;">%</span></span>'
-            : '';
-        var actions = [];
-        if(!m.is_primary && m.role==='owner') actions.push('<a href="#" onclick="wlMakePrimary(\''+personId+'\',\''+m.person_id+'\');return false;" style="color:#f59e0b;text-decoration:none;font-weight:700;">Make primary</a>');
-        if(m.role==='admin') actions.push('<a href="#" onclick="wlSetRole(\''+personId+'\',\''+m.id+'\',\'owner\');return false;" style="color:#6d28d9;text-decoration:none;font-weight:700;">Make owner</a>');
-        if(m.role==='owner' && !m.is_primary) actions.push('<a href="#" onclick="wlSetRole(\''+personId+'\',\''+m.id+'\',\'admin\');return false;" style="color:#64748b;text-decoration:none;font-weight:700;">Make admin</a>');
-        if(!m.is_primary) actions.push('<a href="#" onclick="wlRemoveMember(\''+personId+'\',\''+m.id+'\');return false;" style="color:#dc2626;text-decoration:none;font-weight:700;">Remove</a>');
-        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;">'
-          +'<div style="min-width:0;flex:1;"><div style="font-weight:700;font-size:12px;">'+star+_wlEsc(m.full_name||m.email||m.person_id)+'</div>'
-          +'<div style="font-size:11px;color:#94a3b8;">'+_wlEsc(m.email||'')+'</div></div>'
-          +'<div style="display:flex;align-items:center;gap:10px;font-size:11px;white-space:nowrap;">'+pctCtl+roleChip+' '+actions.join(' · ')+'</div></div>';
-    }).join('') || '<div style="font-size:12px;color:#94a3b8;padding:6px 0;">No owners recorded yet. Add the first owner below.</div>';
-
-    var pctSummary = anyPct
-        ? '<div style="font-size:11px;margin-top:6px;color:'+(Math.abs(totalPct-100)<0.01?'#059669':(totalPct>100?'#dc2626':'#b45309'))+';font-weight:700;">Total ownership: '+(Math.round(totalPct*100)/100)+'%'+(Math.abs(totalPct-100)<0.01?' ✓':(totalPct>100?' — over 100%':' — '+(Math.round((100-totalPct)*100)/100)+'% unassigned'))+'</div>'
-        : '';
-
-    var nameEditor = st.relationship_id
-      ? '<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">'
-        +'<input id="wlAgencyNameInput" value="'+_wlEsc(st.agency_name||'')+'" placeholder="Agency / brand name" style="flex:1;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;">'
-        +'<button onclick="wlSaveAgencyName(\''+personId+'\')" style="background:#0d9488;color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;">Save name</button></div>'
-      : '';
+    wrap.innerHTML='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;margin-bottom:6px;">Companies Owned</div><div style="font-size:12px;color:#94a3b8;">Loading…</div></div>';
+    var r=null;
+    try { r = await fetch('/api/whitelabel',{method:'POST',headers:_wlAgHdrs(),body:JSON.stringify({action:'get_person_companies',person_id:personId})}).then(x=>x.json()); } catch(e){}
+    var comps = (r && r.success && r.companies) || [];
+    var rows = comps.map(function(c){
+        var star = c.is_primary ? '<span title="Primary owner" style="color:#f59e0b;">★</span> ' : '';
+        var pct = (c.ownership_percent==null)?'':('<span style="font-family:monospace;color:#0369a1;font-weight:700;">'+(Math.round(c.ownership_percent*100)/100)+'%</span>');
+        var tag = c.is_primary?'<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#ede9fe;color:#6d28d9;">PRIMARY</span>':'<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#f1f5f9;color:#475569;">CO-OWNER</span>';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;"><div style="font-weight:700;font-size:12px;">'+star+_wlEsc(c.company_name)+'</div><div style="display:flex;align-items:center;gap:10px;">'+pct+tag+'</div></div>';
+    }).join('') || '<div style="font-size:12px;color:#94a3b8;padding:6px 0;">Not recorded as an owner of any company yet.</div>';
     wrap.innerHTML =
       '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">'
-      +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;margin-bottom:6px;">Company Ownership &amp; Team</div>'
-      +nameEditor
-      +'<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">Owners are the company owner(s) — highest access. A partnership can have several owners; one is primary (★). Ownership&nbsp;% is optional. Everyone else is a CRM admin.</div>'
+      +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#64748b;margin-bottom:6px;">Companies Owned</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">Ownership is managed on the <a href="/company-manager" style="color:#0d9488;font-weight:700;text-decoration:none;">Company Manager</a> — a company can have several owners; highest % is primary (★) and hosts its CRM. This reflects what this person owns.</div>'
       +rows
-      +pctSummary
-      +'<div style="margin-top:10px;position:relative;">'
-      +'<div style="display:flex;gap:6px;">'
-      +'<input id="wlMemSearch" oninput="wlMemSearch(\''+personId+'\')" placeholder="Add a person by name or email…" autocomplete="off" style="flex:1;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">'
-      +'<select id="wlMemRole" onchange="wlToggleAddPct()" style="padding:7px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;"><option value="owner">Owner</option><option value="admin">Admin</option></select>'
-      +'<input id="wlMemPct" type="number" min="0" max="100" step="0.01" placeholder="%" title="Ownership % (optional)" style="width:64px;padding:7px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;text-align:right;">'
-      +'</div><div id="wlMemResults" style="position:absolute;z-index:50;left:0;right:0;background:white;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;max-height:180px;overflow:auto;display:none;box-shadow:0 6px 18px rgba(0,0,0,.08);"></div>'
-      +'</div></div>';
+      +'</div>';
 }
 window.wlToggleAddPct = function(){
     var role = (document.getElementById('wlMemRole')||{}).value;

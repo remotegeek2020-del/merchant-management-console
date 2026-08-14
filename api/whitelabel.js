@@ -318,6 +318,53 @@ async function resolvePortal(body) {
     return null;
 }
 
+// Reconcile a company's ownership into the agency/CRM tenancy:
+//   • primary owner = highest ownership_percent (ties keep the existing primary / first)
+//   • the company's CRM (agency_sub_accounts) lives under the PRIMARY owner's agency
+//   • co-owners get scoped CRM access (crm_admin) to just that company's CRM — not the
+//     whole agency. 50/50 → both get full CRM access (equal).
+async function syncCompanyOwnership(companyId, actorId) {
+    const { data: owners } = await supabase.from('company_owners').select('*').eq('company_id', companyId);
+    const list = owners || [];
+    if (!list.length) return;
+    // Determine primary by highest %, ties resolved to the current primary else first.
+    const top = Math.max.apply(null, list.map(o => o.ownership_percent || 0));
+    const tied = list.filter(o => (o.ownership_percent || 0) === top);
+    let primary = tied.length > 1 ? (tied.find(o => o.is_primary) || tied[0]) : tied[0];
+    for (const o of list) { const ip = o.person_id === primary.person_id; if (o.is_primary !== ip) await supabase.from('company_owners').update({ is_primary: ip }).eq('id', o.id); }
+    // Primary owner's agency hosts the company's CRM.
+    const portal = await ensurePortal(primary.person_id, null);
+    if (!portal) return;
+    await supabase.from('partner_portal_members').upsert({ portal_id: portal.id, person_id: primary.person_id, role: 'owner', added_by: actorId }, { onConflict: 'portal_id,person_id' });
+    await ensureOnePrimary(portal.id);
+    // Ensure a CRM sub-account exists for this company under the primary's agency.
+    const { data: comp } = await supabase.from('companies').select('company_name').eq('id', companyId).maybeSingle();
+    let { data: sub } = await supabase.from('agency_sub_accounts').select('*').eq('company_id', companyId).maybeSingle();
+    if (!sub) { const ins = await supabase.from('agency_sub_accounts').insert({ portal_id: portal.id, company_id: companyId, name: (comp && comp.company_name) || 'Company', created_by: actorId }).select('*').single(); sub = ins.data; }
+    else if (sub.portal_id !== portal.id) { await supabase.from('agency_sub_accounts').update({ portal_id: portal.id }).eq('id', sub.id); sub.portal_id = portal.id; }
+    if (!sub) return;
+    // Co-owners → scoped CRM access (crm_admin) to this sub-account, full perms.
+    for (const o of list) {
+        if (o.person_id === primary.person_id) continue;
+        const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', portal.id).eq('person_id', o.person_id).maybeSingle();
+        if (mem && (mem.role === 'owner' || mem.role === 'agency_admin')) continue; // already broad
+        const scope = (mem && mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids.slice() : [];
+        if (!scope.includes(sub.id)) scope.push(sub.id);
+        await supabase.from('partner_portal_members').upsert({ portal_id: portal.id, person_id: o.person_id, role: 'crm_admin', scope: { sub_account_ids: scope }, permissions: {}, added_by: actorId }, { onConflict: 'portal_id,person_id' });
+    }
+}
+
+// Revoke a person's scoped access to a company's CRM (used when ownership is removed).
+async function revokeCompanyAccess(companyId, personId) {
+    const { data: sub } = await supabase.from('agency_sub_accounts').select('*').eq('company_id', companyId).maybeSingle();
+    if (!sub) return;
+    const { data: mem } = await supabase.from('partner_portal_members').select('*').eq('portal_id', sub.portal_id).eq('person_id', personId).maybeSingle();
+    if (!mem || mem.role === 'owner') return; // don't touch owners here
+    const scope = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids.filter(id => id !== sub.id) : [];
+    if (mem.role === 'crm_admin' && !scope.length) await supabase.from('partner_portal_members').delete().eq('id', mem.id);
+    else await supabase.from('partner_portal_members').update({ scope: { sub_account_ids: scope } }).eq('id', mem.id);
+}
+
 // Sync a Cloudflare status back into a portal_brands row.
 async function refreshBrandStatus(cf, brandRow) {
     if (!brandRow || !brandRow.cf_hostname_id) return brandRow;
@@ -1056,6 +1103,52 @@ export default async function handler(req, res) {
             await supabase.from('partner_portal_members').delete().eq('id', m.id);
             await ensureOnePrimary(m.portal_id);
             return res.status(200).json({ success: true, portal_id: m.portal_id, members: await loadMembers(m.portal_id) });
+        }
+
+        // ── COMPANY OWNERSHIP (staff — managed on the company list) ─────────────
+        // Ownership lives on the COMPANY (shared across all owners' cards), not on a
+        // single partner. Highest % dominates; setting ownership auto-provisions the
+        // company's CRM under the primary owner and grants co-owners scoped access.
+        if (action === 'get_company_owners') {
+            if (!body.company_id) return res.status(400).json({ success: false, message: 'company_id required.' });
+            const { data: owners } = await supabase.from('company_owners').select('*').eq('company_id', body.company_id);
+            const list = owners || [];
+            const pids = list.map(o => o.person_id);
+            let people = {};
+            if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
+            const enriched = list.map(o => ({ id: o.id, person_id: o.person_id, ownership_percent: o.ownership_percent, is_primary: o.is_primary === true, full_name: (people[o.person_id] || {}).full_name || null, email: (people[o.person_id] || {}).email || null }))
+                .sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0)));
+            return res.status(200).json({ success: true, owners: enriched });
+        }
+        if (action === 'set_company_owner') {
+            if (!body.company_id || !body.member_person_id) return res.status(400).json({ success: false, message: 'company_id and member_person_id required.' });
+            const pct = parsePct(body.ownership_percent);
+            if (pct === undefined) return res.status(400).json({ success: false, message: 'Ownership % must be between 0 and 100.' });
+            await supabase.from('company_owners').upsert({ company_id: body.company_id, person_id: body.member_person_id, ownership_percent: pct, added_by: actor.userid || 'admin' }, { onConflict: 'company_id,person_id' });
+            await syncCompanyOwnership(body.company_id, actor.userid || 'admin');
+            const { data: owners } = await supabase.from('company_owners').select('*').eq('company_id', body.company_id);
+            const pids = (owners || []).map(o => o.person_id); let people = {};
+            if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
+            return res.status(200).json({ success: true, owners: (owners || []).map(o => ({ id: o.id, person_id: o.person_id, ownership_percent: o.ownership_percent, is_primary: o.is_primary === true, full_name: (people[o.person_id] || {}).full_name || null, email: (people[o.person_id] || {}).email || null })).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0))) });
+        }
+        if (action === 'remove_company_owner') {
+            if (!body.company_id || !body.member_person_id) return res.status(400).json({ success: false, message: 'company_id and member_person_id required.' });
+            await supabase.from('company_owners').delete().eq('company_id', body.company_id).eq('person_id', body.member_person_id);
+            await revokeCompanyAccess(body.company_id, body.member_person_id);
+            await syncCompanyOwnership(body.company_id, actor.userid || 'admin'); // reassign primary among the rest
+            const { data: owners } = await supabase.from('company_owners').select('*').eq('company_id', body.company_id);
+            const pids = (owners || []).map(o => o.person_id); let people = {};
+            if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
+            return res.status(200).json({ success: true, owners: (owners || []).map(o => ({ id: o.id, person_id: o.person_id, ownership_percent: o.ownership_percent, is_primary: o.is_primary === true, full_name: (people[o.person_id] || {}).full_name || null, email: (people[o.person_id] || {}).email || null })).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0))) });
+        }
+        // Companies a person owns / co-owns (read-only reflection on the partner card).
+        if (action === 'get_person_companies') {
+            if (!body.person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
+            const { data: rows } = await supabase.from('company_owners').select('*').eq('person_id', body.person_id);
+            const list = rows || [];
+            const cids = list.map(r => r.company_id); let comps = {};
+            if (cids.length) { const { data } = await supabase.from('companies').select('id, company_name').in('id', cids); (data || []).forEach(c => comps[c.id] = c); }
+            return res.status(200).json({ success: true, companies: list.map(r => ({ company_id: r.company_id, company_name: (comps[r.company_id] || {}).company_name || 'Company', ownership_percent: r.ownership_percent, is_primary: r.is_primary === true })).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0))) });
         }
 
         // All agency portals + their domains (management overview).

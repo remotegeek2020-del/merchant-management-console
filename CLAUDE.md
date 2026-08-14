@@ -433,3 +433,23 @@ added `permissions jsonb`; created `agency_invites`).
 - agency.html Team panel rebuilt: member list with role badges + CRM scope, Add member modal
   (existing sub-agent OR invite by email; role; CRM scope for crm_admin; granular permission
   toggles), pending invites with cancel, edit/remove.
+
+## Company ownership moved to the COMPANY (2026-08-13)
+Problem: the "Company Ownership & Team" panel lived on each PARTNER card and keyed to
+that person's partner_portal — so co-ownership couldn't be shared (Ben's card wrote Ben's
+portal; Greg's card read Greg's). Ownership is a property of the COMPANY.
+- Migration `company_owners` (company_id→companies, person_id→persons, ownership_percent,
+  is_primary, unique(company_id,person_id)). Source of truth for who owns each company.
+- Model (user-confirmed): 1 agency per partner (person). A company's CRM (agency_sub_accounts)
+  is hosted under the PRIMARY owner (highest %; ties = equal). Co-owners get scoped crm_admin
+  access to ONLY that company's CRM (not the whole agency), full perms. 50/50 = equal privilege.
+- whitelabel.js: `syncCompanyOwnership(companyId)` (sets primary by %, ensures primary's portal
+  via ensurePortal, ensures/moves the company's sub-account under primary, grants co-owners
+  scoped crm_admin), `revokeCompanyAccess`. Staff actions: get_company_owners, set_company_owner
+  (upsert + sync), remove_company_owner (delete + revoke + re-sync), get_person_companies.
+- company-manager.html: new "Ownership" tab per company (owners list, % editor, primary ★ /
+  equal / co-owner tags, add owner via people search, remove). This is where ownership is set.
+- partners-dashboard.html: the editable ownership panel on the partner card is now a READ-ONLY
+  "Companies Owned" reflection (get_person_companies) pointing to Company Manager to edit.
+  (Legacy add_member/set_ownership_percent/etc. staff actions remain but are no longer used by
+  the card.)
