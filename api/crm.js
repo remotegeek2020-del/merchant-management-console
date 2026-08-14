@@ -691,9 +691,16 @@ export default async function handler(req, res) {
             const subject = (body.subject || '').trim() || '(no subject)';
             const html = (body.body || '').replace(/\n/g, '<br>');
             if (!to) return res.status(400).json({ success: false, message: 'No recipient email.' });
+            // CC: accepts an array or comma/semicolon-separated string; dedup + drop the primary recipient.
+            const ccList = (Array.isArray(body.cc) ? body.cc : String(body.cc || '').split(/[,;]/))
+                .map(x => String(x).trim()).filter(Boolean)
+                .filter((x, i, a) => a.indexOf(x) === i && x.toLowerCase() !== to.toLowerCase());
+            const cc = ccList.join(', ');
             try {
                 if (conn.provider === 'google') {
-                    var mime = ['To: ' + to, 'From: ' + conn.email, 'Subject: ' + subject, 'Content-Type: text/html; charset=UTF-8', 'MIME-Version: 1.0'];
+                    var mime = ['To: ' + to, 'From: ' + conn.email];
+                    if (cc) mime.push('Cc: ' + cc);
+                    mime.push('Subject: ' + subject, 'Content-Type: text/html; charset=UTF-8', 'MIME-Version: 1.0');
                     if (body.in_reply_to) { mime.push('In-Reply-To: ' + body.in_reply_to); mime.push('References: ' + body.in_reply_to); }
                     mime = mime.join('\r\n') + '\r\n\r\n' + html;
                     const payload = { raw: b64urlEncode(mime) };
@@ -701,11 +708,13 @@ export default async function handler(req, res) {
                     const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                     if (!r.ok) return res.status(500).json({ success: false, message: 'Gmail send failed.' });
                 } else {
-                    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] } }) });
+                    const msg = { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] };
+                    if (ccList.length) msg.ccRecipients = ccList.map(a => ({ emailAddress: { address: a } }));
+                    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) });
                     if (r.status !== 202) return res.status(500).json({ success: false, message: 'Outlook send failed.' });
                 }
                 // Log to the CRM conversation as an outbound email.
-                await supabase.from('crm_messages').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, direction: 'outbound', channel: 'email', body: 'Subject: ' + subject + '\n\n' + (body.body || ''), created_by: personId });
+                await supabase.from('crm_messages').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, direction: 'outbound', channel: 'email', body: 'Subject: ' + subject + (cc ? '\nCc: ' + cc : '') + '\n\n' + (body.body || ''), created_by: personId });
                 return res.status(200).json({ success: true });
             } catch (e) { return res.status(500).json({ success: false, message: 'Could not send email.' }); }
         }

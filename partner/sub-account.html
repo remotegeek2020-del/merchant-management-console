@@ -581,12 +581,24 @@ window.cdCompose=async function(pre){
     var to = pre.to || (CURRENT_CONTACT && CURRENT_CONTACT.contact.email) || '';
     // extract bare email from "Name <email>" if present
     var m=String(to).match(/<([^>]+)>/); if(m) to=m[1];
+    await ensureMembers();
+    // Team members (with an email) that can be CC'd so they see this thread on their contact view.
+    var teamCc=(CRM_MEMBERS||[]).filter(function(x){ return x.email && x.email.toLowerCase()!==String(to).toLowerCase(); });
+    var ccChecks=teamCc.length
+      ? teamCc.map(function(x){ return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#334155;margin:2px 0;cursor:pointer;"><input type="checkbox" class="emCcMember" value="'+esc(x.email)+'"> '+esc(x.full_name||x.email)+' <span style="color:#94a3b8;">&lt;'+esc(x.email)+'&gt;</span></label>'; }).join('')
+      : '<div style="font-size:12px;color:#94a3b8;">No other team members to CC.</div>';
     var html='<div style="text-align:left;">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">To</label><input id="emTo" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(to)+'">'
+      +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">CC team</label>'
+      +'<div style="margin:4px 0 6px;max-height:110px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">'+ccChecks+'</div>'
+      +'<input id="emCcExtra" class="swal2-input" placeholder="Other CC emails (comma-separated)" style="margin:0 0 10px;width:100%;height:34px;font-size:12px;">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Subject</label><input id="emSubj" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(pre.subject||'')+'">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Message</label><textarea id="emBody" class="swal2-textarea" style="margin:4px 0 0;width:100%;min-height:150px;font-size:13px;"></textarea></div>';
     var res=await Swal.fire({title:pre.thread_id?'Reply':'New email', html:html, width:600, showCancelButton:true, confirmButtonText:'Send', confirmButtonColor:'#0d9488', focusConfirm:false,
-        preConfirm:function(){ var t=(document.getElementById('emTo').value||'').trim(); var b=(document.getElementById('emBody').value||'').trim(); if(!t){Swal.showValidationMessage('Enter a recipient.');return false;} if(!b){Swal.showValidationMessage('Write a message.');return false;} return {to:t, subject:(document.getElementById('emSubj').value||'').trim(), body:b}; }});
+        preConfirm:function(){ var t=(document.getElementById('emTo').value||'').trim(); var b=(document.getElementById('emBody').value||'').trim(); if(!t){Swal.showValidationMessage('Enter a recipient.');return false;} if(!b){Swal.showValidationMessage('Write a message.');return false;}
+          var cc=Array.prototype.map.call(document.querySelectorAll('.emCcMember:checked'),function(el){return el.value;});
+          (document.getElementById('emCcExtra').value||'').split(',').forEach(function(x){ x=x.trim(); if(x) cc.push(x); });
+          return {to:t, cc:cc, subject:(document.getElementById('emSubj').value||'').trim(), body:b}; }});
     if(!res.isConfirmed) return;
     var payload=Object.assign({action:'send_email', contact_id:CURRENT_CONTACT.contact.id, thread_id:pre.thread_id}, res.value);
     var r=await crmApi(payload);
