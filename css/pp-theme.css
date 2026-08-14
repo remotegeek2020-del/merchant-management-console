@@ -1,0 +1,56 @@
+/* In-portal theme presets + micro-animations for branded Agency/CRM pages.
+   Loaded by js/brand.js only on branded (non-portal) worlds, so the canonical
+   PayProTec portal is untouched. Themes keyed on html[data-app-theme="X"].
+   Themes only restyle backgrounds / sidebar / panels — content stays legible. */
+
+/* ── Micro-animations (all themes) ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+    .nav-item { transition: background .15s ease, color .15s ease, transform .15s ease; }
+    .nav-item:hover { transform: translateX(3px); }
+    .btn, .kpi, .card, .panel, .deal, .crm-card, .co-card { transition: transform .16s ease, box-shadow .18s ease, background .15s ease; }
+    .btn:hover { transform: translateY(-1px); }
+    .kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.09); }
+    .content > * { animation: pp-fade-up .34s cubic-bezier(.16,.84,.44,1) both; }
+    #crmMain { animation: pp-fade-up .28s ease both; }
+    @keyframes pp-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes pp-aurora { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+}
+
+/* ── Presets ───────────────────────────────────────────────────────────────── */
+/* 2 · Gradient sidebar */
+html[data-app-theme="gradient"] .sidebar { background: linear-gradient(180deg, var(--navy), var(--teal-dark, var(--teal))); }
+html[data-app-theme="gradient"] body { background: linear-gradient(180deg, #f8fafc, #eef4f3); }
+
+/* 3 · Soft — big radius, gentle shadows */
+html[data-app-theme="soft"] body { background: #f4f6f8; }
+html[data-app-theme="soft"] .panel, html[data-app-theme="soft"] .card { border-radius: 18px; box-shadow: 0 6px 22px rgba(0,0,0,.06); }
+
+/* 4 · Minimal — flat, thin borders */
+html[data-app-theme="minimal"] body { background: #ffffff; }
+html[data-app-theme="minimal"] .panel, html[data-app-theme="minimal"] .card { box-shadow: none; border: 1px solid #e8ebef; border-radius: 12px; }
+html[data-app-theme="minimal"] .topbar { box-shadow: none; }
+
+/* 5 · Elevated — strong shadows, no borders */
+html[data-app-theme="elevated"] body { background: #eef1f5; }
+html[data-app-theme="elevated"] .panel, html[data-app-theme="elevated"] .card { box-shadow: 0 12px 34px rgba(0,0,0,.10); border: none; }
+
+/* 6 · Tinted — faint brand wash + gradient sidebar */
+html[data-app-theme="tinted"] body { background: linear-gradient(180deg, color-mix(in srgb, var(--teal) 8%, #f8fafc), #f8fafc); }
+html[data-app-theme="tinted"] .sidebar { background: linear-gradient(180deg, var(--navy), #00355f); }
+
+/* 7 · Contrast — near-black sidebar, crisp panels */
+html[data-app-theme="contrast"] .sidebar { background: #0a0f1c; }
+html[data-app-theme="contrast"] body { background: #f1f3f6; }
+html[data-app-theme="contrast"] .panel, html[data-app-theme="contrast"] .card { border: 1px solid #e2e8f0; }
+
+/* 8 · Pop — rounded, colored panel top-accent */
+html[data-app-theme="pop"] body { background: #f6f7fb; }
+html[data-app-theme="pop"] .panel, html[data-app-theme="pop"] .card { border-radius: 16px; border-top: 3px solid var(--teal); }
+
+/* 9 · Paper — warm off-white */
+html[data-app-theme="paper"] body { background: #faf7f2; }
+html[data-app-theme="paper"] .panel, html[data-app-theme="paper"] .card { background: #fffdf9; border: 1px solid #efe9df; }
+
+/* 10 · Aurora — slow animated page wash + gradient sidebar */
+html[data-app-theme="aurora"] body { background: linear-gradient(120deg, #f8fafc, color-mix(in srgb, var(--teal) 12%, #f8fafc), #eef2ff, #f8fafc); background-size: 300% 300%; animation: pp-aurora 22s ease infinite; }
+html[data-app-theme="aurora"] .sidebar { background: linear-gradient(180deg, var(--navy), var(--teal-dark, #0f766e)); }

@@ -138,7 +138,7 @@ async function agencyCompanies(portalId) {
 }
 
 // Agency branding fields (kept on partner_portals; mirrored to each domain's brand row).
-const BRAND_FIELDS = ['logo_url', 'favicon_url', 'color_primary', 'color_dark', 'color_accent', 'support_email', 'login_template'];
+const BRAND_FIELDS = ['logo_url', 'favicon_url', 'color_primary', 'color_dark', 'color_accent', 'support_email', 'login_template', 'app_theme'];
 // Push the agency's branding onto every custom-domain brand row so the live white-label
 // portal (resolved by host from portal_brands) reflects it.
 async function syncBrandingToDomains(portalId, agencyName) {
@@ -147,6 +147,7 @@ async function syncBrandingToDomains(portalId, agencyName) {
     const patch = { name: agencyName || portal.agency_name || null, updated_at: new Date().toISOString() };
     BRAND_FIELDS.forEach(f => { patch[f] = portal[f] || null; });
     patch.login_powered_by = portal.login_powered_by !== false;
+    patch.login_copy = portal.login_copy || {};
     await supabase.from('portal_brands').update(patch).eq('portal_id', portalId).eq('added_by_partner', true);
 }
 
@@ -616,6 +617,7 @@ export default async function handler(req, res) {
                     const branding = {};
                     BRAND_FIELDS.forEach(f => { branding[f] = (full && full[f]) || ''; });
                     branding.login_powered_by = !full || full.login_powered_by !== false;
+                    branding.login_copy = (full && full.login_copy) || {};
                     return res.status(200).json({
                         success: true, can_manage: canManage,
                         relationship_id: full.relationship_id, agency_name: full.agency_name || '',
@@ -630,6 +632,7 @@ export default async function handler(req, res) {
                     if (typeof body.agency_name === 'string') patch.agency_name = body.agency_name.trim() || null;
                     BRAND_FIELDS.forEach(f => { if (f in b) patch[f] = (b[f] || '').trim() || null; });
                     if ('login_powered_by' in b) patch.login_powered_by = !(b.login_powered_by === false || b.login_powered_by === 'false');
+                    if ('login_copy' in b && b.login_copy && typeof b.login_copy === 'object') patch.login_copy = b.login_copy;
                     await supabase.from('partner_portals').update(patch).eq('id', portal.id);
                     await syncBrandingToDomains(portal.id, patch.agency_name);
                     return res.status(200).json({ success: true });

@@ -267,7 +267,7 @@ function showSection(key){
     ACTIVE_SECTION=key;
     document.querySelectorAll('.nav-item[data-section]').forEach(function(a){ a.classList.toggle('active', a.getAttribute('data-section')===key); });
     var st=document.getElementById('secTitle'); if(st) st.textContent=SECTION_TITLES[key]||'CRM';
-    var main=document.getElementById('crmMain'); if(main) main.innerHTML = SECTIONS[key]();
+    var main=document.getElementById('crmMain'); if(main){ main.innerHTML = SECTIONS[key](); main.style.animation='none'; requestAnimationFrame(function(){ main.style.animation=''; }); }
     var sb=document.querySelector('.sidebar'); if(sb) sb.classList.remove('open'); // close mobile drawer on nav
     try{ history.replaceState(null,'', '/partner/sub-account?sub='+encodeURIComponent(subId)+'&section='+key); }catch(e){}
 }

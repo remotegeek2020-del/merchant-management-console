@@ -141,12 +141,59 @@ function render(){
       '<div class="crumb"><a href="/partner/home">Home</a> › <a href="'+ag+'">Agency</a> › Settings <span class="rel" style="margin-left:6px;">'+esc(DATA.relationship_id||'')+'</span></div>'
       + brandingCard
       + loginTemplateCard()
+      + appThemeCard()
       + domainCard();
 }
+function appThemeCard(){
+    var cm = DATA.can_manage;
+    var cur = (DATA.branding && DATA.branding.app_theme) || 'default';
+    var T = [
+        {k:'default',name:'Default',sb:'#001e3c',ct:'#f8fafc',pn:'#fff'},
+        {k:'gradient',name:'Gradient',sb:'linear-gradient(180deg,#001e3c,#0d9488)',ct:'#eef4f3',pn:'#fff'},
+        {k:'soft',name:'Soft',sb:'#001e3c',ct:'#f4f6f8',pn:'#fff',round:true},
+        {k:'minimal',name:'Minimal',sb:'#001e3c',ct:'#fff',pn:'#fff',border:true},
+        {k:'elevated',name:'Elevated',sb:'#001e3c',ct:'#eef1f5',pn:'#fff',shadow:true},
+        {k:'tinted',name:'Tinted',sb:'linear-gradient(180deg,#001e3c,#00355f)',ct:'#eef6f5',pn:'#fff'},
+        {k:'contrast',name:'Contrast',sb:'#0a0f1c',ct:'#f1f3f6',pn:'#fff',border:true},
+        {k:'pop',name:'Pop',sb:'#001e3c',ct:'#f6f7fb',pn:'#fff',top:true},
+        {k:'paper',name:'Paper',sb:'#001e3c',ct:'#faf7f2',pn:'#fffdf9'},
+        {k:'aurora',name:'Aurora',sb:'linear-gradient(180deg,#001e3c,#0f766e)',ct:'linear-gradient(120deg,#f8fafc,#e6f4f1,#eef2ff)',pn:'#fff'}
+    ];
+    var cards = T.map(function(t){
+        var sel=t.k===cur;
+        var pnStyle='position:absolute;left:38%;right:12%;top:22%;height:44%;background:'+t.pn+';border-radius:'+(t.round?'5px':'3px')+';'+(t.border?'border:1px solid #e2e8f0;':'')+(t.shadow?'box-shadow:0 4px 10px rgba(0,0,0,0.15);':'')+(t.top?'border-top:2px solid #0d9488;':'');
+        var check = sel?'<span style="position:absolute;top:4px;right:4px;background:var(--teal);color:#fff;border-radius:99px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;z-index:2;"><span class="material-icons" style="font-size:12px;">check</span></span>':'';
+        return '<div '+(cm?'onclick="saveAppTheme(\''+t.k+'\')"':'')+' style="cursor:'+(cm?'pointer':'default')+';border:2px solid '+(sel?'var(--teal)':'transparent')+';border-radius:12px;padding:4px;">'
+          +'<div style="position:relative;height:64px;border-radius:9px;overflow:hidden;background:'+t.ct+';">'+check
+          +'<span style="position:absolute;left:0;top:0;bottom:0;width:26%;background:'+t.sb+';"></span>'
+          +'<span style="'+pnStyle+'"></span></div>'
+          +'<div style="text-align:center;font-size:11px;font-weight:700;margin-top:5px;color:'+(sel?'var(--teal)':'var(--secondary)')+';">'+t.name+'</div></div>';
+    }).join('');
+    return '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">palette</span> App Theme</div>'
+      +'<div class="card-sub">The look inside your portal &amp; CRM (sidebar, background, panels). Uses your brand colors, with subtle animations.</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;">'+cards+'</div>'
+      +(cm?'':'<div class="muted" style="margin-top:12px;">Only owners and admins can change the theme.</div>')
+      +'</div>';
+}
+window.saveAppTheme = async function(k){
+    DATA.branding = DATA.branding || {}; DATA.branding.app_theme = k;
+    render();
+    var r = await api({action:'save_agency_branding', branding:{app_theme:k}});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
+    else Swal.fire({icon:'success',title:'Theme saved',timer:900,showConfirmButton:false});
+};
+window.saveLoginCopy = async function(){
+    var copy = { tag:val('lcTag'), heading:val('lcHeading'), sub:val('lcSub'), button:val('lcButton'), tagline:val('lcTagline') };
+    DATA.branding = DATA.branding || {}; DATA.branding.login_copy = copy;
+    var r = await api({action:'save_agency_branding', branding:{login_copy:copy}});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
+    else Swal.fire({icon:'success',title:'Wording saved',timer:900,showConfirmButton:false});
+};
 
 function loginTemplateCard(){
     var cm = DATA.can_manage;
     var cur = (DATA.branding && DATA.branding.login_template) || 'classic';
+    var lc = (DATA.branding && DATA.branding.login_copy) || {};
     var tpls = [
         {k:'classic',name:'Classic',css:'background:linear-gradient(135deg,#001e3c,#0d9488);'},
         {k:'split',name:'Split',css:'background:#fff;',extra:'<span style="position:absolute;left:0;top:0;bottom:0;width:45%;background:linear-gradient(160deg,#001e3c,#0d9488);"></span>'},
@@ -171,6 +218,13 @@ function loginTemplateCard(){
       +'<div class="card-sub">Pick a preset design for your branded login page — it uses your logo &amp; colors. Custom CSS/JS is coming later.</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;">'+cards+'</div>'
       +'<label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-size:13px;font-weight:600;color:var(--text);cursor:'+(cm?'pointer':'default')+';text-transform:none;letter-spacing:0;"><input type="checkbox" id="fPoweredBy"'+(((DATA.branding&&DATA.branding.login_powered_by)!==false)?' checked':'')+' '+(cm?'onchange="saveLoginPoweredBy(this.checked)"':'disabled')+'> Show “Powered by PayProTec” on the login screen</label>'
+      +'<div style="border-top:1px solid #f1f5f9;margin-top:16px;padding-top:14px;">'
+      +'<div style="font-size:12px;font-weight:800;margin-bottom:8px;">Login wording</div>'
+      +'<div class="row"><div><label>Badge</label><input id="lcTag" type="text" value="'+esc(lc.tag||'')+'" placeholder="Partner Portal" '+(cm?'':'disabled')+'></div><div><label>Heading</label><input id="lcHeading" type="text" value="'+esc(lc.heading||'')+'" placeholder="Sign in" '+(cm?'':'disabled')+'></div></div>'
+      +'<label>Subheading</label><input id="lcSub" type="text" value="'+esc(lc.sub||'')+'" placeholder="Access your merchant portfolio" '+(cm?'':'disabled')+'>'
+      +'<div class="row"><div><label>Button text</label><input id="lcButton" type="text" value="'+esc(lc.button||'')+'" placeholder="Sign In" '+(cm?'':'disabled')+'></div><div><label>Panel tagline (split / bold)</label><input id="lcTagline" type="text" value="'+esc(lc.tagline||'')+'" placeholder="Sign in to your dedicated partner portal." '+(cm?'':'disabled')+'></div></div>'
+      +(cm?'<button class="btn btn-teal" onclick="saveLoginCopy()"><span class="material-icons" style="font-size:16px;">save</span> Save wording</button>':'')
+      +'</div>'
       +(cm?'<div class="muted" style="margin-top:12px;">Applies to your custom domain login.'+openLink+'</div>':'<div class="muted" style="margin-top:12px;">Only owners and admins can change the login design.</div>')
       +'</div>';
 }

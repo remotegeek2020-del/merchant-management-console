@@ -479,3 +479,18 @@ Per-agency preset login designs (custom CSS/JS is a future step).
   corporate, bold. Templates restyle bg/card using brand --teal/--navy; split & bold use #brandPanel.
 - partner/agency-settings.html: "Login Screen" card = 10 preview swatches; saveLoginTemplate()
   saves via save_agency_branding {branding:{login_template}}. Only canonical host stays default.
+
+## Login wording + App themes + animations (2026-08-14)
+- Migration `login_copy_and_app_theme`: login_copy jsonb + app_theme text on partner_portals + portal_brands.
+- whitelabel: BRAND_FIELDS += app_theme; get/save_agency_branding + syncBrandingToDomains carry
+  login_copy (jsonb) + login_powered_by. api/brand.js publicBrand returns login_copy + app_theme.
+- Editable login wording: index.html tags [data-login-copy=tag|heading|sub|button|tagline];
+  js/brand.js applyLoginTemplate fills them from brand.login_copy.
+- App theme: js/brand.js applyAppTheme sets <html data-app-theme> + injects /css/pp-theme.css
+  (only on branded worlds). 10 presets (default/gradient/soft/minimal/elevated/tinted/contrast/
+  pop/paper/aurora) restyle bg/sidebar/panels + micro-animations (nav hover, kpi/btn lift,
+  content fade-up). sub-account showSection re-triggers #crmMain fade on section switch.
+- Login animations: index.html login-templates block adds floating orbs (glass/aurora),
+  spotlight pulse, logo pop; reduced-motion guarded.
+- agency-settings.html: Login Screen card gains wording inputs (saveLoginCopy) + App Theme card
+  (10 swatches, saveAppTheme). Custom CSS/JS still future.

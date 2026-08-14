@@ -16,7 +16,9 @@ function publicBrand(b) {
         color_primary: b.color_primary || '', color_dark: b.color_dark || '', color_accent: b.color_accent || '',
         tagline: b.tagline || '', support_email: b.support_email || '', support_phone: b.support_phone || '',
         login_template: b.login_template || 'classic',
-        login_powered_by: b.login_powered_by !== false
+        login_powered_by: b.login_powered_by !== false,
+        login_copy: b.login_copy || {},
+        app_theme: b.app_theme || 'default'
     };
 }
 

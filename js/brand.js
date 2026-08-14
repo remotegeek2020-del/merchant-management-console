@@ -84,6 +84,22 @@
         // "Powered by PayProTec" mark — shown on branded logins unless the agency hides it.
         var pb = document.getElementById('poweredBy');
         if (pb) pb.style.display = (b.login_powered_by === false) ? 'none' : 'flex';
+        // Editable login wording.
+        var copy = b.login_copy || {};
+        document.querySelectorAll('[data-login-copy]').forEach(function (el) {
+            var k = el.getAttribute('data-login-copy');
+            if (copy[k] && String(copy[k]).trim()) el.textContent = copy[k];
+        });
+    }
+
+    // In-portal theme preset: set <html data-app-theme> and load the theme + animation CSS.
+    function applyAppTheme(b) {
+        document.documentElement.setAttribute('data-app-theme', (b && b.app_theme) || 'default');
+        if (!document.getElementById('pp-theme-css')) {
+            var l = document.createElement('link');
+            l.id = 'pp-theme-css'; l.rel = 'stylesheet'; l.href = '/css/pp-theme.css?v=20260814';
+            document.head.appendChild(l);
+        }
     }
 
     function applyBrand(b) {
@@ -98,6 +114,7 @@
         applyName(b.name);
         hideBrandedOff();
         applyLoginTemplate(b);
+        applyAppTheme(b);
         document.documentElement.setAttribute('data-branded', '1');
 
         // Re-apply logos shortly after: partner-nav.js / page scripts inject the

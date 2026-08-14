@@ -152,6 +152,24 @@
             html[data-login-template="split"] #brandPanel { display:none; }
             html[data-login-template="split"] body { justify-content:center; padding:20px; }
         }
+
+        /* ── Fancy: animated background orbs + entrance motion ── */
+        @keyframes bp-float  { 0%,100%{ transform:translate(0,0); } 50%{ transform:translate(26px,-28px); } }
+        @keyframes bp-float2 { 0%,100%{ transform:translate(0,0); } 50%{ transform:translate(-26px,22px); } }
+        @keyframes bp-pulse  { 0%,100%{ opacity:.45; } 50%{ opacity:.9; } }
+        @keyframes bp-logopop{ from{ opacity:0; transform:translateY(-6px) scale(.96); } to{ opacity:1; transform:none; } }
+        html[data-login-template="glass"] body::before, html[data-login-template="aurora"] body::before {
+            content:""; position:fixed; width:360px; height:360px; border-radius:50%; background:var(--teal);
+            filter:blur(90px); opacity:.55; top:-90px; left:-70px; animation:bp-float 13s ease-in-out infinite; pointer-events:none; z-index:0; }
+        html[data-login-template="glass"] body::after, html[data-login-template="aurora"] body::after {
+            content:""; position:fixed; width:320px; height:320px; border-radius:50%; background:var(--navy);
+            filter:blur(90px); opacity:.5; bottom:-80px; right:-60px; animation:bp-float2 16s ease-in-out infinite; pointer-events:none; z-index:0; }
+        html[data-login-template="spotlight"] body::before {
+            content:""; position:fixed; inset:0; background:radial-gradient(circle at 50% 30%, rgba(13,148,136,.18), transparent 45%);
+            animation:bp-pulse 6s ease-in-out infinite; pointer-events:none; z-index:0; }
+        html[data-login-template] .card, html[data-login-template] #brandPanel { position:relative; z-index:1; }
+        .card .logo { animation:bp-logopop .5s ease .05s both; }
+        @media (prefers-reduced-motion: reduce){ body::before, body::after { animation:none !important; } .card, .card .logo { animation:none !important; } }
     </style>
 </head>
 <body>
@@ -159,15 +177,15 @@
 <div id="brandPanel">
     <img data-brand-panel-logo src="/api/brand-logo" alt="">
     <div class="bp-name" data-brand-panel-name>Partner Portal</div>
-    <div class="bp-tag">Sign in to your dedicated partner portal.</div>
+    <div class="bp-tag" data-login-copy="tagline">Sign in to your dedicated partner portal.</div>
 </div>
 
 <div class="card" id="loginCard">
     <img src="/api/brand-logo" class="logo" data-brand-logo alt="Partner Portal">
     <div style="text-align:center;">
-        <span class="portal-tag"><span class="material-icons" style="font-size:12px;">handshake</span> Partner Portal</span>
-        <h1>Sign in</h1>
-        <p class="sub">Access your merchant portfolio</p>
+        <span class="portal-tag"><span class="material-icons" style="font-size:12px;">handshake</span> <span data-login-copy="tag">Partner Portal</span></span>
+        <h1 data-login-copy="heading">Sign in</h1>
+        <p class="sub" data-login-copy="sub">Access your merchant portfolio</p>
     </div>
 
     <div>
@@ -184,7 +202,7 @@
         </div>
         <button class="btn" onclick="handleLogin()" id="loginBtn">
             <span class="material-icons" style="font-size:18px;">login</span>
-            Sign In
+            <span data-login-copy="button">Sign In</span>
         </button>
         <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:#94a3b8;font-size:12px;"><div style="flex:1;height:1px;background:#e2e8f0;"></div>or<div style="flex:1;height:1px;background:#e2e8f0;"></div></div>
         <button class="btn" onclick="openMagic()" id="magicBtn" style="background:#fff;color:var(--teal);border:1.5px solid var(--teal);">
