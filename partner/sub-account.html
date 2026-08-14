@@ -552,18 +552,30 @@ function renderContactDetail(){
       +'<div style="display:flex;gap:6px;margin-bottom:8px;"><textarea id="cdNoteBody" placeholder="Write a note…" style="flex:1;min-height:38px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;resize:vertical;"></textarea><button onclick="cdAddNote()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;align-self:flex-start;">Add</button></div>'
       +noteItems+'</div>';
 
-    var msgs=CURRENT_CONTACT.messages||[];
-    var msgItems=msgs.map(function(m){
-        var icon=m.channel==='call'?'call':m.channel==='email'?'mail':m.channel==='sms'?'sms':'sticky_note_2';
-        return '<div style="padding:8px 0;border-bottom:1px solid #f6f8fb;"><div style="display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;color:var(--teal);">'+icon+'</span><span style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;">'+esc(m.channel)+' · '+(m.direction==='inbound'?'in':'out')+'</span><span style="font-size:11px;color:var(--muted);margin-left:auto;">'+fmtDateTime(m.created_at)+'</span><span class="material-icons" title="Delete" onclick="cdDeleteMsg(\''+m.id+'\')" style="font-size:14px;color:#cbd5e1;cursor:pointer;margin-left:6px;">delete</span></div><div style="font-size:13px;white-space:pre-wrap;margin-top:3px;word-break:break-word;">'+esc(m.body)+'</div></div>';
-    }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No activity logged.</div>';
-    var convCard='<div class="panel" style="padding:16px 18px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:8px;">Conversation log</div>'
-      +'<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'
-      +'<select id="cdMsgChan" style="padding:8px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="sms">SMS</option></select>'
-      +'<select id="cdMsgDir" style="padding:8px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;"><option value="outbound">Outbound</option><option value="inbound">Inbound</option></select>'
-      +'<input id="cdMsgBody" placeholder="Log an interaction…" style="flex:1;min-width:150px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;" onkeydown="if(event.key===\'Enter\')cdAddMsg();">'
-      +'<button onclick="cdAddMsg()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;">Log</button></div>'
-      +msgItems+'</div>';
+    var msgs=(CURRENT_CONTACT.messages||[]).slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+    var msgItems;
+    if(!msgs.length){ msgItems='<div class="conv-empty" style="padding:26px;"><span class="material-icons" style="font-size:38px;">chat</span><div style="font-size:13px;">No activity yet. Start below.</div></div>'; }
+    else {
+        var cdLastDay=''; var cdParts=[];
+        msgs.forEach(function(m){
+            var day=fmtDate(m.created_at);
+            if(day!==cdLastDay){ cdParts.push('<div class="conv-daysep">'+esc(day)+'</div>'); cdLastDay=day; }
+            var out=m.direction==='outbound';
+            cdParts.push('<div class="bub-row'+(out?' out':'')+'">'
+              +'<div class="bub '+(out?'bub-out':'bub-in')+'">'+esc(m.body)+'</div>'
+              +'<div class="bub-meta"><span class="material-icons">'+convIcon(m.channel)+'</span>'+esc(m.channel||'note')+' · '+fmtDateTime(m.created_at)
+              +' <span class="material-icons del" title="Delete" onclick="cdDeleteMsg(\''+m.id+'\')">delete</span></div></div>');
+        });
+        msgItems=cdParts.join('');
+    }
+    var convCard='<div class="panel" style="padding:16px 18px 12px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:10px;">Conversation log</div>'
+      +'<div class="conv-body" style="max-height:340px;border-radius:12px;border:1px solid var(--border);padding:14px 12px;">'+msgItems+'</div>'
+      +'<div class="conv-ctabs" style="margin-top:12px;">'
+      +'<button class="conv-ctab active" data-cdc="note" onclick="cdSetChan(\'note\')"><span class="material-icons">sticky_note_2</span>Note</button>'
+      +'<button class="conv-ctab" data-cdc="call" onclick="cdSetChan(\'call\')"><span class="material-icons">call</span>Call</button>'
+      +'<button class="conv-ctab" data-cdc="email" onclick="cdSetChan(\'email\')"><span class="material-icons">mail</span>Email</button>'
+      +'<button class="conv-ctab" data-cdc="sms" onclick="cdSetChan(\'sms\')"><span class="material-icons">sms</span>SMS</button>'
+      +'</div><div id="cdChanBody" style="margin-top:10px;"></div></div>';
     var dealItems=opps.map(function(o){
         var st=(CRM_STAGES.filter(function(s){return s.id===o.stage_id;})[0]||{}).name||o.status;
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;" onclick="openDeal(\''+o.id+'\')"><div><div style="font-size:13px;font-weight:700;">'+esc(o.title)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(st||'')+'</div></div><div class="mono" style="font-weight:800;color:var(--teal);">'+money((o.value_cents||0)/100)+'</div></div>';
@@ -575,6 +587,31 @@ function renderContactDetail(){
       +'<div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;" class="cd-grid">'
       +'<div>'+infoCard+'</div><div>'+emailCard+tasksCard+convCard+notesCard+dealsCard+'</div></div>';
     setTimeout(cdLoadEmails, 0);
+    CD_CHAN='note'; setTimeout(function(){ cdRenderChan(); var cb=host.querySelector('.conv-body'); if(cb) cb.scrollTop=cb.scrollHeight; }, 0);
+}
+var CD_CHAN='note', CD_LOG_DIR='outbound';
+window.cdSetChan=function(k){ CD_CHAN=k; document.querySelectorAll('.conv-ctab[data-cdc]').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-cdc')===k); }); cdRenderChan(); };
+function cdRenderChan(){
+    var el=document.getElementById('cdChanBody'); if(!el) return;
+    if(CD_CHAN==='email'){
+        var em=CURRENT_CONTACT&&CURRENT_CONTACT.contact&&CURRENT_CONTACT.contact.email;
+        el.innerHTML= em
+          ? '<button onclick="cdCompose()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">edit</span> Compose email</button> <span style="font-size:12px;color:var(--muted);">Real email to '+esc(em)+' — shows in the Email card above too.</span>'
+          : '<div style="font-size:12px;color:var(--muted);">Add an email address to send email.</div>';
+        return;
+    }
+    if(CD_CHAN==='sms'){
+        el.innerHTML='<div style="display:flex;align-items:center;gap:12px;border:1.5px dashed var(--border);border-radius:12px;background:var(--surface);padding:13px;">'
+          +'<span class="material-icons" style="font-size:28px;color:var(--muted);opacity:.6;">sms</span>'
+          +'<div><div style="font-weight:800;font-size:13px;color:var(--secondary);">Text messaging is coming soon <span class="soon" style="margin:0 0 0 6px;">SMS</span></div>'
+          +'<div style="font-size:12px;color:var(--muted);margin-top:2px;">Two-way SMS will land right in this log. For now, log an SMS manually under Note/Call.</div></div></div>';
+        return;
+    }
+    var ph=CD_CHAN==='call'?'Log a call…':'Write a note…';
+    el.innerHTML='<div style="display:flex;gap:8px;align-items:flex-end;">'
+      +'<select id="cdMsgDir" onchange="CD_LOG_DIR=this.value" style="padding:9px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;"><option value="outbound"'+(CD_LOG_DIR==='outbound'?' selected':'')+'>Outbound</option><option value="inbound"'+(CD_LOG_DIR==='inbound'?' selected':'')+'>Inbound</option></select>'
+      +'<textarea id="cdMsgBody" placeholder="'+ph+'" style="flex:1;min-height:40px;max-height:120px;padding:9px 12px;border:1.5px solid var(--border);border-radius:11px;font-size:13px;font-family:inherit;outline:none;resize:vertical;" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();cdAddMsg();}"></textarea>'
+      +'<button onclick="cdAddMsg()" style="background:var(--teal);color:#fff;border:none;border-radius:11px;width:44px;height:42px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;"><span class="material-icons">send</span></button></div>';
 }
 /* ── Live email for this contact (from the acting user's connected mailbox) ── */
 async function cdLoadEmails(){
@@ -684,7 +721,7 @@ window.cdCompose=async function(pre){
     if(ACTIVE_SECTION==='conversations' && CONV_ACTIVE){ convOpen(CONV_ACTIVE); }
     else openContactDetail(CURRENT_CONTACT.contact.id);
 };
-window.cdAddMsg=async function(){ var b=(document.getElementById('cdMsgBody').value||'').trim(); if(!b) return; var r=await crmApi({action:'add_message',contact_id:CURRENT_CONTACT.contact.id,channel:document.getElementById('cdMsgChan').value,direction:document.getElementById('cdMsgDir').value,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not log.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
+window.cdAddMsg=async function(){ var el=document.getElementById('cdMsgBody'); if(!el) return; var b=(el.value||'').trim(); if(!b) return; var channel=CD_CHAN==='call'?'call':'note'; var r=await crmApi({action:'add_message',contact_id:CURRENT_CONTACT.contact.id,channel:channel,direction:CD_LOG_DIR,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not log.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdDeleteMsg=async function(id){ await crmApi({action:'delete_message',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdAddTask=async function(){ var el=document.getElementById('cdTaskTitle'),du=document.getElementById('cdTaskDue'); var t=(el.value||'').trim(); if(!t) return; var r=await crmApi({action:'add_task',contact_id:CURRENT_CONTACT.contact.id,title:t,due_date:du.value||null}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add task.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdToggleTask=async function(id,done){ await crmApi({action:'update_task',id:id,done:done}); openContactDetail(CURRENT_CONTACT.contact.id); };
