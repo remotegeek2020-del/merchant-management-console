@@ -725,12 +725,43 @@ function collectCustom(){
 }
 
 /* ── CRM SETTINGS section: Custom Fields + Tags managers ────────────────────── */
+function pdApi(b){ return fetch('/api/partner-data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(r=>r.json()); }
+var CRM_EMAIL = [];
 async function loadCrmSettings(){
     var host=document.getElementById('crmSettings'); if(!host) return;
-    var res = await Promise.all([ crmApi({action:'list_custom_fields', sub_account_id:subId, entity:'contact'}), crmApi({action:'list_tags', sub_account_id:subId}) ]);
+    var res = await Promise.all([ crmApi({action:'list_custom_fields', sub_account_id:subId, entity:'contact'}), crmApi({action:'list_tags', sub_account_id:subId}), pdApi({action:'get_email_connections'}) ]);
     CRM_FIELDS = (res[0] && res[0].success && res[0].fields) || [];
     CRM_TAGS = (res[1] && res[1].success && res[1].tags) || [];
+    CRM_EMAIL = (res[2] && res[2].success && (res[2].connections||res[2].email_connections)) || [];
     renderCrmSettings();
+}
+window.crmConnectEmail = async function(provider){
+    var r = await pdApi({action:'get_oauth_url', provider:provider});
+    if(r && r.success && r.url){ window.location.href = r.url; }
+    else Swal.fire('Not available',(r&&r.message)||'Email connect is not configured yet.','info');
+};
+window.crmDisconnectEmail = async function(provider){
+    var c = await Swal.fire({icon:'warning',title:'Disconnect email?',text:'You’ll stop sending from this address.',showCancelButton:true,confirmButtonText:'Disconnect',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    await pdApi({action:'disconnect_email', provider:provider});
+    loadCrmSettings();
+};
+function emailPanel(){
+    var c = (CRM_EMAIL||[])[0];
+    var body;
+    if(c){
+        body = '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;">'
+          +'<span class="material-icons" style="color:#16a34a;">mark_email_read</span>'
+          +'<div style="flex:1;"><div style="font-weight:700;font-size:13px;">'+esc(c.email||'Connected')+'</div><div style="font-size:11px;color:var(--muted);text-transform:capitalize;">'+esc(c.provider||'')+' · connected · sends as you</div></div>'
+          +'<button onclick="crmDisconnectEmail(\''+esc(c.provider)+'\')" style="background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Disconnect</button></div>';
+    } else {
+        body = '<div style="padding:6px 0;"><div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Connect your business email to send and log messages from Conversations as your own address.</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+          +'<button onclick="crmConnectEmail(\'google\')" style="display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><img src="https://www.google.com/favicon.ico" style="width:16px;height:16px;"> Connect Gmail</button>'
+          +'<button onclick="crmConnectEmail(\'microsoft\')" style="display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><img src="https://outlook.com/favicon.ico" style="width:16px;height:16px;"> Connect Outlook</button>'
+          +'</div></div>';
+    }
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Email connection</div><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Each CRM user connects their own email to activate Conversations. This is the same connection as your Portal Settings.</div>'+body+'</div>';
 }
 function renderCrmSettings(){
     var host=document.getElementById('crmSettings'); if(!host) return;
@@ -752,7 +783,8 @@ function renderCrmSettings(){
     }).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 0;">No tags yet.</div>';
     var addBtn = function(fn,label){ return '<button onclick="'+fn+'" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">add</span> '+label+'</button>'; };
     host.innerHTML =
-      '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Custom Fields</div><div style="font-size:12px;color:var(--muted);">Extra fields shown on the contact form for this CRM.</div></div>'+addBtn('openField()','Add field')+'</div>'+fieldRows+'</div>'
+      emailPanel()
+      +'<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Custom Fields</div><div style="font-size:12px;color:var(--muted);">Extra fields shown on the contact form for this CRM.</div></div>'+addBtn('openField()','Add field')+'</div>'+fieldRows+'</div>'
       +'<div class="panel" style="padding:18px 20px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Tags</div><div style="font-size:12px;color:var(--muted);">Labels to segment contacts in this CRM.</div></div>'+addBtn('openTag()','Add tag')+'</div>'+tagRows+'</div>';
 }
 function fieldIcon(t){ return t==='dropdown'?'arrow_drop_down_circle':t==='date'?'event':t==='number'?'pin':t==='checkbox'?'check_box':t==='textarea'?'notes':'text_fields'; }
