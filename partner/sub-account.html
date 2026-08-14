@@ -170,7 +170,7 @@ function merchantsPanel(){
           +'<td style="color:var(--secondary);">'+esc(loc||'—')+'</td></tr>';
     }).join('');
     var more = m.count>m.sample.length ? '<div style="padding:12px 16px;font-size:12px;color:var(--muted);">Showing top '+m.sample.length+' of '+m.count.toLocaleString()+' merchants.</div>' : '';
-    return '<div class="panel"><table><thead><tr><th>Merchant (DBA)</th><th>Partner ID</th><th>Status</th><th>30-Day Volume</th><th>Location</th></tr></thead><tbody>'+rows+'</tbody></table>'+more+'</div>';
+    return '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Merchant (DBA)</th><th>Partner ID</th><th>Status</th><th>30-Day Volume</th><th>Location</th></tr></thead><tbody>'+rows+'</tbody></table>'+more+'</div>';
 }
 function emptyPanel(icon,title,sub,soon){
     return '<div class="panel"><div class="empty"><span class="material-icons">'+icon+'</span><h4>'+esc(title)+'</h4><p>'+esc(sub)+'</p>'+(soon?'<span class="soon">COMING SOON</span>':'')+'</div></div>';
@@ -184,7 +184,7 @@ function partnerIdsPanel(){
           +'<td>'+(x.prime49?'<span class="badge approved">Prime49</span>':'<span style="color:var(--muted);">—</span>')+'</td>'
           +'<td class="mono">'+(x.rev_share!=null?esc(x.rev_share)+'%':'—')+'</td></tr>';
     }).join('');
-    return '<div class="panel"><table><thead><tr><th>Partner ID</th><th>Merchants</th><th>Tier</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    return '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Partner ID</th><th>Merchants</th><th>Tier</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 function subPartnersPanel(){
     var sp = DATA.objects.sub_partners;
@@ -195,7 +195,7 @@ function subPartnersPanel(){
           +'<td class="mono" style="color:var(--teal);">'+esc(x.id_string||'—')+'</td>'
           +'<td class="mono">'+(x.rev_share!=null?esc(x.rev_share)+'%':'—')+'</td></tr>';
     }).join('');
-    return '<div class="panel"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    return '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', forms:'Forms', reporting:'Reporting', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
 var SECTIONS = {
@@ -618,9 +618,10 @@ async function loadReport(){
       +tile('Won', money(d.won_value_cents/100), 'emoji_events', '#166534')
       +tile('Form leads', d.form_submissions.toLocaleString(), 'description')
       +'</div>'
-      +'<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-top:0;">'
+      +'<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-top:0;">'
       +tile('Won deals', d.won_count, 'check_circle', '#166534')
       +tile('Lost deals', d.lost_count, 'cancel', '#b91c1c')
+      +tile('Win rate', ((d.won_count+d.lost_count)?Math.round(d.won_count/(d.won_count+d.lost_count)*100):0)+'%', 'percent', '#0d9488')
       +tile('Tasks open', d.tasks_open, 'task_alt')
       +tile('Overdue', d.tasks_overdue, 'schedule', d.tasks_overdue?'#b91c1c':'')
       +'</div>';
