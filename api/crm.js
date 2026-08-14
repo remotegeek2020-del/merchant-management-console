@@ -633,10 +633,10 @@ export default async function handler(req, res) {
                     const list = await lr.json();
                     const ids = (list.messages || []).map(m => m.id);
                     let emails = await Promise.all(ids.map(async id => {
-                        const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Bcc&metadataHeaders=Subject&metadataHeaders=Date`, { headers: { Authorization: 'Bearer ' + at } });
+                        const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Bcc&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID`, { headers: { Authorization: 'Bearer ' + at } });
                         const m = await mr.json();
                         const h = {}; ((m.payload && m.payload.headers) || []).forEach(x => h[x.name.toLowerCase()] = x.value);
-                        return { id: m.id, thread_id: m.threadId, from: h.from || '', to: h.to || '', cc: h.cc || '', bcc: h.bcc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
+                        return { id: m.id, thread_id: m.threadId, message_id: h['message-id'] || '', from: h.from || '', to: h.to || '', cc: h.cc || '', bcc: h.bcc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
                     }));
                     // Safety net: only keep messages whose From/To/Cc/Bcc actually contain the contact's address.
                     emails = emails.filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle));

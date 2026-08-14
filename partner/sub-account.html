@@ -530,6 +530,7 @@ async function cdLoadEmails(){
     if(r.needs_connect){ host.innerHTML='<div style="color:var(--muted);">Connect your email in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a> to see and send email here.</div>'; return; }
     if(r.needs_reauth){ host.innerHTML='<div style="color:var(--muted);">Reconnect your email (new inbox permission needed) in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a>.</div>'; return; }
     window._cdEmails = r.emails||[];
+    window._cdEmailAddr = r.address||'';
     window._cdEmailPage = 0;
     cdRenderEmailList();
 }
@@ -565,7 +566,8 @@ function cdRenderEmailList(){
 window.cdEmailPage=function(delta){ var emails=window._cdEmails||[]; var pages=Math.ceil(emails.length/CD_EMAIL_PER); window._cdEmailPage=Math.max(0,Math.min((window._cdEmailPage||0)+delta,pages-1)); cdRenderEmailList(); };
 window.cdOpenEmail=async function(id, subject){
     var meta=(window._cdEmails||[]).filter(function(x){return x.id===id;})[0]||{};
-    Swal.fire({title:esc(subject||'Email'), html:'<div id="emlWrap" style="text-align:left;"><div style="color:#94a3b8;font-size:12px;">Loading…</div></div>', width:680, showConfirmButton:true, confirmButtonText:'Reply', showCancelButton:true, cancelButtonText:'Close', confirmButtonColor:'#0d9488',
+    var hasOthers=cdReplyAllCc(meta).length>0;
+    Swal.fire({title:esc(subject||'Email'), html:'<div id="emlWrap" style="text-align:left;"><div style="color:#94a3b8;font-size:12px;">Loading…</div></div>', width:680, showConfirmButton:true, confirmButtonText:'Reply', showDenyButton:hasOthers, denyButtonText:'Reply all', showCancelButton:true, cancelButtonText:'Close', confirmButtonColor:'#0d9488', denyButtonColor:'#0ea5e9',
         didOpen: async function(){
             var r=await crmApi({action:'email_body', contact_id:CURRENT_CONTACT.contact.id, message_id:id});
             var wrap=document.getElementById('emlWrap'); if(!wrap) return;
@@ -574,24 +576,44 @@ window.cdOpenEmail=async function(id, subject){
                 else { wrap.innerHTML='<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;max-height:52vh;overflow:auto;">'+esc(r.text)+'</pre>'; }
             } else { wrap.innerHTML='<div style="color:#94a3b8;">Could not load the message body.</div>'; }
         }
-    }).then(function(res){ if(res.isConfirmed){ cdCompose({to:(meta.outbound?meta.to:meta.from), subject:(/^re:/i.test(subject||'')?subject:'Re: '+(subject||'')), thread_id:meta.thread_id}); } });
+    }).then(function(res){
+        if(res.isConfirmed||res.isDenied){
+            var subj=(/^re:/i.test(subject||'')?subject:'Re: '+(subject||''));
+            cdCompose({to:(meta.outbound?meta.to:meta.from), cc:(res.isDenied?cdReplyAllCc(meta):[]), subject:subj, thread_id:meta.thread_id, in_reply_to:meta.message_id||''});
+        }
+    });
 };
+// Everyone else on the original thread (To + Cc), minus the reply recipient and our own address.
+function cdReplyAllCc(meta){
+    var self=String(window._cdEmailAddr||'').toLowerCase();
+    var primary=String(meta.outbound?meta.to:meta.from||'').toLowerCase();
+    var pool=[]; [meta.to, meta.cc].forEach(function(s){ String(s||'').split(',').forEach(function(p){ p=p.trim(); if(p) pool.push(p); }); });
+    var out=[], seen={};
+    pool.forEach(function(p){ var m=p.match(/<([^>]+)>/); var addr=(m?m[1]:p).trim(); var k=addr.toLowerCase(); if(!addr||seen[k]||k===self||primary.indexOf(k)>-1) return; seen[k]=1; out.push(addr); });
+    return out;
+}
 window.cdCompose=async function(pre){
     pre=pre||{};
     var to = pre.to || (CURRENT_CONTACT && CURRENT_CONTACT.contact.email) || '';
     // extract bare email from "Name <email>" if present
     var m=String(to).match(/<([^>]+)>/); if(m) to=m[1];
     await ensureMembers();
+    // Any prefilled CC (e.g. Reply all) — normalize to lowercased bare addresses.
+    var preCc=(pre.cc||[]).map(function(x){ var mm=String(x).match(/<([^>]+)>/); return (mm?mm[1]:x).trim(); }).filter(Boolean);
+    var preCcSet={}; preCc.forEach(function(a){ preCcSet[a.toLowerCase()]=1; });
     // Team members (with an email) that can be CC'd so they see this thread on their contact view.
     var teamCc=(CRM_MEMBERS||[]).filter(function(x){ return x.email && x.email.toLowerCase()!==String(to).toLowerCase(); });
     var ccChecks=teamCc.length
-      ? teamCc.map(function(x){ return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#334155;margin:2px 0;cursor:pointer;"><input type="checkbox" class="emCcMember" value="'+esc(x.email)+'"> '+esc(x.full_name||x.email)+' <span style="color:#94a3b8;">&lt;'+esc(x.email)+'&gt;</span></label>'; }).join('')
+      ? teamCc.map(function(x){ var chk=preCcSet[x.email.toLowerCase()]?' checked':''; return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#334155;margin:2px 0;cursor:pointer;"><input type="checkbox" class="emCcMember" value="'+esc(x.email)+'"'+chk+'> '+esc(x.full_name||x.email)+' <span style="color:#94a3b8;">&lt;'+esc(x.email)+'&gt;</span></label>'; }).join('')
       : '<div style="font-size:12px;color:#94a3b8;">No other team members to CC.</div>';
+    // Prefilled CCs that aren't team members go into the free-form field.
+    var teamEmails={}; teamCc.forEach(function(x){ teamEmails[x.email.toLowerCase()]=1; });
+    var extraCc=preCc.filter(function(a){ return !teamEmails[a.toLowerCase()]; }).join(', ');
     var html='<div style="text-align:left;">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">To</label><input id="emTo" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(to)+'">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">CC team</label>'
       +'<div style="margin:4px 0 6px;max-height:110px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">'+ccChecks+'</div>'
-      +'<input id="emCcExtra" class="swal2-input" placeholder="Other CC emails (comma-separated)" style="margin:0 0 10px;width:100%;height:34px;font-size:12px;">'
+      +'<input id="emCcExtra" class="swal2-input" placeholder="Other CC emails (comma-separated)" value="'+esc(extraCc)+'" style="margin:0 0 10px;width:100%;height:34px;font-size:12px;">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Subject</label><input id="emSubj" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(pre.subject||'')+'">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Message</label><textarea id="emBody" class="swal2-textarea" style="margin:4px 0 0;width:100%;min-height:150px;font-size:13px;"></textarea></div>';
     var res=await Swal.fire({title:pre.thread_id?'Reply':'New email', html:html, width:600, showCancelButton:true, confirmButtonText:'Send', confirmButtonColor:'#0d9488', focusConfirm:false,
@@ -600,7 +622,7 @@ window.cdCompose=async function(pre){
           (document.getElementById('emCcExtra').value||'').split(',').forEach(function(x){ x=x.trim(); if(x) cc.push(x); });
           return {to:t, cc:cc, subject:(document.getElementById('emSubj').value||'').trim(), body:b}; }});
     if(!res.isConfirmed) return;
-    var payload=Object.assign({action:'send_email', contact_id:CURRENT_CONTACT.contact.id, thread_id:pre.thread_id}, res.value);
+    var payload=Object.assign({action:'send_email', contact_id:CURRENT_CONTACT.contact.id, thread_id:pre.thread_id, in_reply_to:pre.in_reply_to}, res.value);
     var r=await crmApi(payload);
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not send.','error'); return; }
     crmToast('Email sent'); openContactDetail(CURRENT_CONTACT.contact.id);
