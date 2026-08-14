@@ -146,6 +146,7 @@ async function syncBrandingToDomains(portalId, agencyName) {
     if (!portal) return;
     const patch = { name: agencyName || portal.agency_name || null, updated_at: new Date().toISOString() };
     BRAND_FIELDS.forEach(f => { patch[f] = portal[f] || null; });
+    patch.login_powered_by = portal.login_powered_by !== false;
     await supabase.from('portal_brands').update(patch).eq('portal_id', portalId).eq('added_by_partner', true);
 }
 
@@ -614,6 +615,7 @@ export default async function handler(req, res) {
                     const { data: dom } = await supabase.from('portal_brands').select('host, ssl_status, active').eq('portal_id', portal.id).eq('added_by_partner', true).maybeSingle();
                     const branding = {};
                     BRAND_FIELDS.forEach(f => { branding[f] = (full && full[f]) || ''; });
+                    branding.login_powered_by = !full || full.login_powered_by !== false;
                     return res.status(200).json({
                         success: true, can_manage: canManage,
                         relationship_id: full.relationship_id, agency_name: full.agency_name || '',
@@ -627,6 +629,7 @@ export default async function handler(req, res) {
                     const patch = { updated_at: new Date().toISOString() };
                     if (typeof body.agency_name === 'string') patch.agency_name = body.agency_name.trim() || null;
                     BRAND_FIELDS.forEach(f => { if (f in b) patch[f] = (b[f] || '').trim() || null; });
+                    if ('login_powered_by' in b) patch.login_powered_by = !(b.login_powered_by === false || b.login_powered_by === 'false');
                     await supabase.from('partner_portals').update(patch).eq('id', portal.id);
                     await syncBrandingToDomains(portal.id, patch.agency_name);
                     return res.status(200).json({ success: true });

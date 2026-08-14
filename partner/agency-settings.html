@@ -170,6 +170,7 @@ function loginTemplateCard(){
     return '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">wallpaper</span> Login Screen</div>'
       +'<div class="card-sub">Pick a preset design for your branded login page — it uses your logo &amp; colors. Custom CSS/JS is coming later.</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;">'+cards+'</div>'
+      +'<label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-size:13px;font-weight:600;color:var(--text);cursor:'+(cm?'pointer':'default')+';text-transform:none;letter-spacing:0;"><input type="checkbox" id="fPoweredBy"'+(((DATA.branding&&DATA.branding.login_powered_by)!==false)?' checked':'')+' '+(cm?'onchange="saveLoginPoweredBy(this.checked)"':'disabled')+'> Show “Powered by PayProTec” on the login screen</label>'
       +(cm?'<div class="muted" style="margin-top:12px;">Applies to your custom domain login.'+openLink+'</div>':'<div class="muted" style="margin-top:12px;">Only owners and admins can change the login design.</div>')
       +'</div>';
 }
@@ -179,6 +180,12 @@ window.saveLoginTemplate = async function(tpl){
     var r = await api({action:'save_agency_branding', branding:{login_template:tpl}});
     if(!r || !r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
     else Swal.fire({icon:'success',title:'Login design saved',timer:900,showConfirmButton:false});
+};
+window.saveLoginPoweredBy = async function(on){
+    DATA.branding = DATA.branding || {}; DATA.branding.login_powered_by = !!on;
+    var r = await api({action:'save_agency_branding', branding:{login_powered_by:!!on}});
+    if(!r || !r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
+    else Swal.fire({icon:'success',title:'Saved',timer:800,showConfirmButton:false});
 };
 
 function domainCard(){

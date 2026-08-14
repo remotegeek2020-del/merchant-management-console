@@ -81,6 +81,9 @@
         var panelLogo = document.querySelector('[data-brand-panel-logo]');
         if (panelLogo && b.logo_url) { panelLogo.src = b.logo_url; panelLogo.style.filter = 'none'; }
         document.querySelectorAll('[data-brand-panel-name]').forEach(function (el) { if (b.name) el.textContent = b.name; });
+        // "Powered by PayProTec" mark — shown on branded logins unless the agency hides it.
+        var pb = document.getElementById('poweredBy');
+        if (pb) pb.style.display = (b.login_powered_by === false) ? 'none' : 'flex';
     }
 
     function applyBrand(b) {
