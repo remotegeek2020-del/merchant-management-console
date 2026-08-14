@@ -21,11 +21,21 @@
 
         var c = null;
         try { c = JSON.parse(localStorage.getItem('pp_brand:' + host) || 'null'); } catch (e) {}
+        // Set the app theme from cache BEFORE the theme CSS loads, so there's no
+        // flash of the default look. Default to 'default' when unknown.
+        document.documentElement.setAttribute('data-app-theme', (c && c.app_theme) || 'default');
         if (c) {
             var d = document.documentElement.style;
             if (c.color_primary) { d.setProperty('--teal', c.color_primary); d.setProperty('--teal-dark', c.color_accent || c.color_primary); }
             if (c.color_dark) { d.setProperty('--navy', c.color_dark); }
             if (c.login_template) document.documentElement.setAttribute('data-login-template', c.login_template);
+        }
+        // Load the theme + animation CSS render-blocking here in <head> so themed
+        // styles are present on first paint (brand.js would inject it too late).
+        if (!document.getElementById('pp-theme-css')) {
+            var l = document.createElement('link');
+            l.id = 'pp-theme-css'; l.rel = 'stylesheet'; l.href = '/css/pp-theme.css?v=20260814';
+            (document.head || document.documentElement).appendChild(l);
         }
     } catch (e) { /* best-effort; page still works */ }
 })();

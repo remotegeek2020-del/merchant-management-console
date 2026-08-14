@@ -175,8 +175,13 @@ function appThemeCard(){
       +(cm?'':'<div class="muted" style="margin-top:12px;">Only owners and admins can change the theme.</div>')
       +'</div>';
 }
+// Keep the per-host brand cache (read by brand-boot.js on next load) in sync so a
+// just-changed theme/template doesn't flash the previous value.
+function bumpBrandCache(obj){ try{ var k='pp_brand:'+location.hostname; var c=JSON.parse(localStorage.getItem(k)||'null'); if(c){ Object.assign(c,obj); localStorage.setItem(k, JSON.stringify(c)); } }catch(e){} }
 window.saveAppTheme = async function(k){
     DATA.branding = DATA.branding || {}; DATA.branding.app_theme = k;
+    document.documentElement.setAttribute('data-app-theme', k); // reflect live on this page too
+    bumpBrandCache({app_theme:k});
     render();
     var r = await api({action:'save_agency_branding', branding:{app_theme:k}});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
@@ -185,6 +190,7 @@ window.saveAppTheme = async function(k){
 window.saveLoginCopy = async function(){
     var copy = { tag:val('lcTag'), heading:val('lcHeading'), sub:val('lcSub'), button:val('lcButton'), tagline:val('lcTagline') };
     DATA.branding = DATA.branding || {}; DATA.branding.login_copy = copy;
+    bumpBrandCache({login_copy:copy});
     var r = await api({action:'save_agency_branding', branding:{login_copy:copy}});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
     else Swal.fire({icon:'success',title:'Wording saved',timer:900,showConfirmButton:false});
@@ -231,12 +237,14 @@ function loginTemplateCard(){
 window.saveLoginTemplate = async function(tpl){
     DATA.branding = DATA.branding || {}; DATA.branding.login_template = tpl;
     render();
+    bumpBrandCache({login_template:tpl});
     var r = await api({action:'save_agency_branding', branding:{login_template:tpl}});
     if(!r || !r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
     else Swal.fire({icon:'success',title:'Login design saved',timer:900,showConfirmButton:false});
 };
 window.saveLoginPoweredBy = async function(on){
     DATA.branding = DATA.branding || {}; DATA.branding.login_powered_by = !!on;
+    bumpBrandCache({login_powered_by:!!on});
     var r = await api({action:'save_agency_branding', branding:{login_powered_by:!!on}});
     if(!r || !r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
     else Swal.fire({icon:'success',title:'Saved',timer:800,showConfirmButton:false});
