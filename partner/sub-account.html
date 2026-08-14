@@ -819,13 +819,15 @@ function renderBoard(){
         var deals = CRM_OPPS.filter(function(o){return o.stage_id===st.id;});
         var sum = deals.reduce(function(s,o){return s+(o.value_cents||0);},0)/100;
         var cards = deals.map(function(o){
+            var due = o.expected_close_date ? '<span style="margin-left:8px;"><span class="material-icons" style="font-size:12px;vertical-align:middle;">event</span> '+fmtDate(o.expected_close_date)+'</span>' : '';
+            var meta = (oppContactName(o)||due) ? '<div class="deal-meta">'+(oppContactName(o)?'<span class="material-icons" style="font-size:12px;vertical-align:middle;">person</span> '+esc(oppContactName(o)):'')+(oppContactName(o)?'</span>':'')+due+'</div>' : '';
             return '<div class="deal" draggable="true" data-id="'+o.id+'" onclick="openDeal(\''+o.id+'\')">'
               +'<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;"><div class="deal-title">'+esc(o.title)+'</div><div class="deal-val">'+money((o.value_cents||0)/100)+'</div></div>'
-              +(oppContactName(o)?'<div class="deal-meta"><span class="material-icons" style="font-size:12px;vertical-align:middle;">person</span> '+esc(oppContactName(o))+'</div>':'')
+              + meta
               +'</div>';
         }).join('') || '<div style="font-size:11px;color:var(--muted);padding:8px 6px;">No deals</div>';
         var cls = st.is_won?'stage-won':(st.is_lost?'stage-lost':'');
-        return '<div class="col '+cls+'" data-stage="'+st.id+'"><div class="col-head"><div class="col-title">'+esc(st.name)+'</div><div class="col-sum">'+deals.length+' · '+money(sum)+'</div></div><div class="col-body">'+cards+'</div></div>';
+        return '<div class="col '+cls+'" data-stage="'+st.id+'"><div class="col-head"><div class="col-title">'+esc(st.name)+'</div><div style="display:flex;align-items:center;gap:8px;"><div class="col-sum">'+deals.length+' · '+money(sum)+'</div><span class="material-icons" title="Add deal to '+esc(st.name)+'" onclick="event.stopPropagation();openDeal(null,{stage_id:\''+st.id+'\'})" style="font-size:16px;color:var(--muted);cursor:pointer;">add</span></div></div><div class="col-body">'+cards+'</div></div>';
     }).join('');
     host.innerHTML = toolbar + '<div class="board">'+cols+'</div>';
     wireDnD();
@@ -850,7 +852,7 @@ async function moveDeal(id, stageId){
 }
 window.openDeal = async function(id, prefill){
     var o = id ? CRM_OPPS.filter(function(x){return x.id===id;})[0] : null; o=o||{};
-    if(!id && prefill && prefill.contact_id) o={contact_id:prefill.contact_id};
+    if(!id && prefill) o=Object.assign({}, prefill);
     var lab=function(t){ return '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">'+t+'</label>'; };
     var contactOpts = '<option value="">— none —</option>'+CRM_CONTACTS.map(function(c){return '<option value="'+c.id+'"'+(o.contact_id===c.id?' selected':'')+'>'+esc(cName(c))+'</option>';}).join('');
     var stageOpts = CRM_STAGES.map(function(s){return '<option value="'+s.id+'"'+(o.stage_id===s.id?' selected':'')+'>'+esc(s.name)+'</option>';}).join('');
