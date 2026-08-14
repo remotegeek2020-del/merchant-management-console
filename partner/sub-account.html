@@ -464,7 +464,7 @@ function renderContactDetail(){
     var customRows=CRM_FIELDS.map(function(fd){ var v=cv[fd.field_key]; if(fd.type==='checkbox') v=v?'Yes':''; return row(fd.label, v); }).join('');
     var tags=(c.tags||[]).map(tagChip).join('')||'<span style="color:var(--muted);font-size:11px;">No tags</span>';
     var infoCard='<div class="panel" style="padding:18px;">'
-      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><div class="sa-icon" style="width:46px;height:46px;border-radius:50%;"><span class="material-icons">person</span></div>'
+      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><div style="width:46px;height:46px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0;">'+initials(cName(c))+'</div>'
       +'<div><div style="font-size:16px;font-weight:800;">'+esc(cName(c))+'</div>'+(c.company?'<div style="font-size:12px;color:var(--muted);">'+esc(c.company)+'</div>':'')+'</div></div>'
       +row('Email',c.email)+row('Phone',c.phone)+row('Company',c.company)+row('Title',c.title)+row('Source',c.source)+customRows
       +'<div style="margin-top:10px;">'+tags+'</div>'
