@@ -1028,6 +1028,15 @@ export default async function handler(req, res) {
                 .limit(12);
             return res.status(200).json({ success: true, people: data || [] });
         }
+        // The companies this person is actually tied to (via their agents) — the
+        // sensible default when picking a company to set ownership on.
+        if (action === 'get_person_companies_available') {
+            if (!body.person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
+            const { data: agents } = await supabase.from('agents').select('company_id, companies:company_id(company_name)').eq('parent_agent_id', body.person_id);
+            const map = {};
+            (agents || []).forEach(a => { if (a.company_id && !map[a.company_id]) map[a.company_id] = { company_id: a.company_id, company_name: (a.companies && a.companies.company_name) || 'Company' }; });
+            return res.status(200).json({ success: true, companies: Object.keys(map).map(k => map[k]) });
+        }
         if (action === 'search_companies') {
             const q = String(body.q || '').trim();
             if (q.length < 2) return res.status(200).json({ success: true, companies: [] });

@@ -2650,16 +2650,34 @@ async function _wlRenderMembers(personId){
 /* ── On-card company-ownership manager (writes to the shared company_owners) ── */
 var _coCompanyId=null, _coForPerson=null, _coOwners=[];
 window.wlAddCompanyOwnership = async function(personId){
-    var pick = await Swal.fire({ title:'Pick a company', input:'text', inputPlaceholder:'Search company name…', showCancelButton:true, confirmButtonText:'Search', confirmButtonColor:'#0d9488' });
-    if(!pick.isConfirmed || !(pick.value||'').trim()) return;
-    var r = await fetch('/api/whitelabel',{method:'POST',headers:_wlAgHdrs(),body:JSON.stringify({action:'search_companies',q:pick.value.trim()})}).then(x=>x.json());
-    var comps = (r&&r.success&&r.companies)||[];
-    if(!comps.length){ Swal.fire('No matches','No company found by that name.','info'); return; }
-    var opts={}; comps.forEach(function(c){ opts[c.id]=c.company_name; });
-    var sel = await Swal.fire({ title:'Select company', input:'select', inputOptions:opts, showCancelButton:true, confirmButtonText:'Manage', confirmButtonColor:'#0d9488' });
-    if(!sel.isConfirmed || !sel.value) return;
-    wlManageCompanyOwners(sel.value, opts[sel.value], personId);
+    window._wlLookupPerson = personId;
+    var dr=null;
+    try { dr = await fetch('/api/whitelabel',{method:'POST',headers:_wlAgHdrs(),body:JSON.stringify({action:'get_person_companies_available',person_id:personId})}).then(x=>x.json()); } catch(e){}
+    window._wlLookupMine = (dr && dr.success && dr.companies) || [];
+    await Swal.fire({
+        title:'Select a company', width:520, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
+        html:'<div style="text-align:left;"><input id="wlCoLookup" placeholder="Search all companies by name…" oninput="wlCoLookup(this.value)" autocomplete="off" style="width:100%;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">'
+          +'<div id="wlCoLookupResults" style="margin-top:8px;max-height:260px;overflow:auto;border:1px solid #f1f5f9;border-radius:8px;">'+_wlLookupRender(window._wlLookupMine, true)+'</div></div>'
+    });
 };
+function _wlLookupRender(list, isDefault){
+    if(!list || !list.length) return '<div style="font-size:12px;color:#94a3b8;padding:10px;">'+(isDefault?'No companies linked to this partner yet — search above.':'No matches.')+'</div>';
+    var head = isDefault ? '<div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.4px;padding:8px 10px 4px;">Their companies</div>' : '';
+    return head + list.map(function(c){
+        return '<div onclick="wlLookupPick(\''+c.company_id+'\',\''+_wlEsc(c.company_name).replace(/\x27/g,"&#39;")+'\')" style="padding:9px 11px;cursor:pointer;border-top:1px solid #f1f5f9;font-size:13px;font-weight:600;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">'+_wlEsc(c.company_name)+'</div>';
+    }).join('');
+}
+var _wlLookupT=null;
+window.wlCoLookup=function(q){
+    clearTimeout(_wlLookupT);
+    var box=document.getElementById('wlCoLookupResults'); if(!box) return;
+    if(!q || q.trim().length<2){ box.innerHTML=_wlLookupRender(window._wlLookupMine||[], true); return; }
+    _wlLookupT=setTimeout(async function(){
+        var r=await fetch('/api/whitelabel',{method:'POST',headers:_wlAgHdrs(),body:JSON.stringify({action:'search_companies',q:q.trim()})}).then(x=>x.json());
+        box.innerHTML=_wlLookupRender((r&&r.success&&r.companies)||[], false);
+    },250);
+};
+window.wlLookupPick=function(companyId, companyName){ Swal.close(); wlManageCompanyOwners(companyId, companyName, window._wlLookupPerson); };
 window.wlManageCompanyOwners = async function(companyId, companyName, personId){
     _coCompanyId=companyId;
     _coForPerson=personId||null;
