@@ -453,3 +453,16 @@ portal; Greg's card read Greg's). Ownership is a property of the COMPANY.
   "Companies Owned" reflection (get_person_companies) pointing to Company Manager to edit.
   (Legacy add_member/set_ownership_percent/etc. staff actions remain but are no longer used by
   the card.)
+
+## Staff granular perms: Grant Agency Access + Login As (2026-08-13)
+Two new app_users flags (migration `staff_agency_login_perms`): `access_grant_agency`,
+`access_login_as`. Admins/super-admins keep both implicitly.
+- _access.js: canGrantAgency(a) / canLoginAs(a) (isAdminRole OR the flag); loadActor selects both.
+- partner-auth.js admin_login_as → canLoginAs (was super_admin-only).
+- whitelabel.js staff surface: gate now admin OR canGrantAgency; infra actions (cf_config_get/set,
+  cf_diagnostics, list_portals, admin_refresh_domain) stay admin-only; new `my_staff_caps` action
+  (any staff) returns {is_admin, can_grant_agency, can_login_as}.
+- partners-dashboard.html wlAgencyInit: reads my_staff_caps (cached) → hides "Login As" unless
+  can_login_as, hides "Grant Agency Access" + the whole ownership panel unless can_grant_agency.
+- user-management.html: two Elevated toggles (Grant Agency Access, Login As Partner);
+  api/users.js selects + ALLOWED_BATCH_FIELDS updated.

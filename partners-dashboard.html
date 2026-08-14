@@ -2607,6 +2607,18 @@ function _wlAgPaint(personId) {
     }
 }
 window.wlAgencyInit = async function(personId) {
+    // Staff capability gate (cached): who may Grant Agency Access / Login As.
+    if(!window._ppCaps){ try{ window._ppCaps = await fetch('/api/whitelabel',{method:'POST',headers:_wlAgHdrs(),body:JSON.stringify({action:'my_staff_caps'})}).then(x=>x.json()); }catch(e){ window._ppCaps={}; } }
+    var caps = window._ppCaps || {};
+    var laBtn=document.getElementById('login-as-btn'); if(laBtn) laBtn.style.display = caps.can_login_as ? '' : 'none';
+    var agBtn=document.getElementById('agency-toggle-btn');
+    if(!caps.can_grant_agency){
+        if(agBtn) agBtn.style.display='none';
+        var mw=document.getElementById('agency-members-wrap'); if(mw) mw.style.display='none';
+        var rel=document.getElementById('agency-rel-id'); if(rel) rel.textContent='';
+        return; // no white-label permission → don't load or show agency/ownership
+    }
+    if(agBtn) agBtn.style.display='';
     try {
         var r = await fetch('/api/whitelabel', { method: 'POST', headers: _wlAgHdrs(), body: JSON.stringify({ action: 'get_agency_access', person_id: personId }) }).then(x => x.json());
         window._wlAgency[personId] = r && r.success ? r : { agency_enabled: false };

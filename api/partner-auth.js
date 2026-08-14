@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { validateSession as validateStaffSession } from './_validate.js';
-import { loadActor } from './_access.js';
+import { loadActor, canLoginAs } from './_access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -118,8 +118,8 @@ export default async function handler(req, res) {
             const staff = await validateStaffSession(req);
             if (!staff) return res.status(401).json({ success: false, message: 'Staff session required.' });
             const actor = await loadActor(staff.userid);
-            if (!actor || !actor.is_active || String(actor.role || '').toLowerCase() !== 'super_admin') {
-                return res.status(403).json({ success: false, message: 'Super admin only.' });
+            if (!canLoginAs(actor)) {
+                return res.status(403).json({ success: false, message: 'You are not permitted to Login As.' });
             }
             const { person_id } = req.body;
             if (!person_id) return res.status(400).json({ success: false, message: 'person_id required.' });

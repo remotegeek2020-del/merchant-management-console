@@ -7,7 +7,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export async function loadActor(userid) {
     if (!userid) return null;
     const { data } = await supabase.from('app_users')
-        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects, access_delete_leads, access_jarvis, can_delete_tickets')
+        .select('userid, email, first_name, last_name, role, is_active, access_marketing, access_marketing_settings, access_lead_portal, access_prospects, access_delete_leads, access_jarvis, can_delete_tickets, access_grant_agency, access_login_as')
         .eq('userid', userid).maybeSingle();
     return data || null;
 }
@@ -46,4 +46,14 @@ export function canProspects(a) {
 // Deleting a prospect + revoking their Lead Portal access (destructive).
 export function canDeleteLeads(a) {
     return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_delete_leads === true);
+}
+
+// Grant/revoke agency access + manage company ownership (white-label admin).
+export function canGrantAgency(a) {
+    return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_grant_agency === true);
+}
+
+// "Login As" a partner (impersonation / god mode).
+export function canLoginAs(a) {
+    return !!a && (a.is_active !== false) && (isAdminRole(a) || a.access_login_as === true);
 }

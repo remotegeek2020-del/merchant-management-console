@@ -17,7 +17,7 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { validateSession, sessionErrorResponse } from './_validate.js';
-import { loadActor, isAdminRole } from './_access.js';
+import { loadActor, isAdminRole, canGrantAgency, canLoginAs } from './_access.js';
 import { getConfigValue, setConfigValue } from './api-config.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
@@ -889,7 +889,19 @@ export default async function handler(req, res) {
         const session = await validateSession(req);
         if (!session) return sessionErrorResponse(res);
         const actor = await loadActor(session.userid);
-        if (!isAdminRole(actor)) return res.status(403).json({ success: false, message: 'Admin only.' });
+        const _isAdmin = isAdminRole(actor);
+        const _canGrant = canGrantAgency(actor);
+
+        // Any signed-in staff may ask what agency capabilities they have (drives the
+        // Grant Agency Access / Login As buttons on the partners dashboard).
+        if (action === 'my_staff_caps') {
+            return res.status(200).json({ success: true, is_admin: _isAdmin, can_grant_agency: _canGrant, can_login_as: canLoginAs(actor) });
+        }
+        // Agency access + ownership + members are open to admins OR staff granted
+        // "Grant Agency Access". Infra config + portfolio overview stay admin-only.
+        if (!_isAdmin && !_canGrant) return res.status(403).json({ success: false, message: 'Not permitted.' });
+        const ADMIN_ONLY = ['cf_config_get', 'cf_config_set', 'cf_diagnostics', 'list_portals', 'admin_refresh_domain'];
+        if (ADMIN_ONLY.includes(action) && !_isAdmin) return res.status(403).json({ success: false, message: 'Admin only.' });
 
         if (action === 'cf_config_get') {
             const cf = await getCfConfig();
