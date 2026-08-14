@@ -90,7 +90,15 @@
         .deal-meta { font-size:11px; color:var(--muted); margin-top:4px; }
         .stage-won .col-title { color:var(--green-text); } .stage-lost .col-title { color:#b91c1c; }
         .dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; align-items:start; }
-        @media (max-width:768px){ .dash-grid{ grid-template-columns:1fr; } }
+        .mobile-menu-btn { display:none; background:none; border:none; cursor:pointer; color:var(--navy); padding:4px; margin-right:4px; }
+        .sb-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:99; }
+        @media (max-width:768px){
+            .dash-grid{ grid-template-columns:1fr; }
+            .sidebar{ transition:transform .25s ease; }
+            .sidebar.open{ transform:translateX(0); }
+            .sidebar.open ~ .sb-overlay { display:block; }
+            .mobile-menu-btn{ display:inline-flex; }
+        }
         @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
         @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .cd-grid{grid-template-columns:1fr !important;} }
     </style>
@@ -125,10 +133,14 @@
     </nav>
     <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;" data-brand-replace>PayProTec Partner Portal v1.0</div>
 </div>
+<div class="sb-overlay" onclick="document.querySelector('.sidebar').classList.remove('open')"></div>
 
 <div class="main">
     <div class="topbar">
-        <a href="/partner/agency" id="backToAgency" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Agency</a>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Menu"><span class="material-icons">menu</span></button>
+            <a href="/partner/agency" id="backToAgency" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--teal);font-weight:700;font-size:13px;"><span class="material-icons" style="font-size:18px;">arrow_back</span> Agency</a>
+        </div>
         <div id="secTitle" style="font-size:1.1rem;font-weight:800;">CRM</div>
     </div>
     <div class="content"><div id="crmMain"><div style="color:var(--muted);padding:40px;">Loading CRM…</div></div></div>
@@ -256,6 +268,7 @@ function showSection(key){
     document.querySelectorAll('.nav-item[data-section]').forEach(function(a){ a.classList.toggle('active', a.getAttribute('data-section')===key); });
     var st=document.getElementById('secTitle'); if(st) st.textContent=SECTION_TITLES[key]||'CRM';
     var main=document.getElementById('crmMain'); if(main) main.innerHTML = SECTIONS[key]();
+    var sb=document.querySelector('.sidebar'); if(sb) sb.classList.remove('open'); // close mobile drawer on nav
     try{ history.replaceState(null,'', '/partner/sub-account?sub='+encodeURIComponent(subId)+'&section='+key); }catch(e){}
 }
 
@@ -323,33 +336,51 @@ async function loadContacts(){
     if(_pendingContactId){ var pid=_pendingContactId; _pendingContactId=null; openContactDetail(pid); return; }
     renderContacts();
 }
+var CRM_TAGFILTER = '';
+function _crmFiltered(){
+    var q = CRM_Q.toLowerCase();
+    return CRM_CONTACTS.filter(function(c){
+        if(q && ![c.first_name,c.last_name,c.email,c.phone,c.company].some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;})) return false;
+        if(CRM_TAGFILTER && !(c.tags||[]).some(function(t){return t.id===CRM_TAGFILTER;})) return false;
+        return true;
+    });
+}
 function renderContacts(){
     var host = document.getElementById('crmContacts'); if(!host) return;
-    var q = CRM_Q.toLowerCase();
-    var list = !q ? CRM_CONTACTS : CRM_CONTACTS.filter(function(c){ return [c.first_name,c.last_name,c.email,c.phone,c.company].some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;}); });
-    var toolbar = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">'
+    var tagFilters = CRM_TAGS.length ? ('<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;"><span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tags:</span>'
+        + CRM_TAGS.map(function(t){ var on=CRM_TAGFILTER===t.id; var col=t.color||'#0d9488'; return '<span onclick="toggleTagFilter(\''+t.id+'\')" style="cursor:pointer;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid '+col+';'+(on?('background:'+col+';color:#fff;'):('background:'+col+'18;color:'+shade(col)+';'))+'">'+esc(t.name)+'</span>'; }).join('')
+        + (CRM_TAGFILTER?'<span onclick="toggleTagFilter(\'\')" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;">clear</span>':'')
+        + '</div>') : '';
+    var toolbar = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
       +'<div style="position:relative;flex:1;min-width:220px;"><span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px;">search</span>'
-      +'<input id="crmSearch" value="'+esc(CRM_Q)+'" oninput="CRM_Q=this.value;renderContacts();document.getElementById(\'crmSearch\').focus();" placeholder="Search contacts…" style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;"></div>'
-      +'<div style="font-size:12px;color:var(--muted);font-weight:600;">'+list.length+' contact'+(list.length===1?'':'s')+'</div>'
+      +'<input id="crmSearch" value="'+esc(CRM_Q)+'" oninput="crmFilter(this.value)" placeholder="Search contacts…" style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;"></div>'
+      +'<div id="crmCount" style="font-size:12px;color:var(--muted);font-weight:600;"></div>'
       +'<button onclick="openContact()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">person_add</span> Add contact</button>'
       +'</div>';
-    var inner;
-    if(!list.length){
-        inner = '<div class="panel"><div class="empty"><span class="material-icons">contacts</span><h4>'+(CRM_Q?'No matches':'No contacts yet')+'</h4><p>'+(CRM_Q?'Try a different search.':'Add your first contact to this CRM.')+'</p></div></div>';
-    } else {
-        var rows = list.map(function(c){
-            var tags = (c.tags||[]).map(tagChip).join('') || '<span style="color:var(--muted);font-size:11px;">—</span>';
-            return '<tr style="cursor:pointer;" onclick="openContactDetail(\''+c.id+'\')">'
-              +'<td style="font-weight:700;">'+esc(cName(c))+(c.company?'<div style="font-weight:400;color:var(--muted);font-size:11px;">'+esc(c.company)+'</div>':'')+'</td>'
-              +'<td style="color:var(--secondary);">'+esc(c.email||'—')+'</td>'
-              +'<td class="mono">'+esc(c.phone||'—')+'</td>'
-              +'<td>'+tags+'</td>'
-              +'<td style="text-align:right;" onclick="event.stopPropagation();"><span class="material-icons" title="Edit" onclick="openContact(\''+c.id+'\')" style="font-size:17px;color:var(--muted);cursor:pointer;">edit</span> <span class="material-icons" title="Delete" onclick="deleteContact(\''+c.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></td></tr>';
-        }).join('');
-        inner = '<div class="panel"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Tags</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-    }
-    host.innerHTML = toolbar + inner;
+    host.innerHTML = toolbar + tagFilters + '<div id="crmContactList"></div>';
+    renderContactList();
 }
+function renderContactList(){
+    var wrap = document.getElementById('crmContactList'); if(!wrap) return;
+    var list = _crmFiltered();
+    var cnt = document.getElementById('crmCount'); if(cnt) cnt.textContent = list.length + ' contact' + (list.length===1?'':'s');
+    if(!list.length){
+        wrap.innerHTML = '<div class="panel"><div class="empty"><span class="material-icons">contacts</span><h4>'+((CRM_Q||CRM_TAGFILTER)?'No matches':'No contacts yet')+'</h4><p>'+((CRM_Q||CRM_TAGFILTER)?'Try a different search or tag.':'Add your first contact to this CRM.')+'</p></div></div>';
+        return;
+    }
+    var rows = list.map(function(c){
+        var tags = (c.tags||[]).map(tagChip).join('') || '<span style="color:var(--muted);font-size:11px;">—</span>';
+        return '<tr style="cursor:pointer;" onclick="openContactDetail(\''+c.id+'\')">'
+          +'<td style="font-weight:700;">'+esc(cName(c))+(c.company?'<div style="font-weight:400;color:var(--muted);font-size:11px;">'+esc(c.company)+'</div>':'')+'</td>'
+          +'<td style="color:var(--secondary);">'+esc(c.email||'—')+'</td>'
+          +'<td class="mono">'+esc(c.phone||'—')+'</td>'
+          +'<td>'+tags+'</td>'
+          +'<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation();"><span class="material-icons" title="Edit" onclick="openContact(\''+c.id+'\')" style="font-size:17px;color:var(--muted);cursor:pointer;">edit</span> <span class="material-icons" title="Delete" onclick="deleteContact(\''+c.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></td></tr>';
+    }).join('');
+    wrap.innerHTML = '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Tags</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+window.crmFilter = function(v){ CRM_Q = v; renderContactList(); };
+window.toggleTagFilter = function(id){ CRM_TAGFILTER = (CRM_TAGFILTER===id ? '' : id); renderContacts(); var s=document.getElementById('crmSearch'); if(s){ s.value=CRM_Q; } };
 function tagCheckboxes(selectedIds){
     var sel = {}; (selectedIds||[]).forEach(function(id){ sel[id]=1; });
     var boxes = CRM_TAGS.map(function(t){
