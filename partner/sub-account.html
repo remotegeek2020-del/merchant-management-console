@@ -101,6 +101,61 @@
         }
         @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
         @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .cd-grid{grid-template-columns:1fr !important;} }
+        /* Conversations inbox */
+        .conv{ display:grid; grid-template-columns:340px 1fr; height:calc(100vh - 150px); min-height:500px; background:#fff; border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow-md); overflow:hidden; }
+        .conv-list{ border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; background:#fbfcfe; }
+        .conv-search{ padding:12px 12px 8px; }
+        .conv-search-wrap{ position:relative; }
+        .conv-search-wrap .material-icons{ position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:18px; color:var(--muted); pointer-events:none; }
+        .conv-search input{ width:100%; padding:9px 12px 9px 34px; border:1.5px solid var(--border); border-radius:10px; font-size:13px; font-family:inherit; outline:none; background:#fff; transition:border-color .15s, box-shadow .15s; }
+        .conv-search input:focus{ border-color:var(--teal); box-shadow:0 0 0 3px var(--teal-bg); }
+        .conv-filters{ display:flex; gap:6px; padding:2px 12px 10px; flex-wrap:wrap; border-bottom:1px solid var(--border); }
+        .conv-chip{ font-size:11px; font-weight:700; padding:5px 10px; border-radius:99px; border:1px solid var(--border); background:#fff; color:var(--secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-family:inherit; transition:all .12s; }
+        .conv-chip:hover{ border-color:var(--teal); color:var(--teal); }
+        .conv-chip.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
+        .conv-chip .material-icons{ font-size:14px; }
+        .conv-chip .cc{ font-size:10px; background:#eef2f6; color:#64748b; border-radius:99px; padding:0 6px; font-weight:800; }
+        .conv-chip.active .cc{ background:rgba(255,255,255,.25); color:#fff; }
+        .conv-threads{ flex:1; overflow-y:auto; min-height:0; }
+        .conv-thread{ display:flex; gap:11px; align-items:center; padding:12px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; transition:background .12s; }
+        .conv-thread:hover{ background:var(--teal-bg); }
+        .conv-thread.active{ background:var(--teal-bg); box-shadow:inset 3px 0 0 var(--teal); }
+        .conv-av{ width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--teal),var(--navy)); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; position:relative; }
+        .conv-av .ch{ position:absolute; right:-2px; bottom:-2px; width:18px; height:18px; border-radius:50%; background:#fff; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; }
+        .conv-av .ch .material-icons{ font-size:11px; color:var(--teal); }
+        .conv-tmid{ flex:1; min-width:0; }
+        .conv-tname{ font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .conv-tsnip{ font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+        .conv-tright{ text-align:right; flex-shrink:0; }
+        .conv-ttime{ font-size:10px; color:var(--muted); white-space:nowrap; }
+        .conv-tcount{ display:inline-block; margin-top:4px; font-size:10px; font-weight:800; background:var(--teal-bg); color:var(--teal); border-radius:99px; padding:1px 7px; }
+        .conv-main{ display:flex; flex-direction:column; min-height:0; }
+        .conv-head{ padding:13px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-shrink:0; }
+        .conv-head .conv-av{ width:38px; height:38px; font-size:13px; }
+        .conv-body{ flex:1; overflow-y:auto; padding:20px 18px; background:linear-gradient(180deg,#f8fafc,#eef2f7); min-height:0; display:flex; flex-direction:column; gap:4px; }
+        .bub-row{ display:flex; flex-direction:column; margin-bottom:8px; }
+        .bub-row.out{ align-items:flex-end; }
+        .bub{ max-width:76%; padding:9px 13px; border-radius:15px; font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:break-word; box-shadow:var(--shadow-sm); }
+        .bub-in{ background:#fff; border:1px solid var(--border); border-bottom-left-radius:4px; color:var(--text); }
+        .bub-out{ background:var(--teal); color:#fff; border-bottom-right-radius:4px; }
+        .bub-meta{ font-size:10px; color:var(--muted); margin:3px 4px 0; display:flex; align-items:center; gap:5px; }
+        .bub-meta .material-icons{ font-size:12px; }
+        .bub-meta .del{ cursor:pointer; color:#cbd5e1; }
+        .conv-daysep{ align-self:center; font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px; background:#fff; border:1px solid var(--border); border-radius:99px; padding:3px 12px; margin:8px 0; }
+        .conv-compose{ border-top:1px solid var(--border); padding:11px 12px; background:#fff; flex-shrink:0; }
+        .conv-ctabs{ display:flex; gap:4px; margin-bottom:9px; flex-wrap:wrap; }
+        .conv-ctab{ font-size:12px; font-weight:700; padding:6px 12px; border-radius:8px; border:none; background:#f1f5f9; color:var(--secondary); cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:5px; }
+        .conv-ctab .material-icons{ font-size:15px; }
+        .conv-ctab.active{ background:var(--teal); color:#fff; }
+        .conv-empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--muted); text-align:center; padding:40px; }
+        .conv-empty .material-icons{ font-size:52px; opacity:.25; margin-bottom:10px; }
+        .conv-back{ display:none; background:none; border:none; cursor:pointer; color:var(--teal); padding:2px; }
+        @media (max-width:820px){
+            .conv{ grid-template-columns:1fr; height:calc(100vh - 130px); }
+            .conv.showmain .conv-list{ display:none; }
+            .conv:not(.showmain) .conv-main{ display:none; }
+            .conv.showmain .conv-back{ display:inline-flex; }
+        }
     </style>
 </head>
 <body>
@@ -625,7 +680,9 @@ window.cdCompose=async function(pre){
     var payload=Object.assign({action:'send_email', contact_id:CURRENT_CONTACT.contact.id, thread_id:pre.thread_id, in_reply_to:pre.in_reply_to}, res.value);
     var r=await crmApi(payload);
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not send.','error'); return; }
-    crmToast('Email sent'); openContactDetail(CURRENT_CONTACT.contact.id);
+    crmToast('Email sent');
+    if(ACTIVE_SECTION==='conversations' && CONV_ACTIVE){ convOpen(CONV_ACTIVE); }
+    else openContactDetail(CURRENT_CONTACT.contact.id);
 };
 window.cdAddMsg=async function(){ var b=(document.getElementById('cdMsgBody').value||'').trim(); if(!b) return; var r=await crmApi({action:'add_message',contact_id:CURRENT_CONTACT.contact.id,channel:document.getElementById('cdMsgChan').value,direction:document.getElementById('cdMsgDir').value,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not log.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdDeleteMsg=async function(id){ await crmApi({action:'delete_message',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
@@ -750,24 +807,156 @@ async function loadReport(){
 }
 
 /* ── CONVERSATIONS (recent threads; open a contact to log/view) ─────────────── */
+/* ── CONVERSATIONS (two-pane inbox) ────────────────────────────────────────── */
+var CONV_THREADS=[], CONV_FILTER='all', CONV_Q='', CONV_ACTIVE=null, CONV_DETAIL=null, CONV_COMPOSE='note', CONV_LOG_DIR='outbound';
+var CONV_CHANNELS=[
+    {key:'all', label:'All', icon:'inbox'},
+    {key:'email', label:'Email', icon:'mail'},
+    {key:'sms', label:'SMS', icon:'sms'},
+    {key:'call', label:'Call', icon:'call'},
+    {key:'note', label:'Note', icon:'sticky_note_2'}
+];
+function convIcon(ch){ return ch==='call'?'call':ch==='email'?'mail':ch==='sms'?'sms':'sticky_note_2'; }
 async function loadConversations(){
     var host=document.getElementById('crmConv'); if(!host) return;
     var r=await crmApi({action:'list_conversations', sub_account_id:subId});
     if(r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
-    var threads=(r && r.success && r.threads)||[];
-    if(!threads.length){ host.innerHTML=emptyPanel('forum','No conversations yet','Log calls, emails, SMS and notes from a contact’s record — recent threads show up here.', false); return; }
-    var rows=threads.map(function(t){
+    CONV_THREADS=(r && r.success && r.threads)||[];
+    renderConvShell();
+}
+function convFilteredThreads(){
+    var q=(CONV_Q||'').toLowerCase();
+    return CONV_THREADS.filter(function(t){
+        var ch=(t.last&&t.last.channel)||'note';
+        if(CONV_FILTER!=='all' && ch!==CONV_FILTER) return false;
+        if(q){ var name=(t.contact?cName(t.contact):'').toLowerCase(); var snip=((t.last&&t.last.body)||'').toLowerCase(); if(name.indexOf(q)<0 && snip.indexOf(q)<0) return false; }
+        return true;
+    });
+}
+function convChips(){
+    return CONV_CHANNELS.map(function(c){
+        var n = c.key==='all' ? CONV_THREADS.length : CONV_THREADS.filter(function(t){ return ((t.last&&t.last.channel)||'note')===c.key; }).length;
+        return '<button class="conv-chip'+(CONV_FILTER===c.key?' active':'')+'" onclick="convSetFilter(\''+c.key+'\')"><span class="material-icons">'+c.icon+'</span>'+c.label+(n?'<span class="cc">'+n+'</span>':'')+'</button>';
+    }).join('');
+}
+function convThreadRows(){
+    var list=convFilteredThreads();
+    if(!list.length) return '<div style="padding:26px 16px;text-align:center;color:var(--muted);font-size:12px;">No conversations match.</div>';
+    return list.map(function(t){
         var name=t.contact?cName(t.contact):'Unknown';
         var last=t.last||{};
-        var icon=last.channel==='call'?'call':last.channel==='email'?'mail':last.channel==='sms'?'sms':'sticky_note_2';
-        var snip=last.body?esc(String(last.body).slice(0,90)):'';
-        return '<div onclick="openContactFrom(\''+t.contact_id+'\')" style="display:flex;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;">'
-          +'<span class="material-icons" style="color:var(--teal);">'+icon+'</span>'
-          +'<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">'+esc(name)+'</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+snip+'</div></div>'
-          +'<div style="font-size:11px;color:var(--muted);text-align:right;white-space:nowrap;">'+fmtDateTime(last.created_at)+'<div>'+t.count+' msg</div></div></div>';
+        var snip=last.body?esc(String(last.body).replace(/\s+/g,' ').slice(0,80)):'';
+        var pre=last.direction==='outbound'?'<span style="color:var(--teal);font-weight:700;">You: </span>':'';
+        return '<div class="conv-thread'+(CONV_ACTIVE===t.contact_id?' active':'')+'" data-cid="'+t.contact_id+'" onclick="convOpen(\''+t.contact_id+'\')">'
+          +'<div class="conv-av">'+initials(name)+'<span class="ch"><span class="material-icons">'+convIcon(last.channel)+'</span></span></div>'
+          +'<div class="conv-tmid"><div class="conv-tname">'+esc(name)+'</div><div class="conv-tsnip">'+pre+snip+'</div></div>'
+          +'<div class="conv-tright"><div class="conv-ttime">'+fmtDateTime(last.created_at)+'</div><span class="conv-tcount">'+t.count+'</span></div>'
+          +'</div>';
     }).join('');
-    host.innerHTML='<div class="panel">'+rows+'</div>';
 }
+function renderConvShell(){
+    var host=document.getElementById('crmConv'); if(!host) return;
+    if(!CONV_THREADS.length){ host.innerHTML=emptyPanel('forum','No conversations yet','Log calls, emails, SMS and notes from a contact’s record — recent threads show up here.', false); return; }
+    host.innerHTML='<div class="conv'+(CONV_ACTIVE?' showmain':'')+'" id="convWrap">'
+      +'<div class="conv-list">'
+      +'<div class="conv-search"><div class="conv-search-wrap"><span class="material-icons">search</span><input id="convSearch" placeholder="Search conversations…" value="'+esc(CONV_Q)+'" oninput="convSearch(this.value)"></div></div>'
+      +'<div class="conv-filters" id="convFilters">'+convChips()+'</div>'
+      +'<div class="conv-threads" id="convThreads">'+convThreadRows()+'</div>'
+      +'</div>'
+      +'<div class="conv-main" id="convMain">'+convMainHtml()+'</div>'
+      +'</div>';
+    convScrollBottom();
+}
+window.convSearch=function(v){ CONV_Q=v; var el=document.getElementById('convThreads'); if(el) el.innerHTML=convThreadRows(); };
+window.convSetFilter=function(f){ CONV_FILTER=f; var fe=document.getElementById('convFilters'); if(fe) fe.innerHTML=convChips(); var te=document.getElementById('convThreads'); if(te) te.innerHTML=convThreadRows(); };
+window.convBack=function(){ CONV_ACTIVE=null; CONV_DETAIL=null; var w=document.getElementById('convWrap'); if(w) w.classList.remove('showmain'); document.querySelectorAll('.conv-thread').forEach(function(el){ el.classList.remove('active'); }); var m=document.getElementById('convMain'); if(m) m.innerHTML=convMainHtml(); };
+window.convOpen=async function(cid){
+    CONV_ACTIVE=cid;
+    document.querySelectorAll('.conv-thread').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-cid')===cid); });
+    var w=document.getElementById('convWrap'); if(w) w.classList.add('showmain');
+    var main=document.getElementById('convMain'); if(main) main.innerHTML='<div class="conv-empty"><span class="material-icons">forum</span><div>Loading…</div></div>';
+    var r=await crmApi({action:'get_contact', id:cid});
+    CONV_DETAIL=(r&&r.success)?r:null;
+    if(CONV_DETAIL) CURRENT_CONTACT=CONV_DETAIL; // keep email compose/reply working from here
+    if(main) main.innerHTML=convMainHtml();
+    convScrollBottom();
+};
+function convMainHtml(){
+    if(!CONV_ACTIVE || !CONV_DETAIL){
+        return '<div class="conv-empty"><span class="material-icons">forum</span><h4 style="margin:0 0 4px;color:var(--secondary);">Select a conversation</h4><p style="margin:0;font-size:13px;">Pick a contact on the left to view and continue the thread.</p></div>';
+    }
+    var c=CONV_DETAIL.contact, name=cName(c);
+    var head='<div class="conv-head">'
+      +'<button class="conv-back" onclick="convBack()"><span class="material-icons">arrow_back</span></button>'
+      +'<div class="conv-av">'+initials(name)+'</div>'
+      +'<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;">'+esc(name)+'</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(c.email||c.phone||'')+'</div></div>'
+      +'<button onclick="openContactFrom(\''+c.id+'\')" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">open_in_new</span> Open record</button>'
+      +'</div>';
+    var msgs=(CONV_DETAIL.messages||[]).slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+    var body;
+    if(!msgs.length){ body='<div class="conv-empty"><span class="material-icons">chat</span><div style="font-size:13px;">No messages yet. Start the conversation below.</div></div>'; }
+    else {
+        var lastDay=''; var parts=[];
+        msgs.forEach(function(m){
+            var day=fmtDate(m.created_at);
+            if(day!==lastDay){ parts.push('<div class="conv-daysep">'+esc(day)+'</div>'); lastDay=day; }
+            var out=m.direction==='outbound';
+            parts.push('<div class="bub-row'+(out?' out':'')+'">'
+              +'<div class="bub '+(out?'bub-out':'bub-in')+'">'+esc(m.body)+'</div>'
+              +'<div class="bub-meta"><span class="material-icons">'+convIcon(m.channel)+'</span>'+esc((m.channel||'note'))+' · '+fmtDateTime(m.created_at)
+              +' <span class="material-icons del" title="Delete" onclick="convDelMsg(\''+m.id+'\')">delete</span></div>'
+              +'</div>');
+        });
+        body=parts.join('');
+    }
+    return head+'<div class="conv-body" id="convBody">'+body+'</div>'+convComposeHtml();
+}
+function convComposeHtml(){
+    var tabs=[
+        {key:'email', label:'Email', icon:'mail'},
+        {key:'sms', label:'SMS', icon:'sms'},
+        {key:'call', label:'Call', icon:'call'},
+        {key:'note', label:'Note', icon:'sticky_note_2'}
+    ];
+    var tabHtml=tabs.map(function(t){ return '<button class="conv-ctab'+(CONV_COMPOSE===t.key?' active':'')+'" data-ck="'+t.key+'" onclick="convSetCompose(\''+t.key+'\')"><span class="material-icons">'+t.icon+'</span>'+t.label+'</button>'; }).join('');
+    return '<div class="conv-compose" id="convCompose"><div class="conv-ctabs">'+tabHtml+'</div><div id="convComposeBody">'+convComposeBody()+'</div></div>';
+}
+function convComposeBody(){
+    if(CONV_COMPOSE==='email'){
+        var em=CONV_DETAIL&&CONV_DETAIL.contact&&CONV_DETAIL.contact.email;
+        if(!em) return '<div style="font-size:12px;color:var(--muted);padding:6px 2px;">This contact has no email address on file.</div>';
+        return '<div style="display:flex;gap:8px;align-items:center;"><button onclick="convComposeEmail()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:17px;">edit</span> Compose email</button><span style="font-size:12px;color:var(--muted);">Send a real email to '+esc(em)+' — appears here and on their record.</span></div>';
+    }
+    if(CONV_COMPOSE==='sms'){
+        return '<div style="display:flex;align-items:center;gap:12px;padding:6px 2px;border:1.5px dashed var(--border);border-radius:12px;background:var(--surface);padding:14px;">'
+          +'<span class="material-icons" style="font-size:30px;color:var(--muted);opacity:.6;">sms</span>'
+          +'<div><div style="font-weight:800;font-size:13px;color:var(--secondary);">Text messaging is coming soon <span class="soon" style="margin:0 0 0 6px;">SMS</span></div>'
+          +'<div style="font-size:12px;color:var(--muted);margin-top:3px;">Two-way SMS from your business number will land right in this thread. For now you can log an SMS manually under <b>Note</b>/<b>Call</b>.</div></div></div>';
+    }
+    // note / call → free-text log with direction
+    var ph=CONV_COMPOSE==='call'?'Log a call…':'Write a note…';
+    return '<div style="display:flex;gap:8px;align-items:flex-end;">'
+      +'<select id="convLogDir" onchange="CONV_LOG_DIR=this.value" style="padding:9px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;">'
+      +'<option value="outbound"'+(CONV_LOG_DIR==='outbound'?' selected':'')+'>Outbound</option><option value="inbound"'+(CONV_LOG_DIR==='inbound'?' selected':'')+'>Inbound</option></select>'
+      +'<textarea id="convLogBody" placeholder="'+ph+'" style="flex:1;min-height:40px;max-height:120px;padding:9px 12px;border:1.5px solid var(--border);border-radius:11px;font-size:13px;font-family:inherit;outline:none;resize:vertical;" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();convLog();}"></textarea>'
+      +'<button onclick="convLog()" style="background:var(--teal);color:#fff;border:none;border-radius:11px;width:44px;height:42px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;"><span class="material-icons">send</span></button></div>';
+}
+window.convSetCompose=function(k){
+    CONV_COMPOSE=k;
+    document.querySelectorAll('.conv-ctab').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-ck')===k); });
+    var el=document.getElementById('convComposeBody'); if(el) el.innerHTML=convComposeBody();
+};
+window.convLog=async function(){
+    var bodyEl=document.getElementById('convLogBody'); if(!bodyEl) return;
+    var body=(bodyEl.value||'').trim(); if(!body) return;
+    var channel=CONV_COMPOSE==='call'?'call':'note';
+    var r=await crmApi({action:'add_message', contact_id:CONV_ACTIVE, channel:channel, direction:CONV_LOG_DIR, body:body});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not log.','error'); return; }
+    await convOpen(CONV_ACTIVE);
+};
+window.convDelMsg=async function(id){ await crmApi({action:'delete_message', id:id}); await convOpen(CONV_ACTIVE); };
+window.convComposeEmail=function(){ if(CONV_DETAIL) CURRENT_CONTACT=CONV_DETAIL; cdCompose(); };
+function convScrollBottom(){ setTimeout(function(){ var b=document.getElementById('convBody'); if(b) b.scrollTop=b.scrollHeight; }, 30); }
 
 /* ── CALENDARS (appointments) ──────────────────────────────────────────────── */
 var CRM_APPTS=[];
