@@ -312,7 +312,10 @@ function handleLogout(){
 }
 
 /* ── CONTACTS (per-CRM, isolated by sub_account_id) ─────────────────────────── */
-var CRM_CONTACTS = [], CRM_TAGS = [], CRM_FIELDS = [], CRM_Q = '', CURRENT_CONTACT = null, _pendingContactId = null;
+var CRM_CONTACTS = [], CRM_TAGS = [], CRM_FIELDS = [], CRM_Q = '', CURRENT_CONTACT = null, _pendingContactId = null, CRM_MEMBERS = [];
+async function ensureMembers(){ if(CRM_MEMBERS.length) return; try{ var r=await crmApi({action:'crm_members', sub_account_id:subId}); CRM_MEMBERS=(r&&r.success&&r.members)||[]; }catch(e){} }
+function memberName(m){ return (m.full_name||m.email||'User'); }
+function ownerSelect(id, selected){ var opts='<option value="">— Unassigned —</option>'+CRM_MEMBERS.map(function(m){return '<option value="'+m.person_id+'"'+(selected===m.person_id?' selected':'')+'>'+esc(memberName(m))+'</option>';}).join(''); return '<select id="'+id+'" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+opts+'</select>'; }
 window.openContactFrom = function(id){ _pendingContactId = id; showSection('contacts'); };
 function fmtDate(s){ if(!s) return ''; try{ return new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return s; } }
 function fmtDateTime(s){ if(!s) return ''; try{ return new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return s; } }
@@ -402,6 +405,7 @@ window.addTagInModal = async function(){
     el.value='';
 };
 window.openContact = async function(id){
+    await ensureMembers();
     var c = id ? CRM_CONTACTS.filter(function(x){return x.id===id;})[0] : null;
     c = c || {};
     var selTags = (c.tags||[]).map(function(t){return t.id;});
@@ -416,6 +420,7 @@ window.openContact = async function(id){
       +f('Email','email','email')+f('Phone','phone')+f('Company','company')+f('Title','title')+f('Source','source')
       +'<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">Notes</label><textarea id="cf_notes" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;">'+esc(c.notes||'')+'</textarea>'
       + customHtml
+      + (CRM_MEMBERS.length ? '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:12px 2px 3px;">Assigned to</label>'+ownerSelect('cf_owner', c.owner_person_id||'') : '')
       +'<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:12px 2px 6px;">Tags</label>'+tagCheckboxes(selTags)
       +'</div>';
     var res = await Swal.fire({
@@ -425,6 +430,7 @@ window.openContact = async function(id){
             var g=function(k){ var e=document.getElementById('cf_'+k); return e?e.value.trim():''; };
             var tag_ids = Array.prototype.slice.call(document.querySelectorAll('.crmTagCb')).filter(function(x){return x.checked;}).map(function(x){return x.value;});
             var contact={first_name:g('first_name'),last_name:g('last_name'),email:g('email'),phone:g('phone'),company:g('company'),title:g('title'),source:g('source'),notes:g('notes')};
+            var ownEl=document.getElementById('cf_owner'); if(ownEl) contact.owner_person_id = ownEl.value||null;
             if(!contact.first_name && !contact.last_name && !contact.email && !contact.phone){ Swal.showValidationMessage('Enter at least a name, email or phone.'); return false; }
             var custom = collectCustom();
             for(var i=0;i<CRM_FIELDS.length;i++){ var fd=CRM_FIELDS[i]; if(fd.required && !String(custom[fd.field_key]||'').trim()){ Swal.showValidationMessage(fd.label+' is required.'); return false; } }
@@ -523,19 +529,40 @@ async function cdLoadEmails(){
     if(r.no_email){ host.innerHTML='<div style="color:var(--muted);">Add an email address to this contact to see their emails.</div>'; return; }
     if(r.needs_connect){ host.innerHTML='<div style="color:var(--muted);">Connect your email in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a> to see and send email here.</div>'; return; }
     if(r.needs_reauth){ host.innerHTML='<div style="color:var(--muted);">Reconnect your email (new inbox permission needed) in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a>.</div>'; return; }
-    var emails=r.emails||[];
-    if(!emails.length){ host.innerHTML='<div style="color:var(--muted);">No emails with '+esc(CURRENT_CONTACT.contact.email||'')+' yet.</div>'; return; }
-    host.innerHTML=emails.map(function(e){
+    window._cdEmails = r.emails||[];
+    window._cdEmailPage = 0;
+    cdRenderEmailList();
+}
+var CD_EMAIL_PER = 7;
+function cdRenderEmailList(){
+    var host=document.getElementById('cdEmailBody'); if(!host) return;
+    var emails=window._cdEmails||[];
+    if(!emails.length){ host.innerHTML='<div style="color:var(--muted);">No emails with '+esc((CURRENT_CONTACT&&CURRENT_CONTACT.contact.email)||'')+' yet.</div>'; return; }
+    var pages=Math.ceil(emails.length/CD_EMAIL_PER);
+    var pg=Math.min(window._cdEmailPage||0, pages-1);
+    var slice=emails.slice(pg*CD_EMAIL_PER, (pg+1)*CD_EMAIL_PER);
+    var rows=slice.map(function(e){
         var d=e.date?fmtDateTime(e.date):'';
         var who=e.outbound?('To: '+esc(e.to)):('From: '+esc(e.from));
-        return '<div onclick="cdOpenEmail(\''+e.id+'\',\''+esc((e.subject||'').replace(/\x27/g,"&#39;"))+'\')" style="padding:9px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;">'
-          +'<div style="display:flex;justify-content:space-between;gap:8px;"><div style="font-weight:'+(e.unread?'800':'600')+';font-size:13px;">'+esc(e.subject||'(no subject)')+'</div><div style="font-size:11px;color:var(--muted);white-space:nowrap;">'+d+'</div></div>'
-          +'<div style="font-size:11px;color:var(--muted);">'+(e.outbound?'<span style="color:var(--teal);font-weight:700;">Sent</span> · ':'')+who+'</div>'
-          +'<div style="font-size:12px;color:var(--secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(e.snippet||'')+'</div></div>';
+        var extra='';
+        if(e.cc) extra+='<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Cc: '+esc(e.cc)+'</div>';
+        if(e.bcc) extra+='<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Bcc: '+esc(e.bcc)+'</div>';
+        return '<div onclick="cdOpenEmail(\''+e.id+'\',\''+esc((e.subject||'').replace(/\x27/g,"&#39;"))+'\')" style="padding:10px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;">'
+          +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><div style="font-weight:800;font-size:13px;'+(e.unread?'':'')+'">'+(e.unread?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);margin-right:6px;vertical-align:middle;"></span>':'')+esc(e.subject||'(no subject)')+'</div><div style="font-size:11px;color:var(--muted);white-space:nowrap;">'+d+'</div></div>'
+          +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(e.outbound?'<span style="color:var(--teal);font-weight:700;">Sent</span> · ':'')+who+'</div>'
+          +extra
+          +'<div style="font-size:12px;color:var(--secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+esc(e.snippet||'')+'</div></div>';
     }).join('');
-    // stash for reply threading
-    window._cdEmails = emails;
+    var nav;
+    if(pages>1){
+        nav='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;">'
+          +'<button onclick="cdEmailPage(-1)" '+(pg<=0?'disabled':'')+' style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:'+(pg<=0?'default':'pointer')+';opacity:'+(pg<=0?'.5':'1')+';">‹ Prev</button>'
+          +'<span style="color:var(--muted);font-weight:600;">'+(pg*CD_EMAIL_PER+1)+'–'+Math.min((pg+1)*CD_EMAIL_PER,emails.length)+' of '+emails.length+'</span>'
+          +'<button onclick="cdEmailPage(1)" '+(pg>=pages-1?'disabled':'')+' style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:'+(pg>=pages-1?'default':'pointer')+';opacity:'+(pg>=pages-1?'.5':'1')+';">Next ›</button></div>';
+    } else { nav='<div style="font-size:11px;color:var(--muted);margin-top:8px;">'+emails.length+' email'+(emails.length===1?'':'s')+'</div>'; }
+    host.innerHTML=rows+nav;
 }
+window.cdEmailPage=function(delta){ var emails=window._cdEmails||[]; var pages=Math.ceil(emails.length/CD_EMAIL_PER); window._cdEmailPage=Math.max(0,Math.min((window._cdEmailPage||0)+delta,pages-1)); cdRenderEmailList(); };
 window.cdOpenEmail=async function(id, subject){
     var meta=(window._cdEmails||[]).filter(function(x){return x.id===id;})[0]||{};
     Swal.fire({title:esc(subject||'Email'), html:'<div id="emlWrap" style="text-align:left;"><div style="color:#94a3b8;font-size:12px;">Loading…</div></div>', width:680, showConfirmButton:true, confirmButtonText:'Reply', showCancelButton:true, cancelButtonText:'Close', confirmButtonColor:'#0d9488',
@@ -837,10 +864,20 @@ function renderCrmSettings(){
     var addBtn = function(fn,label){ return '<button onclick="'+fn+'" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">add</span> '+label+'</button>'; };
     host.innerHTML =
       emailPanel()
+      + visibilityPanel()
       +'<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Custom Fields</div><div style="font-size:12px;color:var(--muted);">Extra fields shown on the contact form for this CRM.</div></div>'+addBtn('openField()','Add field')+'</div>'+fieldRows+'</div>'
       +'<div class="panel" style="padding:18px 20px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Tags</div><div style="font-size:12px;color:var(--muted);">Labels to segment contacts in this CRM.</div></div>'+addBtn('openTag()','Add tag')+'</div>'+tagRows+'</div>';
 }
 function fieldIcon(t){ return t==='dropdown'?'arrow_drop_down_circle':t==='date'?'event':t==='number'?'pin':t==='checkbox'?'check_box':t==='textarea'?'notes':'text_fields'; }
+function visibilityPanel(){
+    var canM = ['owner','agency_admin','god'].indexOf(DATA&&DATA.my_role)>=0;
+    var on = DATA && DATA.restrict_to_assigned===true;
+    if(!canM){ return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Visibility</div><div style="font-size:12px;color:var(--muted);margin-top:4px;">'+(on?'You see only the contacts &amp; deals assigned to you.':'You can see all contacts &amp; deals in this CRM.')+'</div></div>'; }
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Team &amp; Visibility</div><div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Control what non-admin members can see in this CRM.</div>'
+      +'<label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;cursor:pointer;"><input type="checkbox" '+(on?'checked':'')+' onchange="crmSetVisibility(this.checked)"> Members see only contacts &amp; deals assigned to them</label>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">Owners and agency admins always see everything. Set an owner with the “Assigned to” field on a contact or deal.</div></div>';
+}
+window.crmSetVisibility=async function(on){ if(DATA) DATA.restrict_to_assigned=!!on; var r=await crmApi({action:'set_crm_setting', sub_account_id:subId, restrict_to_assigned:!!on}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Visibility saved'); };
 
 window.openField = async function(id){
     var fd = id ? CRM_FIELDS.filter(function(x){return x.id===id;})[0] : null; fd=fd||{};
@@ -944,6 +981,7 @@ async function moveDeal(id, stageId){
     if(r.opportunity) o.status = r.opportunity.status;
 }
 window.openDeal = async function(id, prefill){
+    await ensureMembers();
     var o = id ? CRM_OPPS.filter(function(x){return x.id===id;})[0] : null; o=o||{};
     if(!id && prefill) o=Object.assign({}, prefill);
     var lab=function(t){ return '<label style="display:block;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.4px;margin:8px 2px 3px;">'+t+'</label>'; };
@@ -956,11 +994,12 @@ window.openDeal = async function(id, prefill){
       +lab('Contact')+'<select id="dlContact" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+contactOpts+'</select>'
       +lab('Stage')+'<select id="dlStage" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+stageOpts+'</select>'
       +lab('Expected close')+'<input id="dlClose" type="date" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(o.expected_close_date||'')+'">'
+      +(CRM_MEMBERS.length?lab('Assigned to')+ownerSelect('dlOwner', o.owner_person_id||''):'')
       +lab('Notes')+'<textarea id="dlNotes" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;">'+esc(o.notes||'')+'</textarea>'
       +(id?'<div style="margin-top:12px;text-align:left;"><a onclick="deleteDeal(\''+id+'\')" style="color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;">Delete deal</a></div>':'')
       +'</div>';
     var res = await Swal.fire({ title:id?'Edit deal':'New deal', html:html, width:480, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
-        preConfirm:function(){ var t=(document.getElementById('dlTitle').value||'').trim(); if(!t){ Swal.showValidationMessage('Enter a deal title.'); return false; } return {title:t, value:document.getElementById('dlValue').value, contact_id:document.getElementById('dlContact').value||null, stage_id:document.getElementById('dlStage').value, expected_close_date:document.getElementById('dlClose').value||null, notes:document.getElementById('dlNotes').value}; }});
+        preConfirm:function(){ var t=(document.getElementById('dlTitle').value||'').trim(); if(!t){ Swal.showValidationMessage('Enter a deal title.'); return false; } var ownEl=document.getElementById('dlOwner'); return {title:t, value:document.getElementById('dlValue').value, contact_id:document.getElementById('dlContact').value||null, stage_id:document.getElementById('dlStage').value, expected_close_date:document.getElementById('dlClose').value||null, notes:document.getElementById('dlNotes').value, owner_person_id: ownEl?(ownEl.value||null):undefined}; }});
     if(!res.isConfirmed) return;
     var r = id ? await crmApi({action:'update_opportunity', id:id, opp:res.value}) : await crmApi({action:'create_opportunity', sub_account_id:subId, opp:res.value});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }

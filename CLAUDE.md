@@ -514,3 +514,17 @@ user's own connected mailbox, and reply — feels like actual email inside the a
 - CAVEAT: gmail.readonly is a Google RESTRICTED scope → needs CASA security assessment for
   production/external users (works for testing / own accounts now). This is why HighLevel uses a
   dedicated mailbox. Live Gmail/Graph calls can't be tested from dev — verify on Vercel.
+
+## CRM: assigned-data visibility + email list polish (2026-08-14)
+- Migration `crm_restrict_to_assigned`: agency_sub_accounts.restrict_to_assigned bool.
+- crm.js: assignedFilter(acc) → when a CRM restricts and the member isn't owner/agency_admin/god,
+  list_contacts & list_opportunities filter to owner_person_id = them. create_contact/create_opportunity
+  default owner_person_id = creator; update accepts owner_person_id. New actions crm_members
+  (people who can access this CRM, for the "Assigned to" picker) + set_crm_setting (owner/admin only).
+  get_sub_account returns restrict_to_assigned.
+- sub-account.html: contact & deal modals get an "Assigned to" dropdown (ensureMembers/ownerSelect);
+  CRM Settings gets a "Team & Visibility" panel (toggle, owner/admin only; others see read-only note).
+- Email list polish: contact_emails returns Cc + Bcc (Gmail metadataHeaders / Graph select). Contact
+  record Email card now paginates (7/page, Prev/Next + count), bold subject, unread dot, shows Cc/Bcc.
+- Clarified: live email is per-USER mailbox (each sees only their own inbox). Per-CRM email connection
+  recommended as a NEXT build (currently one connection per person via partner_email_connections).

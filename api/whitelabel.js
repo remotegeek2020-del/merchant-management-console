@@ -475,6 +475,7 @@ export default async function handler(req, res) {
                     agency: portal ? { portal_id: portal.id, relationship_id: portal.relationship_id, agency_name: portal.agency_name } : null,
                     my_role: god ? 'god' : mem.role,
                     my_permissions: (god || mem.role === 'owner') ? {} : (mem.permissions || {}),
+                    restrict_to_assigned: sub.restrict_to_assigned === true,
                     objects: {
                         merchants,
                         partner_ids: { count: partnerIds.length, sample: partnerIds },

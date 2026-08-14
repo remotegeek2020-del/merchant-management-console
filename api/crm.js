@@ -88,12 +88,17 @@ export default async function handler(req, res) {
         }
 
         // ── CONTACTS ─────────────────────────────────────────────────────────
+        // Owner-scope filter: null (see all) unless this CRM restricts non-admins to their own.
+        function assignedFilter(acc) {
+            return (acc.sub && acc.sub.restrict_to_assigned && !['owner', 'agency_admin', 'god'].includes(acc.role)) ? personId : null;
+        }
+
         if (action === 'list_contacts') {
             const acc = await subAccess(personId, body.sub_account_id, 'contacts');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
-            const { data: contacts } = await supabase.from('crm_contacts')
-                .select('*').eq('sub_account_id', body.sub_account_id)
-                .order('created_at', { ascending: false }).limit(1000);
+            let cq = supabase.from('crm_contacts').select('*').eq('sub_account_id', body.sub_account_id);
+            const own = assignedFilter(acc); if (own) cq = cq.eq('owner_person_id', own);
+            const { data: contacts } = await cq.order('created_at', { ascending: false }).limit(1000);
             let list = contacts || [];
             if (body.q) {
                 const q = String(body.q).toLowerCase();
@@ -116,6 +121,7 @@ export default async function handler(req, res) {
             const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, created_by: personId };
             CONTACT_FIELDS.forEach(k => { row[k] = (f[k] === '' || f[k] === undefined) ? null : f[k]; });
             if (!row.status) row.status = 'active';
+            row.owner_person_id = f.owner_person_id || personId; // default: assigned to creator
             if (body.custom && typeof body.custom === 'object') row.custom = body.custom;
             const { data, error } = await supabase.from('crm_contacts').insert(row).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not create contact.' });
@@ -129,6 +135,7 @@ export default async function handler(req, res) {
             const f = body.contact || {};
             const patch = {};
             CONTACT_FIELDS.forEach(k => { if (k in f) patch[k] = f[k] === '' ? null : f[k]; });
+            if ('owner_person_id' in f) patch.owner_person_id = f.owner_person_id || null;
             if (body.custom && typeof body.custom === 'object') patch.custom = body.custom;
             const { data, error } = await supabase.from('crm_contacts').update(patch).eq('id', body.id).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not update contact.' });
@@ -262,9 +269,9 @@ export default async function handler(req, res) {
         if (action === 'list_opportunities') {
             const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
-            const { data: opps } = await supabase.from('crm_opportunities')
-                .select('*').eq('sub_account_id', body.sub_account_id)
-                .order('position', { ascending: true }).order('created_at', { ascending: true }).limit(2000);
+            let oq = supabase.from('crm_opportunities').select('*').eq('sub_account_id', body.sub_account_id);
+            const oown = assignedFilter(acc); if (oown) oq = oq.eq('owner_person_id', oown);
+            const { data: opps } = await oq.order('position', { ascending: true }).order('created_at', { ascending: true }).limit(2000);
             const list = opps || [];
             const cids = [...new Set(list.map(o => o.contact_id).filter(Boolean))];
             const cmap = {};
@@ -292,7 +299,7 @@ export default async function handler(req, res) {
                 sub_account_id: body.sub_account_id, portal_id: acc.portal_id, pipeline_id: pid, stage_id: stageId,
                 contact_id: o.contact_id || null, title, value_cents: Math.round(Number(o.value || 0) * 100) || 0,
                 status: o.status || 'open', expected_close_date: o.expected_close_date || null, notes: o.notes || null,
-                position: pos, created_by: personId
+                owner_person_id: o.owner_person_id || personId, position: pos, created_by: personId
             };
             const { data, error } = await supabase.from('crm_opportunities').insert(row).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not create deal.' });
@@ -311,6 +318,7 @@ export default async function handler(req, res) {
             if ('status' in o) patch.status = o.status;
             if ('expected_close_date' in o) patch.expected_close_date = o.expected_close_date || null;
             if ('notes' in o) patch.notes = o.notes === '' ? null : o.notes;
+            if ('owner_person_id' in o) patch.owner_person_id = o.owner_person_id || null;
             const { data, error } = await supabase.from('crm_opportunities').update(patch).eq('id', body.id).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not update deal.' });
             return res.status(200).json({ success: true, opportunity: data });
@@ -582,6 +590,29 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── TEAM / VISIBILITY ────────────────────────────────────────────────
+        // People who can access this CRM (for the "Assigned to" picker).
+        if (action === 'crm_members') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: mems } = await supabase.from('partner_portal_members').select('*').eq('portal_id', acc.portal_id);
+            const eligible = (mems || []).filter(m => m.role === 'owner' || m.role === 'agency_admin' || (m.role === 'crm_admin' && m.scope && Array.isArray(m.scope.sub_account_ids) && m.scope.sub_account_ids.includes(body.sub_account_id)));
+            const pids = eligible.map(m => m.person_id);
+            let people = {};
+            if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
+            return res.status(200).json({ success: true, members: eligible.map(m => ({ person_id: m.person_id, role: m.role, full_name: (people[m.person_id] || {}).full_name || null, email: (people[m.person_id] || {}).email || null })) });
+        }
+        // Owner/admin-only: per-CRM visibility setting.
+        if (action === 'set_crm_setting') {
+            const acc = await subAccess(personId, body.sub_account_id);
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            if (!['owner', 'agency_admin', 'god'].includes(acc.role)) return res.status(403).json({ success: false, message: 'Only owners and agency admins can change this.' });
+            const patch = {};
+            if ('restrict_to_assigned' in body) patch.restrict_to_assigned = !!body.restrict_to_assigned;
+            if (Object.keys(patch).length) await supabase.from('agency_sub_accounts').update(patch).eq('id', body.sub_account_id);
+            return res.status(200).json({ success: true });
+        }
+
         // ── EMAIL (live from the acting user's connected mailbox, filtered to the contact) ──
         if (action === 'contact_emails') {
             const ca = await contactAccess(body.id, 'conversations');
@@ -600,20 +631,20 @@ export default async function handler(req, res) {
                     const list = await lr.json();
                     const ids = (list.messages || []).map(m => m.id);
                     const emails = await Promise.all(ids.map(async id => {
-                        const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`, { headers: { Authorization: 'Bearer ' + at } });
+                        const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Bcc&metadataHeaders=Subject&metadataHeaders=Date`, { headers: { Authorization: 'Bearer ' + at } });
                         const m = await mr.json();
                         const h = {}; ((m.payload && m.payload.headers) || []).forEach(x => h[x.name.toLowerCase()] = x.value);
-                        return { id: m.id, thread_id: m.threadId, from: h.from || '', to: h.to || '', cc: h.cc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
+                        return { id: m.id, thread_id: m.threadId, from: h.from || '', to: h.to || '', cc: h.cc || '', bcc: h.bcc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
                     }));
                     emails.sort((a, b) => (b.date || 0) - (a.date || 0));
                     return res.status(200).json({ success: true, emails, address: conn.email });
                 } else if (conn.provider === 'microsoft') {
-                    const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$search="${encodeURIComponent(to)}"&$top=25&$select=id,conversationId,from,toRecipients,ccRecipients,subject,receivedDateTime,bodyPreview,isRead`, { headers: { Authorization: 'Bearer ' + at, ConsistencyLevel: 'eventual' } });
+                    const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$search="${encodeURIComponent(to)}"&$top=25&$select=id,conversationId,from,toRecipients,ccRecipients,bccRecipients,subject,receivedDateTime,bodyPreview,isRead`, { headers: { Authorization: 'Bearer ' + at, ConsistencyLevel: 'eventual' } });
                     if (r.status === 403) return res.status(200).json({ success: true, emails: [], needs_reauth: true });
                     const d = await r.json();
                     const emails = (d.value || []).map(m => ({
                         id: m.id, thread_id: m.conversationId, from: (m.from && m.from.emailAddress && m.from.emailAddress.address) || '',
-                        to: (m.toRecipients || []).map(x => x.emailAddress.address).join(', '), cc: (m.ccRecipients || []).map(x => x.emailAddress.address).join(', '),
+                        to: (m.toRecipients || []).map(x => x.emailAddress.address).join(', '), cc: (m.ccRecipients || []).map(x => x.emailAddress.address).join(', '), bcc: (m.bccRecipients || []).map(x => x.emailAddress.address).join(', '),
                         subject: m.subject || '(no subject)', date: m.receivedDateTime ? new Date(m.receivedDateTime).getTime() : null, snippet: m.bodyPreview || '', unread: m.isRead === false, outbound: false
                     })).sort((a, b) => (b.date || 0) - (a.date || 0));
                     return res.status(200).json({ success: true, emails, address: conn.email });
