@@ -475,6 +475,18 @@ export default async function handler(req, res) {
         }
 
         // ── REPORTING (aggregates from this CRM's own data) ──────────────────
+        // Open tasks across the CRM (for the Dashboard "tasks due" list).
+        if (action === 'list_tasks') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: tasks } = await supabase.from('crm_tasks').select('*').eq('sub_account_id', body.sub_account_id).eq('done', false).order('due_date', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false }).limit(50);
+            const list = tasks || [];
+            const cids = [...new Set(list.map(t => t.contact_id).filter(Boolean))];
+            const cmap = {};
+            if (cids.length) { const { data: cs } = await supabase.from('crm_contacts').select('id, first_name, last_name, email').in('id', cids); (cs || []).forEach(c => cmap[c.id] = c); }
+            return res.status(200).json({ success: true, tasks: list.map(t => ({ ...t, contact: t.contact_id ? (cmap[t.contact_id] || null) : null })) });
+        }
+
         if (action === 'get_report') {
             const acc = await subAccess(personId, body.sub_account_id, 'reporting');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });

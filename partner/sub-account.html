@@ -89,6 +89,8 @@
         .deal-val { font-size:12px; font-weight:800; color:var(--teal); font-family:'DM Mono',monospace; white-space:nowrap; }
         .deal-meta { font-size:11px; color:var(--muted); margin-top:4px; }
         .stage-won .col-title { color:var(--green-text); } .stage-lost .col-title { color:#b91c1c; }
+        .dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; align-items:start; }
+        @media (max-width:768px){ .dash-grid{ grid-template-columns:1fr; } }
         @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
         @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .cd-grid{grid-template-columns:1fr !important;} }
     </style>
@@ -198,18 +200,54 @@ var SECTIONS = {
     sub_partners: subPartnersPanel,
     settings: function(){ setTimeout(loadCrmSettings, 0); return '<div id="crmSettings"><div class="empty"><span class="material-icons">settings</span><h4>Loading settings…</h4></div></div>'; }
 };
-function dashboardSection(){
-    if(!DATA) return '';
-    var sa=DATA.sub_account, o=DATA.objects;
-    return '<div class="sa-head"><div class="sa-icon"><span class="material-icons">'+(sa.type==='company'?'business':'person')+'</span></div>'
-      +'<div><div class="sa-title">'+esc(sa.name)+'</div><span class="type-badge type-'+sa.type+'">'+(sa.type==='company'?'Company':'Client')+'</span></div></div>'
-      +'<div class="kpi-grid">'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">storefront</span> Merchants</div><div class="kpi-value">'+o.merchants.count.toLocaleString()+'</div></div>'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">badge</span> Partner IDs</div><div class="kpi-value">'+o.partner_ids.count+'</div></div>'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">account_tree</span> Sub-Partners</div><div class="kpi-value">'+o.sub_partners.count+'</div></div>'
-      +'<div class="kpi"><div class="kpi-label"><span class="material-icons" style="font-size:13px;">person_search</span> Leads</div><div class="kpi-value">'+o.leads.count+'</div></div>'
-      +'</div>'
-      +'<div class="panel"><div class="empty" style="padding:36px 24px;"><span class="material-icons">dashboard_customize</span><h4>Welcome to '+esc(sa.name)+'</h4><p>Use the left menu. Contacts is live; Opportunities, Conversations, Calendars, Automation and Reporting are on the way.</p></div></div>';
+function dashboardSection(){ setTimeout(loadDashboard, 0); return '<div id="crmDash"><div class="empty"><span class="material-icons">dashboard</span><h4>Loading…</h4></div></div>'; }
+async function loadDashboard(){
+    var host=document.getElementById('crmDash'); if(!host) return;
+    var res=await Promise.all([
+        crmApi({action:'get_report', sub_account_id:subId}),
+        crmApi({action:'list_appointments', sub_account_id:subId}),
+        crmApi({action:'list_tasks', sub_account_id:subId})
+    ]);
+    var rep=(res[0]&&res[0].success)?res[0].report:null;
+    var appts=(res[1]&&res[1].success&&res[1].appointments)||[];
+    var tasks=(res[2]&&res[2].success&&res[2].tasks)||[];
+    renderDashboard(rep, appts, tasks);
+}
+function renderDashboard(rep, appts, tasks){
+    var host=document.getElementById('crmDash'); if(!host||!DATA) return;
+    var sa=DATA.sub_account;
+    var head='<div class="sa-head"><div class="sa-icon"><span class="material-icons">'+(sa.type==='company'?'business':'person')+'</span></div><div><div class="sa-title">'+esc(sa.name)+'</div><span class="type-badge type-'+sa.type+'">'+(sa.type==='company'?'Company':'Client')+'</span></div></div>';
+    var tile=function(label,val,icon,color,onclick){ return '<div class="kpi"'+(onclick?' style="cursor:pointer;" onclick="'+onclick+'"':'')+'><div class="kpi-label"><span class="material-icons" style="font-size:13px;'+(color?'color:'+color+';':'')+'">'+icon+'</span> '+label+'</div><div class="kpi-value"'+(color?' style="color:'+color+';"':'')+'>'+val+'</div></div>'; };
+    var tiles;
+    if(rep){
+        tiles='<div class="kpi-grid">'
+          +tile('Contacts', rep.contacts.toLocaleString(), 'contacts', '', "showSection('contacts')")
+          +tile('Open deals', rep.open_count+' · '+money(rep.open_value_cents/100), 'trending_up', '', "showSection('opportunities')")
+          +tile('Won', money(rep.won_value_cents/100), 'emoji_events', '#166534')
+          +tile('Tasks due', rep.tasks_open+(rep.tasks_overdue?(' · '+rep.tasks_overdue+' overdue'):''), 'task_alt', rep.tasks_overdue?'#b91c1c':'')
+          +'</div>';
+    } else {
+        var o=DATA.objects;
+        tiles='<div class="kpi-grid">'
+          +tile('Merchants', o.merchants.count.toLocaleString(),'storefront')
+          +tile('Partner IDs', o.partner_ids.count,'badge')
+          +tile('Sub-Partners', o.sub_partners.count,'account_tree')
+          +tile('Leads', o.leads.count,'person_search')
+          +'</div>';
+    }
+    var pipe='';
+    if(rep && rep.by_stage && rep.by_stage.length){
+        var maxV=Math.max.apply(null,[1].concat(rep.by_stage.map(function(s){return s.value_cents;})));
+        var bars=rep.by_stage.map(function(s){ var w=Math.round((s.value_cents/maxV)*100); var col=s.is_won?'#22c55e':(s.is_lost?'#ef4444':'var(--teal)'); return '<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="font-weight:700;">'+esc(s.name)+' <span style="color:var(--muted);font-weight:500;">· '+s.count+'</span></span><span class="mono" style="font-weight:700;">'+money(s.value_cents/100)+'</span></div><div style="height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+w+'%;background:'+col+';border-radius:99px;"></div></div></div>'; }).join('');
+        pipe='<div class="panel" style="padding:16px 18px;margin-top:6px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-weight:800;font-size:14px;">Pipeline</div><a onclick="showSection(\'opportunities\')" style="color:var(--teal);font-weight:700;font-size:12px;cursor:pointer;">Open board →</a></div>'+bars+'</div>';
+    }
+    var taskRows=(tasks||[]).slice(0,6).map(function(t){ var overdue=t.due_date&&new Date(t.due_date)<new Date(new Date().toDateString()); var who=t.contact?cName(t.contact):''; return '<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f6f8fb;"><div><div style="font-size:13px;font-weight:600;">'+esc(t.title)+'</div>'+(who?'<div style="font-size:11px;color:var(--muted);">'+esc(who)+'</div>':'')+'</div>'+(t.due_date?'<div style="font-size:11px;font-weight:700;color:'+(overdue?'#b91c1c':'var(--muted)')+';white-space:nowrap;">'+fmtDate(t.due_date)+'</div>':'')+'</div>'; }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No open tasks.</div>';
+    var tasksPanel='<div class="panel" style="padding:16px 18px;"><div style="font-weight:800;font-size:14px;margin-bottom:10px;">Tasks due</div>'+taskRows+'</div>';
+    var today=new Date(new Date().toDateString());
+    var up=(appts||[]).filter(function(a){return a.status!=='cancelled'&&new Date(a.starts_at)>=today;}).slice(0,5);
+    var apptRows=up.map(function(a){ var d=new Date(a.starts_at); var who=a.contact?cName(a.contact):''; return '<div style="display:flex;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid #f6f8fb;"><div style="text-align:center;min-width:42px;"><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;">'+d.toLocaleDateString(undefined,{month:'short'})+'</div><div style="font-size:16px;font-weight:800;line-height:1;">'+d.getDate()+'</div></div><div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+esc(a.title)+'</div><div style="font-size:11px;color:var(--muted);">'+d.toLocaleString(undefined,{hour:'numeric',minute:'2-digit'})+(who?(' · '+esc(who)):'')+'</div></div></div>'; }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No upcoming appointments.</div>';
+    var apptPanel='<div class="panel" style="padding:16px 18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-weight:800;font-size:14px;">Upcoming</div><a onclick="showSection(\'calendars\')" style="color:var(--teal);font-weight:700;font-size:12px;cursor:pointer;">Calendar →</a></div>'+apptRows+'</div>';
+    host.innerHTML=head+tiles+pipe+'<div class="dash-grid">'+tasksPanel+apptPanel+'</div>';
 }
 var ACTIVE_SECTION='';
 function showSection(key){
