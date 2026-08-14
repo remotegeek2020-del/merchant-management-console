@@ -776,7 +776,7 @@ async function loadEmailConnections() {
 async function connectEmail(provider) {
     const btn = document.getElementById(provider === 'google' ? 'btnGoogle' : 'btnMicrosoft');
     btn.disabled = true; btn.style.opacity = '0.6';
-    const res = await api('partner-data', { action: 'get_oauth_url', token, provider });
+    const res = await api('partner-data', { action: 'get_oauth_url', token, provider, return_to: location.href });
     btn.disabled = false; btn.style.opacity = '1';
     if (!res.success) {
         document.getElementById('oauthMsg').innerHTML = `<span style="color:#dc2626;">${res.message}</span>`;

@@ -67,7 +67,7 @@ async function refreshMicrosoftToken(refreshToken) {
             client_secret: process.env.MICROSOFT_CLIENT_SECRET,
             refresh_token: refreshToken,
             grant_type:    'refresh_token',
-            scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access'
+            scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access'
         })
     });
     return r.json();
@@ -169,6 +169,21 @@ export default async function handler(req, res) {
     const { personId, provider } = payload;
     if (!personId || !provider) return redirect('Missing session data.');
 
+    // Return the user to the ORIGINATING (branded) page so their per-domain
+    // session survives — the callback lives on the portal domain, but branded
+    // users must land back on their own domain. Only same-family hosts allowed.
+    let retUrl = null;
+    try {
+        if (payload.ret && /^https:\/\//i.test(payload.ret)) {
+            const u = new URL(payload.ret);
+            const host = u.hostname.toLowerCase();
+            let ok = ['portal.mypayprotec.com', 'app.mypayprotec.com'].includes(host);
+            if (!ok) { const { data } = await supabase.from('portal_brands').select('host').eq('host', host).eq('active', true).maybeSingle(); ok = !!data; }
+            if (ok) retUrl = u.origin + u.pathname;
+        }
+    } catch (e) {}
+    const done = (msg) => res.redirect((retUrl || `${PORTAL_URL}/partner/settings`) + '?oauth_msg=' + encodeURIComponent(msg));
+
     try {
         let tokenRes, email;
 
@@ -185,7 +200,7 @@ export default async function handler(req, res) {
                 })
             });
             tokenRes = await r.json();
-            if (!tokenRes.access_token) return redirect('Google auth failed: ' + (tokenRes.error_description || tokenRes.error));
+            if (!tokenRes.access_token) return done('Google auth failed: ' + (tokenRes.error_description || tokenRes.error));
             // Extract email from id_token JWT (openid email scope — no extra API call needed)
             const idPayload = JSON.parse(Buffer.from(tokenRes.id_token.split('.')[1], 'base64url').toString());
             email = idPayload.email;
@@ -202,11 +217,11 @@ export default async function handler(req, res) {
                     client_secret: process.env.MICROSOFT_CLIENT_SECRET,
                     redirect_uri:  REDIRECT_URI,
                     grant_type:    'authorization_code',
-                    scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access'
+                    scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access'
                 })
             });
             tokenRes = await r.json();
-            if (!tokenRes.access_token) return redirect('Microsoft auth failed: ' + (tokenRes.error_description || tokenRes.error));
+            if (!tokenRes.access_token) return done('Microsoft auth failed: ' + (tokenRes.error_description || tokenRes.error));
             const profile = await (await fetch('https://graph.microsoft.com/v1.0/me', {
                 headers: { Authorization: `Bearer ${tokenRes.access_token}` }
             })).json();
@@ -224,9 +239,9 @@ export default async function handler(req, res) {
             updated_at:    new Date().toISOString()
         }, { onConflict: 'person_id,provider' });
 
-        return redirect(`Connected: ${email}`);
+        return done(`Connected: ${email}`);
     } catch (err) {
         console.error('[partner-oauth]', err);
-        return redirect('Error: ' + (err.message || 'Unknown error. Check Vercel logs.'));
+        return done('Error: ' + (err.message || 'Unknown error. Check Vercel logs.'));
     }
 }

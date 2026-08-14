@@ -1050,7 +1050,7 @@ export default async function handler(req, res) {
             const REDIRECT_URI = `${PORTAL_URL}/api/partner-oauth`;
             const { createHmac } = await import('crypto');
             const STATE_SECRET = process.env.TOKEN_ENCRYPTION_KEY || 'fallback-secret';
-            const payload = { personId, provider, ts: Date.now() };
+            const payload = { personId, provider, ts: Date.now(), ret: (typeof req.body.return_to === 'string' ? req.body.return_to.slice(0, 300) : null) };
             const b64  = Buffer.from(JSON.stringify(payload)).toString('base64url');
             const sig  = createHmac('sha256', STATE_SECRET).update(b64).digest('hex').slice(0, 16);
             const state = `${b64}.${sig}`;

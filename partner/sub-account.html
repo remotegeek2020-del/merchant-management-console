@@ -789,7 +789,7 @@ async function loadCrmSettings(){
     renderCrmSettings();
 }
 window.crmConnectEmail = async function(provider){
-    var r = await pdApi({action:'get_oauth_url', provider:provider});
+    var r = await pdApi({action:'get_oauth_url', provider:provider, return_to: location.href});
     if(r && r.success && r.url){ window.location.href = r.url; }
     else Swal.fire('Not available',(r&&r.message)||'Email connect is not configured yet.','info');
 };
