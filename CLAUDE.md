@@ -494,3 +494,23 @@ Per-agency preset login designs (custom CSS/JS is a future step).
   spotlight pulse, logo pop; reduced-motion guarded.
 - agency-settings.html: Login Screen card gains wording inputs (saveLoginCopy) + App Theme card
   (10 swatches, saveAppTheme). Custom CSS/JS still future.
+
+## CRM live email (per-user mailbox, filtered to contact) 2026-08-14
+Goal (user): open a contact → see all real emails to/from/cc that person from the acting
+user's own connected mailbox, and reply — feels like actual email inside the app.
+- Reuses partner_email_connections (per person, Gmail/Outlook OAuth). Scope upgraded in
+  api/partner-data.js get_oauth_url: Google += gmail.readonly; Microsoft += Mail.Read.
+  EXISTING connections were send-only → users must RECONNECT to grant inbox read (UI shows
+  "Reconnect" via needs_reauth).
+- api/crm.js imports getValidAccessToken from partner-oauth.js. Actions (all contactAccess +
+  'conversations' area gated): contact_emails (Gmail search from:/to:/cc: the contact, or Graph
+  $search; returns metadata list), email_body (full body; Gmail parts walk / Graph body),
+  send_email (Gmail raw MIME send with threadId+In-Reply-To / Graph sendMail; logs a crm_messages
+  outbound row). Helpers emailConn/extractGmailBody/b64url.
+- partner/sub-account.html contact record: new "Email" card lists the contact's real emails
+  (subject/from/date/snippet, Sent tag), click → body modal (rendered in a sandboxed iframe),
+  Reply/Compose modal → send_email. needs_connect/needs_reauth link to CRM Settings.
+- CRM Settings already shows the same per-user email connection (connect/disconnect).
+- CAVEAT: gmail.readonly is a Google RESTRICTED scope → needs CASA security assessment for
+  production/external users (works for testing / own accounts now). This is why HighLevel uses a
+  dedicated mailbox. Live Gmail/Graph calls can't be tested from dev — verify on Vercel.

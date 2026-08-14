@@ -1062,7 +1062,7 @@ export default async function handler(req, res) {
                     client_id:     process.env.GOOGLE_CLIENT_ID,
                     redirect_uri:  REDIRECT_URI,
                     response_type: 'code',
-                    scope:         'https://www.googleapis.com/auth/gmail.send openid email',
+                    scope:         'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly openid email',
                     access_type:   'offline',
                     prompt:        'consent',
                     state
@@ -1074,7 +1074,7 @@ export default async function handler(req, res) {
                     client_id:     process.env.MICROSOFT_CLIENT_ID,
                     redirect_uri:  REDIRECT_URI,
                     response_type: 'code',
-                    scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access',
+                    scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access',
                     prompt:        'select_account',
                     state
                 });

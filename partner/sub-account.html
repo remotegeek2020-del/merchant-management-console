@@ -509,10 +509,63 @@ function renderContactDetail(){
     }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No deals yet.</div>';
     var dealsCard='<div class="panel" id="cdDeals" style="padding:16px 18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;">Deals</div><button onclick="cdAddDeal()" style="background:#fff;color:var(--teal);border:1px solid var(--teal);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;">+ Add deal</button></div>'+dealItems+'</div>';
 
+    var emailCard='<div class="panel" id="cdEmails" style="padding:16px 18px;margin-bottom:16px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;">Email</div><button onclick="cdCompose()" style="background:var(--teal);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;">Compose</button></div><div id="cdEmailBody" style="font-size:12px;color:var(--muted);padding:6px 0;">Loading email…</div></div>';
     host.innerHTML='<div style="margin-bottom:14px;"><a onclick="renderContacts()" style="display:inline-flex;align-items:center;gap:5px;color:var(--teal);font-weight:700;font-size:13px;cursor:pointer;"><span class="material-icons" style="font-size:17px;">arrow_back</span> Contacts</a></div>'
       +'<div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;" class="cd-grid">'
-      +'<div>'+infoCard+'</div><div>'+tasksCard+convCard+notesCard+dealsCard+'</div></div>';
+      +'<div>'+infoCard+'</div><div>'+emailCard+tasksCard+convCard+notesCard+dealsCard+'</div></div>';
+    setTimeout(cdLoadEmails, 0);
 }
+/* ── Live email for this contact (from the acting user's connected mailbox) ── */
+async function cdLoadEmails(){
+    var host=document.getElementById('cdEmailBody'); if(!host||!CURRENT_CONTACT) return;
+    var r=await crmApi({action:'contact_emails', id:CURRENT_CONTACT.contact.id});
+    if(!r||!r.success){ host.innerHTML='<div style="color:var(--muted);">Could not load email.</div>'; return; }
+    if(r.no_email){ host.innerHTML='<div style="color:var(--muted);">Add an email address to this contact to see their emails.</div>'; return; }
+    if(r.needs_connect){ host.innerHTML='<div style="color:var(--muted);">Connect your email in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a> to see and send email here.</div>'; return; }
+    if(r.needs_reauth){ host.innerHTML='<div style="color:var(--muted);">Reconnect your email (new inbox permission needed) in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a>.</div>'; return; }
+    var emails=r.emails||[];
+    if(!emails.length){ host.innerHTML='<div style="color:var(--muted);">No emails with '+esc(CURRENT_CONTACT.contact.email||'')+' yet.</div>'; return; }
+    host.innerHTML=emails.map(function(e){
+        var d=e.date?fmtDateTime(e.date):'';
+        var who=e.outbound?('To: '+esc(e.to)):('From: '+esc(e.from));
+        return '<div onclick="cdOpenEmail(\''+e.id+'\',\''+esc((e.subject||'').replace(/\x27/g,"&#39;"))+'\')" style="padding:9px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;">'
+          +'<div style="display:flex;justify-content:space-between;gap:8px;"><div style="font-weight:'+(e.unread?'800':'600')+';font-size:13px;">'+esc(e.subject||'(no subject)')+'</div><div style="font-size:11px;color:var(--muted);white-space:nowrap;">'+d+'</div></div>'
+          +'<div style="font-size:11px;color:var(--muted);">'+(e.outbound?'<span style="color:var(--teal);font-weight:700;">Sent</span> · ':'')+who+'</div>'
+          +'<div style="font-size:12px;color:var(--secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(e.snippet||'')+'</div></div>';
+    }).join('');
+    // stash for reply threading
+    window._cdEmails = emails;
+}
+window.cdOpenEmail=async function(id, subject){
+    var meta=(window._cdEmails||[]).filter(function(x){return x.id===id;})[0]||{};
+    Swal.fire({title:esc(subject||'Email'), html:'<div id="emlWrap" style="text-align:left;"><div style="color:#94a3b8;font-size:12px;">Loading…</div></div>', width:680, showConfirmButton:true, confirmButtonText:'Reply', showCancelButton:true, cancelButtonText:'Close', confirmButtonColor:'#0d9488',
+        didOpen: async function(){
+            var r=await crmApi({action:'email_body', contact_id:CURRENT_CONTACT.contact.id, message_id:id});
+            var wrap=document.getElementById('emlWrap'); if(!wrap) return;
+            if(r&&r.success&&(r.html||r.text)){
+                if(r.html){ var f=document.createElement('iframe'); f.setAttribute('sandbox',''); f.style.cssText='width:100%;height:52vh;border:1px solid #e2e8f0;border-radius:8px;background:#fff;'; wrap.innerHTML=''; wrap.appendChild(f); f.srcdoc=r.html; }
+                else { wrap.innerHTML='<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;max-height:52vh;overflow:auto;">'+esc(r.text)+'</pre>'; }
+            } else { wrap.innerHTML='<div style="color:#94a3b8;">Could not load the message body.</div>'; }
+        }
+    }).then(function(res){ if(res.isConfirmed){ cdCompose({to:(meta.outbound?meta.to:meta.from), subject:(/^re:/i.test(subject||'')?subject:'Re: '+(subject||'')), thread_id:meta.thread_id}); } });
+};
+window.cdCompose=async function(pre){
+    pre=pre||{};
+    var to = pre.to || (CURRENT_CONTACT && CURRENT_CONTACT.contact.email) || '';
+    // extract bare email from "Name <email>" if present
+    var m=String(to).match(/<([^>]+)>/); if(m) to=m[1];
+    var html='<div style="text-align:left;">'
+      +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">To</label><input id="emTo" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(to)+'">'
+      +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Subject</label><input id="emSubj" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(pre.subject||'')+'">'
+      +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">Message</label><textarea id="emBody" class="swal2-textarea" style="margin:4px 0 0;width:100%;min-height:150px;font-size:13px;"></textarea></div>';
+    var res=await Swal.fire({title:pre.thread_id?'Reply':'New email', html:html, width:600, showCancelButton:true, confirmButtonText:'Send', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){ var t=(document.getElementById('emTo').value||'').trim(); var b=(document.getElementById('emBody').value||'').trim(); if(!t){Swal.showValidationMessage('Enter a recipient.');return false;} if(!b){Swal.showValidationMessage('Write a message.');return false;} return {to:t, subject:(document.getElementById('emSubj').value||'').trim(), body:b}; }});
+    if(!res.isConfirmed) return;
+    var payload=Object.assign({action:'send_email', contact_id:CURRENT_CONTACT.contact.id, thread_id:pre.thread_id}, res.value);
+    var r=await crmApi(payload);
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not send.','error'); return; }
+    crmToast('Email sent'); openContactDetail(CURRENT_CONTACT.contact.id);
+};
 window.cdAddMsg=async function(){ var b=(document.getElementById('cdMsgBody').value||'').trim(); if(!b) return; var r=await crmApi({action:'add_message',contact_id:CURRENT_CONTACT.contact.id,channel:document.getElementById('cdMsgChan').value,direction:document.getElementById('cdMsgDir').value,body:b}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not log.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdDeleteMsg=async function(id){ await crmApi({action:'delete_message',id:id}); openContactDetail(CURRENT_CONTACT.contact.id); };
 window.cdAddTask=async function(){ var el=document.getElementById('cdTaskTitle'),du=document.getElementById('cdTaskDue'); var t=(el.value||'').trim(); if(!t) return; var r=await crmApi({action:'add_task',contact_id:CURRENT_CONTACT.contact.id,title:t,due_date:du.value||null}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add task.','error'); return; } openContactDetail(CURRENT_CONTACT.contact.id); };

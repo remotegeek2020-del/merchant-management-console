@@ -5,10 +5,31 @@
 //   • portal gods pass
 // This mirrors get_sub_account in whitelabel.js so access stays consistent.
 import { createClient } from '@supabase/supabase-js';
+import { getValidAccessToken } from './partner-oauth.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// The acting user's connected mailbox (provider + address), or null.
+async function emailConn(personId) {
+    const { data } = await supabase.from('partner_email_connections').select('provider, email').eq('person_id', personId).limit(1);
+    return (data && data[0]) || null;
+}
+function b64urlDecode(s) { try { return Buffer.from(String(s || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch (e) { return ''; } }
+function b64urlEncode(s) { return Buffer.from(s, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+// Walk a Gmail payload tree for the best text/html (fallback text/plain) body.
+function extractGmailBody(payload) {
+    var html = '', text = '';
+    (function walk(p) {
+        if (!p) return;
+        var mt = p.mimeType || '';
+        if (mt === 'text/html' && p.body && p.body.data) html = html || b64urlDecode(p.body.data);
+        else if (mt === 'text/plain' && p.body && p.body.data) text = text || b64urlDecode(p.body.data);
+        (p.parts || []).forEach(walk);
+    })(payload);
+    return { html: html, text: text };
+}
 
 async function validatePartner(token) {
     if (!token) return null;
@@ -559,6 +580,96 @@ export default async function handler(req, res) {
             if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
             await supabase.from('crm_forms').delete().eq('id', body.id);
             return res.status(200).json({ success: true });
+        }
+
+        // ── EMAIL (live from the acting user's connected mailbox, filtered to the contact) ──
+        if (action === 'contact_emails') {
+            const ca = await contactAccess(body.id, 'conversations');
+            if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
+            const to = ca.contact.email;
+            if (!to) return res.status(200).json({ success: true, emails: [], no_email: true });
+            const conn = await emailConn(personId);
+            if (!conn) return res.status(200).json({ success: true, emails: [], needs_connect: true });
+            const at = await getValidAccessToken(personId, conn.provider);
+            if (!at) return res.status(200).json({ success: true, emails: [], needs_connect: true });
+            try {
+                if (conn.provider === 'google') {
+                    const q = encodeURIComponent(`from:${to} OR to:${to} OR cc:${to}`);
+                    const lr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`, { headers: { Authorization: 'Bearer ' + at } });
+                    if (lr.status === 403) return res.status(200).json({ success: true, emails: [], needs_reauth: true });
+                    const list = await lr.json();
+                    const ids = (list.messages || []).map(m => m.id);
+                    const emails = await Promise.all(ids.map(async id => {
+                        const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`, { headers: { Authorization: 'Bearer ' + at } });
+                        const m = await mr.json();
+                        const h = {}; ((m.payload && m.payload.headers) || []).forEach(x => h[x.name.toLowerCase()] = x.value);
+                        return { id: m.id, thread_id: m.threadId, from: h.from || '', to: h.to || '', cc: h.cc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
+                    }));
+                    emails.sort((a, b) => (b.date || 0) - (a.date || 0));
+                    return res.status(200).json({ success: true, emails, address: conn.email });
+                } else if (conn.provider === 'microsoft') {
+                    const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$search="${encodeURIComponent(to)}"&$top=25&$select=id,conversationId,from,toRecipients,ccRecipients,subject,receivedDateTime,bodyPreview,isRead`, { headers: { Authorization: 'Bearer ' + at, ConsistencyLevel: 'eventual' } });
+                    if (r.status === 403) return res.status(200).json({ success: true, emails: [], needs_reauth: true });
+                    const d = await r.json();
+                    const emails = (d.value || []).map(m => ({
+                        id: m.id, thread_id: m.conversationId, from: (m.from && m.from.emailAddress && m.from.emailAddress.address) || '',
+                        to: (m.toRecipients || []).map(x => x.emailAddress.address).join(', '), cc: (m.ccRecipients || []).map(x => x.emailAddress.address).join(', '),
+                        subject: m.subject || '(no subject)', date: m.receivedDateTime ? new Date(m.receivedDateTime).getTime() : null, snippet: m.bodyPreview || '', unread: m.isRead === false, outbound: false
+                    })).sort((a, b) => (b.date || 0) - (a.date || 0));
+                    return res.status(200).json({ success: true, emails, address: conn.email });
+                }
+                return res.status(200).json({ success: true, emails: [] });
+            } catch (e) { return res.status(200).json({ success: true, emails: [], error: 'Could not load email.' }); }
+        }
+
+        if (action === 'email_body') {
+            const ca = await contactAccess(body.contact_id, 'conversations');
+            if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
+            const conn = await emailConn(personId);
+            const at = conn && await getValidAccessToken(personId, conn.provider);
+            if (!at) return res.status(400).json({ success: false, message: 'Email not connected.' });
+            try {
+                if (conn.provider === 'google') {
+                    const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${body.message_id}?format=full`, { headers: { Authorization: 'Bearer ' + at } });
+                    const m = await mr.json();
+                    const parts = extractGmailBody(m.payload);
+                    return res.status(200).json({ success: true, html: parts.html, text: parts.text });
+                } else {
+                    const mr = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${body.message_id}?$select=body`, { headers: { Authorization: 'Bearer ' + at } });
+                    const m = await mr.json();
+                    const isHtml = m.body && m.body.contentType === 'html';
+                    return res.status(200).json({ success: true, html: isHtml ? m.body.content : '', text: isHtml ? '' : (m.body && m.body.content) || '' });
+                }
+            } catch (e) { return res.status(500).json({ success: false, message: 'Could not load message.' }); }
+        }
+
+        if (action === 'send_email') {
+            const ca = await contactAccess(body.contact_id, 'conversations');
+            if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
+            const conn = await emailConn(personId);
+            const at = conn && await getValidAccessToken(personId, conn.provider);
+            if (!at) return res.status(400).json({ success: false, message: 'Connect your email first.' });
+            const to = (body.to || ca.contact.email || '').trim();
+            const subject = (body.subject || '').trim() || '(no subject)';
+            const html = (body.body || '').replace(/\n/g, '<br>');
+            if (!to) return res.status(400).json({ success: false, message: 'No recipient email.' });
+            try {
+                if (conn.provider === 'google') {
+                    var mime = ['To: ' + to, 'From: ' + conn.email, 'Subject: ' + subject, 'Content-Type: text/html; charset=UTF-8', 'MIME-Version: 1.0'];
+                    if (body.in_reply_to) { mime.push('In-Reply-To: ' + body.in_reply_to); mime.push('References: ' + body.in_reply_to); }
+                    mime = mime.join('\r\n') + '\r\n\r\n' + html;
+                    const payload = { raw: b64urlEncode(mime) };
+                    if (body.thread_id) payload.threadId = body.thread_id;
+                    const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!r.ok) return res.status(500).json({ success: false, message: 'Gmail send failed.' });
+                } else {
+                    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] } }) });
+                    if (r.status !== 202) return res.status(500).json({ success: false, message: 'Outlook send failed.' });
+                }
+                // Log to the CRM conversation as an outbound email.
+                await supabase.from('crm_messages').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, direction: 'outbound', channel: 'email', body: 'Subject: ' + subject + '\n\n' + (body.body || ''), created_by: personId });
+                return res.status(200).json({ success: true });
+            } catch (e) { return res.status(500).json({ success: false, message: 'Could not send email.' }); }
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });
