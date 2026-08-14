@@ -1028,6 +1028,13 @@ export default async function handler(req, res) {
                 .limit(12);
             return res.status(200).json({ success: true, people: data || [] });
         }
+        if (action === 'search_companies') {
+            const q = String(body.q || '').trim();
+            if (q.length < 2) return res.status(200).json({ success: true, companies: [] });
+            const like = `%${q.replace(/[%_]/g, '')}%`;
+            const { data } = await supabase.from('companies').select('id, company_name').ilike('company_name', like).order('company_name', { ascending: true }).limit(12);
+            return res.status(200).json({ success: true, companies: data || [] });
+        }
 
         // ── Owners & admins management (staff) ──────────────────────────────────
         if (action === 'get_members') {
