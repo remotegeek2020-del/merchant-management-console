@@ -624,18 +624,22 @@ export default async function handler(req, res) {
             const at = await getValidAccessToken(personId, conn.provider);
             if (!at) return res.status(200).json({ success: true, emails: [], needs_connect: true });
             try {
+                const needle = String(to).toLowerCase().trim();
                 if (conn.provider === 'google') {
-                    const q = encodeURIComponent(`from:${to} OR to:${to} OR cc:${to}`);
+                    // Curly braces = OR in Gmail; quote the address so it isn't tokenized into loose terms.
+                    const q = encodeURIComponent(`{from:"${to}" to:"${to}" cc:"${to}" bcc:"${to}"}`);
                     const lr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`, { headers: { Authorization: 'Bearer ' + at } });
                     if (lr.status === 403) return res.status(200).json({ success: true, emails: [], needs_reauth: true });
                     const list = await lr.json();
                     const ids = (list.messages || []).map(m => m.id);
-                    const emails = await Promise.all(ids.map(async id => {
+                    let emails = await Promise.all(ids.map(async id => {
                         const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Bcc&metadataHeaders=Subject&metadataHeaders=Date`, { headers: { Authorization: 'Bearer ' + at } });
                         const m = await mr.json();
                         const h = {}; ((m.payload && m.payload.headers) || []).forEach(x => h[x.name.toLowerCase()] = x.value);
                         return { id: m.id, thread_id: m.threadId, from: h.from || '', to: h.to || '', cc: h.cc || '', bcc: h.bcc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
                     }));
+                    // Safety net: only keep messages whose From/To/Cc/Bcc actually contain the contact's address.
+                    emails = emails.filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle));
                     emails.sort((a, b) => (b.date || 0) - (a.date || 0));
                     return res.status(200).json({ success: true, emails, address: conn.email });
                 } else if (conn.provider === 'microsoft') {
@@ -646,7 +650,10 @@ export default async function handler(req, res) {
                         id: m.id, thread_id: m.conversationId, from: (m.from && m.from.emailAddress && m.from.emailAddress.address) || '',
                         to: (m.toRecipients || []).map(x => x.emailAddress.address).join(', '), cc: (m.ccRecipients || []).map(x => x.emailAddress.address).join(', '), bcc: (m.bccRecipients || []).map(x => x.emailAddress.address).join(', '),
                         subject: m.subject || '(no subject)', date: m.receivedDateTime ? new Date(m.receivedDateTime).getTime() : null, snippet: m.bodyPreview || '', unread: m.isRead === false, outbound: false
-                    })).sort((a, b) => (b.date || 0) - (a.date || 0));
+                    }))
+                    // Safety net: $search is fuzzy full-text — keep only messages actually involving the contact.
+                    .filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle))
+                    .sort((a, b) => (b.date || 0) - (a.date || 0));
                     return res.status(200).json({ success: true, emails, address: conn.email });
                 }
                 return res.status(200).json({ success: true, emails: [] });
