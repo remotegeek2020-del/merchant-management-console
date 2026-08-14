@@ -93,8 +93,74 @@
         .mm-card .input-wrap { text-align:left; margin-bottom:8px; }
         .mm-err { color:#dc2626; font-size:12.5px; text-align:left; margin:2px 2px 12px; display:none; }
     </style>
+    <style id="login-templates">
+        /* ── Agency login-screen preset templates (set via data-login-template on <html>) ── */
+        #brandPanel { display:none; }
+        #brandPanel .bp-name { font-size:2rem; font-weight:800; line-height:1.15; }
+        #brandPanel .bp-tag { font-size:15px; opacity:.82; max-width:360px; line-height:1.5; }
+
+        /* 2 · Split — brand panel left, form right */
+        html[data-login-template="split"] #brandPanel { display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:14px; position:fixed; left:0; top:0; bottom:0; width:44%; padding:6vw; background:linear-gradient(160deg,var(--navy),var(--teal)); color:#fff; }
+        html[data-login-template="split"] #brandPanel img { height:44px; filter:none; }
+        html[data-login-template="split"] body { justify-content:flex-end; padding:0 max(6vw,32px); }
+        html[data-login-template="split"] .card { box-shadow:none; border:1px solid #e2e8f0; }
+
+        /* 3 · Glass — glassmorphism over a brand gradient */
+        html[data-login-template="glass"] body { background:linear-gradient(135deg,var(--navy),var(--teal)); }
+        html[data-login-template="glass"] .card { background:rgba(255,255,255,0.13); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border:1px solid rgba(255,255,255,0.28); box-shadow:0 30px 60px rgba(0,0,0,0.35); }
+        html[data-login-template="glass"] .card h1 { color:#fff; }
+        html[data-login-template="glass"] .card .sub, html[data-login-template="glass"] .card label { color:rgba(255,255,255,.85); }
+        html[data-login-template="glass"] .card input { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); color:#fff; }
+        html[data-login-template="glass"] .card input::placeholder { color:rgba(255,255,255,.6); }
+
+        /* 4 · Minimal — plain, quiet */
+        html[data-login-template="minimal"] body { background:#f6f7f9; }
+        html[data-login-template="minimal"] .card { box-shadow:none; border:1px solid #e6e8ec; max-width:380px; padding:34px 30px; }
+
+        /* 5 · Dark */
+        html[data-login-template="dark"] body { background:#0b1020; }
+        html[data-login-template="dark"] .card { background:#111827; border:1px solid #1f2937; box-shadow:0 30px 60px rgba(0,0,0,0.5); }
+        html[data-login-template="dark"] .card h1 { color:#f9fafb; }
+        html[data-login-template="dark"] .card .sub { color:#9ca3af; }
+        html[data-login-template="dark"] .card label { color:#cbd5e1; }
+        html[data-login-template="dark"] .card input { background:#1f2937; border-color:#374151; color:#fff; }
+        html[data-login-template="dark"] .card input::placeholder { color:#6b7280; }
+        html[data-login-template="dark"] .footer-note { color:#6b7280; }
+
+        /* 6 · Mesh — animated brand gradient */
+        @keyframes bp-mesh { 0%,100%{background-position:0% 50%,100% 50%} 50%{background-position:100% 50%,0% 50%} }
+        html[data-login-template="mesh"] body { background:radial-gradient(60% 60% at 15% 20%,var(--teal),transparent 60%),radial-gradient(60% 60% at 85% 80%,var(--navy),transparent 60%),#0b1020; background-size:200% 200%; animation:bp-mesh 16s ease infinite; }
+
+        /* 7 · Spotlight — white card glows on near-black */
+        html[data-login-template="spotlight"] body { background:radial-gradient(circle at 50% 28%, rgba(255,255,255,0.06), transparent 42%),#0a0f1c; }
+        html[data-login-template="spotlight"] .card { box-shadow:0 0 120px rgba(13,148,136,0.35),0 30px 60px rgba(0,0,0,0.5); }
+
+        /* 8 · Aurora — soft colored glows */
+        html[data-login-template="aurora"] body { background:radial-gradient(40% 40% at 15% 20%, rgba(13,148,136,.5), transparent), radial-gradient(45% 45% at 85% 25%, rgba(99,102,241,.45), transparent), radial-gradient(45% 55% at 50% 95%, rgba(236,72,153,.35), transparent), #0b1224; }
+
+        /* 9 · Corporate — clean, top accent bar */
+        html[data-login-template="corporate"] body { background:#eef1f5; }
+        html[data-login-template="corporate"] .card { border-top:5px solid var(--teal); box-shadow:0 12px 30px rgba(0,0,0,0.08); }
+
+        /* 10 · Bold — full brand background, big mark above the card */
+        html[data-login-template="bold"] body { flex-direction:column; gap:22px; background:linear-gradient(140deg,var(--teal),var(--navy)); }
+        html[data-login-template="bold"] #brandPanel { display:flex; flex-direction:column; align-items:center; gap:8px; color:#fff; text-align:center; }
+        html[data-login-template="bold"] #brandPanel img { height:52px; filter:none; }
+        html[data-login-template="bold"] #brandPanel .bp-tag { display:none; }
+
+        @media (max-width:800px){
+            html[data-login-template="split"] #brandPanel { display:none; }
+            html[data-login-template="split"] body { justify-content:center; padding:20px; }
+        }
+    </style>
 </head>
 <body>
+
+<div id="brandPanel">
+    <img data-brand-panel-logo src="/api/brand-logo" alt="">
+    <div class="bp-name" data-brand-panel-name>Partner Portal</div>
+    <div class="bp-tag">Sign in to your dedicated partner portal.</div>
+</div>
 
 <div class="card" id="loginCard">
     <img src="/api/brand-logo" class="logo" data-brand-logo alt="Partner Portal">

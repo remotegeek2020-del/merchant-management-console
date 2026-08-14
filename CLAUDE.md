@@ -466,3 +466,16 @@ Two new app_users flags (migration `staff_agency_login_perms`): `access_grant_ag
   can_login_as, hides "Grant Agency Access" + the whole ownership panel unless can_grant_agency.
 - user-management.html: two Elevated toggles (Grant Agency Access, Login As Partner);
   api/users.js selects + ALLOWED_BATCH_FIELDS updated.
+
+## Agency login-screen templates (2026-08-14)
+Per-agency preset login designs (custom CSS/JS is a future step).
+- Migration `login_template`: `login_template` text default 'classic' on partner_portals + portal_brands.
+- whitelabel.js BRAND_FIELDS += 'login_template' (saved on portal, mirrored to portal_brands via
+  syncBrandingToDomains; returned by get_agency_branding). api/brand.js publicBrand returns it.
+- js/brand.js applyLoginTemplate: sets <html data-login-template> + fills #brandPanel
+  ([data-brand-panel-logo]/[data-brand-panel-name]). js/brand-boot.js also sets it from cache (no flash).
+- partner/index.html: #brandPanel DOM + <style id="login-templates"> with 10 presets keyed on
+  html[data-login-template=...]: classic, split, glass, minimal, dark, mesh, spotlight, aurora,
+  corporate, bold. Templates restyle bg/card using brand --teal/--navy; split & bold use #brandPanel.
+- partner/agency-settings.html: "Login Screen" card = 10 preview swatches; saveLoginTemplate()
+  saves via save_agency_branding {branding:{login_template}}. Only canonical host stays default.

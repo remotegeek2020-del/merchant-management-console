@@ -138,7 +138,7 @@ async function agencyCompanies(portalId) {
 }
 
 // Agency branding fields (kept on partner_portals; mirrored to each domain's brand row).
-const BRAND_FIELDS = ['logo_url', 'favicon_url', 'color_primary', 'color_dark', 'color_accent', 'support_email'];
+const BRAND_FIELDS = ['logo_url', 'favicon_url', 'color_primary', 'color_dark', 'color_accent', 'support_email', 'login_template'];
 // Push the agency's branding onto every custom-domain brand row so the live white-label
 // portal (resolved by host from portal_brands) reflects it.
 async function syncBrandingToDomains(portalId, agencyName) {

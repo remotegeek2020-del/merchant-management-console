@@ -73,6 +73,16 @@
         document.querySelectorAll('[data-hide-branded]').forEach(function (el) { el.style.display = 'none'; });
     }
 
+    // Login-screen preset: set the template on <html> and fill the optional
+    // brand side-panel (used by split/showcase templates) with logo + name.
+    function applyLoginTemplate(b) {
+        var tpl = (b && b.login_template) || 'classic';
+        document.documentElement.setAttribute('data-login-template', tpl);
+        var panelLogo = document.querySelector('[data-brand-panel-logo]');
+        if (panelLogo && b.logo_url) { panelLogo.src = b.logo_url; panelLogo.style.filter = 'none'; }
+        document.querySelectorAll('[data-brand-panel-name]').forEach(function (el) { if (b.name) el.textContent = b.name; });
+    }
+
     function applyBrand(b) {
         if (!b) return;
         window._portalBrand = b;
@@ -84,6 +94,7 @@
         applyFavicon(b.favicon_url);
         applyName(b.name);
         hideBrandedOff();
+        applyLoginTemplate(b);
         document.documentElement.setAttribute('data-branded', '1');
 
         // Re-apply logos shortly after: partner-nav.js / page scripts inject the

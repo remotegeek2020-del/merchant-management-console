@@ -140,8 +140,46 @@ function render(){
     document.getElementById('content').innerHTML =
       '<div class="crumb"><a href="/partner/home">Home</a> › <a href="'+ag+'">Agency</a> › Settings <span class="rel" style="margin-left:6px;">'+esc(DATA.relationship_id||'')+'</span></div>'
       + brandingCard
+      + loginTemplateCard()
       + domainCard();
 }
+
+function loginTemplateCard(){
+    var cm = DATA.can_manage;
+    var cur = (DATA.branding && DATA.branding.login_template) || 'classic';
+    var tpls = [
+        {k:'classic',name:'Classic',css:'background:linear-gradient(135deg,#001e3c,#0d9488);'},
+        {k:'split',name:'Split',css:'background:#fff;',extra:'<span style="position:absolute;left:0;top:0;bottom:0;width:45%;background:linear-gradient(160deg,#001e3c,#0d9488);"></span>'},
+        {k:'glass',name:'Glass',css:'background:linear-gradient(135deg,#001e3c,#0d9488);',extra:'<span style="position:absolute;inset:22% 25%;background:rgba(255,255,255,0.3);border:1px solid rgba(255,255,255,0.6);border-radius:6px;"></span>'},
+        {k:'minimal',name:'Minimal',css:'background:#f6f7f9;',extra:'<span style="position:absolute;inset:25% 22%;background:#fff;border:1px solid #e6e8ec;border-radius:6px;"></span>'},
+        {k:'dark',name:'Dark',css:'background:#0b1020;',extra:'<span style="position:absolute;inset:25% 22%;background:#111827;border:1px solid #1f2937;border-radius:6px;"></span>'},
+        {k:'mesh',name:'Mesh',css:'background:radial-gradient(circle at 20% 20%,#0d9488,transparent 60%),radial-gradient(circle at 80% 80%,#001e3c,transparent 60%),#0b1020;'},
+        {k:'spotlight',name:'Spotlight',css:'background:radial-gradient(circle at 50% 30%,rgba(255,255,255,0.16),transparent 45%),#0a0f1c;',extra:'<span style="position:absolute;inset:28% 26%;background:#fff;border-radius:6px;"></span>'},
+        {k:'aurora',name:'Aurora',css:'background:radial-gradient(40% 40% at 20% 25%,rgba(13,148,136,.7),transparent),radial-gradient(45% 45% at 80% 25%,rgba(99,102,241,.6),transparent),radial-gradient(45% 55% at 50% 95%,rgba(236,72,153,.5),transparent),#0b1224;'},
+        {k:'corporate',name:'Corporate',css:'background:#eef1f5;',extra:'<span style="position:absolute;inset:25% 22%;background:#fff;border-top:3px solid #0d9488;border-radius:4px;"></span>'},
+        {k:'bold',name:'Bold',css:'background:linear-gradient(140deg,#0d9488,#001e3c);',extra:'<span style="position:absolute;left:30%;right:30%;bottom:20%;height:28%;background:#fff;border-radius:5px;"></span>'}
+    ];
+    var cards = tpls.map(function(t){
+        var sel = t.k===cur;
+        var check = sel ? '<span style="position:absolute;top:4px;right:4px;background:var(--teal);color:#fff;border-radius:99px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:12px;">check</span></span>' : '';
+        return '<div '+(cm?'onclick="saveLoginTemplate(\''+t.k+'\')"':'')+' style="cursor:'+(cm?'pointer':'default')+';border:2px solid '+(sel?'var(--teal)':'transparent')+';border-radius:12px;padding:4px;">'
+          +'<div style="position:relative;height:72px;border-radius:9px;overflow:hidden;'+t.css+'">'+(t.extra||'')+check+'</div>'
+          +'<div style="text-align:center;font-size:11px;font-weight:700;margin-top:5px;color:'+(sel?'var(--teal)':'var(--secondary)')+';">'+t.name+'</div></div>';
+    }).join('');
+    var openLink = (DOMAIN && DOMAIN.host) ? ' · <a href="https://'+esc(DOMAIN.host)+'/partner" target="_blank" style="color:var(--teal);font-weight:700;">Open login ↗</a>' : '';
+    return '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">wallpaper</span> Login Screen</div>'
+      +'<div class="card-sub">Pick a preset design for your branded login page — it uses your logo &amp; colors. Custom CSS/JS is coming later.</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;">'+cards+'</div>'
+      +(cm?'<div class="muted" style="margin-top:12px;">Applies to your custom domain login.'+openLink+'</div>':'<div class="muted" style="margin-top:12px;">Only owners and admins can change the login design.</div>')
+      +'</div>';
+}
+window.saveLoginTemplate = async function(tpl){
+    DATA.branding = DATA.branding || {}; DATA.branding.login_template = tpl;
+    render();
+    var r = await api({action:'save_agency_branding', branding:{login_template:tpl}});
+    if(!r || !r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); }
+    else Swal.fire({icon:'success',title:'Login design saved',timer:900,showConfirmButton:false});
+};
 
 function domainCard(){
     var cm=DATA.can_manage;

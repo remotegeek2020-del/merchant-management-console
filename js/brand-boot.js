@@ -25,6 +25,7 @@
             var d = document.documentElement.style;
             if (c.color_primary) { d.setProperty('--teal', c.color_primary); d.setProperty('--teal-dark', c.color_accent || c.color_primary); }
             if (c.color_dark) { d.setProperty('--navy', c.color_dark); }
+            if (c.login_template) document.documentElement.setAttribute('data-login-template', c.login_template);
         }
     } catch (e) { /* best-effort; page still works */ }
 })();
