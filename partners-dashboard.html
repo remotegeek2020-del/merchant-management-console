@@ -2627,10 +2627,16 @@ async function _wlRenderMembers(personId){
     try { r = await fetch('/api/whitelabel',{method:'POST',headers:_wlAgHdrs(),body:JSON.stringify({action:'get_person_companies',person_id:personId})}).then(x=>x.json()); } catch(e){}
     var comps = (r && r.success && r.companies) || [];
     var rows = comps.map(function(c){
-        var star = c.is_primary ? '<span title="Primary owner" style="color:#f59e0b;">★</span> ' : '';
-        var pct = (c.ownership_percent==null)?'':('<span style="font-family:monospace;color:#0369a1;font-weight:700;">'+(Math.round(c.ownership_percent*100)/100)+'%</span>');
-        var tag = c.is_primary?'<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#ede9fe;color:#6d28d9;">PRIMARY</span>':'<span style="font-size:10px;font-weight:800;padding:1px 8px;border-radius:99px;background:#f1f5f9;color:#475569;">CO-OWNER</span>';
-        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;"><div style="font-weight:700;font-size:12px;">'+star+_wlEsc(c.company_name)+'</div><div style="display:flex;align-items:center;gap:10px;">'+pct+tag+'<a href="#" onclick="wlManageCompanyOwners(\''+c.company_id+'\',\''+_wlEsc(c.company_name).replace(/\x27/g,"&#39;")+'\',\''+personId+'\');return false;" style="color:#0d9488;font-weight:700;font-size:11px;text-decoration:none;">Manage</a></div></div>';
+        var ownerLines = (c.owners||[]).map(function(o){
+            var star = o.is_primary ? '<span title="Primary" style="color:#f59e0b;">★</span> ' : '';
+            var pct = (o.ownership_percent==null) ? '<span style="color:#cbd5e1;">—</span>' : '<span style="font-family:monospace;color:#0369a1;font-weight:700;">'+(Math.round(o.ownership_percent*100)/100)+'%</span>';
+            var nm = _wlEsc(o.full_name||o.email||'—') + (o.is_self ? ' <span style="font-size:9px;font-weight:800;color:#0d9488;">(this partner)</span>' : '');
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0 3px 12px;font-size:12px;"><div>'+star+nm+'</div>'+pct+'</div>';
+        }).join('') || '<div style="padding:3px 0 3px 12px;font-size:11px;color:#94a3b8;">No owners recorded.</div>';
+        return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div style="font-weight:800;font-size:12px;">'+_wlEsc(c.company_name)+'</div>'
+          +'<a href="#" onclick="wlManageCompanyOwners(\''+c.company_id+'\',\''+_wlEsc(c.company_name).replace(/\x27/g,"&#39;")+'\',\''+personId+'\');return false;" style="color:#0d9488;font-weight:700;font-size:11px;text-decoration:none;">Manage</a></div>'
+          +'<div style="margin-top:4px;">'+ownerLines+'</div></div>';
     }).join('') || '<div style="font-size:12px;color:#94a3b8;padding:6px 0;">Not recorded as an owner of any company yet.</div>';
     wrap.innerHTML =
       '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">'

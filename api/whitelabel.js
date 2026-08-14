@@ -1148,14 +1148,35 @@ export default async function handler(req, res) {
             if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
             return res.status(200).json({ success: true, owners: (owners || []).map(o => ({ id: o.id, person_id: o.person_id, ownership_percent: o.ownership_percent, is_primary: o.is_primary === true, full_name: (people[o.person_id] || {}).full_name || null, email: (people[o.person_id] || {}).email || null })).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0))) });
         }
-        // Companies a person owns / co-owns (read-only reflection on the partner card).
+        // Companies a person owns / co-owns, each with ALL of its owners (so the
+        // partner card can show every co-owner + %). Read-only reflection.
         if (action === 'get_person_companies') {
             if (!body.person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
-            const { data: rows } = await supabase.from('company_owners').select('*').eq('person_id', body.person_id);
-            const list = rows || [];
-            const cids = list.map(r => r.company_id); let comps = {};
-            if (cids.length) { const { data } = await supabase.from('companies').select('id, company_name').in('id', cids); (data || []).forEach(c => comps[c.id] = c); }
-            return res.status(200).json({ success: true, companies: list.map(r => ({ company_id: r.company_id, company_name: (comps[r.company_id] || {}).company_name || 'Company', ownership_percent: r.ownership_percent, is_primary: r.is_primary === true })).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0))) });
+            const { data: mine } = await supabase.from('company_owners').select('*').eq('person_id', body.person_id);
+            const cids = [...new Set((mine || []).map(r => r.company_id))];
+            if (!cids.length) return res.status(200).json({ success: true, companies: [] });
+            const [{ data: comps }, { data: allOwners }] = await Promise.all([
+                supabase.from('companies').select('id, company_name').in('id', cids),
+                supabase.from('company_owners').select('*').in('company_id', cids)
+            ]);
+            const compName = {}; (comps || []).forEach(c => compName[c.id] = c.company_name);
+            const pids = [...new Set((allOwners || []).map(o => o.person_id))];
+            let people = {};
+            if (pids.length) { const { data } = await supabase.from('persons').select('id, full_name, email').in('id', pids); (data || []).forEach(p => people[p.id] = p); }
+            const byCompany = {};
+            (allOwners || []).forEach(o => {
+                (byCompany[o.company_id] = byCompany[o.company_id] || []).push({
+                    person_id: o.person_id, ownership_percent: o.ownership_percent, is_primary: o.is_primary === true,
+                    full_name: (people[o.person_id] || {}).full_name || null, email: (people[o.person_id] || {}).email || null,
+                    is_self: o.person_id === body.person_id
+                });
+            });
+            const companies = cids.map(cid => {
+                const owners = (byCompany[cid] || []).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0)));
+                const self = owners.find(o => o.is_self) || {};
+                return { company_id: cid, company_name: compName[cid] || 'Company', ownership_percent: self.ownership_percent, is_primary: !!self.is_primary, owners };
+            }).sort((a, b) => (b.is_primary - a.is_primary) || ((b.ownership_percent || 0) - (a.ownership_percent || 0)));
+            return res.status(200).json({ success: true, companies });
         }
 
         // All agency portals + their domains (management overview).
