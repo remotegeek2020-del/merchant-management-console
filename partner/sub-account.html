@@ -102,6 +102,11 @@
         @media (max-width:900px){ .kpi-grid{grid-template-columns:1fr 1fr;} }
         @media (max-width:768px){ .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .cd-grid{grid-template-columns:1fr !important;} }
         /* Conversations inbox */
+        .conv-channelbar{ display:flex; gap:6px; margin-bottom:14px; background:#f1f5f9; border-radius:12px; padding:5px; width:fit-content; max-width:100%; overflow-x:auto; }
+        .conv-channel{ display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; padding:8px 16px; border:none; border-radius:9px; background:transparent; color:var(--secondary); cursor:pointer; font-family:inherit; white-space:nowrap; }
+        .conv-channel .material-icons{ font-size:17px; }
+        .conv-channel.active{ background:#fff; color:var(--teal); box-shadow:var(--shadow-sm); }
+        #convInner .conv{ height:calc(100vh - 205px); }
         .conv{ display:grid; grid-template-columns:340px 1fr; height:calc(100vh - 150px); min-height:500px; background:#fff; border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow-md); overflow:hidden; }
         .conv-list{ border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; background:#fbfcfe; }
         .conv-search{ padding:12px 12px 8px; }
@@ -552,7 +557,8 @@ function renderContactDetail(){
       +'<div style="display:flex;gap:6px;margin-bottom:8px;"><textarea id="cdNoteBody" placeholder="Write a note…" style="flex:1;min-height:38px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;resize:vertical;"></textarea><button onclick="cdAddNote()" style="background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;align-self:flex-start;">Add</button></div>'
       +noteItems+'</div>';
 
-    var msgs=(CURRENT_CONTACT.messages||[]).slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+    // Activity = calls/notes/sms only. Email lives in its own card (crm_emails store).
+    var msgs=(CURRENT_CONTACT.messages||[]).slice().filter(function(m){return m.channel!=='email';}).sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
     var msgItems;
     if(!msgs.length){ msgItems='<div class="conv-empty" style="padding:26px;"><span class="material-icons" style="font-size:38px;">chat</span><div style="font-size:13px;">No activity yet. Start below.</div></div>'; }
     else {
@@ -568,12 +574,11 @@ function renderContactDetail(){
         });
         msgItems=cdParts.join('');
     }
-    var convCard='<div class="panel" style="padding:16px 18px 12px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:10px;">Conversation log</div>'
+    var convCard='<div class="panel" style="padding:16px 18px 12px;margin-bottom:16px;"><div style="font-weight:800;font-size:14px;margin-bottom:10px;">Activity <span style="font-weight:600;font-size:11px;color:var(--muted);">· calls & notes</span></div>'
       +'<div class="conv-body" style="max-height:340px;border-radius:12px;border:1px solid var(--border);padding:14px 12px;">'+msgItems+'</div>'
       +'<div class="conv-ctabs" style="margin-top:12px;">'
       +'<button class="conv-ctab active" data-cdc="note" onclick="cdSetChan(\'note\')"><span class="material-icons">sticky_note_2</span>Note</button>'
       +'<button class="conv-ctab" data-cdc="call" onclick="cdSetChan(\'call\')"><span class="material-icons">call</span>Call</button>'
-      +'<button class="conv-ctab" data-cdc="email" onclick="cdSetChan(\'email\')"><span class="material-icons">mail</span>Email</button>'
       +'<button class="conv-ctab" data-cdc="sms" onclick="cdSetChan(\'sms\')"><span class="material-icons">sms</span>SMS</button>'
       +'</div><div id="cdChanBody" style="margin-top:10px;"></div></div>';
     var dealItems=opps.map(function(o){
@@ -619,12 +624,31 @@ async function cdLoadEmails(){
     var r=await crmApi({action:'contact_emails', id:CURRENT_CONTACT.contact.id});
     if(!r||!r.success){ host.innerHTML='<div style="color:var(--muted);">Could not load email.</div>'; return; }
     if(r.no_email){ host.innerHTML='<div style="color:var(--muted);">Add an email address to this contact to see their emails.</div>'; return; }
-    if(r.needs_connect){ host.innerHTML='<div style="color:var(--muted);">Connect your email in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a> to see and send email here.</div>'; return; }
-    if(r.needs_reauth){ host.innerHTML='<div style="color:var(--muted);">Reconnect your email (new inbox permission needed) in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a>.</div>'; return; }
-    window._cdEmails = r.emails||[];
-    window._cdEmailAddr = r.address||'';
+    if(r.needs_connect){ host.innerHTML='<div style="color:var(--muted);">Connect a mailbox in <a onclick="showSection(\'settings\')" style="color:var(--teal);font-weight:700;cursor:pointer;">CRM Settings</a> to see and send email here.</div>'; return; }
+    window._cdEmails = (r.emails||[]).map(normEmail);
+    window._cdMailboxes = r.mailboxes||[];
+    window._cdMailboxEmails = (r.mailboxes||[]).map(function(m){ return String(m.email||'').toLowerCase(); });
+    window._cdReauth = !!r.needs_reauth;
     window._cdEmailPage = 0;
     cdRenderEmailList();
+}
+// Map a crm_emails store row → the shape the list/viewer/reply use.
+function normEmail(e){
+    return {
+        id: e.id, provider_message_id: e.provider_message_id, thread_id: e.provider_thread_id||'', message_id: e.rfc_message_id||'',
+        from: e.from_name ? (e.from_name+' <'+e.from_address+'>') : (e.from_address||''), from_address: e.from_address||'',
+        to: e.to_addresses||'', cc: e.cc_addresses||'', bcc: e.bcc_addresses||'',
+        subject: e.subject||'(no subject)', date: e.sent_at ? new Date(e.sent_at).getTime() : null,
+        snippet: e.snippet||'', unread: !!e.unread, outbound: e.direction==='outbound',
+        mailbox_kind: e.mailbox_kind, mailbox_email: e.mailbox_email||'', shared_mailbox_id: e.shared_mailbox_id||null
+    };
+}
+// A small chip identifying which of our mailboxes handled a message + direction.
+function cdMailboxChip(e){
+    var arrow = e.outbound ? '<span class="material-icons" style="font-size:12px;vertical-align:-2px;">north_east</span> Sent from' : '<span class="material-icons" style="font-size:12px;vertical-align:-2px;">south_west</span> Received in';
+    var label = e.mailbox_kind==='shared' ? ('Shared · '+esc(e.mailbox_email)) : esc(e.mailbox_email);
+    var bg = e.mailbox_kind==='shared' ? 'background:var(--purple-bg);color:var(--purple-text);' : 'background:var(--teal-bg);color:var(--teal);';
+    return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:800;border-radius:99px;padding:1px 8px;'+bg+'">'+arrow+' '+label+'</span>';
 }
 var CD_EMAIL_PER = 7;
 function cdRenderEmailList(){
@@ -641,11 +665,13 @@ function cdRenderEmailList(){
         if(e.cc) extra+='<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Cc: '+esc(e.cc)+'</div>';
         if(e.bcc) extra+='<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Bcc: '+esc(e.bcc)+'</div>';
         return '<div onclick="cdOpenEmail(\''+e.id+'\',\''+esc((e.subject||'').replace(/\x27/g,"&#39;"))+'\')" style="padding:10px 0;border-bottom:1px solid #f6f8fb;cursor:pointer;">'
-          +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><div style="font-weight:800;font-size:13px;'+(e.unread?'':'')+'">'+(e.unread?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);margin-right:6px;vertical-align:middle;"></span>':'')+esc(e.subject||'(no subject)')+'</div><div style="font-size:11px;color:var(--muted);white-space:nowrap;">'+d+'</div></div>'
-          +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(e.outbound?'<span style="color:var(--teal);font-weight:700;">Sent</span> · ':'')+who+'</div>'
+          +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><div style="font-weight:800;font-size:13px;">'+(e.unread?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);margin-right:6px;vertical-align:middle;"></span>':'')+esc(e.subject||'(no subject)')+'</div><div style="font-size:11px;color:var(--muted);white-space:nowrap;">'+d+'</div></div>'
+          +'<div style="margin-top:4px;">'+cdMailboxChip(e)+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);margin-top:3px;">'+who+'</div>'
           +extra
           +'<div style="font-size:12px;color:var(--secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+esc(e.snippet||'')+'</div></div>';
     }).join('');
+    var reauth = window._cdReauth ? '<div style="font-size:11px;color:#92400e;background:var(--amber-bg);border-radius:8px;padding:6px 10px;margin-bottom:8px;">Your personal mailbox needs reconnecting for inbox access — <a onclick="showSection(\'settings\')" style="color:#92400e;font-weight:800;cursor:pointer;text-decoration:underline;">CRM Settings</a>.</div>' : '';
     var nav;
     if(pages>1){
         nav='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;">'
@@ -653,7 +679,7 @@ function cdRenderEmailList(){
           +'<span style="color:var(--muted);font-weight:600;">'+(pg*CD_EMAIL_PER+1)+'–'+Math.min((pg+1)*CD_EMAIL_PER,emails.length)+' of '+emails.length+'</span>'
           +'<button onclick="cdEmailPage(1)" '+(pg>=pages-1?'disabled':'')+' style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:'+(pg>=pages-1?'default':'pointer')+';opacity:'+(pg>=pages-1?'.5':'1')+';">Next ›</button></div>';
     } else { nav='<div style="font-size:11px;color:var(--muted);margin-top:8px;">'+emails.length+' email'+(emails.length===1?'':'s')+'</div>'; }
-    host.innerHTML=rows+nav;
+    host.innerHTML=reauth+rows+nav;
 }
 window.cdEmailPage=function(delta){ var emails=window._cdEmails||[]; var pages=Math.ceil(emails.length/CD_EMAIL_PER); window._cdEmailPage=Math.max(0,Math.min((window._cdEmailPage||0)+delta,pages-1)); cdRenderEmailList(); };
 window.cdOpenEmail=async function(id, subject){
@@ -661,7 +687,7 @@ window.cdOpenEmail=async function(id, subject){
     var hasOthers=cdReplyAllCc(meta).length>0;
     Swal.fire({title:esc(subject||'Email'), html:'<div id="emlWrap" style="text-align:left;"><div style="color:#94a3b8;font-size:12px;">Loading…</div></div>', width:680, showConfirmButton:true, confirmButtonText:'Reply', showDenyButton:hasOthers, denyButtonText:'Reply all', showCancelButton:true, cancelButtonText:'Close', confirmButtonColor:'#0d9488', denyButtonColor:'#0ea5e9',
         didOpen: async function(){
-            var r=await crmApi({action:'email_body', contact_id:CURRENT_CONTACT.contact.id, message_id:id});
+            var r=await crmApi({action:'email_body', contact_id:CURRENT_CONTACT.contact.id, email_id:id});
             var wrap=document.getElementById('emlWrap'); if(!wrap) return;
             if(r&&r.success&&(r.html||r.text)){
                 if(r.html){ var f=document.createElement('iframe'); f.setAttribute('sandbox',''); f.style.cssText='width:100%;height:52vh;border:1px solid #e2e8f0;border-radius:8px;background:#fff;'; wrap.innerHTML=''; wrap.appendChild(f); f.srcdoc=r.html; }
@@ -671,17 +697,19 @@ window.cdOpenEmail=async function(id, subject){
     }).then(function(res){
         if(res.isConfirmed||res.isDenied){
             var subj=(/^re:/i.test(subject||'')?subject:'Re: '+(subject||''));
-            cdCompose({to:(meta.outbound?meta.to:meta.from), cc:(res.isDenied?cdReplyAllCc(meta):[]), subject:subj, thread_id:meta.thread_id, in_reply_to:meta.message_id||''});
+            // Reply from the same mailbox that owns this thread so threading stays valid.
+            var fromMb = meta.shared_mailbox_id ? ('shared:'+meta.shared_mailbox_id) : 'personal';
+            cdCompose({to:(meta.outbound?meta.to:meta.from), cc:(res.isDenied?cdReplyAllCc(meta):[]), subject:subj, thread_id:meta.thread_id, in_reply_to:meta.message_id||'', from_mailbox:fromMb});
         }
     });
 };
-// Everyone else on the original thread (To + Cc), minus the reply recipient and our own address.
+// Everyone else on the original thread (To + Cc), minus the reply recipient and any of our own mailbox addresses.
 function cdReplyAllCc(meta){
-    var self=String(window._cdEmailAddr||'').toLowerCase();
+    var ours=window._cdMailboxEmails||[];
     var primary=String(meta.outbound?meta.to:meta.from||'').toLowerCase();
     var pool=[]; [meta.to, meta.cc].forEach(function(s){ String(s||'').split(',').forEach(function(p){ p=p.trim(); if(p) pool.push(p); }); });
     var out=[], seen={};
-    pool.forEach(function(p){ var m=p.match(/<([^>]+)>/); var addr=(m?m[1]:p).trim(); var k=addr.toLowerCase(); if(!addr||seen[k]||k===self||primary.indexOf(k)>-1) return; seen[k]=1; out.push(addr); });
+    pool.forEach(function(p){ var m=p.match(/<([^>]+)>/); var addr=(m?m[1]:p).trim(); var k=addr.toLowerCase(); if(!addr||seen[k]||ours.indexOf(k)>-1||primary.indexOf(k)>-1) return; seen[k]=1; out.push(addr); });
     return out;
 }
 window.cdCompose=async function(pre){
@@ -701,7 +729,18 @@ window.cdCompose=async function(pre){
     // Prefilled CCs that aren't team members go into the free-form field.
     var teamEmails={}; teamCc.forEach(function(x){ teamEmails[x.email.toLowerCase()]=1; });
     var extraCc=preCc.filter(function(a){ return !teamEmails[a.toLowerCase()]; }).join(', ');
+    // "From" mailbox options (hybrid: shared inbox(es) + personal).
+    var mbRes=await crmApi({action:'list_mailboxes', sub_account_id:subId});
+    var fromOpts=[]; if(mbRes&&mbRes.success){
+        (mbRes.shared||[]).forEach(function(s){ fromOpts.push({val:'shared:'+s.id, label:'Shared · '+s.email}); });
+        if(mbRes.personal) fromOpts.push({val:'personal', label:'You · '+mbRes.personal.email});
+    }
+    var defFrom = pre.from_mailbox || (fromOpts.some(function(o){return o.val==='personal';})?'personal':(fromOpts[0]&&fromOpts[0].val));
+    var fromField = fromOpts.length>1
+      ? '<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">From</label><select id="emFrom" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;">'+fromOpts.map(function(o){return '<option value="'+esc(o.val)+'"'+(o.val===defFrom?' selected':'')+'>'+esc(o.label)+'</option>';}).join('')+'</select>'
+      : (fromOpts.length===1?'<input type="hidden" id="emFrom" value="'+esc(fromOpts[0].val)+'">':'');
     var html='<div style="text-align:left;">'
+      +fromField
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">To</label><input id="emTo" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" value="'+esc(to)+'">'
       +'<label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;">CC team</label>'
       +'<div style="margin:4px 0 6px;max-height:110px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">'+ccChecks+'</div>'
@@ -712,7 +751,8 @@ window.cdCompose=async function(pre){
         preConfirm:function(){ var t=(document.getElementById('emTo').value||'').trim(); var b=(document.getElementById('emBody').value||'').trim(); if(!t){Swal.showValidationMessage('Enter a recipient.');return false;} if(!b){Swal.showValidationMessage('Write a message.');return false;}
           var cc=Array.prototype.map.call(document.querySelectorAll('.emCcMember:checked'),function(el){return el.value;});
           (document.getElementById('emCcExtra').value||'').split(',').forEach(function(x){ x=x.trim(); if(x) cc.push(x); });
-          return {to:t, cc:cc, subject:(document.getElementById('emSubj').value||'').trim(), body:b}; }});
+          var fromEl=document.getElementById('emFrom');
+          return {to:t, cc:cc, from_mailbox:(fromEl?fromEl.value:undefined), subject:(document.getElementById('emSubj').value||'').trim(), body:b}; }});
     if(!res.isConfirmed) return;
     var payload=Object.assign({action:'send_email', contact_id:CURRENT_CONTACT.contact.id, thread_id:pre.thread_id, in_reply_to:pre.in_reply_to}, res.value);
     var r=await crmApi(payload);
@@ -843,61 +883,84 @@ async function loadReport(){
     host.innerHTML=tiles+'<div class="panel" style="padding:18px 20px;margin-top:6px;"><div style="font-weight:800;font-size:14px;margin-bottom:14px;">Pipeline by stage</div>'+bars+'</div>';
 }
 
-/* ── CONVERSATIONS (recent threads; open a contact to log/view) ─────────────── */
-/* ── CONVERSATIONS (two-pane inbox) ────────────────────────────────────────── */
-var CONV_THREADS=[], CONV_FILTER='all', CONV_Q='', CONV_ACTIVE=null, CONV_DETAIL=null, CONV_COMPOSE='note', CONV_LOG_DIR='outbound';
-var CONV_CHANNELS=[
-    {key:'all', label:'All', icon:'inbox'},
-    {key:'email', label:'Email', icon:'mail'},
-    {key:'sms', label:'SMS', icon:'sms'},
-    {key:'call', label:'Call', icon:'call'},
-    {key:'note', label:'Note', icon:'sticky_note_2'}
-];
+/* ── CONVERSATIONS (channel-separated inbox: Email · SMS · Activity) ─────────── */
+var CONV_CHANNEL='email';   // top-level channel (email | sms | activity)
+var CONV_THREADS=[], CONV_Q='', CONV_ACTIVE=null, CONV_DETAIL=null, CONV_EMAILS=[], CONV_COMPOSE='note', CONV_LOG_DIR='outbound';
 function convIcon(ch){ return ch==='call'?'call':ch==='email'?'mail':ch==='sms'?'sms':'sticky_note_2'; }
+var CONV_TABS=[{key:'email',label:'Email',icon:'mail'},{key:'sms',label:'SMS',icon:'sms'},{key:'activity',label:'Activity',icon:'sticky_note_2'}];
+function convChannelBar(){
+    return '<div class="conv-channelbar">'+CONV_TABS.map(function(t){
+        var soon = t.key==='sms' ? '<span class="soon" style="margin-left:6px;padding:1px 7px;">SOON</span>' : '';
+        return '<button class="conv-channel'+(CONV_CHANNEL===t.key?' active':'')+'" onclick="convSetChannel(\''+t.key+'\')"><span class="material-icons">'+t.icon+'</span>'+t.label+soon+'</button>';
+    }).join('')+'</div>';
+}
 async function loadConversations(){
     var host=document.getElementById('crmConv'); if(!host) return;
-    var r=await crmApi({action:'list_conversations', sub_account_id:subId});
+    host.innerHTML=convChannelBar()+'<div id="convInner"><div class="empty"><span class="material-icons">forum</span><h4>Loading…</h4></div></div>';
+    convLoadChannel();
+}
+window.convSetChannel=function(k){
+    CONV_CHANNEL=k; CONV_ACTIVE=null; CONV_DETAIL=null; CONV_Q='';
+    document.querySelectorAll('.conv-channel').forEach(function(b){ b.classList.toggle('active', b.getAttribute('onclick').indexOf("'"+k+"'")>-1); });
+    convLoadChannel();
+};
+async function convLoadChannel(){
+    var inner=document.getElementById('convInner'); if(!inner) return;
+    if(CONV_CHANNEL==='sms'){
+        inner.innerHTML='<div class="conv" style="grid-template-columns:1fr;"><div class="conv-empty"><span class="material-icons">sms</span>'
+          +'<h4 style="margin:0 0 4px;color:var(--secondary);">Text messaging is coming soon <span class="soon" style="margin-left:6px;">SMS</span></h4>'
+          +'<p style="margin:0;font-size:13px;max-width:420px;">Two-way SMS from your business number will get its own thread here — kept separate from email, the way it should be. For now you can log an SMS manually on a contact under Activity.</p></div></div>';
+        return;
+    }
+    inner.innerHTML='<div class="empty"><span class="material-icons">forum</span><h4>Loading…</h4></div>';
+    var action = CONV_CHANNEL==='email' ? 'list_email_conversations' : 'list_conversations';
+    var r=await crmApi({action:action, sub_account_id:subId});
     if(r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
     CONV_THREADS=(r && r.success && r.threads)||[];
     renderConvShell();
 }
+// Uniform display fields for a thread across channels.
+function convThreadMeta(t){
+    var name=t.contact?cName(t.contact):'Unknown';
+    if(CONV_CHANNEL==='email'){
+        var e=t.last||{};
+        var out=e.direction==='outbound';
+        var snip=(out?'You: ':'')+String(e.subject||'(no subject)');
+        return {name:name, snip:snip, time:e.sent_at, icon:'mail', badge:''};
+    }
+    var m=t.last||{};
+    var pre=m.direction==='outbound'?'You: ':'';
+    return {name:name, snip:pre+String(m.body||'').replace(/\s+/g,' '), time:m.created_at, icon:convIcon(m.channel), badge:t.count||''};
+}
 function convFilteredThreads(){
     var q=(CONV_Q||'').toLowerCase();
+    if(!q) return CONV_THREADS;
     return CONV_THREADS.filter(function(t){
-        var ch=(t.last&&t.last.channel)||'note';
-        if(CONV_FILTER!=='all' && ch!==CONV_FILTER) return false;
-        if(q){ var name=(t.contact?cName(t.contact):'').toLowerCase(); var snip=((t.last&&t.last.body)||'').toLowerCase(); if(name.indexOf(q)<0 && snip.indexOf(q)<0) return false; }
-        return true;
+        var meta=convThreadMeta(t);
+        return meta.name.toLowerCase().indexOf(q)>-1 || String(meta.snip).toLowerCase().indexOf(q)>-1;
     });
-}
-function convChips(){
-    return CONV_CHANNELS.map(function(c){
-        var n = c.key==='all' ? CONV_THREADS.length : CONV_THREADS.filter(function(t){ return ((t.last&&t.last.channel)||'note')===c.key; }).length;
-        return '<button class="conv-chip'+(CONV_FILTER===c.key?' active':'')+'" onclick="convSetFilter(\''+c.key+'\')"><span class="material-icons">'+c.icon+'</span>'+c.label+(n?'<span class="cc">'+n+'</span>':'')+'</button>';
-    }).join('');
 }
 function convThreadRows(){
     var list=convFilteredThreads();
-    if(!list.length) return '<div style="padding:26px 16px;text-align:center;color:var(--muted);font-size:12px;">No conversations match.</div>';
+    if(!list.length) return '<div style="padding:26px 16px;text-align:center;color:var(--muted);font-size:12px;">Nothing here yet.</div>';
     return list.map(function(t){
-        var name=t.contact?cName(t.contact):'Unknown';
-        var last=t.last||{};
-        var snip=last.body?esc(String(last.body).replace(/\s+/g,' ').slice(0,80)):'';
-        var pre=last.direction==='outbound'?'<span style="color:var(--teal);font-weight:700;">You: </span>':'';
+        var meta=convThreadMeta(t);
         return '<div class="conv-thread'+(CONV_ACTIVE===t.contact_id?' active':'')+'" data-cid="'+t.contact_id+'" onclick="convOpen(\''+t.contact_id+'\')">'
-          +'<div class="conv-av">'+initials(name)+'<span class="ch"><span class="material-icons">'+convIcon(last.channel)+'</span></span></div>'
-          +'<div class="conv-tmid"><div class="conv-tname">'+esc(name)+'</div><div class="conv-tsnip">'+pre+snip+'</div></div>'
-          +'<div class="conv-tright"><div class="conv-ttime">'+fmtDateTime(last.created_at)+'</div><span class="conv-tcount">'+t.count+'</span></div>'
+          +'<div class="conv-av">'+initials(meta.name)+'<span class="ch"><span class="material-icons">'+meta.icon+'</span></span></div>'
+          +'<div class="conv-tmid"><div class="conv-tname">'+esc(meta.name)+'</div><div class="conv-tsnip">'+esc(String(meta.snip).slice(0,90))+'</div></div>'
+          +'<div class="conv-tright"><div class="conv-ttime">'+fmtDateTime(meta.time)+'</div>'+(meta.badge?'<span class="conv-tcount">'+meta.badge+'</span>':'')+'</div>'
           +'</div>';
     }).join('');
 }
 function renderConvShell(){
-    var host=document.getElementById('crmConv'); if(!host) return;
-    if(!CONV_THREADS.length){ host.innerHTML=emptyPanel('forum','No conversations yet','Log calls, emails, SMS and notes from a contact’s record — recent threads show up here.', false); return; }
-    host.innerHTML='<div class="conv'+(CONV_ACTIVE?' showmain':'')+'" id="convWrap">'
+    var inner=document.getElementById('convInner'); if(!inner) return;
+    if(!CONV_THREADS.length){
+        var msg = CONV_CHANNEL==='email' ? 'Emails to and from your contacts appear here once a mailbox is connected in CRM Settings.' : 'Log calls and notes from a contact’s record — recent activity shows up here.';
+        inner.innerHTML=emptyPanel(CONV_CHANNEL==='email'?'mail':'sticky_note_2','Nothing yet', msg, false); return;
+    }
+    inner.innerHTML='<div class="conv'+(CONV_ACTIVE?' showmain':'')+'" id="convWrap">'
       +'<div class="conv-list">'
-      +'<div class="conv-search"><div class="conv-search-wrap"><span class="material-icons">search</span><input id="convSearch" placeholder="Search conversations…" value="'+esc(CONV_Q)+'" oninput="convSearch(this.value)"></div></div>'
-      +'<div class="conv-filters" id="convFilters">'+convChips()+'</div>'
+      +'<div class="conv-search"><div class="conv-search-wrap"><span class="material-icons">search</span><input id="convSearch" placeholder="Search '+CONV_CHANNEL+'…" value="'+esc(CONV_Q)+'" oninput="convSearch(this.value)"></div></div>'
       +'<div class="conv-threads" id="convThreads">'+convThreadRows()+'</div>'
       +'</div>'
       +'<div class="conv-main" id="convMain">'+convMainHtml()+'</div>'
@@ -905,84 +968,99 @@ function renderConvShell(){
     convScrollBottom();
 }
 window.convSearch=function(v){ CONV_Q=v; var el=document.getElementById('convThreads'); if(el) el.innerHTML=convThreadRows(); };
-window.convSetFilter=function(f){ CONV_FILTER=f; var fe=document.getElementById('convFilters'); if(fe) fe.innerHTML=convChips(); var te=document.getElementById('convThreads'); if(te) te.innerHTML=convThreadRows(); };
 window.convBack=function(){ CONV_ACTIVE=null; CONV_DETAIL=null; var w=document.getElementById('convWrap'); if(w) w.classList.remove('showmain'); document.querySelectorAll('.conv-thread').forEach(function(el){ el.classList.remove('active'); }); var m=document.getElementById('convMain'); if(m) m.innerHTML=convMainHtml(); };
 window.convOpen=async function(cid){
     CONV_ACTIVE=cid;
     document.querySelectorAll('.conv-thread').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-cid')===cid); });
     var w=document.getElementById('convWrap'); if(w) w.classList.add('showmain');
     var main=document.getElementById('convMain'); if(main) main.innerHTML='<div class="conv-empty"><span class="material-icons">forum</span><div>Loading…</div></div>';
-    var r=await crmApi({action:'get_contact', id:cid});
-    CONV_DETAIL=(r&&r.success)?r:null;
-    if(CONV_DETAIL) CURRENT_CONTACT=CONV_DETAIL; // keep email compose/reply working from here
+    var thread=(CONV_THREADS||[]).filter(function(t){return t.contact_id===cid;})[0];
+    if(CONV_CHANNEL==='email'){
+        var r=await crmApi({action:'contact_emails', id:cid});
+        CONV_DETAIL = { contact: (thread&&thread.contact) || {id:cid} };
+        CURRENT_CONTACT = CONV_DETAIL;            // so compose/reply work from here
+        CONV_EMAILS=(r&&r.success)?(r.emails||[]).map(normEmail):[];
+        window._cdEmails=CONV_EMAILS;
+        window._cdMailboxes=(r&&r.mailboxes)||[];
+        window._cdMailboxEmails=((r&&r.mailboxes)||[]).map(function(m){return String(m.email||'').toLowerCase();});
+        window._cdReauth=!!(r&&r.needs_reauth);
+    } else {
+        var gr=await crmApi({action:'get_contact', id:cid});
+        CONV_DETAIL=(gr&&gr.success)?gr:null;
+        if(CONV_DETAIL) CURRENT_CONTACT=CONV_DETAIL;
+    }
     if(main) main.innerHTML=convMainHtml();
     convScrollBottom();
 };
-function convMainHtml(){
-    if(!CONV_ACTIVE || !CONV_DETAIL){
-        return '<div class="conv-empty"><span class="material-icons">forum</span><h4 style="margin:0 0 4px;color:var(--secondary);">Select a conversation</h4><p style="margin:0;font-size:13px;">Pick a contact on the left to view and continue the thread.</p></div>';
-    }
+function convHead(){
     var c=CONV_DETAIL.contact, name=cName(c);
-    var head='<div class="conv-head">'
+    return '<div class="conv-head">'
       +'<button class="conv-back" onclick="convBack()"><span class="material-icons">arrow_back</span></button>'
       +'<div class="conv-av">'+initials(name)+'</div>'
       +'<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;">'+esc(name)+'</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(c.email||c.phone||'')+'</div></div>'
       +'<button onclick="openContactFrom(\''+c.id+'\')" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">open_in_new</span> Open record</button>'
       +'</div>';
-    var msgs=(CONV_DETAIL.messages||[]).slice().sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+}
+function convMainHtml(){
+    if(!CONV_ACTIVE || !CONV_DETAIL){
+        return '<div class="conv-empty"><span class="material-icons">forum</span><h4 style="margin:0 0 4px;color:var(--secondary);">Select a conversation</h4><p style="margin:0;font-size:13px;">Pick a contact on the left to view and continue the thread.</p></div>';
+    }
+    return CONV_CHANNEL==='email' ? convEmailMain() : convActivityMain();
+}
+function convEmailMain(){
     var body;
-    if(!msgs.length){ body='<div class="conv-empty"><span class="material-icons">chat</span><div style="font-size:13px;">No messages yet. Start the conversation below.</div></div>'; }
+    var emails=(CONV_EMAILS||[]).slice().sort(function(a,b){ return (a.date||0)-(b.date||0); });
+    if(!emails.length){ body='<div class="conv-empty"><span class="material-icons">mail</span><div style="font-size:13px;">No emails with this contact yet. Compose one below.</div></div>'; }
     else {
         var lastDay=''; var parts=[];
-        msgs.forEach(function(m){
-            var day=fmtDate(m.created_at);
-            if(day!==lastDay){ parts.push('<div class="conv-daysep">'+esc(day)+'</div>'); lastDay=day; }
-            var out=m.direction==='outbound';
+        if(window._cdReauth) parts.push('<div style="align-self:center;font-size:11px;color:#92400e;background:var(--amber-bg);border-radius:8px;padding:6px 10px;margin-bottom:6px;">Reconnect your personal mailbox for inbox access in CRM Settings.</div>');
+        emails.forEach(function(e){
+            var day=fmtDate(e.date); if(day!==lastDay){ parts.push('<div class="conv-daysep">'+esc(day)+'</div>'); lastDay=day; }
+            var out=e.outbound;
             parts.push('<div class="bub-row'+(out?' out':'')+'">'
-              +'<div class="bub '+(out?'bub-out':'bub-in')+'">'+esc(m.body)+'</div>'
-              +'<div class="bub-meta"><span class="material-icons">'+convIcon(m.channel)+'</span>'+esc((m.channel||'note'))+' · '+fmtDateTime(m.created_at)
-              +' <span class="material-icons del" title="Delete" onclick="convDelMsg(\''+m.id+'\')">delete</span></div>'
+              +'<div class="bub '+(out?'bub-out':'bub-in')+'" style="cursor:pointer;" onclick="cdOpenEmail(\''+e.id+'\',\''+esc((e.subject||'').replace(/\x27/g,"&#39;"))+'\')">'
+              +'<div style="font-weight:800;font-size:12px;margin-bottom:2px;">'+esc(e.subject||'(no subject)')+'</div>'
+              +'<div style="font-size:12px;opacity:.9;">'+esc(e.snippet||'')+'</div></div>'
+              +'<div class="bub-meta">'+cdMailboxChip(e)+' · '+fmtDateTime(e.date)+'</div>'
               +'</div>');
         });
         body=parts.join('');
     }
-    return head+'<div class="conv-body" id="convBody">'+body+'</div>'+convComposeHtml();
+    var em=CONV_DETAIL.contact&&CONV_DETAIL.contact.email;
+    var composer='<div class="conv-compose">'+(em
+        ? '<button onclick="convComposeEmail()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:17px;">edit</span> Compose email</button>'
+        : '<div style="font-size:12px;color:var(--muted);">This contact has no email address on file.</div>')+'</div>';
+    return convHead()+'<div class="conv-body" id="convBody">'+body+'</div>'+composer;
 }
-function convComposeHtml(){
-    var tabs=[
-        {key:'email', label:'Email', icon:'mail'},
-        {key:'sms', label:'SMS', icon:'sms'},
-        {key:'call', label:'Call', icon:'call'},
-        {key:'note', label:'Note', icon:'sticky_note_2'}
-    ];
+function convActivityMain(){
+    var msgs=((CONV_DETAIL&&CONV_DETAIL.messages)||[]).slice().filter(function(m){return m.channel!=='email';}).sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
+    var body;
+    if(!msgs.length){ body='<div class="conv-empty"><span class="material-icons">chat</span><div style="font-size:13px;">No activity yet. Log a call or note below.</div></div>'; }
+    else {
+        var lastDay=''; var parts=[];
+        msgs.forEach(function(m){
+            var day=fmtDate(m.created_at); if(day!==lastDay){ parts.push('<div class="conv-daysep">'+esc(day)+'</div>'); lastDay=day; }
+            var out=m.direction==='outbound';
+            parts.push('<div class="bub-row'+(out?' out':'')+'">'
+              +'<div class="bub '+(out?'bub-out':'bub-in')+'">'+esc(m.body)+'</div>'
+              +'<div class="bub-meta"><span class="material-icons">'+convIcon(m.channel)+'</span>'+esc((m.channel||'note'))+' · '+fmtDateTime(m.created_at)
+              +' <span class="material-icons del" title="Delete" onclick="convDelMsg(\''+m.id+'\')">delete</span></div></div>');
+        });
+        body=parts.join('');
+    }
+    return convHead()+'<div class="conv-body" id="convBody">'+body+'</div>'+convActivityComposer();
+}
+function convActivityComposer(){
+    var tabs=[{key:'note',label:'Note',icon:'sticky_note_2'},{key:'call',label:'Call',icon:'call'}];
     var tabHtml=tabs.map(function(t){ return '<button class="conv-ctab'+(CONV_COMPOSE===t.key?' active':'')+'" data-ck="'+t.key+'" onclick="convSetCompose(\''+t.key+'\')"><span class="material-icons">'+t.icon+'</span>'+t.label+'</button>'; }).join('');
-    return '<div class="conv-compose" id="convCompose"><div class="conv-ctabs">'+tabHtml+'</div><div id="convComposeBody">'+convComposeBody()+'</div></div>';
-}
-function convComposeBody(){
-    if(CONV_COMPOSE==='email'){
-        var em=CONV_DETAIL&&CONV_DETAIL.contact&&CONV_DETAIL.contact.email;
-        if(!em) return '<div style="font-size:12px;color:var(--muted);padding:6px 2px;">This contact has no email address on file.</div>';
-        return '<div style="display:flex;gap:8px;align-items:center;"><button onclick="convComposeEmail()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:17px;">edit</span> Compose email</button><span style="font-size:12px;color:var(--muted);">Send a real email to '+esc(em)+' — appears here and on their record.</span></div>';
-    }
-    if(CONV_COMPOSE==='sms'){
-        return '<div style="display:flex;align-items:center;gap:12px;padding:6px 2px;border:1.5px dashed var(--border);border-radius:12px;background:var(--surface);padding:14px;">'
-          +'<span class="material-icons" style="font-size:30px;color:var(--muted);opacity:.6;">sms</span>'
-          +'<div><div style="font-weight:800;font-size:13px;color:var(--secondary);">Text messaging is coming soon <span class="soon" style="margin:0 0 0 6px;">SMS</span></div>'
-          +'<div style="font-size:12px;color:var(--muted);margin-top:3px;">Two-way SMS from your business number will land right in this thread. For now you can log an SMS manually under <b>Note</b>/<b>Call</b>.</div></div></div>';
-    }
-    // note / call → free-text log with direction
     var ph=CONV_COMPOSE==='call'?'Log a call…':'Write a note…';
-    return '<div style="display:flex;gap:8px;align-items:flex-end;">'
-      +'<select id="convLogDir" onchange="CONV_LOG_DIR=this.value" style="padding:9px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;">'
-      +'<option value="outbound"'+(CONV_LOG_DIR==='outbound'?' selected':'')+'>Outbound</option><option value="inbound"'+(CONV_LOG_DIR==='inbound'?' selected':'')+'>Inbound</option></select>'
+    var editor='<div style="display:flex;gap:8px;align-items:flex-end;">'
+      +'<select id="convLogDir" onchange="CONV_LOG_DIR=this.value" style="padding:9px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;"><option value="outbound"'+(CONV_LOG_DIR==='outbound'?' selected':'')+'>Outbound</option><option value="inbound"'+(CONV_LOG_DIR==='inbound'?' selected':'')+'>Inbound</option></select>'
       +'<textarea id="convLogBody" placeholder="'+ph+'" style="flex:1;min-height:40px;max-height:120px;padding:9px 12px;border:1.5px solid var(--border);border-radius:11px;font-size:13px;font-family:inherit;outline:none;resize:vertical;" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();convLog();}"></textarea>'
       +'<button onclick="convLog()" style="background:var(--teal);color:#fff;border:none;border-radius:11px;width:44px;height:42px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;"><span class="material-icons">send</span></button></div>';
+    return '<div class="conv-compose"><div class="conv-ctabs">'+tabHtml+'</div><div id="convComposeBody">'+editor+'</div></div>';
 }
-window.convSetCompose=function(k){
-    CONV_COMPOSE=k;
-    document.querySelectorAll('.conv-ctab').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-ck')===k); });
-    var el=document.getElementById('convComposeBody'); if(el) el.innerHTML=convComposeBody();
-};
+window.convSetCompose=function(k){ CONV_COMPOSE=k; var m=document.getElementById('convMain'); if(m) m.innerHTML=convMainHtml(); convScrollBottom(); };
 window.convLog=async function(){
     var bodyEl=document.getElementById('convLogBody'); if(!bodyEl) return;
     var body=(bodyEl.value||'').trim(); if(!body) return;
@@ -992,7 +1070,7 @@ window.convLog=async function(){
     await convOpen(CONV_ACTIVE);
 };
 window.convDelMsg=async function(id){ await crmApi({action:'delete_message', id:id}); await convOpen(CONV_ACTIVE); };
-window.convComposeEmail=function(){ if(CONV_DETAIL) CURRENT_CONTACT=CONV_DETAIL; cdCompose(); };
+window.convComposeEmail=function(){ cdCompose(); };
 function convScrollBottom(){ setTimeout(function(){ var b=document.getElementById('convBody'); if(b) b.scrollTop=b.scrollHeight; }, 30); }
 
 /* ── CALENDARS (appointments) ──────────────────────────────────────────────── */
@@ -1069,11 +1147,44 @@ function pdApi(b){ return fetch('/api/partner-data',{method:'POST',headers:{'Con
 var CRM_EMAIL = [];
 async function loadCrmSettings(){
     var host=document.getElementById('crmSettings'); if(!host) return;
-    var res = await Promise.all([ crmApi({action:'list_custom_fields', sub_account_id:subId, entity:'contact'}), crmApi({action:'list_tags', sub_account_id:subId}), pdApi({action:'get_email_connections'}) ]);
+    var res = await Promise.all([ crmApi({action:'list_custom_fields', sub_account_id:subId, entity:'contact'}), crmApi({action:'list_tags', sub_account_id:subId}), pdApi({action:'get_email_connections'}), crmApi({action:'list_mailboxes', sub_account_id:subId}) ]);
     CRM_FIELDS = (res[0] && res[0].success && res[0].fields) || [];
     CRM_TAGS = (res[1] && res[1].success && res[1].tags) || [];
     CRM_EMAIL = (res[2] && res[2].success && (res[2].connections||res[2].email_connections)) || [];
+    CRM_MAILBOXES = (res[3] && res[3].success) ? res[3] : {shared:[],can_manage:false};
     renderCrmSettings();
+}
+var CRM_MAILBOXES = {shared:[],can_manage:false};
+window.crmConnectShared = async function(provider){
+    var r = await crmApi({action:'oauth_url_shared', sub_account_id:subId, provider:provider, return_to: location.href});
+    if(r && r.success && r.url){ window.location.href = r.url; }
+    else Swal.fire('Not available',(r&&r.message)||'Shared mailbox connect is not configured yet.','info');
+};
+window.crmDisconnectShared = async function(id){
+    var c = await Swal.fire({icon:'warning',title:'Remove shared mailbox?',text:'The team will stop seeing this inbox’s emails on contacts.',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'});
+    if(!c.isConfirmed) return;
+    await crmApi({action:'disconnect_shared_mailbox', sub_account_id:subId, mailbox_id:id});
+    loadCrmSettings();
+};
+function sharedMailboxPanel(){
+    var mb=CRM_MAILBOXES||{}; var shared=mb.shared||[];
+    var rows = shared.map(function(s){
+        var err=s.status==='error';
+        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;">'
+          +'<span class="material-icons" style="color:'+(err?'#dc2626':'#7c3aed')+';">'+(err?'error':'groups')+'</span>'
+          +'<div style="flex:1;"><div style="font-weight:700;font-size:13px;">'+esc(s.email)+'</div><div style="font-size:11px;color:var(--muted);text-transform:capitalize;">'+esc(s.provider||'')+' · shared with the whole CRM'+(err?' · needs reconnect':'')+'</div></div>'
+          +(mb.can_manage?'<button onclick="crmDisconnectShared(\''+s.id+'\')" style="background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Remove</button>':'')
+          +'</div>';
+    }).join('');
+    var connect = mb.can_manage
+      ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:'+(shared.length?'12px':'6px')+';">'
+          +'<button onclick="crmConnectShared(\'google\')" style="display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><img src="https://www.google.com/favicon.ico" style="width:16px;height:16px;"> '+(shared.length?'Add another':'Connect a shared Gmail')+'</button>'
+          +'<button onclick="crmConnectShared(\'microsoft\')" style="display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><img src="https://outlook.com/favicon.ico" style="width:16px;height:16px;"> Shared Outlook</button>'
+          +'</div>'
+      : (shared.length?'':'<div style="font-size:12px;color:var(--muted);padding:6px 0;">No shared mailbox yet. An owner or admin can connect one.</div>');
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Shared CRM mailbox</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">A team inbox (e.g. hello@yourco.com) everyone in this CRM sees on a contact — alongside their own personal mailbox. Still 1:1, never bulk.</div>'
+      +rows+connect+'</div>';
 }
 window.crmConnectEmail = async function(provider){
     var r = await pdApi({action:'get_oauth_url', provider:provider, return_to: location.href});
@@ -1124,6 +1235,7 @@ function renderCrmSettings(){
     var addBtn = function(fn,label){ return '<button onclick="'+fn+'" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">add</span> '+label+'</button>'; };
     host.innerHTML =
       emailPanel()
+      + sharedMailboxPanel()
       + visibilityPanel()
       +'<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Custom Fields</div><div style="font-size:12px;color:var(--muted);">Extra fields shown on the contact form for this CRM.</div></div>'+addBtn('openField()','Add field')+'</div>'+fieldRows+'</div>'
       +'<div class="panel" style="padding:18px 20px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Tags</div><div style="font-size:12px;color:var(--muted);">Labels to segment contacts in this CRM.</div></div>'+addBtn('openTag()','Add tag')+'</div>'+tagRows+'</div>';
