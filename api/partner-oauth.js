@@ -112,6 +112,41 @@ export async function getValidAccessToken(personId, provider) {
     return fresh.access_token;
 }
 
+// ── Get a valid access token for a SHARED CRM mailbox (crm_mailboxes row) ────
+export async function getValidSharedMailboxToken(mailboxId) {
+    const { data: mb } = await supabase
+        .from('crm_mailboxes')
+        .select('id, provider, access_token, refresh_token, token_expiry')
+        .eq('id', mailboxId)
+        .single();
+    if (!mb || !mb.access_token) return null;
+
+    const accessToken  = decrypt(mb.access_token);
+    const refreshToken = decrypt(mb.refresh_token);
+
+    if (new Date(mb.token_expiry) > new Date(Date.now() + 60000)) return accessToken;
+
+    const fresh = mb.provider === 'google'
+        ? await refreshGoogleToken(refreshToken)
+        : await refreshMicrosoftToken(refreshToken);
+
+    if (!fresh.access_token) {
+        await supabase.from('crm_mailboxes').update({ status: 'error', updated_at: new Date().toISOString() }).eq('id', mailboxId);
+        return null;
+    }
+
+    const newExpiry = new Date(Date.now() + (fresh.expires_in || 3600) * 1000);
+    await supabase.from('crm_mailboxes').update({
+        access_token:  encrypt(fresh.access_token),
+        refresh_token: fresh.refresh_token ? encrypt(fresh.refresh_token) : mb.refresh_token,
+        token_expiry:  newExpiry.toISOString(),
+        status:        'active',
+        updated_at:    new Date().toISOString()
+    }).eq('id', mailboxId);
+
+    return fresh.access_token;
+}
+
 // ── RFC 2047 encode a header value so non-ASCII (em dash, accents) survives ──
 function encodeHeader(str) {
     return `=?UTF-8?B?${Buffer.from(str, 'utf8').toString('base64')}?=`;
@@ -229,6 +264,26 @@ export default async function handler(req, res) {
         }
 
         const expiry = new Date(Date.now() + (tokenRes.expires_in || 3600) * 1000);
+
+        // Shared CRM mailbox (state.scope==='shared', signed when the connect URL
+        // was generated after an owner/admin access check) → crm_mailboxes.
+        if (payload.scope === 'shared' && payload.sub_account_id) {
+            const { data: sub } = await supabase.from('agency_sub_accounts').select('portal_id').eq('id', payload.sub_account_id).single();
+            await supabase.from('crm_mailboxes').upsert({
+                sub_account_id: payload.sub_account_id,
+                portal_id:      sub ? sub.portal_id : null,
+                provider,
+                email,
+                access_token:   encrypt(tokenRes.access_token),
+                refresh_token:  encrypt(tokenRes.refresh_token || ''),
+                token_expiry:   expiry.toISOString(),
+                status:         'active',
+                connected_by:   personId,
+                updated_at:     new Date().toISOString()
+            }, { onConflict: 'sub_account_id,email' });
+            return done(`Shared mailbox connected: ${email}`);
+        }
+
         await supabase.from('partner_email_connections').upsert({
             person_id:     personId,
             provider,

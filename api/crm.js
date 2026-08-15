@@ -5,7 +5,7 @@
 //   • portal gods pass
 // This mirrors get_sub_account in whitelabel.js so access stays consistent.
 import { createClient } from '@supabase/supabase-js';
-import { getValidAccessToken } from './partner-oauth.js';
+import { getValidAccessToken, getValidSharedMailboxToken } from './partner-oauth.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
 
@@ -15,6 +15,77 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 async function emailConn(personId) {
     const { data } = await supabase.from('partner_email_connections').select('provider, email').eq('person_id', personId).limit(1);
     return (data && data[0]) || null;
+}
+// Split "Name <email>" into { email, name }.
+function parseAddr(s) {
+    const m = String(s || '').match(/<([^>]+)>/);
+    const email = (m ? m[1] : (s || '')).trim();
+    const name = m ? String(s).replace(/<[^>]+>/, '').replace(/"/g, '').trim() : '';
+    return { email, name };
+}
+// Every mailbox the acting person can use in this CRM (hybrid: shared inbox(es) +
+// their own personal mailbox). Shared tokens live in crm_mailboxes; personal in
+// partner_email_connections.
+async function accessibleMailboxes(personId, subId) {
+    const out = [];
+    const { data: shared } = await supabase.from('crm_mailboxes').select('id, provider, email').eq('sub_account_id', subId).eq('status', 'active');
+    (shared || []).forEach(m => out.push({ kind: 'shared', shared_mailbox_id: m.id, person_id: null, provider: m.provider, email: m.email }));
+    const conn = await emailConn(personId);
+    if (conn) out.push({ kind: 'personal', shared_mailbox_id: null, person_id: personId, provider: conn.provider, email: conn.email });
+    return out;
+}
+async function mailboxToken(mb) {
+    return mb.kind === 'shared' ? await getValidSharedMailboxToken(mb.shared_mailbox_id) : await getValidAccessToken(mb.person_id, mb.provider);
+}
+// Pull messages involving `addr` from one mailbox and upsert into crm_emails with
+// full attribution (which mailbox, direction). Returns { reauth } on token failure.
+async function syncMailboxForContact(mb, addr, subId, portalId, contactId) {
+    const at = await mailboxToken(mb);
+    if (!at) return { reauth: true };
+    const needle = String(addr).toLowerCase().trim();
+    let rows = [];
+    try {
+        if (mb.provider === 'google') {
+            const q = encodeURIComponent(`{from:"${addr}" to:"${addr}" cc:"${addr}" bcc:"${addr}"}`);
+            const lr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`, { headers: { Authorization: 'Bearer ' + at } });
+            if (lr.status === 403) return { reauth: true };
+            const list = await lr.json();
+            const ids = (list.messages || []).map(m => m.id);
+            const metas = await Promise.all(ids.map(async id => {
+                const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Bcc&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID`, { headers: { Authorization: 'Bearer ' + at } });
+                const m = await mr.json();
+                const h = {}; ((m.payload && m.payload.headers) || []).forEach(x => h[x.name.toLowerCase()] = x.value);
+                return { pid: m.id, thread: m.threadId, rfc: h['message-id'] || '', from: h.from || '', to: h.to || '', cc: h.cc || '', bcc: h.bcc || '', subject: h.subject || '(no subject)', date: m.internalDate ? new Date(Number(m.internalDate)) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD') };
+            }));
+            rows = metas.filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle));
+        } else {
+            const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$search="${encodeURIComponent(addr)}"&$top=25&$select=id,conversationId,internetMessageId,from,toRecipients,ccRecipients,bccRecipients,subject,receivedDateTime,bodyPreview,isRead`, { headers: { Authorization: 'Bearer ' + at, ConsistencyLevel: 'eventual' } });
+            if (r.status === 403) return { reauth: true };
+            const d = await r.json();
+            rows = (d.value || []).map(m => ({ pid: m.id, thread: m.conversationId, rfc: m.internetMessageId || '', from: (m.from && m.from.emailAddress && m.from.emailAddress.address) || '', to: (m.toRecipients || []).map(x => x.emailAddress.address).join(', '), cc: (m.ccRecipients || []).map(x => x.emailAddress.address).join(', '), bcc: (m.bccRecipients || []).map(x => x.emailAddress.address).join(', '), subject: m.subject || '(no subject)', date: m.receivedDateTime ? new Date(m.receivedDateTime) : null, snippet: m.bodyPreview || '', unread: m.isRead === false }))
+                .filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle));
+        }
+    } catch (e) { return { reauth: false }; }
+
+    if (rows.length) {
+        const mbEmail = String(mb.email || '').toLowerCase();
+        const records = rows.map(e => {
+            const fromP = parseAddr(e.from);
+            const outbound = !!(mbEmail && fromP.email && fromP.email.toLowerCase() === mbEmail);
+            return {
+                sub_account_id: subId, portal_id: portalId, contact_id: contactId,
+                mailbox_kind: mb.kind, mailbox_email: mb.email, mailbox_person_id: mb.person_id, shared_mailbox_id: mb.shared_mailbox_id,
+                provider: mb.provider, provider_message_id: e.pid, provider_thread_id: e.thread, rfc_message_id: e.rfc,
+                direction: outbound ? 'outbound' : 'inbound',
+                from_address: fromP.email, from_name: fromP.name,
+                to_addresses: e.to, cc_addresses: e.cc, bcc_addresses: e.bcc,
+                subject: e.subject, snippet: e.snippet,
+                sent_at: e.date ? e.date.toISOString() : null, unread: !!e.unread
+            };
+        });
+        await supabase.from('crm_emails').upsert(records, { onConflict: 'sub_account_id,mailbox_email,provider_message_id' });
+    }
+    return { reauth: false };
 }
 function b64urlDecode(s) { try { return Buffer.from(String(s || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch (e) { return ''; } }
 function b64urlEncode(s) { return Buffer.from(s, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
@@ -613,67 +684,108 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // ── EMAIL (live from the acting user's connected mailbox, filtered to the contact) ──
+        // ── MAILBOXES (hybrid: shared CRM inbox + each person's personal) ────
+        // Whether the acting person may manage this CRM's shared mailbox / settings.
+        function canManageCrm(acc) { return ['owner', 'agency_admin', 'god'].includes(acc.role); }
+
+        if (action === 'list_mailboxes') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: shared } = await supabase.from('crm_mailboxes').select('id, provider, email, label, status, connected_by, created_at').eq('sub_account_id', body.sub_account_id).order('created_at');
+            const conn = await emailConn(personId);
+            return res.status(200).json({ success: true, shared: shared || [], personal: conn || null, can_manage: canManageCrm(acc) });
+        }
+        // OAuth URL to connect a SHARED mailbox (owner/admin only). Signs scope into state.
+        if (action === 'oauth_url_shared') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            if (!canManageCrm(acc)) return res.status(403).json({ success: false, message: 'Only owners and agency admins can connect a shared mailbox.' });
+            const provider = body.provider;
+            const PORTAL_URL = process.env.SITE_URL || 'https://portal.mypayprotec.com';
+            const REDIRECT_URI = `${PORTAL_URL}/api/partner-oauth`;
+            const { createHmac } = await import('crypto');
+            const STATE_SECRET = process.env.TOKEN_ENCRYPTION_KEY || 'fallback-secret';
+            const payload = { personId, provider, scope: 'shared', sub_account_id: body.sub_account_id, ts: Date.now(), ret: (typeof body.return_to === 'string' ? body.return_to.slice(0, 300) : null) };
+            const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+            const sig = createHmac('sha256', STATE_SECRET).update(b64).digest('hex').slice(0, 16);
+            const state = `${b64}.${sig}`;
+            let url;
+            if (provider === 'google') {
+                if (!process.env.GOOGLE_CLIENT_ID) return res.status(200).json({ success: false, message: 'Google OAuth not configured yet.' });
+                url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly openid email', access_type: 'offline', prompt: 'consent', state });
+            } else if (provider === 'microsoft') {
+                if (!process.env.MICROSOFT_CLIENT_ID) return res.status(200).json({ success: false, message: 'Microsoft OAuth not configured yet.' });
+                const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
+                url = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?` + new URLSearchParams({ client_id: process.env.MICROSOFT_CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: 'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access', prompt: 'select_account', state });
+            } else return res.status(400).json({ success: false, message: 'Unknown provider.' });
+            return res.status(200).json({ success: true, url });
+        }
+        if (action === 'disconnect_shared_mailbox') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            if (!canManageCrm(acc)) return res.status(403).json({ success: false, message: 'Only owners and agency admins can manage the shared mailbox.' });
+            await supabase.from('crm_mailboxes').delete().eq('id', body.mailbox_id).eq('sub_account_id', body.sub_account_id);
+            return res.status(200).json({ success: true });
+        }
+
+        // ── EMAIL CHANNEL (unified crm_emails store; synced from all accessible mailboxes) ──
         if (action === 'contact_emails') {
             const ca = await contactAccess(body.id, 'conversations');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
-            const to = ca.contact.email;
-            if (!to) return res.status(200).json({ success: true, emails: [], no_email: true });
-            const conn = await emailConn(personId);
-            if (!conn) return res.status(200).json({ success: true, emails: [], needs_connect: true });
-            const at = await getValidAccessToken(personId, conn.provider);
-            if (!at) return res.status(200).json({ success: true, emails: [], needs_connect: true });
-            try {
-                const needle = String(to).toLowerCase().trim();
-                if (conn.provider === 'google') {
-                    // Curly braces = OR in Gmail; quote the address so it isn't tokenized into loose terms.
-                    const q = encodeURIComponent(`{from:"${to}" to:"${to}" cc:"${to}" bcc:"${to}"}`);
-                    const lr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`, { headers: { Authorization: 'Bearer ' + at } });
-                    if (lr.status === 403) return res.status(200).json({ success: true, emails: [], needs_reauth: true });
-                    const list = await lr.json();
-                    const ids = (list.messages || []).map(m => m.id);
-                    let emails = await Promise.all(ids.map(async id => {
-                        const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Bcc&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID`, { headers: { Authorization: 'Bearer ' + at } });
-                        const m = await mr.json();
-                        const h = {}; ((m.payload && m.payload.headers) || []).forEach(x => h[x.name.toLowerCase()] = x.value);
-                        return { id: m.id, thread_id: m.threadId, message_id: h['message-id'] || '', from: h.from || '', to: h.to || '', cc: h.cc || '', bcc: h.bcc || '', subject: h.subject || '(no subject)', date: m.internalDate ? Number(m.internalDate) : null, snippet: m.snippet || '', unread: (m.labelIds || []).includes('UNREAD'), outbound: (m.labelIds || []).includes('SENT') };
-                    }));
-                    // Safety net: only keep messages whose From/To/Cc/Bcc actually contain the contact's address.
-                    emails = emails.filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle));
-                    emails.sort((a, b) => (b.date || 0) - (a.date || 0));
-                    return res.status(200).json({ success: true, emails, address: conn.email });
-                } else if (conn.provider === 'microsoft') {
-                    const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$search="${encodeURIComponent(to)}"&$top=25&$select=id,conversationId,from,toRecipients,ccRecipients,bccRecipients,subject,receivedDateTime,bodyPreview,isRead`, { headers: { Authorization: 'Bearer ' + at, ConsistencyLevel: 'eventual' } });
-                    if (r.status === 403) return res.status(200).json({ success: true, emails: [], needs_reauth: true });
-                    const d = await r.json();
-                    const emails = (d.value || []).map(m => ({
-                        id: m.id, thread_id: m.conversationId, from: (m.from && m.from.emailAddress && m.from.emailAddress.address) || '',
-                        to: (m.toRecipients || []).map(x => x.emailAddress.address).join(', '), cc: (m.ccRecipients || []).map(x => x.emailAddress.address).join(', '), bcc: (m.bccRecipients || []).map(x => x.emailAddress.address).join(', '),
-                        subject: m.subject || '(no subject)', date: m.receivedDateTime ? new Date(m.receivedDateTime).getTime() : null, snippet: m.bodyPreview || '', unread: m.isRead === false, outbound: false
-                    }))
-                    // Safety net: $search is fuzzy full-text — keep only messages actually involving the contact.
-                    .filter(e => [e.from, e.to, e.cc, e.bcc].join(' ').toLowerCase().includes(needle))
-                    .sort((a, b) => (b.date || 0) - (a.date || 0));
-                    return res.status(200).json({ success: true, emails, address: conn.email });
-                }
-                return res.status(200).json({ success: true, emails: [] });
-            } catch (e) { return res.status(200).json({ success: true, emails: [], error: 'Could not load email.' }); }
+            const addr = ca.contact.email;
+            if (!addr) return res.status(200).json({ success: true, emails: [], no_email: true });
+            const boxes = await accessibleMailboxes(personId, ca.contact.sub_account_id);
+            if (!boxes.length) return res.status(200).json({ success: true, emails: [], needs_connect: true });
+            let reauth = false;
+            await Promise.all(boxes.map(async mb => { const r = await syncMailboxForContact(mb, addr, ca.contact.sub_account_id, ca.portal_id, body.id); if (r.reauth && mb.kind === 'personal') reauth = true; }));
+            const { data: emails } = await supabase.from('crm_emails').select('*').eq('contact_id', body.id).order('sent_at', { ascending: false }).limit(100);
+            return res.status(200).json({ success: true, emails: emails || [], mailboxes: boxes.map(b => ({ kind: b.kind, email: b.email, provider: b.provider, id: b.shared_mailbox_id })), needs_reauth: reauth });
+        }
+        // Recent email threads across this CRM (for the Conversations "Email" channel list).
+        if (action === 'list_email_conversations') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: rows } = await supabase.from('crm_emails').select('*').eq('sub_account_id', body.sub_account_id).order('sent_at', { ascending: false }).limit(400);
+            const own = assignedFilter(acc);
+            const byContact = {};
+            (rows || []).forEach(e => { if (!e.contact_id) return; if (!byContact[e.contact_id]) byContact[e.contact_id] = e; });
+            let cids = Object.keys(byContact);
+            const contacts = {};
+            if (cids.length) { const { data: cs } = await supabase.from('crm_contacts').select('id, first_name, last_name, email, phone, company, owner_person_id').in('id', cids); (cs || []).forEach(c => contacts[c.id] = c); }
+            let threads = cids.map(cid => ({ contact_id: cid, contact: contacts[cid] || null, last: byContact[cid] })).filter(t => t.contact);
+            if (own) threads = threads.filter(t => t.contact.owner_person_id === own);
+            threads.sort((a, b) => new Date(b.last.sent_at || 0) - new Date(a.last.sent_at || 0));
+            return res.status(200).json({ success: true, threads });
         }
 
         if (action === 'email_body') {
-            const ca = await contactAccess(body.contact_id, 'conversations');
+            let row = null;
+            if (body.email_id) { const { data } = await supabase.from('crm_emails').select('*').eq('id', body.email_id).maybeSingle(); row = data; }
+            const cid = (row && row.contact_id) || body.contact_id;
+            const ca = await contactAccess(cid, 'conversations');
             if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
-            const conn = await emailConn(personId);
-            const at = conn && await getValidAccessToken(personId, conn.provider);
+            let mb, pmid;
+            if (row) {
+                mb = row.shared_mailbox_id
+                    ? { kind: 'shared', shared_mailbox_id: row.shared_mailbox_id, provider: row.provider }
+                    : { kind: 'personal', person_id: row.mailbox_person_id || personId, provider: row.provider };
+                pmid = row.provider_message_id;
+            } else {
+                const conn = await emailConn(personId);
+                mb = conn ? { kind: 'personal', person_id: personId, provider: conn.provider } : null;
+                pmid = body.message_id;
+            }
+            if (!mb) return res.status(400).json({ success: false, message: 'Email not connected.' });
+            const at = await mailboxToken(mb);
             if (!at) return res.status(400).json({ success: false, message: 'Email not connected.' });
             try {
-                if (conn.provider === 'google') {
-                    const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${body.message_id}?format=full`, { headers: { Authorization: 'Bearer ' + at } });
+                if (mb.provider === 'google') {
+                    const mr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${pmid}?format=full`, { headers: { Authorization: 'Bearer ' + at } });
                     const m = await mr.json();
                     const parts = extractGmailBody(m.payload);
                     return res.status(200).json({ success: true, html: parts.html, text: parts.text });
                 } else {
-                    const mr = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${body.message_id}?$select=body`, { headers: { Authorization: 'Bearer ' + at } });
+                    const mr = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${pmid}?$select=body`, { headers: { Authorization: 'Bearer ' + at } });
                     const m = await mr.json();
                     const isHtml = m.body && m.body.contentType === 'html';
                     return res.status(200).json({ success: true, html: isHtml ? m.body.content : '', text: isHtml ? '' : (m.body && m.body.content) || '' });
@@ -684,21 +796,27 @@ export default async function handler(req, res) {
         if (action === 'send_email') {
             const ca = await contactAccess(body.contact_id, 'conversations');
             if (!ca) return res.status(403).json({ success: false, message: 'No access.' });
-            const conn = await emailConn(personId);
-            const at = conn && await getValidAccessToken(personId, conn.provider);
-            if (!at) return res.status(400).json({ success: false, message: 'Connect your email first.' });
+            // Choose the sending mailbox: 'personal' or 'shared:<id>'. Default: personal, else first shared.
+            const boxes = await accessibleMailboxes(personId, ca.contact.sub_account_id);
+            let mb = null;
+            if (body.from_mailbox === 'personal') mb = boxes.find(b => b.kind === 'personal');
+            else if (typeof body.from_mailbox === 'string' && body.from_mailbox.indexOf('shared:') === 0) { const id = body.from_mailbox.slice(7); mb = boxes.find(b => b.kind === 'shared' && b.shared_mailbox_id === id); }
+            if (!mb) mb = boxes.find(b => b.kind === 'personal') || boxes.find(b => b.kind === 'shared');
+            if (!mb) return res.status(400).json({ success: false, message: 'Connect a mailbox first.' });
+            const at = await mailboxToken(mb);
+            if (!at) return res.status(400).json({ success: false, message: 'That mailbox needs reconnecting.' });
             const to = (body.to || ca.contact.email || '').trim();
             const subject = (body.subject || '').trim() || '(no subject)';
             const html = (body.body || '').replace(/\n/g, '<br>');
             if (!to) return res.status(400).json({ success: false, message: 'No recipient email.' });
-            // CC: accepts an array or comma/semicolon-separated string; dedup + drop the primary recipient.
             const ccList = (Array.isArray(body.cc) ? body.cc : String(body.cc || '').split(/[,;]/))
                 .map(x => String(x).trim()).filter(Boolean)
                 .filter((x, i, a) => a.indexOf(x) === i && x.toLowerCase() !== to.toLowerCase());
             const cc = ccList.join(', ');
             try {
-                if (conn.provider === 'google') {
-                    var mime = ['To: ' + to, 'From: ' + conn.email];
+                let sentId = null, sentThread = body.thread_id || null;
+                if (mb.provider === 'google') {
+                    var mime = ['To: ' + to, 'From: ' + mb.email];
                     if (cc) mime.push('Cc: ' + cc);
                     mime.push('Subject: ' + subject, 'Content-Type: text/html; charset=UTF-8', 'MIME-Version: 1.0');
                     if (body.in_reply_to) { mime.push('In-Reply-To: ' + body.in_reply_to); mime.push('References: ' + body.in_reply_to); }
@@ -707,14 +825,24 @@ export default async function handler(req, res) {
                     if (body.thread_id) payload.threadId = body.thread_id;
                     const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                     if (!r.ok) return res.status(500).json({ success: false, message: 'Gmail send failed.' });
+                    const sent = await r.json(); sentId = sent && sent.id; sentThread = (sent && sent.threadId) || sentThread;
                 } else {
                     const msg = { subject, body: { contentType: 'HTML', content: html }, toRecipients: [{ emailAddress: { address: to } }] };
                     if (ccList.length) msg.ccRecipients = ccList.map(a => ({ emailAddress: { address: a } }));
                     const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + at, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) });
                     if (r.status !== 202) return res.status(500).json({ success: false, message: 'Outlook send failed.' });
                 }
-                // Log to the CRM conversation as an outbound email.
-                await supabase.from('crm_messages').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, direction: 'outbound', channel: 'email', body: 'Subject: ' + subject + (cc ? '\nCc: ' + cc : '') + '\n\n' + (body.body || ''), created_by: personId });
+                // Record the outbound message in the email store so it shows instantly + attributed.
+                // (Gmail returns an id; Graph doesn't — that one is picked up on the next sync.)
+                if (sentId) {
+                    await supabase.from('crm_emails').upsert({
+                        sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id,
+                        mailbox_kind: mb.kind, mailbox_email: mb.email, mailbox_person_id: mb.person_id, shared_mailbox_id: mb.shared_mailbox_id,
+                        provider: mb.provider, provider_message_id: sentId, provider_thread_id: sentThread, rfc_message_id: body.in_reply_to || '',
+                        direction: 'outbound', from_address: mb.email, from_name: '', to_addresses: to, cc_addresses: cc,
+                        subject, snippet: (body.body || '').slice(0, 200), sent_at: new Date().toISOString(), unread: false
+                    }, { onConflict: 'sub_account_id,mailbox_email,provider_message_id' });
+                }
                 return res.status(200).json({ success: true });
             } catch (e) { return res.status(500).json({ success: false, message: 'Could not send email.' }); }
         }
