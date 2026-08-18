@@ -813,7 +813,7 @@ function wlBuildRecords(d, target){
     // 3) Cloudflare SSL (DCV) TXT records.
     (v.dcv||[]).forEach(function(r){ if(r.txt_name&&r.txt_value) recs.push({type:'TXT', name:r.txt_name, value:r.txt_value, purpose:'Issues the SSL certificate', done:sslActive}); });
     // 4) Vercel origin verification TXT (the record that clears the 525).
-    if(vc&&vc.configured&&!vc.verified) (vc.verification||[]).forEach(function(r){ if(r.value) recs.push({type:(r.type||'TXT').toUpperCase(), name:r.name||('_vercel.'+d.host.split('.').slice(1).join('.')), value:r.value, purpose:'Activates the secure origin', done:false}); });
+    if(vc&&vc.configured&&!vc.verified) (vc.verification||[]).forEach(function(r){ if(r.value) recs.push({type:(r.type||'TXT').toUpperCase(), name:r.name||('_vercel.'+d.host.split('.').slice(1).join('.')), value:r.value, purpose:'Confirms domain ownership (one-time — this domain is registered elsewhere)', done:false}); });
     else if(vc&&vc.configured&&vc.verified) { /* origin verified, nothing to add */ }
     return recs;
 }
