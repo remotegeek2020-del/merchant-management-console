@@ -261,22 +261,55 @@ function domainCard(){
           +'<div class="muted" style="margin-top:8px;">Use a subdomain you control (e.g. <code>app.</code>). One DNS record; SSL is automatic.</div>';
     } else {
         var st=DOMAIN.ssl_status||DOMAIN.status;
-        var label = st==='active'?['Live','#059669','#22c55e']:(st==='ssl_pending'?['Issuing SSL…','#b45309','#f59e0b']:['Waiting for DNS','#b45309','#f59e0b']);
-        var v=DOMAIN.verification||{}; var dcv=[];
-        (v.dcv||[]).forEach(function(x){ if(x.txt_name&&x.txt_value) dcv.push('TXT · '+esc(x.txt_name)+' → '+esc(x.txt_value)); });
-        if(v.ownership&&v.ownership.name) dcv.push('TXT · '+esc(v.ownership.name)+' → '+esc(v.ownership.value));
+        var label = st==='active'?['Live','#059669','#22c55e']
+          :(st==='ssl_pending'?['Issuing SSL…','#b45309','#f59e0b']
+          :(st==='vercel_pending'?['Action needed','#b45309','#f59e0b']
+          :['Waiting for DNS','#b45309','#f59e0b']));
         inner='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'
           +'<div><div style="font-weight:800;font-size:15px;">'+esc(DOMAIN.host)+'</div><div class="status" style="color:'+label[1]+';margin-top:3px;"><span class="dot" style="background:'+label[2]+';"></span>'+label[0]+'</div></div>'
           +(cm?'<div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="refreshDomain(this)"><span class="material-icons" style="font-size:16px;">refresh</span> Check status</button><button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="removeDomain()">Remove</button></div>':'')+'</div>';
         if(st!=='active'){
-            inner+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;"><div style="font-size:12px;font-weight:800;margin-bottom:8px;">Add this DNS record at your domain provider</div>'
-              +'<div style="overflow-x:auto;"><table class="dns"><thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>CNAME</td><td>'+esc(DOMAIN.host)+'</td><td>'+esc(CNAME||'(from support)')+'</td></tr></tbody></table></div>'
-              +(dcv.length?'<div class="muted" style="margin-top:10px;"><b>Also add for SSL:</b><br>'+dcv.join('<br>')+'</div>':'')+'</div>';
+            var recs=asBuildRecords(DOMAIN, CNAME);
+            var pending=recs.filter(function(r){return !r.done;}).length;
+            var hdr;
+            if(pending) hdr='<div style="font-size:12px;color:#b45309;font-weight:700;margin:12px 0 10px;">'+pending+' record'+(pending===1?'':'s')+' still need'+(pending===1?'s':'')+' to verify.</div>';
+            else if(st==='ssl_pending') hdr='<div style="font-size:12px;color:#b45309;font-weight:700;margin:12px 0 10px;">✅ DNS verified — issuing your SSL certificate automatically. This can take a few minutes; click Check status.</div>';
+            else hdr='<div style="font-size:12px;color:#059669;font-weight:700;margin:12px 0 10px;">All records verified. 🎉</div>';
+            inner+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">'
+              +'<div style="font-size:12px;font-weight:800;margin-bottom:4px;">Add the record(s) below at your domain provider</div>'
+              +'<div class="muted" style="margin-bottom:10px;">Usually just the <b>CNAME</b> — SSL is issued automatically (no TXT). Any extra record required appears here with its own status.</div>'
+              +hdr+recs.map(asRecordRow).join('')
+              +(st==='dns_pending'?'<div class="muted" style="margin-top:6px;">If your DNS is on Cloudflare, set this CNAME to <b>DNS only</b> (grey cloud), not proxied. New records can take a few minutes to propagate — click Check status again shortly.</div>':'')
+              +'</div>';
         }
     }
     return '<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">public</span> Custom Domain</div>'
       +'<div class="card-sub">Run the portal on your own branded URL.</div>'+inner+'</div>';
 }
+// Full record list from the domain's verification state — each independently tracked.
+function asBuildRecords(d, target){
+    var v=d.verification||{}; var cfActive=(v.cf_status==='active'); var sslActive=(v.ssl_status==='active');
+    var vc=v.vercel||null;
+    var recs=[{type:'CNAME', name:d.host, value:target||'(set by support)', purpose:'Points your domain to the platform', done:cfActive}];
+    if(v.ownership&&v.ownership.name&&v.ownership.value) recs.push({type:(v.ownership.type||'TXT').toUpperCase(), name:v.ownership.name, value:v.ownership.value, purpose:'Verifies you own the domain', done:cfActive});
+    (v.dcv||[]).forEach(function(r){ if(r.txt_name&&r.txt_value) recs.push({type:'TXT', name:r.txt_name, value:r.txt_value, purpose:'Issues the SSL certificate', done:sslActive}); });
+    if(vc&&vc.configured&&!vc.verified) (vc.verification||[]).forEach(function(r){ if(r.value) recs.push({type:(r.type||'TXT').toUpperCase(), name:r.name||('_vercel.'+d.host.split('.').slice(1).join('.')), value:r.value, purpose:'Activates the secure origin', done:false}); });
+    return recs;
+}
+function asRecordRow(r){
+    var pill=r.done
+      ?'<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:99px;background:#ecfdf5;color:#059669;font-size:11px;font-weight:800;"><span class="material-icons" style="font-size:13px;">check_circle</span> Verified</span>'
+      :'<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:99px;background:#fffbeb;color:#b45309;font-size:11px;font-weight:800;"><span class="material-icons" style="font-size:13px;">schedule</span> Pending</span>';
+    var mono='font-family:monospace;word-break:break-all;';
+    return '<div style="border:1px solid '+(r.done?'#d1fae5':'#e2e8f0')+';border-radius:12px;padding:12px 14px;margin-bottom:10px;background:'+(r.done?'#f6fefb':'#fff')+';">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;"><div style="font-size:11px;font-weight:800;color:var(--muted,#64748b);">'+esc(r.purpose)+'</div>'+pill+'</div>'
+      +'<div style="display:grid;grid-template-columns:64px 1fr;gap:6px 10px;font-size:12px;align-items:center;">'
+        +'<div style="color:#64748b;font-weight:700;">Type</div><div style="'+mono+'font-weight:700;">'+esc(r.type)+'</div>'
+        +'<div style="color:#64748b;font-weight:700;">Name</div><div style="'+mono+'"><span onclick="asCopy(this,\''+esc(r.name).replace(/'/g,"\\'")+'\')" title="Copy" style="cursor:pointer;">'+esc(r.name)+' <span class="material-icons" style="font-size:13px;vertical-align:-2px;color:#94a3b8;">content_copy</span></span></div>'
+        +'<div style="color:#64748b;font-weight:700;">Value</div><div style="'+mono+'"><span onclick="asCopy(this,\''+esc(r.value).replace(/'/g,"\\'")+'\')" title="Copy" style="cursor:pointer;">'+esc(r.value)+' <span class="material-icons" style="font-size:13px;vertical-align:-2px;color:#94a3b8;">content_copy</span></span></div>'
+      +'</div></div>';
+}
+window.asCopy=function(el,val){ try{ navigator.clipboard.writeText(val); var ic=el.querySelector('.material-icons'); if(ic){ var o=ic.textContent; ic.textContent='check'; setTimeout(function(){ic.textContent=o;},1200);} }catch(e){} };
 
 window.saveBranding = async function(btn){
     btn.disabled=true;
@@ -314,7 +347,7 @@ window.addDomain = async function(btn){
     var r=await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_domain',token:token,host:host})}).then(x=>x.json());
     btn.disabled=false;
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not connect.','error'); return; }
-    DOMAIN={host:r.host,ssl_status:r.status,verification:r.verification}; CNAME=r.cname_target||CNAME; render();
+    DOMAIN={host:r.host,ssl_status:r.status,verification:r.verification,active:r.active}; CNAME=r.cname_target||CNAME; render();
     Swal.fire({icon:'success',title:'Domain connected',text:'Add the DNS record shown, then Check status.',timer:2200,showConfirmButton:false});
 };
 window.refreshDomain = async function(btn){
@@ -322,7 +355,7 @@ window.refreshDomain = async function(btn){
     var r=await fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'refresh_domain',token:token})}).then(x=>x.json());
     btn.disabled=false;
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Error.','error'); return; }
-    DOMAIN={host:r.host,ssl_status:r.status,verification:r.verification}; render();
+    DOMAIN={host:r.host,ssl_status:r.status,verification:r.verification,active:r.active}; render();
     if(r.status==='active') Swal.fire({icon:'success',title:'Your domain is live! 🎉',timer:1800,showConfirmButton:false});
 };
 window.removeDomain = async function(){
