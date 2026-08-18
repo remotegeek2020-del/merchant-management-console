@@ -190,10 +190,10 @@
                     </div>
                     <!-- DNS instructions (all records, each tracked) -->
                     <div id="wlDns" style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
-                        <div style="font-size:12px;font-weight:800;color:var(--secondary);margin-bottom:4px;">Add these DNS records at your domain provider</div>
-                        <div class="section-sub" style="margin-bottom:10px;">Add every record below in one go — each is checked independently. Click <strong>Check status</strong> after adding them; a record can take a few minutes to verify. When all turn <strong>Verified</strong>, your branded portal goes live.</div>
+                        <div style="font-size:12px;font-weight:800;color:var(--secondary);margin-bottom:4px;">Add the record(s) below at your domain provider</div>
+                        <div class="section-sub" style="margin-bottom:10px;">In most cases you only add the <strong>CNAME</strong> — your SSL certificate is then issued automatically (no TXT needed). If any extra record is required it will appear here with its own status. Click <strong>Check status</strong> after adding; each record is tracked independently and can take a few minutes to verify.</div>
                         <div id="wlRecordList"></div>
-                        <div class="section-sub" style="margin-top:10px;">Some providers append your domain automatically — if a Name looks doubled (e.g. <code>_x.app.you.com.you.com</code>), enter just the part before your domain.</div>
+                        <div class="section-sub" style="margin-top:10px;">Tip: some providers add your domain to the Name automatically — if a Name looks doubled (e.g. <code>app.you.com.you.com</code>), enter just the part before your domain.</div>
                     </div>
                 </div>
             </div>
@@ -842,9 +842,10 @@ function wlRenderDomain(d, target){
     var pending=recs.filter(function(r){return !r.done;}).length;
     var list=document.getElementById('wlRecordList');
     if(list){
-        var header = pending
-          ? '<div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:10px;">'+pending+' record'+(pending===1?'':'s')+' still need'+(pending===1?'s':'')+' to verify.</div>'
-          : '<div style="font-size:12px;color:#059669;font-weight:700;margin-bottom:10px;">All records verified. 🎉</div>';
+        var header;
+        if(pending) header='<div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:10px;">'+pending+' record'+(pending===1?'':'s')+' still need'+(pending===1?'s':'')+' to verify.</div>';
+        else if(d.status==='ssl_pending') header='<div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:10px;">✅ DNS verified — issuing your SSL certificate automatically. This can take a few minutes; click Check status.</div>';
+        else header='<div style="font-size:12px;color:#059669;font-weight:700;margin-bottom:10px;">All records verified. 🎉</div>';
         list.innerHTML=header+recs.map(wlRecordRow).join('');
     }
     // Keep the records visible until the domain is truly live so partners can track them.

@@ -113,12 +113,19 @@ async function cfFetch(cf, path, opts = {}) {
 async function cfCreateHostname(cf, host) {
     const body = {
         hostname: host,
-        // TXT DCV: the certificate validates via a DNS TXT record, so it does NOT require
-        // the origin to be reachable first (HTTP DCV does). More reliable for onboarding.
-        ssl: { method: 'txt', type: 'dv', settings: { min_tls_version: '1.2' } }
+        // HTTP DCV: Cloudflare validates the certificate at its own edge over HTTP once the
+        // partner's CNAME points here — so the partner adds ONLY the CNAME, no TXT record,
+        // and SSL issues automatically. (The origin doesn't need to be reachable for HTTP-01;
+        // Cloudflare serves the ACME challenge itself.)
+        ssl: { method: 'http', type: 'dv', settings: { min_tls_version: '1.2' } }
     };
     const r = await cfFetch(cf, `/zones/${cf.zone}/custom_hostnames`, { method: 'POST', body: JSON.stringify(body) });
     return r;
+}
+// Flip an existing custom hostname to HTTP DCV (heals older TXT-DCV hostnames so
+// partners no longer need to add the confusing certificate TXT record).
+async function cfSetHttpDcv(cf, id) {
+    return cfFetch(cf, `/zones/${cf.zone}/custom_hostnames/${id}`, { method: 'PATCH', body: JSON.stringify({ ssl: { method: 'http', type: 'dv', settings: { min_tls_version: '1.2' } } }) });
 }
 async function cfGetHostname(cf, id) {
     return cfFetch(cf, `/zones/${cf.zone}/custom_hostnames/${id}`, { method: 'GET' });
@@ -398,7 +405,13 @@ async function refreshBrandStatus(cf, brandRow) {
     if (!brandRow || !brandRow.cf_hostname_id) return brandRow;
     const r = await cfGetHostname(cf, brandRow.cf_hostname_id);
     if (!r.ok) return brandRow;
-    const d = distillCf(r.json.result, cf.target);
+    let rec = r.json.result;
+    // Heal legacy hostnames created with TXT DCV: switch them to HTTP DCV so the
+    // partner never has to add the certificate TXT (only the CNAME is needed).
+    if (rec && rec.ssl && rec.ssl.method === 'txt' && rec.ssl.status !== 'active') {
+        try { const p = await cfSetHttpDcv(cf, brandRow.cf_hostname_id); if (p.ok && p.json && p.json.result) rec = p.json.result; } catch (e) {}
+    }
+    const d = distillCf(rec, cf.target);
     // Also re-attempt/verify the Vercel origin so "Refresh" self-heals a missed
     // registration and surfaces the verification record the partner still owes.
     let vercel = null;
