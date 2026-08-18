@@ -188,25 +188,12 @@
                             <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" onclick="wlRemove(this)">Remove</button>
                         </div>
                     </div>
-                    <!-- DNS instructions -->
+                    <!-- DNS instructions (all records, each tracked) -->
                     <div id="wlDns" style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
-                        <div style="font-size:12px;font-weight:800;color:var(--secondary);margin-bottom:8px;">Add this DNS record at your domain provider</div>
-                        <div style="overflow-x:auto;">
-                          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px;">
-                            <thead><tr style="text-align:left;color:var(--muted);">
-                                <th style="padding:6px 8px;font-weight:700;">Type</th><th style="padding:6px 8px;font-weight:700;">Name / Host</th><th style="padding:6px 8px;font-weight:700;">Value / Target</th>
-                            </tr></thead>
-                            <tbody>
-                              <tr style="background:#f8fafc;">
-                                <td style="padding:8px;font-family:'DM Mono',monospace;font-weight:700;">CNAME</td>
-                                <td id="wlDnsName" style="padding:8px;font-family:'DM Mono',monospace;"></td>
-                                <td id="wlDnsTarget" style="padding:8px;font-family:'DM Mono',monospace;"></td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                        <div id="wlDcvWrap" style="display:none;margin-top:10px;font-size:12px;color:var(--secondary);"></div>
-                        <div class="section-sub" style="margin-top:10px;">After adding the record, DNS + SSL can take a few minutes to a few hours. Click <strong>Check status</strong> to refresh. When it turns <strong>Live</strong>, your branded portal is reachable at your domain.</div>
+                        <div style="font-size:12px;font-weight:800;color:var(--secondary);margin-bottom:4px;">Add these DNS records at your domain provider</div>
+                        <div class="section-sub" style="margin-bottom:10px;">Add every record below in one go — each is checked independently. Click <strong>Check status</strong> after adding them; a record can take a few minutes to verify. When all turn <strong>Verified</strong>, your branded portal goes live.</div>
+                        <div id="wlRecordList"></div>
+                        <div class="section-sub" style="margin-top:10px;">Some providers append your domain automatically — if a Name looks doubled (e.g. <code>_x.app.you.com.you.com</code>), enter just the part before your domain.</div>
                     </div>
                 </div>
             </div>
@@ -806,25 +793,62 @@ async function disconnectEmail(provider) {
 function wlApi(b){ return fetch('/api/whitelabel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token},b))}).then(r=>r.json()); }
 function wlEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function wlStatusLabel(st){
-    var map={active:['Live','#059669','#ecfdf5'],ssl_pending:['Issuing SSL…','#b45309','#fffbeb'],dns_pending:['Waiting for DNS','#b45309','#fffbeb'],pending:['Pending','#b45309','#fffbeb']};
+    var map={active:['Live','#059669','#ecfdf5'],vercel_pending:['Action needed','#b45309','#fffbeb'],ssl_pending:['Issuing SSL…','#b45309','#fffbeb'],dns_pending:['Waiting for DNS','#b45309','#fffbeb'],pending:['Pending','#b45309','#fffbeb']};
     var m=map[st]||map.pending; return '<span style="padding:2px 10px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>';
 }
+// Build the full record list from the domain's verification state. Each record
+// carries its own "done" flag so the partner can track them independently.
+function wlBuildRecords(d, target){
+    var v=d.verification||{};
+    var cfActive=(v.cf_status==='active');
+    var sslActive=(v.ssl_status==='active');
+    var vc=v.vercel||null;
+    var vercelDone = !vc || !vc.configured || vc.verified;
+    var recs=[];
+    // 1) Traffic — the CNAME that points the domain at the platform.
+    recs.push({type:'CNAME', name:d.host, value:target||'(set by support)', purpose:'Points your domain to the platform', done:cfActive});
+    // 2) Cloudflare ownership TXT (if required).
+    if(v.ownership&&v.ownership.name&&v.ownership.value)
+        recs.push({type:(v.ownership.type||'TXT').toUpperCase(), name:v.ownership.name, value:v.ownership.value, purpose:'Verifies you own the domain', done:cfActive});
+    // 3) Cloudflare SSL (DCV) TXT records.
+    (v.dcv||[]).forEach(function(r){ if(r.txt_name&&r.txt_value) recs.push({type:'TXT', name:r.txt_name, value:r.txt_value, purpose:'Issues the SSL certificate', done:sslActive}); });
+    // 4) Vercel origin verification TXT (the record that clears the 525).
+    if(vc&&vc.configured&&!vc.verified) (vc.verification||[]).forEach(function(r){ if(r.value) recs.push({type:(r.type||'TXT').toUpperCase(), name:r.name||('_vercel.'+d.host.split('.').slice(1).join('.')), value:r.value, purpose:'Activates the secure origin', done:false}); });
+    else if(vc&&vc.configured&&vc.verified) { /* origin verified, nothing to add */ }
+    return recs;
+}
+function wlRecordRow(r){
+    var pill = r.done
+      ? '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:99px;background:#ecfdf5;color:#059669;font-size:11px;font-weight:800;"><span class="material-icons" style="font-size:13px;">check_circle</span> Verified</span>'
+      : '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:99px;background:#fffbeb;color:#b45309;font-size:11px;font-weight:800;"><span class="material-icons" style="font-size:13px;">schedule</span> Pending</span>';
+    var mono='font-family:DM Mono,monospace;word-break:break-all;';
+    return '<div style="border:1px solid '+(r.done?'#d1fae5':'#e2e8f0')+';border-radius:12px;padding:12px 14px;margin-bottom:10px;background:'+(r.done?'#f6fefb':'#fff')+';">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">'
+        +'<div style="font-size:11px;font-weight:800;color:var(--secondary);">'+wlEsc(r.purpose)+'</div>'+pill+'</div>'
+      +'<div style="display:grid;grid-template-columns:70px 1fr;gap:6px 10px;font-size:12px;align-items:center;">'
+        +'<div style="color:var(--muted);font-weight:700;">Type</div><div style="'+mono+'font-weight:700;">'+wlEsc(r.type)+'</div>'
+        +'<div style="color:var(--muted);font-weight:700;">Name</div><div style="'+mono+'"><span onclick="wlCopy(this,\''+wlEsc(r.name).replace(/'/g,"\\'")+'\')" title="Copy" style="cursor:pointer;">'+wlEsc(r.name)+' <span class="material-icons" style="font-size:13px;vertical-align:-2px;color:var(--muted);">content_copy</span></span></div>'
+        +'<div style="color:var(--muted);font-weight:700;">Value</div><div style="'+mono+'"><span onclick="wlCopy(this,\''+wlEsc(r.value).replace(/'/g,"\\'")+'\')" title="Copy" style="cursor:pointer;">'+wlEsc(r.value)+' <span class="material-icons" style="font-size:13px;vertical-align:-2px;color:var(--muted);">content_copy</span></span></div>'
+      +'</div></div>';
+}
+window.wlCopy=function(el,val){ try{ navigator.clipboard.writeText(val); var ic=el.querySelector('.material-icons'); if(ic){ var o=ic.textContent; ic.textContent='check'; setTimeout(function(){ic.textContent=o;},1200);} }catch(e){} };
 function wlRenderDomain(d, target){
     var noDom=document.getElementById('wlNoDomain'), card=document.getElementById('wlDomainCard');
     if(!d){ noDom.style.display=''; card.style.display='none'; return; }
     noDom.style.display='none'; card.style.display='';
     document.getElementById('wlDomainHost').textContent=d.host;
     document.getElementById('wlStatusBadge').innerHTML=wlStatusLabel(d.status);
-    document.getElementById('wlDnsName').textContent=d.host;
-    document.getElementById('wlDnsTarget').textContent=target||'(set by support)';
-    // Optional DCV/ownership record if Cloudflare requires a TXT.
-    var dcvWrap=document.getElementById('wlDcvWrap'); var v=d.verification||{};
-    var extra=[];
-    (v.dcv||[]).forEach(function(r){ if(r.txt_name&&r.txt_value) extra.push('TXT · <b>'+wlEsc(r.txt_name)+'</b> → <span style="font-family:DM Mono,monospace;">'+wlEsc(r.txt_value)+'</span>'); });
-    if(v.ownership&&v.ownership.name&&v.ownership.value) extra.push('TXT · <b>'+wlEsc(v.ownership.name)+'</b> → <span style="font-family:DM Mono,monospace;">'+wlEsc(v.ownership.value)+'</span>');
-    if(extra.length){ dcvWrap.style.display=''; dcvWrap.innerHTML='<b>Also add for SSL verification:</b><br>'+extra.join('<br>'); }
-    else { dcvWrap.style.display='none'; dcvWrap.innerHTML=''; }
-    document.getElementById('wlDns').style.display = d.status==='active' ? 'none' : '';
+    var recs=wlBuildRecords(d, target);
+    var pending=recs.filter(function(r){return !r.done;}).length;
+    var list=document.getElementById('wlRecordList');
+    if(list){
+        var header = pending
+          ? '<div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:10px;">'+pending+' record'+(pending===1?'':'s')+' still need'+(pending===1?'s':'')+' to verify.</div>'
+          : '<div style="font-size:12px;color:#059669;font-weight:700;margin-bottom:10px;">All records verified. 🎉</div>';
+        list.innerHTML=header+recs.map(wlRecordRow).join('');
+    }
+    // Keep the records visible until the domain is truly live so partners can track them.
+    document.getElementById('wlDns').style.display = (d.status==='active') ? 'none' : '';
 }
 var _wlTarget='';
 async function wlLoad(){

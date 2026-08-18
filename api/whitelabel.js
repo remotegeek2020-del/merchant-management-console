@@ -57,14 +57,40 @@ async function vercelFetch(v, path, opts = {}) {
     return { ok: res.ok, status: res.status, json };
 }
 // Register a domain with the Vercel project (idempotent — 409 = already added).
+function mapVercelVerification(arr) {
+    return (arr || []).map(x => ({ type: x.type, name: x.domain, value: x.value, reason: x.reason }));
+}
 async function vercelAddDomain(host) {
     const v = await getVercelConfig();
     if (!vercelConfigured(v)) return { skipped: true };
     const r = await vercelFetch(v, `/v10/projects/${v.project}/domains`, { method: 'POST', body: JSON.stringify({ name: host }) });
-    if (r.ok) return { ok: true };
+    if (r.ok) { const d = r.json || {}; return { ok: true, verified: d.verified !== false, verification: mapVercelVerification(d.verification) }; }
     const code = r.json && r.json.error && r.json.error.code;
     if (r.status === 409 || code === 'domain_already_in_use' || code === 'domain_already_exists') return { ok: true, existed: true };
     return { ok: false, message: (r.json && r.json.error && r.json.error.message) || 'Vercel add failed' };
+}
+// Fetch a domain's Vercel status + the exact verification records to add (if any).
+async function vercelDomainStatus(host) {
+    const v = await getVercelConfig();
+    if (!vercelConfigured(v)) return null;
+    const r = await vercelFetch(v, `/v9/projects/${v.project}/domains/${encodeURIComponent(host)}`);
+    if (!r.ok) return { registered: false, verified: false, verification: [] };
+    const d = r.json || {};
+    return { registered: true, verified: d.verified !== false, misconfigured: !!d.misconfigured, verification: mapVercelVerification(d.verification) };
+}
+// Add + read status in one call (self-healing: re-adds if it wasn't registered).
+// Returns { configured, ok, error, verified, misconfigured, verification[] }.
+async function vercelProvision(host) {
+    const add = await vercelAddDomain(host);
+    if (add.skipped) return { configured: false };
+    const st = await vercelDomainStatus(host);
+    const verification = (st && st.verification && st.verification.length) ? st.verification : (add.verification || []);
+    return {
+        configured: true, ok: add.ok !== false, error: (add.ok === false ? add.message : null),
+        verified: st ? st.verified : (add.verified !== false),
+        misconfigured: st ? st.misconfigured : false,
+        verification
+    };
 }
 async function vercelRemoveDomain(host) {
     const v = await getVercelConfig();
@@ -373,9 +399,21 @@ async function refreshBrandStatus(cf, brandRow) {
     const r = await cfGetHostname(cf, brandRow.cf_hostname_id);
     if (!r.ok) return brandRow;
     const d = distillCf(r.json.result, cf.target);
-    const patch = { ssl_status: d.phase, verification: { cf_status: d.cf_status, ssl_status: d.ssl_status, dcv: d.dcv, ownership: d.ownership }, updated_at: new Date().toISOString() };
-    // Auto-activate the brand once the certificate is live.
-    if (d.phase === 'active') patch.active = true;
+    // Also re-attempt/verify the Vercel origin so "Refresh" self-heals a missed
+    // registration and surfaces the verification record the partner still owes.
+    let vercel = null;
+    try { vercel = await vercelProvision(brandRow.host); } catch (e) {}
+    const vercelOk = !vercel || !vercel.configured || vercel.verified;
+    // Cloudflare edge can be "active" while the Vercel origin still needs a
+    // verification TXT — that's the 525. Report it as its own phase, not "Live".
+    let phase = d.phase;
+    if (phase === 'active' && !vercelOk) phase = 'vercel_pending';
+    const patch = {
+        ssl_status: phase,
+        verification: { cf_status: d.cf_status, ssl_status: d.ssl_status, dcv: d.dcv, ownership: d.ownership, vercel: vercel || null },
+        active: (phase === 'active'),
+        updated_at: new Date().toISOString()
+    };
     await supabase.from('portal_brands').update(patch).eq('id', brandRow.id);
     return { ...brandRow, ...patch };
 }
@@ -862,12 +900,17 @@ export default async function handler(req, res) {
                 };
                 // Seed the new domain with the agency's existing branding.
                 BRAND_FIELDS.forEach(f => { row[f] = portal[f] || null; });
+                // Register with Vercel up-front so we can show the origin verification
+                // record (if any) in the SAME step — partner adds every record at once.
+                let vercel = null;
+                try { vercel = await vercelProvision(host); } catch (e) {}
+                const vercelOk = !vercel || !vercel.configured || vercel.verified;
+                row.verification.vercel = vercel || null;
+                if (row.ssl_status === 'active' && !vercelOk) row.ssl_status = 'vercel_pending';
+                row.active = (row.ssl_status === 'active');
                 if (taken) await supabase.from('portal_brands').update(row).eq('id', taken.id);
                 else await supabase.from('portal_brands').upsert(row, { onConflict: 'host' });
-                // Auto-register the domain with Vercel so it serves the host (best-effort).
-                let vercel = null;
-                try { const vr = await vercelAddDomain(host); if (!vr.skipped) vercel = vr.ok ? 'added' : 'error'; } catch (e) {}
-                return res.status(200).json({ success: true, host, cname_target: cf.target, status: d.phase, verification: row.verification, vercel });
+                return res.status(200).json({ success: true, host, cname_target: cf.target, status: row.ssl_status, verification: row.verification });
             }
 
             if (action === 'refresh_domain') {
@@ -947,15 +990,23 @@ export default async function handler(req, res) {
             // a different (and more fundamental) problem than "no fallback origin."
             const authBad = !list.ok && [400, 401, 403].indexOf(list.status) >= 0;
             const authMsg = authBad ? ((list.json && list.json.errors && list.json.errors[0] && list.json.errors[0].message) || ('HTTP ' + list.status)) : null;
-            const hostnames = ((list.json && list.json.result) || []).map(h => ({
-                hostname: h.hostname, status: h.status,
-                ssl_status: h.ssl && h.ssl.status, ssl_method: h.ssl && h.ssl.method,
-                ssl_errors: (h.ssl && h.ssl.validation_errors || []).map(e => e.message),
-                verification_errors: h.verification_errors || []
+            const vconf = await getVercelConfig();
+            const hostnames = await Promise.all(((list.json && list.json.result) || []).map(async h => {
+                // Also report the Vercel origin state so admins can see a "verification
+                // required" origin (the 525 cause) that Cloudflare alone can't reveal.
+                let vercel = null;
+                if (vercelConfigured(vconf)) { try { vercel = await vercelDomainStatus(h.hostname); } catch (e) {} }
+                return {
+                    hostname: h.hostname, status: h.status,
+                    ssl_status: h.ssl && h.ssl.status, ssl_method: h.ssl && h.ssl.method,
+                    ssl_errors: (h.ssl && h.ssl.validation_errors || []).map(e => e.message),
+                    verification_errors: h.verification_errors || [],
+                    vercel
+                };
             }));
             return res.status(200).json({
                 success: true, configured: true, cname_target: cf.target || '',
-                auth_error: authMsg,
+                auth_error: authMsg, vercel_configured: vercelConfigured(vconf),
                 fallback_origin: foRes ? { origin: foRes.origin, status: foRes.status, errors: foRes.errors || [] } : null,
                 fallback_error: fo.ok ? null : ((fo.json && fo.json.errors && fo.json.errors[0] && fo.json.errors[0].message) || 'not set'),
                 hostnames
