@@ -234,6 +234,7 @@
         <a class="nav-item" data-section="dashboard" onclick="showSection('dashboard')"><span class="material-icons">dashboard</span> Dashboard</a>
         <a class="nav-item" data-section="contacts" onclick="showSection('contacts')"><span class="material-icons">contacts</span> Contacts</a>
         <a class="nav-item" data-section="opportunities" onclick="showSection('opportunities')"><span class="material-icons">trending_up</span> Opportunities</a>
+        <a class="nav-item" data-section="tasks" onclick="showSection('tasks')"><span class="material-icons">task_alt</span> Tasks</a>
         <a class="nav-item" data-section="conversations" onclick="showSection('conversations')"><span class="material-icons">forum</span> Conversations</a>
         <a class="nav-item" data-section="calendars" onclick="showSection('calendars')"><span class="material-icons">event</span> Calendars</a>
         <a class="nav-item" data-section="automation" onclick="showSection('automation')"><span class="material-icons">bolt</span> Automation</a>
@@ -317,7 +318,7 @@ function subPartnersPanel(){
     }).join('');
     return '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', forms:'Forms', reporting:'Reporting', ideas:'Ideas & Suggestions', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
+var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', tasks:'Tasks', conversations:'Conversations', calendars:'Calendars', automation:'Automation', forms:'Forms', reporting:'Reporting', ideas:'Ideas & Suggestions', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
 var SECTIONS = {
     dashboard: dashboardSection,
     contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
@@ -326,6 +327,7 @@ var SECTIONS = {
     calendars: function(){ setTimeout(loadCalendar, 0); return '<div id="crmCal"><div class="empty"><span class="material-icons">event</span><h4>Loading…</h4></div></div>'; },
     automation: function(){ setTimeout(loadWorkflows, 0); return '<div id="crmAuto"><div class="empty"><span class="material-icons">bolt</span><h4>Loading…</h4></div></div>'; },
     ideas: function(){ setTimeout(loadIdeas, 0); return '<div id="crmIdeas"><div class="empty"><span class="material-icons">lightbulb</span><h4>Loading…</h4></div></div>'; },
+    tasks: function(){ setTimeout(loadTasks, 0); return '<div id="crmTasks"><div class="empty"><span class="material-icons">task_alt</span><h4>Loading…</h4></div></div>'; },
     forms: function(){ setTimeout(loadForms, 0); return '<div id="crmForms"><div class="empty"><span class="material-icons">description</span><h4>Loading forms…</h4></div></div>'; },
     reporting: function(){ setTimeout(loadReport, 0); return '<div id="crmReport"><div class="empty"><span class="material-icons">insights</span><h4>Loading reporting…</h4></div></div>'; },
     merchants: merchantsPanel,
@@ -1229,6 +1231,73 @@ window.convLog=async function(){
 window.convDelMsg=async function(id){ await crmApi({action:'delete_message', id:id}); await convOpen(CONV_ACTIVE); };
 window.convComposeEmail=function(){ cdCompose(); };
 function convScrollBottom(){ setTimeout(function(){ var b=document.getElementById('convBody'); if(b) b.scrollTop=b.scrollHeight; }, 30); }
+
+/* ── TASKS (global "My Work" across the CRM) ───────────────────────────────── */
+var TASKS_LIST=[], TASKS_ME=null, TASKS_SCOPE='mine';
+async function loadTasks(){
+    var host=document.getElementById('crmTasks'); if(!host) return;
+    await ensureMembers();
+    var r=await crmApi({action:'list_all_tasks', sub_account_id:subId, mine: TASKS_SCOPE==='mine'});
+    if(r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    TASKS_LIST=(r&&r.success&&r.tasks)||[]; TASKS_ME=(r&&r.me)||null;
+    renderTasks();
+}
+function _taskAssignee(t){ if(!t.assignee_person_id) return ''; if(t.assignee_person_id===TASKS_ME) return 'You'; var m=(CRM_MEMBERS||[]).filter(function(x){return x.person_id===t.assignee_person_id;})[0]; return m?(m.full_name||m.email):''; }
+function taskRow(t){
+    var overdue=!t.done && t.due_date && new Date(t.due_date)<new Date(new Date().toDateString());
+    var who=_taskAssignee(t); var c=t.contact?cName(t.contact):'';
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;">'
+      +'<input type="checkbox" '+(t.done?'checked':'')+' onchange="taskToggle(\''+t.id+'\',this.checked)" style="margin-top:3px;cursor:pointer;">'
+      +'<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;'+(t.done?'text-decoration:line-through;color:var(--muted);':'')+'">'+esc(t.title)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'
+        +(t.due_date?('<span style="color:'+(overdue?'#b91c1c':'var(--muted)')+';font-weight:'+(overdue?'700':'500')+';">'+fmtDate(t.due_date)+(overdue?' · overdue':'')+'</span>'):'No due date')
+        +(who?(' · '+esc(who)):'')
+        +(c?(' · <span onclick="openContactFrom(\''+t.contact_id+'\')" style="color:var(--teal);font-weight:700;cursor:pointer;">'+esc(c)+'</span>'):'')
+      +'</div></div>'
+      +'<span class="material-icons" title="Delete" onclick="taskDelete(\''+t.id+'\')" style="font-size:16px;color:#cbd5e1;cursor:pointer;">delete</span></div>';
+}
+function renderTasks(){
+    var host=document.getElementById('crmTasks'); if(!host) return;
+    var today=new Date(new Date().toDateString());
+    var active=TASKS_LIST.filter(function(t){return !t.done;});
+    var done=TASKS_LIST.filter(function(t){return t.done;});
+    var overdue=active.filter(function(t){return t.due_date && new Date(t.due_date)<today;});
+    var todayT=active.filter(function(t){return t.due_date && new Date(t.due_date).toDateString()===today.toDateString();});
+    var upcoming=active.filter(function(t){return !t.due_date || new Date(t.due_date)>today;});
+    var scopeBtn=function(v,l){ return '<button onclick="taskScope(\''+v+'\')" class="btn" style="padding:6px 12px;font-size:12px;'+(TASKS_SCOPE===v?'background:var(--teal);color:#fff;border:none;':'background:#fff;color:var(--secondary);border:1px solid var(--border);')+'border-radius:8px;font-weight:700;font-family:inherit;cursor:pointer;">'+l+'</button>'; };
+    var top='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">'
+      +'<div style="display:flex;gap:6px;">'+scopeBtn('mine','My tasks')+scopeBtn('all','All tasks')+'</div>'
+      +'<button onclick="openTask()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> New task</button></div>';
+    var tiles='<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">'
+      +'<div class="kpi"><div class="kpi-label">Overdue</div><div class="kpi-value" style="color:'+(overdue.length?'#b91c1c':'inherit')+';">'+overdue.length+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Today</div><div class="kpi-value">'+todayT.length+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Upcoming</div><div class="kpi-value">'+upcoming.length+'</div></div>'
+      +'<div class="kpi"><div class="kpi-label">Done</div><div class="kpi-value">'+done.length+'</div></div></div>';
+    var grp=function(title,arr,color){ if(!arr.length) return ''; return '<div style="font-size:11px;font-weight:800;color:'+(color||'var(--muted)')+';text-transform:uppercase;letter-spacing:.5px;margin:14px 2px 4px;">'+title+' · '+arr.length+'</div>'+arr.map(taskRow).join(''); };
+    var body;
+    if(!TASKS_LIST.length){ body='<div class="empty"><span class="material-icons">task_alt</span><h4>No tasks</h4><p>Create a task or add one from a contact.</p></div>'; }
+    else { body=grp('Overdue',overdue,'#b91c1c')+grp('Today',todayT)+grp('Upcoming',upcoming)+(done.length?grp('Completed',done.slice(0,30)):''); }
+    host.innerHTML=top+tiles+'<div class="panel" style="padding:6px 18px 14px;">'+body+'</div>';
+}
+window.taskScope=function(v){ TASKS_SCOPE=v; loadTasks(); };
+window.taskToggle=async function(id,done){ await crmApi({action:'update_task', id:id, done:done}); loadTasks(); };
+window.taskDelete=async function(id){ await crmApi({action:'delete_task', id:id}); loadTasks(); };
+window.openTask=async function(){
+    await ensureMembers();
+    var contactOpts='<option value="">— no contact —</option>'+(CRM_CONTACTS||[]).slice(0,500).map(function(c){return '<option value="'+c.id+'">'+esc(cName(c))+'</option>';}).join('');
+    var ownerOpts=(CRM_MEMBERS||[]).map(function(m){return '<option value="'+m.person_id+'"'+(m.person_id===TASKS_ME?' selected':'')+'>'+esc(m.full_name||m.email)+'</option>';}).join('');
+    var res=await Swal.fire({title:'New task', width:460, showCancelButton:true, confirmButtonText:'Add', confirmButtonColor:'#0d9488', focusConfirm:false,
+        html:'<div style="text-align:left;">'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Task</label><input id="tkTitle" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" placeholder="e.g. Follow up with…">'
+          +'<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Due</label><input id="tkDue" type="date" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;"></div>'
+          +'<div style="flex:1;"><label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Assign to</label><select id="tkOwner" class="swal2-select" style="margin:4px 0 10px;width:100%;font-size:13px;">'+ownerOpts+'</select></div></div>'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Contact (optional)</label><select id="tkContact" class="swal2-select" style="margin:4px 0 0;width:100%;font-size:13px;">'+contactOpts+'</select></div>',
+        preConfirm:function(){ var t=(document.getElementById('tkTitle').value||'').trim(); if(!t){Swal.showValidationMessage('Enter a task.');return false;} return {title:t, due_date:document.getElementById('tkDue').value||null, assignee_person_id:document.getElementById('tkOwner').value||null, contact_id:document.getElementById('tkContact').value||null}; }});
+    if(!res.isConfirmed) return;
+    var r=await crmApi(Object.assign({action:'add_task_std', sub_account_id:subId}, res.value));
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add.','error'); return; }
+    crmToast('Task added'); loadTasks();
+};
 
 /* ── IDEAS & SUGGESTIONS (white-labeled; routes to the product team) ────────── */
 var IDEA_CATS=[['communications','Communications'],['general','General'],['ui_ux','Design / UX'],['reporting','Reporting'],['calendars','Calendars'],['automation','Automation'],['billing','Billing'],['other','Other']];

@@ -368,7 +368,17 @@ export default async function handler(req, res) {
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const title = (body.title || '').trim();
             if (!title) return res.status(400).json({ success: false, message: 'Task title required.' });
-            const { data, error } = await supabase.from('crm_tasks').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, title, due_date: body.due_date || null, created_by: personId }).select('*').single();
+            const { data, error } = await supabase.from('crm_tasks').insert({ sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, title, due_date: body.due_date || null, assignee_person_id: body.assignee_person_id || personId, created_by: personId }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not add task.' });
+            return res.status(200).json({ success: true, task: data });
+        }
+        // Standalone task (not tied to a contact) — for the global Tasks view.
+        if (action === 'add_task_std') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const title = (body.title || '').trim();
+            if (!title) return res.status(400).json({ success: false, message: 'Task title required.' });
+            const { data, error } = await supabase.from('crm_tasks').insert({ sub_account_id: body.sub_account_id, portal_id: acc.portal_id, contact_id: body.contact_id || null, title, due_date: body.due_date || null, assignee_person_id: body.assignee_person_id || personId, created_by: personId }).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not add task.' });
             return res.status(200).json({ success: true, task: data });
         }
@@ -380,10 +390,26 @@ export default async function handler(req, res) {
             const patch = {};
             if ('title' in body && (body.title || '').trim()) patch.title = body.title.trim();
             if ('due_date' in body) patch.due_date = body.due_date || null;
+            if ('assignee_person_id' in body) patch.assignee_person_id = body.assignee_person_id || null;
             if ('done' in body) { patch.done = !!body.done; patch.done_at = body.done ? new Date().toISOString() : null; }
             const { data, error } = await supabase.from('crm_tasks').update(patch).eq('id', body.id).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not update task.' });
             return res.status(200).json({ success: true, task: data });
+        }
+        // Global task list across the CRM (with optional filters).
+        if (action === 'list_all_tasks') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            let q = supabase.from('crm_tasks').select('*').eq('sub_account_id', body.sub_account_id);
+            if (body.mine) q = q.eq('assignee_person_id', personId);
+            else if (body.assignee_person_id) q = q.eq('assignee_person_id', body.assignee_person_id);
+            const { data: tasks } = await q.order('due_date', { ascending: true, nullsFirst: false }).limit(2000);
+            let list = tasks || [];
+            const cids = [...new Set(list.map(t => t.contact_id).filter(Boolean))];
+            const cmap = {};
+            if (cids.length) { const { data: cs } = await supabase.from('crm_contacts').select('id, first_name, last_name, email').in('id', cids); (cs || []).forEach(c => cmap[c.id] = c); }
+            list = list.map(t => ({ ...t, contact: t.contact_id ? (cmap[t.contact_id] || null) : null }));
+            return res.status(200).json({ success: true, tasks: list, me: personId });
         }
         if (action === 'delete_task') {
             const { data: t } = await supabase.from('crm_tasks').select('sub_account_id').eq('id', body.id).maybeSingle();
