@@ -4,6 +4,7 @@
 // book_slot → creates a contact + appointment and returns add-to-calendar details.
 import { createClient } from '@supabase/supabase-js';
 import { sendAgencyEmail } from './_agency-mail.js';
+import { runWorkflows } from './_automation.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -193,6 +194,8 @@ export default async function handler(req, res) {
             try { await supabase.from('crm_messages').insert({ sub_account_id: cal.sub_account_id, portal_id: cal.portal_id, contact_id: contactId, direction: 'inbound', channel: 'note', body: 'Booked "' + cal.name + '" for ' + new Date(start).toISOString() }); } catch (e) {}
             // White-label confirmation email (best-effort — booking still succeeds if email unset).
             sendBookingEmail(cal, appt, body.origin, 'confirm');
+            // Fire automations (booking_created).
+            runWorkflows('booking_created', { sub_account_id: cal.sub_account_id, portal_id: cal.portal_id, contact_id: contactId });
             return res.status(200).json({
                 success: true,
                 booking: {

@@ -6,6 +6,7 @@
 // This mirrors get_sub_account in whitelabel.js so access stays consistent.
 import { createClient } from '@supabase/supabase-js';
 import { getValidAccessToken, getValidSharedMailboxToken } from './partner-oauth.js';
+import { runWorkflows, WORKFLOW_TRIGGERS, WORKFLOW_ACTIONS } from './_automation.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
 
@@ -216,7 +217,7 @@ export default async function handler(req, res) {
             if (op === 'assign') { await supabase.from('crm_contacts').update({ owner_person_id: body.value || null }).in('id', okIds); return res.status(200).json({ success: true, affected: okIds.length }); }
             if (op === 'add_tag' && body.tag_id) {
                 const { data: t } = await supabase.from('crm_tags').select('id').eq('sub_account_id', body.sub_account_id).eq('id', body.tag_id).maybeSingle();
-                if (t) { const rows = okIds.map(cid => ({ contact_id: cid, tag_id: body.tag_id })); await supabase.from('crm_contact_tags').upsert(rows, { onConflict: 'contact_id,tag_id' }); }
+                if (t) { const rows = okIds.map(cid => ({ contact_id: cid, tag_id: body.tag_id })); await supabase.from('crm_contact_tags').upsert(rows, { onConflict: 'contact_id,tag_id' }); okIds.forEach(cid => runWorkflows('tag_added', { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, contact_id: cid, tag_id: body.tag_id })); }
                 return res.status(200).json({ success: true, affected: okIds.length });
             }
             if (op === 'remove_tag' && body.tag_id) { await supabase.from('crm_contact_tags').delete().eq('tag_id', body.tag_id).in('contact_id', okIds); return res.status(200).json({ success: true, affected: okIds.length }); }
@@ -270,6 +271,7 @@ export default async function handler(req, res) {
             const { data, error } = await supabase.from('crm_contacts').insert(row).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not create contact.' });
             if (Array.isArray(body.tag_ids)) await applyTags(data.id, data.sub_account_id, body.tag_ids);
+            runWorkflows('contact_created', { sub_account_id: data.sub_account_id, portal_id: acc.portal_id, contact_id: data.id });
             return res.status(200).json({ success: true, contact: data });
         }
 
@@ -322,6 +324,7 @@ export default async function handler(req, res) {
             const ca = await contactAccess(body.contact_id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const applied = await applyTags(body.contact_id, ca.contact.sub_account_id, body.tag_ids || []);
+            applied.forEach(tid => runWorkflows('tag_added', { sub_account_id: ca.contact.sub_account_id, portal_id: ca.portal_id, contact_id: body.contact_id, tag_id: tid }));
             return res.status(200).json({ success: true, tag_ids: applied });
         }
 
@@ -1109,6 +1112,56 @@ export default async function handler(req, res) {
                 }
                 return res.status(200).json({ success: true });
             } catch (e) { return res.status(500).json({ success: false, message: 'Could not send email.' }); }
+        }
+
+        // ── AUTOMATION (workflows) ───────────────────────────────────────────
+        if (action === 'list_workflows') {
+            const acc = await subAccess(personId, body.sub_account_id, 'automation');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data } = await supabase.from('crm_workflows').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: false });
+            return res.status(200).json({ success: true, workflows: data || [], triggers: WORKFLOW_TRIGGERS, action_types: WORKFLOW_ACTIONS });
+        }
+        if (action === 'create_workflow' || action === 'update_workflow') {
+            let subId2;
+            if (action === 'update_workflow') { const { data: w } = await supabase.from('crm_workflows').select('sub_account_id').eq('id', body.id).maybeSingle(); if (!w) return res.status(404).json({ success: false, message: 'Not found.' }); subId2 = w.sub_account_id; }
+            else subId2 = body.sub_account_id;
+            const acc = await subAccess(personId, subId2, 'automation');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const w = body.workflow || {};
+            const patch = {};
+            if ('name' in w) { const nm = (w.name || '').trim(); if (!nm) return res.status(400).json({ success: false, message: 'Name required.' }); patch.name = nm; }
+            if ('enabled' in w) patch.enabled = !!w.enabled;
+            if ('trigger' in w) patch.trigger = WORKFLOW_TRIGGERS.includes(w.trigger) ? w.trigger : 'contact_created';
+            if ('trigger_config' in w && w.trigger_config && typeof w.trigger_config === 'object') patch.trigger_config = w.trigger_config;
+            if ('actions' in w && Array.isArray(w.actions)) patch.actions = w.actions.filter(a => a && WORKFLOW_ACTIONS.includes(a.type)).map(a => ({ type: a.type, config: a.config || {} }));
+            if (action === 'create_workflow') {
+                const row = Object.assign({ sub_account_id: subId2, portal_id: acc.portal_id, created_by: personId, trigger: 'contact_created', trigger_config: {}, actions: [] }, patch);
+                if (!row.name) return res.status(400).json({ success: false, message: 'Name required.' });
+                const { data, error } = await supabase.from('crm_workflows').insert(row).select('*').single();
+                if (error) return res.status(500).json({ success: false, message: 'Could not create workflow.' });
+                return res.status(200).json({ success: true, workflow: data });
+            } else {
+                patch.updated_at = new Date().toISOString();
+                const { data, error } = await supabase.from('crm_workflows').update(patch).eq('id', body.id).select('*').single();
+                if (error) return res.status(500).json({ success: false, message: 'Could not update workflow.' });
+                return res.status(200).json({ success: true, workflow: data });
+            }
+        }
+        if (action === 'delete_workflow') {
+            const { data: w } = await supabase.from('crm_workflows').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!w) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, w.sub_account_id, 'automation');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_workflows').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'list_workflow_runs') {
+            const { data: w } = await supabase.from('crm_workflows').select('sub_account_id').eq('id', body.workflow_id).maybeSingle();
+            if (!w) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, w.sub_account_id, 'automation');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const { data } = await supabase.from('crm_workflow_runs').select('*').eq('workflow_id', body.workflow_id).order('created_at', { ascending: false }).limit(50);
+            return res.status(200).json({ success: true, runs: data || [] });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });

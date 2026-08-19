@@ -323,7 +323,7 @@ var SECTIONS = {
     opportunities: function(){ setTimeout(loadOpps, 0); return '<div id="crmOpps"><div class="empty"><span class="material-icons">trending_up</span><h4>Loading pipeline…</h4></div></div>'; },
     conversations: function(){ setTimeout(loadConversations, 0); return '<div id="crmConv"><div class="empty"><span class="material-icons">forum</span><h4>Loading…</h4></div></div>'; },
     calendars: function(){ setTimeout(loadCalendar, 0); return '<div id="crmCal"><div class="empty"><span class="material-icons">event</span><h4>Loading…</h4></div></div>'; },
-    automation: function(){ return emptyPanel('bolt','Automation','Workflows and triggers (e.g. “new form lead → add tag → create task”). This needs a workflow engine + triggers — building it next as a dedicated piece.', true); },
+    automation: function(){ setTimeout(loadWorkflows, 0); return '<div id="crmAuto"><div class="empty"><span class="material-icons">bolt</span><h4>Loading…</h4></div></div>'; },
     forms: function(){ setTimeout(loadForms, 0); return '<div id="crmForms"><div class="empty"><span class="material-icons">description</span><h4>Loading forms…</h4></div></div>'; },
     reporting: function(){ setTimeout(loadReport, 0); return '<div id="crmReport"><div class="empty"><span class="material-icons">insights</span><h4>Loading reporting…</h4></div></div>'; },
     merchants: merchantsPanel,
@@ -1227,6 +1227,106 @@ window.convLog=async function(){
 window.convDelMsg=async function(id){ await crmApi({action:'delete_message', id:id}); await convOpen(CONV_ACTIVE); };
 window.convComposeEmail=function(){ cdCompose(); };
 function convScrollBottom(){ setTimeout(function(){ var b=document.getElementById('convBody'); if(b) b.scrollTop=b.scrollHeight; }, 30); }
+
+/* ── AUTOMATION (workflows: trigger → actions) ─────────────────────────────── */
+var WF_LIST=[];
+var WF_TRIGGERS=[
+    {k:'contact_created', t:'Contact created', i:'person_add'},
+    {k:'form_submitted', t:'Form submitted', i:'description'},
+    {k:'tag_added', t:'Tag added', i:'sell'},
+    {k:'booking_created', t:'Booking made', i:'event_available'}
+];
+var WF_ACTIONS=[
+    {k:'add_tag', t:'Add tag'},
+    {k:'set_status', t:'Set status'},
+    {k:'assign_owner', t:'Assign owner'},
+    {k:'create_task', t:'Create task'},
+    {k:'create_note', t:'Add note'},
+    {k:'send_email', t:'Send email'}
+];
+function wfTrigLabel(k){ var x=WF_TRIGGERS.filter(function(t){return t.k===k;})[0]; return x?x.t:k; }
+function wfActLabel(k){ var x=WF_ACTIONS.filter(function(a){return a.k===k;})[0]; return x?x.t:k; }
+async function loadWorkflows(){
+    var host=document.getElementById('crmAuto'); if(!host) return;
+    await ensureMembers();
+    var res=await Promise.all([ crmApi({action:'list_workflows', sub_account_id:subId}), crmApi({action:'list_tags', sub_account_id:subId}), crmApi({action:'list_forms', sub_account_id:subId}) ]);
+    if(res[0] && /session/i.test(res[0].message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    WF_LIST=(res[0]&&res[0].success&&res[0].workflows)||[];
+    CRM_TAGS=(res[1]&&res[1].success&&res[1].tags)||CRM_TAGS;
+    CRM_FORMS=(res[2]&&res[2].success&&res[2].forms)||CRM_FORMS;
+    renderWorkflows();
+}
+function wfSummary(w){
+    var acts=(w.actions||[]).map(function(a){return wfActLabel(a.type);}).join(' → ')||'no actions';
+    return 'When <b>'+esc(wfTrigLabel(w.trigger))+'</b> → '+esc(acts);
+}
+function renderWorkflows(){
+    var host=document.getElementById('crmAuto'); if(!host) return;
+    var top='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;"><div><div style="font-weight:800;font-size:16px;">Automation</div><div style="font-size:12px;color:var(--muted);">Trigger an action automatically — e.g. new lead → add tag → send email.</div></div><button onclick="openWorkflow()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> New workflow</button></div>';
+    if(!WF_LIST.length){ host.innerHTML=top+'<div class="panel"><div class="empty"><span class="material-icons">bolt</span><h4>No workflows yet</h4><p>Create one to automate follow-ups.</p></div></div>'; return; }
+    var rows=WF_LIST.map(function(w){
+        return '<div style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #f1f5f9;">'
+          +'<label class="switch" style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0;"><input type="checkbox" '+(w.enabled?'checked':'')+' onchange="wfToggle(\''+w.id+'\',this.checked)" style="opacity:0;width:0;height:0;"><span style="position:absolute;cursor:pointer;inset:0;background:'+(w.enabled?'var(--teal)':'#cbd5e1')+';border-radius:99px;transition:.2s;"></span><span style="position:absolute;height:16px;width:16px;left:'+(w.enabled?'19px':'3px')+';top:3px;background:#fff;border-radius:50%;transition:.2s;"></span></label>'
+          +'<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:13px;">'+esc(w.name)+'</div><div style="font-size:12px;color:var(--muted);">'+wfSummary(w)+'</div></div>'
+          +'<span style="font-size:11px;color:var(--muted);white-space:nowrap;">'+(w.run_count||0)+' runs</span>'
+          +'<span class="material-icons" title="Edit" onclick="openWorkflow(\''+w.id+'\')" style="font-size:18px;color:var(--muted);cursor:pointer;">edit</span>'
+          +'<span class="material-icons" title="Delete" onclick="wfDelete(\''+w.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></div>';
+    }).join('');
+    host.innerHTML=top+'<div class="panel" style="padding:6px 18px 12px;">'+rows+'</div>';
+}
+window.wfToggle=async function(id,on){ var r=await crmApi({action:'update_workflow', id:id, workflow:{enabled:on}}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not update.','error'); loadWorkflows(); return; } var w=WF_LIST.filter(function(x){return x.id===id;})[0]; if(w) w.enabled=on; };
+window.wfDelete=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete workflow?',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; var r=await crmApi({action:'delete_workflow', id:id}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; } crmToast('Deleted'); loadWorkflows(); };
+function wfTrigConfigHtml(trig, cfg){
+    cfg=cfg||{};
+    if(trig==='tag_added'){ return '<label class="wfl">If tag is</label><select id="wfTrigTag" class="swal2-select" style="margin:0;width:100%;font-size:13px;"><option value="">Any tag</option>'+CRM_TAGS.map(function(t){return '<option value="'+t.id+'"'+(cfg.tag_id===t.id?' selected':'')+'>'+esc(t.name)+'</option>';}).join('')+'</select>'; }
+    if(trig==='form_submitted'){ return '<label class="wfl">From form</label><select id="wfTrigForm" class="swal2-select" style="margin:0;width:100%;font-size:13px;"><option value="">Any form</option>'+(CRM_FORMS||[]).map(function(f){return '<option value="'+f.id+'"'+(cfg.form_id===f.id?' selected':'')+'>'+esc(f.name)+'</option>';}).join('')+'</select>'; }
+    return '';
+}
+window.wfTrigChange=function(){ var t=document.getElementById('wfTrigger').value; document.getElementById('wfTrigCfg').innerHTML=wfTrigConfigHtml(t,{}); };
+function wfActionRow(a){
+    a=a||{type:'add_tag',config:{}};
+    var typeSel='<select class="wfActType" onchange="wfActTypeChange(this)" style="padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;">'+WF_ACTIONS.map(function(x){return '<option value="'+x.k+'"'+(a.type===x.k?' selected':'')+'>'+x.t+'</option>';}).join('')+'</select>';
+    return '<div class="wfActRow" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;">'
+      +'<div style="display:flex;gap:8px;align-items:center;"><span style="font-size:11px;font-weight:800;color:var(--muted);">DO</span>'+typeSel+'<span class="material-icons" onclick="this.closest(\'.wfActRow\').remove()" style="margin-left:auto;font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></div>'
+      +'<div class="wfActCfg" style="margin-top:8px;">'+wfActCfgHtml(a.type,a.config||{})+'</div></div>';
+}
+function wfActCfgHtml(type,cfg){
+    cfg=cfg||{};
+    if(type==='add_tag') return '<select class="wfCfg" data-k="tag_id" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'+CRM_TAGS.map(function(t){return '<option value="'+t.id+'"'+(cfg.tag_id===t.id?' selected':'')+'>'+esc(t.name)+'</option>';}).join('')+'</select>';
+    if(type==='set_status') return '<select class="wfCfg" data-k="status" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'+['active','lead','customer','inactive'].map(function(s){return '<option value="'+s+'"'+(cfg.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';
+    if(type==='assign_owner') return '<select class="wfCfg" data-k="person_id" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'+(CRM_MEMBERS||[]).map(function(m){return '<option value="'+m.person_id+'"'+(cfg.person_id===m.person_id?' selected':'')+'>'+esc(m.full_name||m.email)+'</option>';}).join('')+'</select>';
+    if(type==='create_task') return '<input class="wfCfg" data-k="title" placeholder="Task title" value="'+esc(cfg.title||'')+'" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;margin-bottom:6px;"><input class="wfCfg" data-k="days_due" type="number" placeholder="Due in N days" value="'+esc(cfg.days_due!=null?cfg.days_due:'')+'" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">';
+    if(type==='create_note') return '<textarea class="wfCfg" data-k="body" placeholder="Note text ({{first_name}} allowed)" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;min-height:50px;">'+esc(cfg.body||'')+'</textarea>';
+    if(type==='send_email') return '<input class="wfCfg" data-k="subject" placeholder="Subject ({{first_name}})" value="'+esc(cfg.subject||'')+'" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;margin-bottom:6px;"><textarea class="wfCfg" data-k="body" placeholder="Email body — {{first_name}}, {{company}} allowed" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;min-height:70px;">'+esc(cfg.body||'')+'</textarea>';
+    return '';
+}
+window.wfActTypeChange=function(sel){ var row=sel.closest('.wfActRow'); row.querySelector('.wfActCfg').innerHTML=wfActCfgHtml(sel.value,{}); };
+window.wfAddAction=function(){ var c=document.getElementById('wfActions'); c.insertAdjacentHTML('beforeend', wfActionRow()); };
+window.openWorkflow=async function(id){
+    var w = id ? (WF_LIST.filter(function(x){return x.id===id;})[0]||{}) : {trigger:'contact_created',actions:[{type:'add_tag',config:{}}]};
+    var trigOpts=WF_TRIGGERS.map(function(t){return '<option value="'+t.k+'"'+((w.trigger||'contact_created')===t.k?' selected':'')+'>'+t.t+'</option>';}).join('');
+    var actsHtml=(w.actions&&w.actions.length?w.actions:[{type:'add_tag',config:{}}]).map(wfActionRow).join('');
+    var html='<div style="text-align:left;max-height:64vh;overflow:auto;padding:2px 4px;"><style>.wfl{display:block;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin:10px 2px 5px;}</style>'
+      +'<label class="wfl">Workflow name</label><input id="wfName" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(w.name||'')+'" placeholder="e.g. New lead welcome">'
+      +'<label class="wfl">When (trigger)</label><select id="wfTrigger" class="swal2-select" onchange="wfTrigChange()" style="margin:0;width:100%;font-size:13px;">'+trigOpts+'</select>'
+      +'<div id="wfTrigCfg">'+wfTrigConfigHtml(w.trigger||'contact_created', w.trigger_config||{})+'</div>'
+      +'<label class="wfl">Then do</label><div id="wfActions">'+actsHtml+'</div>'
+      +'<button type="button" onclick="wfAddAction()" style="background:#fff;border:1px dashed var(--teal);color:var(--teal);border-radius:9px;padding:8px;width:100%;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;">+ Add action</button>'
+      +'</div>';
+    var res=await Swal.fire({title:id?'Edit workflow':'New workflow', html:html, width:560, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){
+            var name=(document.getElementById('wfName').value||'').trim(); if(!name){Swal.showValidationMessage('Enter a name.');return false;}
+            var trigger=document.getElementById('wfTrigger').value;
+            var tcfg={}; var tt=document.getElementById('wfTrigTag'); var tf=document.getElementById('wfTrigForm'); if(tt&&tt.value)tcfg.tag_id=tt.value; if(tf&&tf.value)tcfg.form_id=tf.value;
+            var actions=[]; document.querySelectorAll('.wfActRow').forEach(function(row){ var type=row.querySelector('.wfActType').value; var config={}; row.querySelectorAll('.wfCfg').forEach(function(el){ config[el.getAttribute('data-k')]=el.value; }); actions.push({type:type,config:config}); });
+            if(!actions.length){Swal.showValidationMessage('Add at least one action.');return false;}
+            return {name:name, trigger:trigger, trigger_config:tcfg, actions:actions, enabled: (w.enabled!==false)};
+        }});
+    if(!res.isConfirmed) return;
+    var out=id?await crmApi({action:'update_workflow', id:id, workflow:res.value}):await crmApi({action:'create_workflow', sub_account_id:subId, workflow:res.value});
+    if(!out||!out.success){ Swal.fire('Error',(out&&out.message)||'Could not save.','error'); return; }
+    crmToast(id?'Workflow saved':'Workflow created'); loadWorkflows();
+};
 
 /* ── CALENDARS (appointments) ──────────────────────────────────────────────── */
 var CRM_APPTS=[];
