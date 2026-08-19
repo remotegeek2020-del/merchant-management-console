@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { validateSession as validateStaffSession } from './_validate.js';
 import { loadActor, canLoginAs } from './_access.js';
+import { sendAgencyEmail } from './_agency-mail.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -68,28 +69,56 @@ async function agencyHostGate(host, personId) {
     return { ok: false, name: brand.name || 'this agency' };
 }
 
-// Shared magic-link email body.
-async function sendMagicEmail(person, magicUrl) {
+// Resolve a white-label agency from the host the request came from (canonical → none).
+async function resolveAgencyByHost(host) {
+    if (!host) return null;
+    host = String(host).toLowerCase().split(',')[0].trim().split(':')[0];
+    if (['portal.mypayprotec.com', 'app.mypayprotec.com'].includes(host)) return null;
+    const { data } = await supabase.from('portal_brands').select('portal_id, name, logo_url, host').eq('host', host).eq('active', true).maybeSingle();
+    if (!data || !data.portal_id) return null;
+    const { data: portal } = await supabase.from('partner_portals').select('id, agency_name').eq('id', data.portal_id).maybeSingle();
+    return { portal_id: data.portal_id, host, agency_name: (portal && portal.agency_name) || data.name || 'Your Portal', logo_url: data.logo_url || null };
+}
+// Resolve a person's OWN white-label agency (for admin-initiated sign-in links).
+async function resolveAgencyForOwner(personId) {
+    const { data: portal } = await supabase.from('partner_portals').select('id, agency_name, agency_enabled').eq('owner_person_id', personId).maybeSingle();
+    if (!portal || portal.agency_enabled !== true) return null;
+    const { data: brand } = await supabase.from('portal_brands').select('host, logo_url, name').eq('portal_id', portal.id).eq('added_by_partner', true).eq('active', true).order('created_at', { ascending: false }).maybeSingle();
+    return { portal_id: portal.id, agency_name: portal.agency_name || (brand && brand.name) || 'Your Portal', logo_url: (brand && brand.logo_url) || null, host: (brand && brand.host) || null };
+}
+function magicHtml(person, magicUrl, brandName, logoUrl) {
+    return `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
+        ${logoUrl ? `<img src="${logoUrl}" style="height:36px;margin-bottom:24px;display:block;">` : ''}
+        <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">Sign in to ${brandName}</h2>
+        <p style="color:#475569;line-height:1.6;margin-bottom:24px;">Hi <strong>${person.full_name || 'there'}</strong>, click the button below to sign in instantly — no password needed.</p>
+        <div style="text-align:center;margin:28px 0;"><a href="${magicUrl}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Sign In →</a></div>
+        <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This link expires in 15 minutes and can be used once. If you didn't request it, you can safely ignore this email.</p>
+        <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
+        <p style="font-size:11px;color:#94a3b8;text-align:center;">${brandName} · Secure Access</p></div>`;
+}
+// Send the magic link. On a white-label host with agency email configured, send
+// from the AGENCY's provider + branding; otherwise fall back to platform Postmark.
+async function sendMagicEmail(person, magicUrl, agency) {
+    if (agency && agency.portal_id) {
+        const html = magicHtml(person, magicUrl, agency.agency_name, agency.logo_url);
+        const text = `Hi ${person.full_name || 'there'}, sign in to ${agency.agency_name} (expires in 15 minutes, single use): ${magicUrl}`;
+        const r = await sendAgencyEmail(agency.portal_id, { to: person.email, subject: `Sign in to ${agency.agency_name}`, html, text });
+        if (r.sent) return;                          // sent from the agency's own email
+        if (r.configured) console.error('[MAGIC LINK] Agency email failed, falling back:', r.error);
+        // not configured (or failed) → fall through to platform sender
+    }
     if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[MAGIC LINK] ${person.email} -> ${magicUrl}`); return; }
     try {
         const { ServerClient } = await import('postmark');
         const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        const brand = (agency && agency.agency_name) || 'PayProTec Partner Portal';
+        const logo = (agency && agency.logo_url) || 'https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png';
         await client.sendEmail({
             From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
             To: person.email,
-            Subject: 'Your PayProTec Partner Portal sign-in link',
-            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
-                <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;">
-                <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">Sign in to your Partner Portal</h2>
-                <p style="color:#475569;line-height:1.6;margin-bottom:24px;">Hi <strong>${person.full_name || 'there'}</strong>, click the button below to sign in instantly — no password needed.</p>
-                <div style="text-align:center;margin:28px 0;">
-                    <a href="${magicUrl}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Sign In →</a>
-                </div>
-                <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This link expires in 15 minutes and can be used once. If you didn't request it, you can safely ignore this email.</p>
-                <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
-                <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Portal · Secure Access</p>
-            </div>`,
-            TextBody: `Hi ${person.full_name || 'there'}, sign in to your PayProTec Partner Portal (expires in 15 minutes, single use): ${magicUrl}`,
+            Subject: `Your ${brand} sign-in link`,
+            HtmlBody: magicHtml(person, magicUrl, brand, logo),
+            TextBody: `Hi ${person.full_name || 'there'}, sign in to ${brand} (expires in 15 minutes, single use): ${magicUrl}`,
             MessageStream: 'outbound'
         });
     } catch (emailErr) { console.error('[MAGIC LINK] Email failed:', emailErr.message); }
@@ -216,8 +245,12 @@ export default async function handler(req, res) {
                     person_id: person.id, token_hash: sha256(token), expires_at: expires.toISOString(),
                     ip_address: req.headers['x-forwarded-for'] || ''
                 });
-                const magicUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?magic=${token}`;
-                await sendMagicEmail(person, magicUrl);
+                // Resolve the white-label agency from the host so the email + link stay branded.
+                const host = (req.body.host || req.headers['x-forwarded-host'] || req.headers.host || '').toString();
+                const agency = await resolveAgencyByHost(host);
+                const base = agency ? ('https://' + agency.host) : (process.env.SITE_URL || 'https://portal.mypayprotec.com');
+                const magicUrl = `${base}/partner?magic=${token}`;
+                await sendMagicEmail(person, magicUrl, agency);
             }
             return res.status(200).json({ success: true, status: 'sent' });
         }
@@ -253,8 +286,11 @@ export default async function handler(req, res) {
                 const token = generateToken(32);
                 const expires = new Date(Date.now() + 15 * 60 * 1000);
                 await supabase.from('partner_magic_links').insert({ person_id: person.id, token_hash: sha256(token), expires_at: expires.toISOString() });
-                const magicUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?magic=${token}`;
-                await sendMagicEmail(person, magicUrl);
+                // Use the partner's OWN white-label agency (branded email + domain) if they have one.
+                const agency = await resolveAgencyForOwner(person.id);
+                const base = (agency && agency.host) ? ('https://' + agency.host) : (process.env.SITE_URL || 'https://portal.mypayprotec.com');
+                const magicUrl = `${base}/partner?magic=${token}`;
+                await sendMagicEmail(person, magicUrl, agency);
                 results.sent.push(person.full_name || person.id);
             }
             return res.status(200).json({ success: true, results });

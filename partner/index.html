@@ -362,7 +362,7 @@
         const sb = document.getElementById('mmSend'); sb.disabled = true; sb.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:17px;">sync</span> Sending…';
         let status = 'generic';
         try {
-            const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email: em }) });
+            const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_magic_link', email: em, host: location.hostname }) });
             const r = await res.json(); status = r.status || 'generic';
         } catch (e) {
             sb.disabled = false; sb.innerHTML = '<span class="material-icons" style="font-size:17px;">send</span> Send my link';

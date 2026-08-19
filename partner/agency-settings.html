@@ -142,8 +142,67 @@ function render(){
       + brandingCard
       + loginTemplateCard()
       + appThemeCard()
-      + domainCard();
+      + domainCard()
+      + '<div id="emailCard"></div>';
+    if(DATA.can_manage) loadAgencyEmail();
 }
+// ── White-label email sending (owner/agency admin) ──
+var AEMAIL=null;
+async function loadAgencyEmail(){
+    var host=document.getElementById('emailCard'); if(!host) return;
+    var r=await api({action:'get_agency_email'});
+    AEMAIL=(r&&r.success&&r.config)||{enabled:false,provider:'postmark'};
+    renderAgencyEmail();
+}
+function aeField(id,label,val,ph,type){ return '<label>'+label+'</label><input id="'+id+'" type="'+(type||'text')+'" value="'+esc(val||'')+'" placeholder="'+esc(ph||'')+'" style="margin-bottom:10px;">'; }
+function renderAgencyEmail(){
+    var host=document.getElementById('emailCard'); if(!host) return;
+    var c=AEMAIL||{}; var prov=c.provider||'postmark';
+    var provOpts=[['postmark','Postmark'],['sendgrid','SendGrid'],['mailgun','Mailgun'],['smtp','SMTP (Gmail / Outlook / other)']].map(function(o){return '<option value="'+o[0]+'"'+(prov===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('');
+    var setNote=function(isSet){ return isSet?'<span style="font-size:11px;color:#16a34a;font-weight:700;">✓ saved — leave blank to keep</span>':''; };
+    var fields='';
+    if(prov==='postmark') fields='<label>Server API token '+setNote(c.postmark_token_set)+'</label><input id="aePostmark" type="password" placeholder="'+(c.postmark_token_set?'••••••••':'Postmark server token')+'" style="margin-bottom:10px;">';
+    else if(prov==='sendgrid') fields='<label>API key '+setNote(c.sendgrid_key_set)+'</label><input id="aeSendgrid" type="password" placeholder="'+(c.sendgrid_key_set?'••••••••':'SG.xxxxx')+'" style="margin-bottom:10px;">';
+    else if(prov==='mailgun') fields=aeField('aeMgDomain','Sending domain',c.mailgun_domain,'mg.yourbrand.com')
+        +'<label>Region</label><select id="aeMgRegion" style="margin-bottom:10px;"><option value="us"'+(c.mailgun_region!=='eu'?' selected':'')+'>US</option><option value="eu"'+(c.mailgun_region==='eu'?' selected':'')+'>EU</option></select>'
+        +'<label>API key '+setNote(c.mailgun_key_set)+'</label><input id="aeMgKey" type="password" placeholder="'+(c.mailgun_key_set?'••••••••':'key-xxxxx')+'" style="margin-bottom:10px;">';
+    else if(prov==='smtp') fields=aeField('aeSmtpHost','SMTP host',c.smtp_host,'smtp.gmail.com')
+        +'<div style="display:flex;gap:10px;"><div style="width:110px;">'+aeField('aeSmtpPort','Port',c.smtp_port||587,'587','number')+'</div>'
+        +'<div style="flex:1;"><label>Security</label><select id="aeSmtpSecure" style="margin-bottom:10px;"><option value="0"'+(!c.smtp_secure?' selected':'')+'>STARTTLS (587)</option><option value="1"'+(c.smtp_secure?' selected':'')+'>SSL (465)</option></select></div></div>'
+        +aeField('aeSmtpUser','Username',c.smtp_user,'you@gmail.com')
+        +'<label>Password / app password '+setNote(c.smtp_pass_set)+'</label><input id="aeSmtpPass" type="password" placeholder="'+(c.smtp_pass_set?'••••••••':'app password')+'" style="margin-bottom:10px;">';
+    host.innerHTML='<div class="card"><div class="card-title"><span class="material-icons" style="font-size:18px;color:var(--teal);">alternate_email</span> Email sending</div>'
+      +'<div class="card-sub">Send sign-in links &amp; invites from YOUR email instead of PayProTec. Pick a provider and a verified From address.</div>'
+      +'<label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:12px;"><input type="checkbox" id="aeEnabled" '+(c.enabled?'checked':'')+' style="width:auto;"> Use my own email for this agency</label>'
+      +'<label>Provider</label><select id="aeProvider" onchange="aeProvChange()" style="margin-bottom:10px;">'+provOpts+'</select>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;"><div style="flex:1;min-width:180px;">'+aeField('aeFromEmail','From email',c.from_email,'no-reply@yourbrand.com','email')+'</div>'
+      +'<div style="flex:1;min-width:150px;">'+aeField('aeFromName','From name',c.from_name,'Your Brand')+'</div></div>'
+      +fields
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'
+      +'<button class="btn btn-teal" onclick="saveAgencyEmail(this)"><span class="material-icons" style="font-size:16px;">save</span> Save</button>'
+      +'<button class="btn btn-outline" onclick="testAgencyEmail(this)"><span class="material-icons" style="font-size:16px;">send</span> Send test</button></div>'
+      +'<div class="card-sub" style="margin-top:10px;">Tip: your From address must be a verified sender on the provider (and Gmail/Outlook SMTP needs an app password).</div>'
+      +'</div>';
+}
+window.aeProvChange=function(){ AEMAIL.provider=document.getElementById('aeProvider').value; renderAgencyEmail(); };
+function aeCollect(){
+    var prov=document.getElementById('aeProvider').value;
+    var out={ enabled:document.getElementById('aeEnabled').checked, provider:prov, from_email:val('aeFromEmail'), from_name:val('aeFromName') };
+    if(prov==='postmark') out.postmark_token=val('aePostmark');
+    else if(prov==='sendgrid') out.sendgrid_key=val('aeSendgrid');
+    else if(prov==='mailgun'){ out.mailgun_domain=val('aeMgDomain'); out.mailgun_region=val('aeMgRegion'); out.mailgun_key=val('aeMgKey'); }
+    else if(prov==='smtp'){ out.smtp_host=val('aeSmtpHost'); out.smtp_port=val('aeSmtpPort'); out.smtp_secure=val('aeSmtpSecure')==='1'; out.smtp_user=val('aeSmtpUser'); out.smtp_pass=val('aeSmtpPass'); }
+    return out;
+}
+window.saveAgencyEmail=async function(btn){ btn.disabled=true; var r=await api({action:'save_agency_email', config:aeCollect()}); btn.disabled=false; if(r&&r.success){ AEMAIL=r.config; renderAgencyEmail(); Swal.fire({icon:'success',title:'Saved',timer:1200,showConfirmButton:false}); } else Swal.fire('Error',(r&&r.message)||'Could not save.','error'); };
+window.testAgencyEmail=async function(btn){
+    var save=await api({action:'save_agency_email', config:aeCollect()}); if(save&&save.success){ AEMAIL=save.config; }
+    var to=await Swal.fire({title:'Send a test email',input:'email',inputPlaceholder:'you@email.com',showCancelButton:true,confirmButtonText:'Send',confirmButtonColor:'#0d9488'});
+    if(!to.isConfirmed||!to.value) return;
+    btn.disabled=true; var r=await api({action:'test_agency_email', to:to.value}); btn.disabled=false;
+    if(r&&r.success) Swal.fire({icon:'success',title:'Test sent',text:r.message||'Check the inbox.'});
+    else Swal.fire('Not sent',(r&&r.message)||'Check your settings.','warning');
+};
 function appThemeCard(){
     var cm = DATA.can_manage;
     var cur = (DATA.branding && DATA.branding.app_theme) || 'default';

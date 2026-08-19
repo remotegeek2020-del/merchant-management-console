@@ -19,6 +19,7 @@ import crypto from 'crypto';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { loadActor, isAdminRole, canGrantAgency, canLoginAs } from './_access.js';
 import { getConfigValue, setConfigValue } from './api-config.js';
+import { getAgencyEmailConfig, saveAgencyEmailConfig, maskAgencyEmailConfig, sendAgencyEmail, AGENCY_MAIL_PROVIDERS } from './_agency-mail.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -254,8 +255,20 @@ function sanitizePerms(perms, role) {
     return out;
 }
 // Returns { sent:boolean, error:string|null } so the caller can surface a copy-link fallback.
-// Reads Postmark from Vercel env first, then the Secret Dungeon (app_config) store.
-async function sendInviteEmail(email, agencyName, url, roleLabel) {
+// Sends from the AGENCY's own email (if configured) → then Vercel env Postmark → then Secret Dungeon.
+async function sendInviteEmail(email, agencyName, url, roleLabel, portalId) {
+    const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
+                <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">You're invited to ${agencyName}</h2>
+                <p style="color:#475569;line-height:1.6;margin-bottom:24px;">You've been invited to join <strong>${agencyName}</strong> as ${roleLabel}. Click below to set up your account and get started.</p>
+                <div style="text-align:center;margin:28px 0;"><a href="${url}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Accept Invite →</a></div>
+                <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This invite expires in 7 days. If you weren't expecting it, you can ignore this email.</p>
+            </div>`;
+    const textBody = `You've been invited to ${agencyName} as ${roleLabel}. Accept: ${url}`;
+    const subject = `You've been invited to ${agencyName}`;
+    // Prefer the agency's own white-label email.
+    if (portalId) {
+        try { const ar = await sendAgencyEmail(portalId, { to: email, subject, html, text: textBody }); if (ar.sent) return { sent: true, error: null, via: ar.provider }; } catch (e) {}
+    }
     const token = process.env.POSTMARK_SERVER_TOKEN || await getConfigValue('POSTMARK_SERVER_TOKEN');
     const from = process.env.EMAIL_FROM || await getConfigValue('EMAIL_FROM') || 'noreply@mypayprotec.com';
     if (!token) { console.log(`[AGENCY INVITE] ${email} -> ${url}`); return { sent: false, error: 'Email service not configured' }; }
@@ -265,14 +278,9 @@ async function sendInviteEmail(email, agencyName, url, roleLabel) {
         await client.sendEmail({
             From: from,
             To: email,
-            Subject: `You've been invited to ${agencyName}`,
-            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
-                <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">You're invited to ${agencyName}</h2>
-                <p style="color:#475569;line-height:1.6;margin-bottom:24px;">You've been invited to join <strong>${agencyName}</strong> as ${roleLabel}. Click below to set up your account and get started.</p>
-                <div style="text-align:center;margin:28px 0;"><a href="${url}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Accept Invite →</a></div>
-                <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This invite expires in 7 days. If you weren't expecting it, you can ignore this email.</p>
-            </div>`,
-            TextBody: `You've been invited to ${agencyName} as ${roleLabel}. Accept: ${url}`,
+            Subject: subject,
+            HtmlBody: html,
+            TextBody: textBody,
             MessageStream: 'outbound'
         });
         return { sent: true, error: null };
@@ -446,7 +454,8 @@ export default async function handler(req, res) {
         if (['my_domain', 'add_domain', 'refresh_domain', 'remove_domain', 'set_agency_name', 'get_my_agencies', 'get_sub_account', 'get_agency_overview',
              'list_sub_accounts', 'create_sub_account', 'delete_sub_account', 'my_companies',
              'agency_team', 'agency_grant', 'agency_set_scope', 'agency_revoke', 'agency_update_member', 'agency_invite', 'agency_revoke_invite',
-             'get_agency_branding', 'save_agency_branding', 'get_brand_upload_url'].includes(action)) {
+             'get_agency_branding', 'save_agency_branding', 'get_brand_upload_url',
+             'get_agency_email', 'save_agency_email', 'test_agency_email'].includes(action)) {
             const personId = await validatePartner(body.token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
             const cf = await getCfConfig();
@@ -786,7 +795,7 @@ export default async function handler(req, res) {
                     await supabase.from('agency_invites').insert({ portal_id: portal.id, email, role: grantRole, scope, permissions, invited_by: personId, token, expires_at: expires });
                     const { data: pr } = await supabase.from('partner_portals').select('agency_name').eq('id', portal.id).maybeSingle();
                     const acceptUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?invite=${token}`;
-                    const mail = await sendInviteEmail(email, (pr && pr.agency_name) || 'the agency', acceptUrl, grantRole === 'agency_admin' ? 'an Agency Admin' : 'a CRM Admin');
+                    const mail = await sendInviteEmail(email, (pr && pr.agency_name) || 'the agency', acceptUrl, grantRole === 'agency_admin' ? 'an Agency Admin' : 'a CRM Admin', portal.id);
                     const { data: invites } = await supabase.from('agency_invites').select('*').eq('portal_id', portal.id).eq('status', 'pending').order('created_at', { ascending: false });
                     return res.status(200).json({ success: true, invited: true, email_sent: !!(mail && mail.sent), email_error: (mail && mail.error) || null, accept_url: acceptUrl, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], token: i.token, created_at: i.created_at })) });
                 }
@@ -864,6 +873,54 @@ export default async function handler(req, res) {
                         verification: brand.verification || null, active: brand.active
                     } : null
                 });
+            }
+
+            // ── Per-agency white-label email sender (owner / agency_admin) ──
+            if (action === 'get_agency_email' || action === 'save_agency_email' || action === 'test_agency_email') {
+                const god = await isGod(personId);
+                const portal = body.portal_id
+                    ? (await supabase.from('partner_portals').select('*').eq('id', body.portal_id).maybeSingle()).data
+                    : await getPortal(personId);
+                if (!portal) return res.status(404).json({ success: false, message: 'Agency not found.' });
+                if (!god) {
+                    const { data: mem } = await supabase.from('partner_portal_members').select('role').eq('portal_id', portal.id).eq('person_id', personId).maybeSingle();
+                    if (!mem || !(mem.role === 'owner' || mem.role === 'agency_admin')) return res.status(403).json({ success: false, message: 'Only owners and agency admins can manage email.' });
+                }
+                if (action === 'get_agency_email') {
+                    const cfg = await getAgencyEmailConfig(portal.id);
+                    return res.status(200).json({ success: true, config: maskAgencyEmailConfig(cfg), providers: AGENCY_MAIL_PROVIDERS });
+                }
+                if (action === 'save_agency_email') {
+                    const inc = body.config || {};
+                    const cur = (await getAgencyEmailConfig(portal.id)) || {};
+                    const provider = AGENCY_MAIL_PROVIDERS.includes(inc.provider) ? inc.provider : (cur.provider || 'postmark');
+                    // Keep existing secrets when the client sends a blank (masked) value.
+                    const keep = (v, old) => (v === undefined || v === null || v === '' || /^\*+$/.test(String(v))) ? (old || '') : v;
+                    const next = {
+                        enabled: !!inc.enabled, provider,
+                        from_email: (inc.from_email || '').trim(), from_name: (inc.from_name || '').trim(),
+                        postmark_token: keep(inc.postmark_token, cur.postmark_token),
+                        sendgrid_key: keep(inc.sendgrid_key, cur.sendgrid_key),
+                        mailgun_key: keep(inc.mailgun_key, cur.mailgun_key),
+                        mailgun_domain: (inc.mailgun_domain || cur.mailgun_domain || '').trim(),
+                        mailgun_region: inc.mailgun_region === 'eu' ? 'eu' : 'us',
+                        smtp_host: (inc.smtp_host || '').trim(), smtp_port: parseInt(inc.smtp_port, 10) || 587,
+                        smtp_user: (inc.smtp_user || '').trim(), smtp_pass: keep(inc.smtp_pass, cur.smtp_pass),
+                        smtp_secure: !!inc.smtp_secure
+                    };
+                    if (next.enabled && !next.from_email) return res.status(400).json({ success: false, message: 'Enter a From email address.' });
+                    await saveAgencyEmailConfig(portal.id, next, personId);
+                    return res.status(200).json({ success: true, config: maskAgencyEmailConfig(next) });
+                }
+                if (action === 'test_agency_email') {
+                    const to = (body.to || '').trim();
+                    if (!to) return res.status(400).json({ success: false, message: 'Enter a test recipient.' });
+                    const name = portal.agency_name || 'your agency';
+                    const r = await sendAgencyEmail(portal.id, { to, subject: `Test email from ${name}`, html: `<div style="font-family:Arial,sans-serif;padding:20px;"><h2>It works! ✅</h2><p>This is a test from <b>${name}</b>'s white-label email. Your members' sign-in links and invites will now come from here.</p></div>`, text: `Test email from ${name}. Your white-label email is working.` });
+                    if (!r.configured) return res.status(400).json({ success: false, message: 'Save your email settings (with "Enabled" on) first.' });
+                    if (!r.sent) return res.status(200).json({ success: false, message: r.error || 'Could not send. Check your credentials and From address.' });
+                    return res.status(200).json({ success: true, message: 'Test email sent via ' + r.provider + '.' });
+                }
             }
 
             if (action === 'set_agency_name') {
