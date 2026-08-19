@@ -1242,7 +1242,8 @@ async function loadIdeas(){
     IDEAS_LIST=(r&&r.success&&r.ideas)||[];
     renderIdeas();
 }
-function ideaStatusChip(s){ var m={open:['New','#0369a1','#e0f2fe'],in_review:['In review','#6d28d9','#ede9fe'],planned:['Planned','#0ea5e9','#e0f2fe'],in_progress:['In progress','#b45309','#fef3c7'],done:['Done','#166534','#dcfce7'],rejected:['Declined','#991b1b','#fee2e2']}[s]||['New','#475569','#f1f5f9']; return '<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>'; }
+var IDEA_STATUS={open:['New','#0369a1','#e0f2fe'],pending:['Pending','#475569','#f1f5f9'],in_review:['In review','#6d28d9','#ede9fe'],planned:['Planned','#0ea5e9','#e0f2fe'],in_progress:['In progress','#b45309','#fef3c7'],done:['Completed ✓','#166534','#dcfce7'],rejected:['Declined','#991b1b','#fee2e2']};
+function ideaStatusChip(s){ var m=IDEA_STATUS[s]||IDEA_STATUS.open; return '<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>'; }
 function renderIdeas(){
     var host=document.getElementById('crmIdeas'); if(!host) return;
     var top='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px;"><div><div style="font-weight:800;font-size:16px;">Ideas &amp; Suggestions</div><div style="font-size:12px;color:var(--muted);">Tell us what would make this platform better — feature ideas, improvements, anything.</div></div><button onclick="openIdea()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Share an idea</button></div>';

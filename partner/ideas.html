@@ -86,7 +86,8 @@ function ideaApi(b){ return fetch('/api/partner-ideas',{method:'POST',headers:{'
 function pdApi(b){ return fetch('/api/community',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(function(r){return r.json();}); }
 var IDEA_CATS=[['communications','Communications'],['general','General'],['ui_ux','Design / UX'],['reporting','Reporting'],['calendars','Calendars'],['automation','Automation'],['billing','Billing'],['other','Other']];
 function catLabel(k){ var x=IDEA_CATS.filter(function(c){return c[0]===k;})[0]; return x?x[1]:k; }
-function statusChip(s){ var m={open:['New','#0369a1','#e0f2fe'],in_review:['In review','#6d28d9','#ede9fe'],planned:['Planned','#0ea5e9','#e0f2fe'],in_progress:['In progress','#b45309','#fef3c7'],done:['Done','#166534','#dcfce7'],rejected:['Declined','#991b1b','#fee2e2']}[s]||['New','#475569','#f1f5f9']; return '<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>'; }
+var IDEA_STATUS={open:['New','#0369a1','#e0f2fe'],pending:['Pending','#475569','#f1f5f9'],in_review:['In review','#6d28d9','#ede9fe'],planned:['Planned','#0ea5e9','#e0f2fe'],in_progress:['In progress','#b45309','#fef3c7'],done:['Completed ✓','#166534','#dcfce7'],rejected:['Declined','#991b1b','#fee2e2']};
+function statusChip(s){ var m=IDEA_STATUS[s]||IDEA_STATUS.open; return '<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>'; }
 var LIST=[];
 async function load(){
     var r=await ideaApi({action:'my_list'});
