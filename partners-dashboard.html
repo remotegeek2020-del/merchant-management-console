@@ -355,6 +355,13 @@ input[type=number] {
                 <button onclick="filterByTrend('risk')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#fef2f2;color:#991b1b;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_down</span></button>
                 <button onclick="filterByTrend('all')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:white;color:#64748b;border-radius:6px;">ALL</button>
             </div>
+            <span style="width:1px;height:20px;background:#e2e8f0;"></span>
+            <span style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;">Partner IDs:</span>
+            <div id="lifecycleFilterRow" style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+                <button data-lc="all" onclick="filterByLifecycle('all')" class="lc-filter-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:white;color:#64748b;border-radius:6px;">ALL</button>
+                <button data-lc="current" onclick="filterByLifecycle('current')" class="lc-filter-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:transparent;color:#166534;border-radius:6px;">CURRENT</button>
+                <button data-lc="old" onclick="filterByLifecycle('old')" class="lc-filter-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:transparent;color:#92400e;border-radius:6px;">OLD</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1525,8 +1532,41 @@ async function submitOnboarding() {
 
     
 
+    // Lifecycle filter (partner IDs): 'all' | 'current' | 'old'.
+    var LIFECYCLE_FILTER = 'all';
+    // Keep an id (and prune its sub_ids) if it matches the wanted lifecycle or has a matching descendant.
+    function _lcKeep(id, want){
+        var subs = (id.sub_ids||[]).map(function(s){ return _lcKeep(s, want); }).filter(Boolean);
+        var selfMatch = (id.lifecycle||'current') === want;
+        if(selfMatch || subs.length) return Object.assign({}, id, { sub_ids: subs });
+        return null;
+    }
+    function applyLifecycleFilter(list){
+        if(LIFECYCLE_FILTER === 'all') return list;
+        var want = LIFECYCLE_FILTER;
+        return (list||[]).map(function(p){
+            var companies = (p.companies||[]).map(function(co){
+                var ids = (co.ids||[]).map(function(id){ return _lcKeep(id, want); }).filter(Boolean);
+                return Object.assign({}, co, { ids: ids });
+            }).filter(function(co){ return co.ids.length; });
+            return Object.assign({}, p, { companies: companies });
+        }).filter(function(p){ return p.companies.length; });
+    }
+    window.filterByLifecycle = function(mode){
+        LIFECYCLE_FILTER = mode;
+        document.querySelectorAll('.lc-filter-btn').forEach(function(b){
+            var on = b.getAttribute('data-lc') === mode;
+            b.style.background = on ? '#fff' : 'transparent';
+            b.style.boxShadow = on ? '0 1px 2px rgba(0,0,0,0.06)' : 'none';
+        });
+        currentPage = 1;
+        renderGrid(_lastGridData || allPartners);
+    };
+    var _lastGridData = null;
     function renderGrid(data) {
     if (!data) data = allPartners; // fallback to global
+    _lastGridData = data;                    // remember the pre-lifecycle dataset (e.g. search results)
+    data = applyLifecycleFilter(data);       // then apply the Current/Old filter on top
     const grid = document.getElementById('partnerGrid');
     const prevBtn = document.getElementById('btnPrev');
     const nextBtn = document.getElementById('btnNext');
