@@ -448,7 +448,7 @@ function shade(hex){ return /^#/.test(hex)?hex:'#475569'; }
 async function loadContacts(){
     var host = document.getElementById('crmContacts'); if(!host) return;
     var results = await Promise.all([
-        crmApi({action:'list_contacts', sub_account_id:subId}),
+        crmApi({action:'list_contacts', sub_account_id:subId, all:true}),
         crmApi({action:'list_tags', sub_account_id:subId}),
         crmApi({action:'list_custom_fields', sub_account_id:subId, entity:'contact'})
     ]);
@@ -457,55 +457,150 @@ async function loadContacts(){
     CRM_CONTACTS = (cr && cr.success && cr.contacts) || [];
     CRM_TAGS = (tr && tr.success && tr.tags) || [];
     CRM_FIELDS = (fr && fr.success && fr.fields) || [];
+    ensureMembers();
+    CRM_SEL={};
     if(_pendingContactId){ var pid=_pendingContactId; _pendingContactId=null; openContactDetail(pid); return; }
     renderContacts();
 }
-var CRM_TAGFILTER = '';
+var CRM_TAGFILTER = '', CRM_STATUS='', CRM_OWNER='', CRM_SORT='created_at', CRM_SEL={};
 function _crmFiltered(){
     var q = CRM_Q.toLowerCase();
-    return CRM_CONTACTS.filter(function(c){
+    var list = CRM_CONTACTS.filter(function(c){
         if(q && ![c.first_name,c.last_name,c.email,c.phone,c.company].some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;})) return false;
         if(CRM_TAGFILTER && !(c.tags||[]).some(function(t){return t.id===CRM_TAGFILTER;})) return false;
+        if(CRM_STATUS && (c.status||'active')!==CRM_STATUS) return false;
+        if(CRM_OWNER && c.owner_person_id!==CRM_OWNER) return false;
         return true;
     });
+    if(CRM_SORT==='name') list.sort(function(a,b){ return cName(a).localeCompare(cName(b)); });
+    else if(CRM_SORT==='company') list.sort(function(a,b){ return String(a.company||'').localeCompare(String(b.company||'')); });
+    else list.sort(function(a,b){ return new Date(b.created_at||0)-new Date(a.created_at||0); });
+    return list;
 }
+function memberName(pid){ var m=(CRM_MEMBERS||[]).filter(function(x){return x.person_id===pid;})[0]; return m?(m.full_name||m.email||'—'):'—'; }
 function renderContacts(){
     var host = document.getElementById('crmContacts'); if(!host) return;
     var tagFilters = CRM_TAGS.length ? ('<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;"><span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tags:</span>'
         + CRM_TAGS.map(function(t){ var on=CRM_TAGFILTER===t.id; var col=t.color||'#0d9488'; return '<span onclick="toggleTagFilter(\''+t.id+'\')" style="cursor:pointer;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid '+col+';'+(on?('background:'+col+';color:#fff;'):('background:'+col+'18;color:'+shade(col)+';'))+'">'+esc(t.name)+'</span>'; }).join('')
         + (CRM_TAGFILTER?'<span onclick="toggleTagFilter(\'\')" style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700;">clear</span>':'')
         + '</div>') : '';
-    var toolbar = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
-      +'<div style="position:relative;flex:1;min-width:220px;"><span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px;">search</span>'
+    var statuses=['active','lead','customer','inactive'];
+    var statusSel='<select onchange="crmSetFilter(\'status\',this.value)" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;"><option value="">All statuses</option>'+statuses.map(function(s){return '<option value="'+s+'"'+(CRM_STATUS===s?' selected':'')+'>'+s.charAt(0).toUpperCase()+s.slice(1)+'</option>';}).join('')+'</select>';
+    var ownerSel='<select onchange="crmSetFilter(\'owner\',this.value)" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;"><option value="">All owners</option>'+(CRM_MEMBERS||[]).map(function(m){return '<option value="'+m.person_id+'"'+(CRM_OWNER===m.person_id?' selected':'')+'>'+esc(m.full_name||m.email||'—')+'</option>';}).join('')+'</select>';
+    var sortSel='<select onchange="crmSetFilter(\'sort\',this.value)" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-family:inherit;"><option value="created_at"'+(CRM_SORT==='created_at'?' selected':'')+'>Newest</option><option value="name"'+(CRM_SORT==='name'?' selected':'')+'>Name A–Z</option><option value="company"'+(CRM_SORT==='company'?' selected':'')+'>Company</option></select>';
+    var toolbar = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">'
+      +'<div style="position:relative;flex:1;min-width:200px;"><span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px;">search</span>'
       +'<input id="crmSearch" value="'+esc(CRM_Q)+'" oninput="crmFilter(this.value)" placeholder="Search contacts…" style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;"></div>'
-      +'<div id="crmCount" style="font-size:12px;color:var(--muted);font-weight:600;"></div>'
-      +'<button onclick="openContact()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">person_add</span> Add contact</button>'
-      +'</div>';
-    host.innerHTML = toolbar + tagFilters + '<div id="crmContactList"></div>';
+      +statusSel+ownerSel+sortSel
+      +'<button onclick="crmImportModal()" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">upload_file</span> Import</button>'
+      +'<button onclick="crmExport()" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">download</span> Export</button>'
+      +'<button onclick="openContact()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">person_add</span> Add</button>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div id="crmCount" style="font-size:12px;color:var(--muted);font-weight:600;"></div></div>';
+    host.innerHTML = toolbar + tagFilters + '<div id="crmBulkBar"></div><div id="crmContactList"></div>';
     renderContactList();
+}
+function renderBulkBar(){
+    var bar=document.getElementById('crmBulkBar'); if(!bar) return;
+    var n=Object.keys(CRM_SEL).length;
+    if(!n){ bar.innerHTML=''; return; }
+    var tagOpts=CRM_TAGS.map(function(t){return '<option value="'+t.id+'">'+esc(t.name)+'</option>';}).join('');
+    var ownerOpts=(CRM_MEMBERS||[]).map(function(m){return '<option value="'+m.person_id+'">'+esc(m.full_name||m.email)+'</option>';}).join('');
+    bar.innerHTML='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--teal-bg);border:1px solid var(--teal);border-radius:10px;padding:8px 12px;margin-bottom:10px;">'
+      +'<span style="font-weight:800;font-size:13px;color:var(--teal);">'+n+' selected</span>'
+      +'<select id="bulkTag" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;"><option value="">Tag…</option>'+tagOpts+'</select><button onclick="crmBulkTag()" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">Add tag</button>'
+      +'<select id="bulkStatus" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;"><option value="">Status…</option><option value="active">Active</option><option value="lead">Lead</option><option value="customer">Customer</option><option value="inactive">Inactive</option></select><button onclick="crmBulkStatus()" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">Set</button>'
+      +'<select id="bulkOwner" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;"><option value="">Assign…</option>'+ownerOpts+'</select><button onclick="crmBulkAssign()" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">Assign</button>'
+      +'<button onclick="crmBulkDelete()" style="background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;margin-left:auto;">Delete</button>'
+      +'<button onclick="crmClearSel()" style="background:none;border:none;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;">Clear</button></div>';
 }
 function renderContactList(){
     var wrap = document.getElementById('crmContactList'); if(!wrap) return;
     var list = _crmFiltered();
+    window._crmList = list;
     var cnt = document.getElementById('crmCount'); if(cnt) cnt.textContent = list.length + ' contact' + (list.length===1?'':'s');
+    renderBulkBar();
     if(!list.length){
-        var filtered = (CRM_Q||CRM_TAGFILTER);
+        var filtered = (CRM_Q||CRM_TAGFILTER||CRM_STATUS||CRM_OWNER);
         var cta = filtered ? '' : '<button onclick="openContact()" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">person_add</span> Add contact</button>';
-        wrap.innerHTML = '<div class="panel"><div class="empty"><span class="material-icons">contacts</span><h4>'+(filtered?'No matches':'No contacts yet')+'</h4><p>'+(filtered?'Try a different search or tag.':'Capture your first contact to get started.')+'</p>'+cta+'</div></div>';
+        wrap.innerHTML = '<div class="panel"><div class="empty"><span class="material-icons">contacts</span><h4>'+(filtered?'No matches':'No contacts yet')+'</h4><p>'+(filtered?'Try different filters, or Import a CSV.':'Add a contact or Import a CSV to get started.')+'</p>'+cta+'</div></div>';
         return;
     }
+    var allSel = list.every(function(c){return CRM_SEL[c.id];});
     var rows = list.map(function(c){
         var tags = (c.tags||[]).map(tagChip).join('') || '<span style="color:var(--muted);font-size:11px;">—</span>';
-        return '<tr style="cursor:pointer;" onclick="openContactDetail(\''+c.id+'\')">'
+        return '<tr style="cursor:pointer;'+(CRM_SEL[c.id]?'background:var(--teal-bg);':'')+'" onclick="openContactDetail(\''+c.id+'\')">'
+          +'<td style="width:34px;" onclick="event.stopPropagation();"><input type="checkbox" '+(CRM_SEL[c.id]?'checked':'')+' onchange="crmToggleSel(\''+c.id+'\')"></td>'
           +'<td style="font-weight:700;">'+esc(cName(c))+(c.company?'<div style="font-weight:400;color:var(--muted);font-size:11px;">'+esc(c.company)+'</div>':'')+'</td>'
           +'<td style="color:var(--secondary);">'+esc(c.email||'—')+'</td>'
           +'<td class="mono">'+esc(c.phone||'—')+'</td>'
+          +'<td><span class="badge '+statusClass(c.status)+'">'+esc(c.status||'active')+'</span></td>'
           +'<td>'+tags+'</td>'
           +'<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation();"><span class="material-icons" title="Edit" onclick="openContact(\''+c.id+'\')" style="font-size:17px;color:var(--muted);cursor:pointer;">edit</span> <span class="material-icons" title="Delete" onclick="deleteContact(\''+c.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span></td></tr>';
     }).join('');
-    wrap.innerHTML = '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Tags</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    wrap.innerHTML = '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th style="width:34px;"><input type="checkbox" '+(allSel?'checked':'')+' onchange="crmToggleAll(this.checked)"></th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Tags</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 window.crmFilter = function(v){ CRM_Q = v; renderContactList(); };
+window.crmSetFilter = function(k,v){ if(k==='status')CRM_STATUS=v; else if(k==='owner')CRM_OWNER=v; else if(k==='sort')CRM_SORT=v; renderContactList(); };
+window.crmToggleSel = function(id){ if(CRM_SEL[id]) delete CRM_SEL[id]; else CRM_SEL[id]=1; renderContactList(); };
+window.crmToggleAll = function(on){ CRM_SEL={}; if(on)(window._crmList||[]).forEach(function(c){CRM_SEL[c.id]=1;}); renderContactList(); };
+window.crmClearSel = function(){ CRM_SEL={}; renderContactList(); };
+function _selIds(){ return Object.keys(CRM_SEL); }
+async function _bulk(op, extra){ var r=await crmApi(Object.assign({action:'bulk_contacts', sub_account_id:subId, op:op, ids:_selIds()}, extra||{})); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Bulk action failed.','error'); return; } crmToast(r.affected+' updated'); CRM_SEL={}; loadContacts(); }
+window.crmBulkTag = function(){ var t=document.getElementById('bulkTag').value; if(!t){return;} _bulk('add_tag',{tag_id:t}); };
+window.crmBulkStatus = function(){ var s=document.getElementById('bulkStatus').value; if(!s){return;} _bulk('status',{value:s}); };
+window.crmBulkAssign = function(){ var o=document.getElementById('bulkOwner').value; if(!o){return;} _bulk('assign',{value:o}); };
+window.crmBulkDelete = async function(){ var c=await Swal.fire({icon:'warning',title:'Delete '+_selIds().length+' contacts?',text:'This cannot be undone.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; _bulk('delete'); };
+window.crmExport = function(){
+    var list=_crmFiltered();
+    var cols=['first_name','last_name','email','phone','company','title','source','status'];
+    var head=cols.join(',')+',tags';
+    var esc2=function(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?('"'+v.replace(/"/g,'""')+'"'):v; };
+    var lines=list.map(function(c){ return cols.map(function(k){return esc2(c[k]);}).concat(esc2((c.tags||[]).map(function(t){return t.name;}).join('; '))).join(','); });
+    var csv=head+'\n'+lines.join('\n');
+    var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='contacts.csv'; document.body.appendChild(a); a.click(); a.remove();
+    crmToast('Exported '+list.length+' contacts');
+};
+// Minimal CSV parser (handles quotes, commas, newlines).
+function parseCSV(text){
+    var rows=[], row=[], cur='', q=false;
+    for(var i=0;i<text.length;i++){ var ch=text[i];
+        if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+        else { if(ch==='"') q=true; else if(ch===','){ row.push(cur);cur=''; } else if(ch==='\n'){ row.push(cur);rows.push(row);row=[];cur=''; } else if(ch==='\r'){} else cur+=ch; }
+    }
+    if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+    return rows.filter(function(r){ return r.some(function(x){return String(x).trim()!=='';}); });
+}
+window.crmImportModal = function(){
+    var inp=document.createElement('input'); inp.type='file'; inp.accept='.csv,text/csv';
+    inp.onchange=function(){ var file=inp.files&&inp.files[0]; if(!file) return; var rd=new FileReader();
+        rd.onload=function(){ try{ crmImportMap(parseCSV(String(rd.result))); }catch(e){ Swal.fire('Error','Could not read that CSV.','error'); } };
+        rd.readAsText(file);
+    };
+    inp.click();
+};
+function crmImportMap(rows){
+    if(rows.length<2){ Swal.fire('Empty','That file has no data rows.','info'); return; }
+    var headers=rows[0].map(function(h){return String(h).trim();});
+    var dataRows=rows.slice(1);
+    var fields=[['first_name','First name'],['last_name','Last name'],['email','Email'],['phone','Phone'],['company','Company'],['title','Title'],['source','Source'],['status','Status']];
+    var guess=function(f){ var l=f.replace(/_/g,''); return headers.filter(function(h){ var hl=h.toLowerCase().replace(/[^a-z]/g,''); return hl===l||hl.indexOf(l)>=0||l.indexOf(hl)>=0; })[0]||''; };
+    var rowsHtml=fields.map(function(f){ var g=guess(f[0]); return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div style="width:90px;font-size:12px;font-weight:700;text-align:left;">'+f[1]+'</div><select id="map_'+f[0]+'" class="swal2-select" style="margin:0;flex:1;font-size:12px;"><option value="">— skip —</option>'+headers.map(function(h){return '<option value="'+esc(h)+'"'+(h===g?' selected':'')+'>'+esc(h)+'</option>';}).join('')+'</select></div>'; }).join('');
+    Swal.fire({ title:'Import '+dataRows.length+' contacts', width:520,
+        html:'<div style="text-align:left;"><div style="font-size:12px;color:#64748b;margin-bottom:10px;">Match your CSV columns to contact fields. Rows without any name/email/phone are skipped.</div>'+rowsHtml
+          +'<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;cursor:pointer;"><input type="checkbox" id="mapDedupe" checked> Skip duplicates (same email already in this CRM)</label></div>',
+        showCancelButton:true, confirmButtonText:'Import', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){ var mapping={}; fields.forEach(function(f){ var v=document.getElementById('map_'+f[0]).value; if(v) mapping[f[0]]=v; }); if(!Object.keys(mapping).length){ Swal.showValidationMessage('Map at least one column.'); return false; } return {mapping:mapping, dedupe:document.getElementById('mapDedupe').checked}; }
+    }).then(async function(res){
+        if(!res.isConfirmed) return;
+        var objs=dataRows.map(function(r){ var o={}; headers.forEach(function(h,i){ o[h]=r[i]; }); return o; });
+        Swal.fire({title:'Importing…',didOpen:function(){Swal.showLoading();}});
+        var r=await crmApi({action:'import_contacts', sub_account_id:subId, rows:objs, mapping:res.value.mapping, dedupe_by_email:res.value.dedupe});
+        if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Import failed.','error'); return; }
+        Swal.fire({icon:'success',title:'Imported',text:r.created+' added'+(r.skipped?(', '+r.skipped+' skipped'):'')});
+        loadContacts();
+    });
+}
 window.toggleTagFilter = function(id){ CRM_TAGFILTER = (CRM_TAGFILTER===id ? '' : id); renderContacts(); var s=document.getElementById('crmSearch'); if(s){ s.value=CRM_Q; } };
 function tagCheckboxes(selectedIds){
     var sel = {}; (selectedIds||[]).forEach(function(id){ sel[id]=1; });

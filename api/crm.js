@@ -176,20 +176,86 @@ export default async function handler(req, res) {
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             let cq = supabase.from('crm_contacts').select('*').eq('sub_account_id', body.sub_account_id);
             const own = assignedFilter(acc); if (own) cq = cq.eq('owner_person_id', own);
-            const { data: contacts } = await cq.order('created_at', { ascending: false }).limit(1000);
+            if (body.status) cq = cq.eq('status', body.status);
+            if (body.owner_person_id) cq = cq.eq('owner_person_id', body.owner_person_id);
+            const sortCol = ['created_at', 'first_name', 'last_name', 'company'].includes(body.sort) ? body.sort : 'created_at';
+            const { data: contacts } = await cq.order(sortCol, { ascending: body.sort_dir === 'asc' }).limit(5000);
             let list = contacts || [];
             if (body.q) {
                 const q = String(body.q).toLowerCase();
                 list = list.filter(c => [c.first_name, c.last_name, c.email, c.phone, c.company].some(v => String(v || '').toLowerCase().includes(q)));
             }
-            const ids = list.map(c => c.id);
+            // Tag filter (contact must carry the given tag id).
+            const ids0 = list.map(c => c.id);
             const tagMap = {};
-            if (ids.length) {
-                const { data: links } = await supabase.from('crm_contact_tags').select('contact_id, crm_tags(id,name,color)').in('contact_id', ids);
+            if (ids0.length) {
+                const { data: links } = await supabase.from('crm_contact_tags').select('contact_id, crm_tags(id,name,color)').in('contact_id', ids0);
                 (links || []).forEach(l => { if (l.crm_tags) (tagMap[l.contact_id] = tagMap[l.contact_id] || []).push(l.crm_tags); });
             }
-            list = list.map(c => ({ ...c, tags: tagMap[c.id] || [] }));
-            return res.status(200).json({ success: true, contacts: list });
+            if (body.tag_id) list = list.filter(c => (tagMap[c.id] || []).some(t => t.id === body.tag_id));
+            const total = list.length;
+            const limit = Math.min(parseInt(body.limit, 10) || 100, 500);
+            const offset = Math.max(parseInt(body.offset, 10) || 0, 0);
+            const paged = (body.all ? list : list.slice(offset, offset + limit)).map(c => ({ ...c, tags: tagMap[c.id] || [] }));
+            return res.status(200).json({ success: true, contacts: paged, total, offset, limit });
+        }
+
+        // Bulk operations on selected contacts (or all matching, when ids omitted + all:true handled client-side).
+        if (action === 'bulk_contacts') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const ids = Array.isArray(body.ids) ? body.ids : [];
+            if (!ids.length) return res.status(400).json({ success: false, message: 'No contacts selected.' });
+            // Guard: only contacts in THIS CRM.
+            const { data: own } = await supabase.from('crm_contacts').select('id').eq('sub_account_id', body.sub_account_id).in('id', ids);
+            const okIds = (own || []).map(c => c.id);
+            if (!okIds.length) return res.status(400).json({ success: false, message: 'Nothing to update.' });
+            const op = body.op;
+            if (op === 'delete') { await supabase.from('crm_contacts').delete().in('id', okIds); return res.status(200).json({ success: true, affected: okIds.length }); }
+            if (op === 'status') { await supabase.from('crm_contacts').update({ status: body.value || 'active' }).in('id', okIds); return res.status(200).json({ success: true, affected: okIds.length }); }
+            if (op === 'assign') { await supabase.from('crm_contacts').update({ owner_person_id: body.value || null }).in('id', okIds); return res.status(200).json({ success: true, affected: okIds.length }); }
+            if (op === 'add_tag' && body.tag_id) {
+                const { data: t } = await supabase.from('crm_tags').select('id').eq('sub_account_id', body.sub_account_id).eq('id', body.tag_id).maybeSingle();
+                if (t) { const rows = okIds.map(cid => ({ contact_id: cid, tag_id: body.tag_id })); await supabase.from('crm_contact_tags').upsert(rows, { onConflict: 'contact_id,tag_id' }); }
+                return res.status(200).json({ success: true, affected: okIds.length });
+            }
+            if (op === 'remove_tag' && body.tag_id) { await supabase.from('crm_contact_tags').delete().eq('tag_id', body.tag_id).in('contact_id', okIds); return res.status(200).json({ success: true, affected: okIds.length }); }
+            return res.status(400).json({ success: false, message: 'Unknown bulk op.' });
+        }
+
+        // Import contacts from parsed CSV rows (client parses the file → array of {header:value}).
+        if (action === 'import_contacts') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const rows = Array.isArray(body.rows) ? body.rows : [];
+            if (!rows.length) return res.status(400).json({ success: false, message: 'No rows to import.' });
+            if (rows.length > 5000) return res.status(400).json({ success: false, message: 'Please import 5000 or fewer rows at a time.' });
+            const map = body.mapping || {}; // { first_name:'First Name', ... } header names
+            let created = 0, skipped = 0;
+            const dedupe = body.dedupe_by_email !== false;
+            const toInsert = [];
+            for (const r of rows) {
+                const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, created_by: personId, status: 'active', owner_person_id: personId, custom: {} };
+                CONTACT_FIELDS.forEach(k => { const hdr = map[k]; if (hdr && r[hdr] != null && r[hdr] !== '') row[k] = String(r[hdr]); });
+                if (!row.first_name && !row.last_name && !row.email && !row.phone && !row.company) { skipped++; continue; }
+                toInsert.push(row);
+            }
+            // Dedupe by email within this CRM (skip existing).
+            if (dedupe) {
+                const emails = toInsert.map(r => (r.email || '').toLowerCase()).filter(Boolean);
+                if (emails.length) {
+                    const { data: existing } = await supabase.from('crm_contacts').select('email').eq('sub_account_id', body.sub_account_id).in('email', emails);
+                    const have = new Set((existing || []).map(e => (e.email || '').toLowerCase()));
+                    for (let i = toInsert.length - 1; i >= 0; i--) { const em = (toInsert[i].email || '').toLowerCase(); if (em && have.has(em)) { toInsert.splice(i, 1); skipped++; } }
+                }
+            }
+            // Insert in chunks.
+            for (let i = 0; i < toInsert.length; i += 500) {
+                const chunk = toInsert.slice(i, i + 500);
+                const { error } = await supabase.from('crm_contacts').insert(chunk);
+                if (!error) created += chunk.length;
+            }
+            return res.status(200).json({ success: true, created, skipped });
         }
 
         if (action === 'create_contact') {
