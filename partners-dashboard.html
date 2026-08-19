@@ -688,7 +688,7 @@ async function logAuditAction(action, details, opts = {}) {
         const _idStat = statsByIdString.get(id.id_string);
         idMap[id.id] = {
             db_id: id.id, string: id.id_string, rev: (id.rev_share != null) ? String(id.rev_share).replace(/%+$/, '') + '%' : '0%',
-            isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
+            isPrime: !!id.prime49, lifecycle: id.lifecycle || 'current', sub_ids: [], agent_id: id.agent_id,
             owner_name: myPerson ? myPerson.full_name : 'Unknown',
             parent_config_id: id.parent_config_id,
             upline_name: null, upline_string: null,
@@ -1456,13 +1456,17 @@ async function submitOnboarding() {
         el.addEventListener('animationend', () => el.classList.remove('flipping-in'), { once: true });
     }
 
+    function lifecycleChip(lc){
+        if(lc === 'old') return '<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.3px;padding:1px 7px;border-radius:99px;background:#fef3c7;color:#92400e;vertical-align:middle;margin-left:4px;">OLD</span>';
+        return '<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.3px;padding:1px 7px;border-radius:99px;background:#dcfce7;color:#166534;vertical-align:middle;margin-left:4px;">CURRENT</span>';
+    }
     function renderBadge(id, isRootOfCard = false) {
         let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
         const _bCountHtml = _makeBadgeCountHtml(id.merchantCount||0, id.pendingCount||0, id.riskCount||0, id.closedCount||0);
         return `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
-                <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                    <div style="text-align:left;">${label}<span>${id.string} <span style="font-size:11px;color:#94a3b8;font-weight:600;">${id.rev}</span>${id.isPrime ? ' <span style="font-size:16px;vertical-align:middle;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.18));">&#x1F48E;</span>' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
+                <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime}, '${id.lifecycle || 'current'}')">
+                    <div style="text-align:left;">${label}<span>${id.string} <span style="font-size:11px;color:#94a3b8;font-weight:600;">${id.rev}</span>${id.isPrime ? ' <span style="font-size:16px;vertical-align:middle;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.18));">&#x1F48E;</span>' : ''} ${lifecycleChip(id.lifecycle)}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
                     <div style="display:flex;align-items:center;gap:6px;">
                         <div data-counts-id="${id.string}">${_bCountHtml}</div>
                         <button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button>
@@ -1737,8 +1741,9 @@ async function submitOnboarding() {
         }
     }
 
-  window.editIdentifier = async function(db_id, name, rev, isPrime) {
+  window.editIdentifier = async function(db_id, name, rev, isPrime, lifecycle) {
         const currentIdData = identifiersRaw.find(i => i.id === db_id);
+        const curLifecycle = lifecycle || (currentIdData && currentIdData.lifecycle) || 'current';
         const parentIdRecord = currentIdData?.parent_config_id
             ? identifiersRaw.find(i => i.id === currentIdData.parent_config_id) : null;
         const parentIdString = parentIdRecord ? parentIdRecord.id_string : null;
@@ -1797,6 +1802,17 @@ async function submitOnboarding() {
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;font-size:13px;padding-bottom:10px;white-space:nowrap;">
                             <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''} style="width:15px;height:15px;"> Prime49
                         </label>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">STATUS</label>
+                        <div style="display:flex;gap:8px;">
+                            <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border:2px solid ${curLifecycle!=='old'?'#166534':'#e2e8f0'};border-radius:8px;cursor:pointer;font-size:12px;font-weight:800;color:${curLifecycle!=='old'?'#166534':'#64748b'};background:${curLifecycle!=='old'?'#f0fdf4':'#fff'};">
+                                <input type="radio" name="swal-lifecycle" value="current" ${curLifecycle!=='old'?'checked':''} style="display:none;" onchange="document.querySelectorAll('[name=swal-lifecycle]').forEach(function(r){var l=r.parentElement;var on=r.checked;l.style.borderColor=on?(r.value==='old'?'#92400e':'#166534'):'#e2e8f0';l.style.color=on?(r.value==='old'?'#92400e':'#166534'):'#64748b';l.style.background=on?(r.value==='old'?'#fffbeb':'#f0fdf4'):'#fff';});"> ✅ Current
+                            </label>
+                            <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border:2px solid ${curLifecycle==='old'?'#92400e':'#e2e8f0'};border-radius:8px;cursor:pointer;font-size:12px;font-weight:800;color:${curLifecycle==='old'?'#92400e':'#64748b'};background:${curLifecycle==='old'?'#fffbeb':'#fff'};">
+                                <input type="radio" name="swal-lifecycle" value="old" ${curLifecycle==='old'?'checked':''} style="display:none;" onchange="document.querySelectorAll('[name=swal-lifecycle]').forEach(function(r){var l=r.parentElement;var on=r.checked;l.style.borderColor=on?(r.value==='old'?'#92400e':'#166534'):'#e2e8f0';l.style.color=on?(r.value==='old'?'#92400e':'#166534'):'#64748b';l.style.background=on?(r.value==='old'?'#fffbeb':'#f0fdf4'):'#fff';});"> 📦 Old
+                            </label>
+                        </div>
                     </div>
                     <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">MAKE A SUB PARTNER OF</label>
                     ${buildParentChip()}
@@ -2062,7 +2078,8 @@ async function submitOnboarding() {
             preConfirm: () => {
                 if (activeTab === 'settings') {
                     const v = document.getElementById('swal-rev').value.replace(/%+$/, '').trim();
-                    return { tab: 'settings', rev_share: v ? v+'%' : '0%', prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId, new_parent_label: selectedParentLabel };
+                    const _lcEl = document.querySelector('input[name=swal-lifecycle]:checked');
+                    return { tab: 'settings', rev_share: v ? v+'%' : '0%', prime49: document.getElementById('swal-prime').checked, lifecycle: _lcEl ? _lcEl.value : 'current', new_parent_id: selectedParentId, new_parent_label: selectedParentLabel };
                 } else {
                     if (moveMode === 'company' && !selectedCompanyId) {
                         Swal.showValidationMessage('Please select a destination company.'); return false;
@@ -2118,7 +2135,7 @@ async function submitOnboarding() {
             try {
                 const res = await fetch('/api/partners', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'update_identifier_all', id: db_id, rev_share: result.rev_share, prime49: result.prime49, new_parent_id: result.new_parent_id })
+                    body: JSON.stringify({ action: 'update_identifier_all', id: db_id, rev_share: result.rev_share, prime49: result.prime49, lifecycle: result.lifecycle, new_parent_id: result.new_parent_id })
                 });
                 const data = await res.json();
                 if (data.success) {

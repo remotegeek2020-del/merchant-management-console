@@ -1337,18 +1337,21 @@ if (action === 'get_merchant_data') {
             return res.status(200).json({ success: true });
         }
         if (action === 'update_identifier_all') {
-    const { id, rev_share, prime49, new_parent_id } = body;
+    const { id, rev_share, prime49, new_parent_id, lifecycle } = body;
 
     // Fetch old values for audit trail before updating
     const { data: oldData } = await supabase
         .from('agent_identifiers')
-        .select('id_string, rev_share, prime49, parent_config_id')
+        .select('id_string, rev_share, prime49, parent_config_id, lifecycle')
         .eq('id', id)
         .single();
 
+    const _patch = { rev_share, prime49, parent_config_id: new_parent_id };
+    // Only touch lifecycle when the client sent a valid value (keeps the action back-compatible).
+    if (lifecycle === 'current' || lifecycle === 'old') _patch.lifecycle = lifecycle;
     const { error } = await supabase
         .from('agent_identifiers')
-        .update({ rev_share, prime49, parent_config_id: new_parent_id })
+        .update(_patch)
         .eq('id', id);
 
     // Build human-readable change summary
@@ -1575,7 +1578,7 @@ if (action === 'get_all_stats') {
                 // UPDATED SELECT STRING BELOW
                 fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, is_portal_active, portal_password_set, last_portal_login, is_branded'),
                 fetchAll('agents', 'id, company_id, parent_agent_id'),
-                fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
+                fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id, lifecycle'),
                 fetchAll('companies', 'id, company_name')
             ]);
 
