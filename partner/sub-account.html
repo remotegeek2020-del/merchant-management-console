@@ -1076,14 +1076,24 @@ function convScrollBottom(){ setTimeout(function(){ var b=document.getElementByI
 /* ── CALENDARS (appointments) ──────────────────────────────────────────────── */
 var CRM_APPTS=[];
 function toLocalInput(iso){ try{ var d=new Date(iso); var p=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }catch(e){ return ''; } }
+var CAL_LIST=[];
 async function loadCalendar(){
     var host=document.getElementById('crmCal'); if(!host) return;
-    var res=await Promise.all([ crmApi({action:'list_appointments', sub_account_id:subId}), crmApi({action:'list_contacts', sub_account_id:subId}) ]);
+    var res=await Promise.all([ crmApi({action:'list_appointments', sub_account_id:subId}), crmApi({action:'list_contacts', sub_account_id:subId}), crmApi({action:'list_calendars', sub_account_id:subId}) ]);
     if(res[0] && /session/i.test(res[0].message||'')){ ppClearPartner(); location.href='/partner'; return; }
     CRM_APPTS=(res[0] && res[0].success && res[0].appointments)||[];
     CRM_CONTACTS=(res[1] && res[1].success && res[1].contacts)||CRM_CONTACTS;
+    CAL_LIST=(res[2] && res[2].success && res[2].calendars)||[];
     renderCalendar();
 }
+var CAL_TEMPLATES=[
+  {k:'classic',n:'Classic'},{k:'minimal',n:'Minimal'},{k:'dark',n:'Dark'},{k:'gradient',n:'Gradient'},{k:'glass',n:'Glass'},
+  {k:'split',n:'Split'},{k:'card',n:'Card'},{k:'elegant',n:'Elegant'},{k:'bold',n:'Bold'},{k:'soft',n:'Soft'},
+  {k:'mono',n:'Mono'},{k:'aurora',n:'Aurora'},{k:'sunset',n:'Sunset'},{k:'ocean',n:'Ocean'},{k:'forest',n:'Forest'}
+];
+var CAL_TYPE_LABEL={individual:'Individual',round_robin:'Round-robin team',collective:'Collective team'};
+function calBookUrl(cal){ return location.origin+'/partner/book?c='+cal.id; }
+window.copyCalLink=function(id){ var cal=CAL_LIST.filter(function(c){return c.id===id;})[0]; if(!cal) return; var link=calBookUrl(cal); try{navigator.clipboard.writeText(link);}catch(e){} Swal.fire({icon:'success',title:'Booking link copied', html:'Share this white-label link:<br><input readonly value="'+esc(link)+'" onclick="this.select()" style="width:100%;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;">'+'<div style="margin-top:8px;"><a href="'+esc(link)+'" target="_blank" style="color:var(--teal);font-weight:700;font-size:12px;">Open booking page →</a></div>'}); };
 function apptCard(a){
     var c=a.contact?cName(a.contact):''; var done=a.status==='done'; var d=new Date(a.starts_at);
     return '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid #f1f5f9;">'
@@ -1099,8 +1109,101 @@ function renderCalendar(){
     var toolbar='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;"><div style="font-size:12px;color:var(--muted);font-weight:600;">'+upcoming.length+' upcoming</div><button onclick="openAppt()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Add appointment</button></div>';
     var upHtml=upcoming.length?upcoming.map(apptCard).join(''):'<div style="font-size:13px;color:var(--muted);padding:6px 0;">No upcoming appointments.</div>';
     var pastHtml=past.length?('<div style="margin-top:18px;"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 4px;">Past</div>'+past.slice(0,20).map(apptCard).join('')+'</div>'):'';
-    host.innerHTML=toolbar+'<div class="panel" style="padding:6px 18px 14px;">'+upHtml+pastHtml+'</div>';
+    // Booking calendars panel (white-label scheduling pages).
+    var calCards=CAL_LIST.map(function(c){
+        var dot='<span style="width:12px;height:12px;border-radius:4px;background:'+esc(c.color_primary||'#0d9488')+';display:inline-block;flex-shrink:0;"></span>';
+        return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f1f5f9;">'+dot
+          +'<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:13px;">'+esc(c.name)+(c.active?'':' <span style="font-size:10px;font-weight:800;color:#92400e;background:#fef3c7;border-radius:99px;padding:1px 7px;">OFF</span>')+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);">'+(CAL_TYPE_LABEL[c.type]||c.type)+' · '+c.duration_min+' min · '+esc((c.template||'classic'))+'</div></div>'
+          +'<div style="display:flex;gap:8px;align-items:center;">'
+          +'<button onclick="copyCalLink(\''+c.id+'\')" title="Copy booking link" style="background:var(--teal-bg);color:var(--teal);border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:15px;">link</span> Link</button>'
+          +'<span class="material-icons" title="Bookings" onclick="viewBookings(\''+c.id+'\')" style="font-size:18px;color:var(--muted);cursor:pointer;">list_alt</span>'
+          +'<span class="material-icons" title="Edit" onclick="openCalendarEditor(\''+c.id+'\')" style="font-size:18px;color:var(--muted);cursor:pointer;">edit</span>'
+          +'<span class="material-icons" title="Delete" onclick="deleteCalendar(\''+c.id+'\')" style="font-size:17px;color:#cbd5e1;cursor:pointer;">delete</span>'
+          +'</div></div>';
+    }).join('')||'<div style="font-size:13px;color:var(--muted);padding:6px 0;">No booking calendars yet. Create one to share a white-label scheduling link.</div>';
+    var calPanel='<div class="panel" style="padding:16px 18px 14px;margin-bottom:18px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:14px;">Booking calendars</div><div style="font-size:12px;color:var(--muted);">Share a white-label link; bookings drop into your CRM.</div></div>'
+      +'<button onclick="openCalendarEditor()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> New calendar</button></div>'
+      +calCards+'</div>';
+    host.innerHTML=calPanel+toolbar+'<div class="panel" style="padding:6px 18px 14px;">'+upHtml+pastHtml+'</div>';
 }
+var _DOW=[['mon','Mon'],['tue','Tue'],['wed','Wed'],['thu','Thu'],['fri','Fri'],['sat','Sat'],['sun','Sun']];
+window.openCalendarEditor=async function(id){
+    await ensureMembers();
+    var c = id ? (CAL_LIST.filter(function(x){return x.id===id;})[0]||{}) : {};
+    var av = c.availability && Object.keys(c.availability).length ? c.availability : {mon:[{start:'09:00',end:'17:00'}],tue:[{start:'09:00',end:'17:00'}],wed:[{start:'09:00',end:'17:00'}],thu:[{start:'09:00',end:'17:00'}],fri:[{start:'09:00',end:'17:00'}]};
+    var hosts=Array.isArray(c.host_person_ids)?c.host_person_ids:[];
+    var prim=c.color_primary||'#0d9488', acc=c.color_accent||'#0f766e', tpl=c.template||'classic';
+    var typeOpts=['individual','round_robin','collective'].map(function(t){return '<option value="'+t+'"'+((c.type||'individual')===t?' selected':'')+'>'+CAL_TYPE_LABEL[t]+'</option>';}).join('');
+    var locOpts=[['custom','Custom'],['in_person','In person'],['phone','Phone'],['video','Video']].map(function(o){return '<option value="'+o[0]+'"'+((c.location_type||'custom')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('');
+    var hostChecks=(CRM_MEMBERS||[]).map(function(m){ var on=hosts.indexOf(m.person_id)>=0; return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0;cursor:pointer;"><input type="checkbox" class="calHost" value="'+m.person_id+'"'+(on?' checked':'')+'> '+esc(m.full_name||m.email||m.person_id)+'</label>'; }).join('')||'<div style="font-size:12px;color:var(--muted);">No team members. Add hosts under Agency → Team.</div>';
+    var dayRows=_DOW.map(function(d){ var w=(av[d[0]]||[])[0]||null; var on=!!w; return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;"><label style="width:70px;display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;"><input type="checkbox" class="calDay" data-d="'+d[0]+'"'+(on?' checked':'')+'> '+d[1]+'</label><input type="time" class="calStart" data-d="'+d[0]+'" value="'+(w?w.start:'09:00')+'" style="padding:5px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"><span style="color:var(--muted);font-size:12px;">to</span><input type="time" class="calEnd" data-d="'+d[0]+'" value="'+(w?w.end:'17:00')+'" style="padding:5px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></div>'; }).join('');
+    var tplGallery=CAL_TEMPLATES.map(function(t){ return '<label class="calTpl" style="cursor:pointer;"><input type="radio" name="calTpl" value="'+t.k+'"'+(t.k===tpl?' checked':'')+' style="display:none;" onchange="calTplPaint()"><div data-tpl="'+t.k+'" style="border:2px solid '+(t.k===tpl?'var(--teal)':'var(--border)')+';border-radius:10px;padding:8px 6px;text-align:center;font-size:11px;font-weight:700;color:var(--secondary);">'+t.n+'</div></label>'; }).join('');
+    var tz=c.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'America/New_York';
+    var L=function(t){return '<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin:14px 2px 6px;">'+t+'</div>';};
+    var html='<div style="text-align:left;max-height:66vh;overflow:auto;padding:2px 6px;">'
+      +L('Name')+'<input id="calName" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(c.name||'')+'" placeholder="e.g. Intro Call">'
+      +L('Description')+'<textarea id="calDesc" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;" placeholder="Shown on the booking page">'+esc(c.description||'')+'</textarea>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+        +'<div style="flex:1;min-width:140px;">'+L('Type')+'<select id="calType" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+typeOpts+'</select></div>'
+        +'<div style="width:110px;">'+L('Duration (min)')+'<input id="calDur" type="number" min="5" step="5" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+(c.duration_min||30)+'"></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+        +'<div style="flex:1;min-width:130px;">'+L('Location')+'<select id="calLocType" class="swal2-select" style="margin:0;width:100%;font-size:13px;">'+locOpts+'</select></div>'
+        +'<div style="flex:1;min-width:150px;">'+L('Location detail / link')+'<input id="calLocVal" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(c.location_value||'')+'" placeholder="Address, phone, or meeting link"></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+        +'<div style="width:120px;">'+L('Min notice (min)')+'<input id="calNotice" type="number" min="0" step="15" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+(c.min_notice_min!=null?c.min_notice_min:60)+'"></div>'
+        +'<div style="width:130px;">'+L('Bookable ahead (days)')+'<input id="calRange" type="number" min="1" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+(c.date_range_days||30)+'"></div>'
+        +'<div style="flex:1;min-width:160px;">'+L('Timezone')+'<input id="calTz" class="swal2-input" style="margin:0;width:100%;height:38px;font-size:13px;" value="'+esc(tz)+'"></div>'
+      +'</div>'
+      +L('Hosts (who takes bookings)')+'<div style="border:1px solid var(--border);border-radius:10px;padding:8px 10px;max-height:110px;overflow:auto;">'+hostChecks+'</div>'
+      +L('Weekly availability')+'<div style="border:1px solid var(--border);border-radius:10px;padding:10px;">'+dayRows+'</div>'
+      +L('Booking page design')+'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">'+tplGallery+'</div>'
+      +'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:flex-end;">'
+        +'<div>'+L('Primary color (hex)')+'<div style="display:flex;gap:6px;align-items:center;"><input type="color" id="calPrimPick" value="'+esc(prim)+'" oninput="document.getElementById(\'calPrim\').value=this.value" style="width:38px;height:38px;border:1px solid var(--border);border-radius:8px;padding:2px;background:#fff;cursor:pointer;"><input id="calPrim" class="swal2-input" style="margin:0;width:110px;height:38px;font-size:13px;font-family:monospace;" value="'+esc(prim)+'" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById(\'calPrimPick\').value=this.value" placeholder="#0d9488"></div></div>'
+        +'<div>'+L('Accent color (hex)')+'<div style="display:flex;gap:6px;align-items:center;"><input type="color" id="calAccPick" value="'+esc(acc)+'" oninput="document.getElementById(\'calAcc\').value=this.value" style="width:38px;height:38px;border:1px solid var(--border);border-radius:8px;padding:2px;background:#fff;cursor:pointer;"><input id="calAcc" class="swal2-input" style="margin:0;width:110px;height:38px;font-size:13px;font-family:monospace;" value="'+esc(acc)+'" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById(\'calAccPick\').value=this.value" placeholder="#0f766e"></div></div>'
+      +'</div>'
+      +L('Confirmation message')+'<textarea id="calConf" class="swal2-textarea" style="margin:0;width:100%;font-size:13px;" placeholder="Shown after booking">'+esc(c.confirmation_message||'')+'</textarea>'
+      +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer;font-weight:700;"><input type="checkbox" id="calActive"'+((c.active!==false)?' checked':'')+'> Accepting bookings</label>'
+      +'</div>';
+    var res=await Swal.fire({title:id?'Edit calendar':'New booking calendar', html:html, width:640, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
+        preConfirm:function(){
+            var name=(document.getElementById('calName').value||'').trim(); if(!name){Swal.showValidationMessage('Enter a name.');return false;}
+            var avail={}; document.querySelectorAll('.calDay').forEach(function(ch){ var d=ch.getAttribute('data-d'); if(ch.checked){ var st=document.querySelector('.calStart[data-d="'+d+'"]').value||'09:00'; var en=document.querySelector('.calEnd[data-d="'+d+'"]').value||'17:00'; avail[d]=[{start:st,end:en}]; } });
+            var host_person_ids=Array.prototype.slice.call(document.querySelectorAll('.calHost:checked')).map(function(x){return x.value;});
+            var type=document.getElementById('calType').value;
+            if((type==='round_robin'||type==='collective') && !host_person_ids.length){ Swal.showValidationMessage('Team calendars need at least one host.'); return false; }
+            var prim=(document.getElementById('calPrim').value||'').trim(); if(!/^#[0-9a-fA-F]{6}$/.test(prim)) prim='#0d9488';
+            var acc=(document.getElementById('calAcc').value||'').trim(); if(!/^#[0-9a-fA-F]{6}$/.test(acc)) acc='#0f766e';
+            return { name:name, description:document.getElementById('calDesc').value||null, type:type,
+                duration_min:parseInt(document.getElementById('calDur').value,10)||30,
+                min_notice_min:parseInt(document.getElementById('calNotice').value,10)||0,
+                date_range_days:parseInt(document.getElementById('calRange').value,10)||30,
+                timezone:document.getElementById('calTz').value||'America/New_York',
+                location_type:document.getElementById('calLocType').value, location_value:document.getElementById('calLocVal').value||null,
+                host_person_ids:host_person_ids, availability:avail,
+                template:(document.querySelector('input[name=calTpl]:checked')||{}).value||'classic',
+                color_primary:prim, color_accent:acc,
+                confirmation_message:document.getElementById('calConf').value||null,
+                active:document.getElementById('calActive').checked };
+        }});
+    if(!res.isConfirmed) return;
+    var out=id?await crmApi({action:'update_calendar', id:id, calendar:res.value}):await crmApi({action:'create_calendar', sub_account_id:subId, calendar:res.value});
+    if(!out||!out.success){ Swal.fire('Error',(out&&out.message)||'Could not save.','error'); return; }
+    crmToast(id?'Calendar saved':'Calendar created');
+    await loadCalendar();
+    if(!id && out.calendar) copyCalLink(out.calendar.id);
+};
+window.calTplPaint=function(){ var sel=(document.querySelector('input[name=calTpl]:checked')||{}).value; document.querySelectorAll('.calTpl [data-tpl]').forEach(function(el){ el.style.borderColor = el.getAttribute('data-tpl')===sel?'var(--teal)':'var(--border)'; }); };
+window.deleteCalendar=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete calendar?',text:'The booking link will stop working. Existing bookings stay in your CRM.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; var r=await crmApi({action:'delete_calendar', id:id}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; } crmToast('Calendar deleted'); await loadCalendar(); };
+window.viewBookings=async function(id){
+    var r=await crmApi({action:'list_calendar_bookings', calendar_id:id});
+    var list=(r&&r.success&&r.bookings)||[];
+    var rows=list.length?list.map(function(b){ var d=new Date(b.starts_at); var who=b.attendee_name||(b.contact?cName(b.contact):'')||b.attendee_email||''; return '<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;text-align:left;"><div><div style="font-weight:700;font-size:13px;">'+esc(who)+'</div><div style="font-size:11px;color:var(--muted);">'+esc(b.attendee_email||'')+'</div></div><div style="text-align:right;font-size:12px;color:var(--secondary);white-space:nowrap;">'+d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+'<br>'+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})+'</div></div>'; }).join(''):'<div style="color:var(--muted);font-size:13px;padding:16px 0;">No bookings yet.</div>';
+    Swal.fire({title:'Bookings', html:'<div style="max-height:60vh;overflow:auto;">'+rows+'</div>', width:520, confirmButtonText:'Close', confirmButtonColor:'#0d9488'});
+};
 window.openAppt=async function(id){
     if(!CRM_CONTACTS.length){ var cr=await crmApi({action:'list_contacts', sub_account_id:subId}); CRM_CONTACTS=(cr&&cr.success&&cr.contacts)||[]; }
     var a=id?CRM_APPTS.filter(function(x){return x.id===id;})[0]:null; a=a||{};

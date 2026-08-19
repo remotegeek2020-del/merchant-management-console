@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="/js/brand-boot.js?v=20260812b"></script>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book a time</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{
+            --cal-primary:#0d9488; --cal-accent:#0f766e;
+            --ink:#0a1628; --muted:#7c8ba1; --border:#e4e9f0; --card:#ffffff; --page:#eef2f7;
+            --radius:20px;
+        }
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--page);color:var(--ink);min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;-webkit-font-smoothing:antialiased;}
+        .wrap{width:100%;max-width:820px;}
+        .bcard{background:var(--card);border-radius:var(--radius);box-shadow:0 30px 70px rgba(2,12,40,.16);overflow:hidden;display:grid;grid-template-columns:300px 1fr;min-height:520px;}
+        .binfo{padding:30px 28px;border-right:1px solid var(--border);display:flex;flex-direction:column;}
+        .blogo{height:30px;margin-bottom:22px;object-fit:contain;object-position:left;display:none;}
+        .bname{font-size:1.35rem;font-weight:800;line-height:1.2;margin:0 0 8px;}
+        .bmeta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:6px 0;font-weight:600;}
+        .bmeta .material-icons{font-size:17px;color:var(--cal-primary);}
+        .bdesc{font-size:13px;color:var(--muted);line-height:1.55;margin-top:12px;white-space:pre-wrap;}
+        .bmain{padding:28px 30px;min-width:0;}
+        .bstep-t{font-size:15px;font-weight:800;margin:0 0 4px;}
+        .bstep-s{font-size:12.5px;color:var(--muted);margin:0 0 18px;}
+        .dates{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;}
+        .datechip{flex-shrink:0;min-width:64px;text-align:center;border:1.5px solid var(--border);border-radius:12px;padding:9px 6px;cursor:pointer;background:#fff;transition:.12s;}
+        .datechip:hover{border-color:var(--cal-primary);}
+        .datechip.active{background:var(--cal-primary);border-color:var(--cal-primary);color:#fff;}
+        .datechip .dow{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.8;}
+        .datechip .dnum{font-size:19px;font-weight:800;line-height:1.1;}
+        .datechip .dmo{font-size:10px;font-weight:700;opacity:.7;}
+        .times{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;max-height:280px;overflow-y:auto;}
+        .timebtn{border:1.5px solid var(--border);background:#fff;border-radius:10px;padding:10px 6px;font-size:13px;font-weight:700;font-family:inherit;color:var(--ink);cursor:pointer;transition:.12s;}
+        .timebtn:hover{border-color:var(--cal-primary);color:var(--cal-primary);}
+        .timebtn.active{background:var(--cal-primary);border-color:var(--cal-primary);color:#fff;}
+        label{display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 2px 5px;}
+        input,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;color:var(--ink);background:#f8fafc;outline:none;}
+        input:focus,textarea:focus{border-color:var(--cal-primary);background:#fff;box-shadow:0 0 0 3px color-mix(in srgb,var(--cal-primary) 18%,transparent);}
+        .btn{width:100%;margin-top:18px;padding:13px;background:var(--cal-primary);color:#fff;border:none;border-radius:11px;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer;transition:.15s;}
+        .btn:hover{background:var(--cal-accent);} .btn:disabled{opacity:.55;cursor:not-allowed;}
+        .btn-ghost{background:none;color:var(--cal-primary);border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;padding:6px 0;display:inline-flex;align-items:center;gap:4px;}
+        .selslot{display:flex;align-items:center;gap:8px;background:color-mix(in srgb,var(--cal-primary) 10%,#fff);border:1px solid color-mix(in srgb,var(--cal-primary) 30%,#fff);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--cal-accent);margin-bottom:6px;}
+        .selslot .material-icons{font-size:17px;}
+        .conf{text-align:center;padding:14px 4px;}
+        .conf .ok{width:64px;height:64px;border-radius:50%;background:color-mix(in srgb,var(--cal-primary) 15%,#fff);color:var(--cal-primary);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+        .conf .ok .material-icons{font-size:36px;}
+        .addcal{display:flex;flex-direction:column;gap:8px;margin-top:18px;}
+        .addcal a,.addcal button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid var(--border);background:#fff;color:var(--ink);border-radius:10px;padding:11px;font-size:13px;font-weight:700;font-family:inherit;text-decoration:none;cursor:pointer;}
+        .addcal a:hover,.addcal button:hover{border-color:var(--cal-primary);color:var(--cal-primary);}
+        .err{color:#dc2626;font-size:12.5px;text-align:center;margin-top:10px;display:none;}
+        .foot{text-align:center;font-size:10px;color:var(--muted);margin-top:16px;}
+        .empty{color:var(--muted);font-size:13px;padding:24px 0;text-align:center;}
+        @media(max-width:680px){ .bcard{grid-template-columns:1fr;} .binfo{border-right:none;border-bottom:1px solid var(--border);} }
+
+        /* ── 15 PRESET TEMPLATES (restyle bg + card using the two brand colors) ── */
+        html[data-cal-template="classic"] body{background:var(--page);}
+        html[data-cal-template="minimal"] body{background:#fafbfc;} html[data-cal-template="minimal"] .bcard{box-shadow:0 1px 0 var(--border),0 20px 50px rgba(2,12,40,.06);border:1px solid var(--border);}
+        html[data-cal-template="dark"] body{background:#0b1220;} html[data-cal-template="dark"] .bcard{--card:#111a2e;--ink:#e7ecf5;--border:#22304c;--muted:#93a1bd;background:#111a2e;}
+        html[data-cal-template="dark"] input,html[data-cal-template="dark"] textarea{background:#0d1526;color:#e7ecf5;} html[data-cal-template="dark"] .timebtn,html[data-cal-template="dark"] .datechip{background:#0d1526;color:#e7ecf5;}
+        html[data-cal-template="gradient"] body{background:linear-gradient(135deg,var(--cal-accent),var(--cal-primary));}
+        html[data-cal-template="glass"] body{background:linear-gradient(135deg,var(--cal-primary),var(--cal-accent));} html[data-cal-template="glass"] .bcard{background:rgba(255,255,255,.82);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.5);}
+        html[data-cal-template="split"] .binfo{background:linear-gradient(160deg,var(--cal-primary),var(--cal-accent));color:#fff;} html[data-cal-template="split"] .bmeta,html[data-cal-template="split"] .bdesc{color:rgba(255,255,255,.85);} html[data-cal-template="split"] .bmeta .material-icons{color:#fff;}
+        html[data-cal-template="card"] body{background:radial-gradient(1200px 500px at 50% -10%,color-mix(in srgb,var(--cal-primary) 22%,#eef2f7),#eef2f7);}
+        html[data-cal-template="elegant"] body{background:#f5f2ec;} html[data-cal-template="elegant"] .bcard{border-radius:8px;} html[data-cal-template="elegant"] .bname{font-weight:700;letter-spacing:-.02em;}
+        html[data-cal-template="bold"] .binfo{background:var(--cal-primary);color:#fff;} html[data-cal-template="bold"] .bname{font-size:1.7rem;} html[data-cal-template="bold"] .bmeta,html[data-cal-template="bold"] .bdesc{color:rgba(255,255,255,.9);} html[data-cal-template="bold"] .bmeta .material-icons{color:#fff;}
+        html[data-cal-template="soft"] body{background:color-mix(in srgb,var(--cal-primary) 10%,#f4f7fb);} html[data-cal-template="soft"] .bcard{border-radius:26px;box-shadow:0 24px 60px color-mix(in srgb,var(--cal-primary) 20%,transparent);}
+        html[data-cal-template="mono"] body{background:#f6f6f6;} html[data-cal-template="mono"] .bcard{border:1px solid #111;box-shadow:8px 8px 0 #111;border-radius:6px;}
+        html[data-cal-template="aurora"] body{background:linear-gradient(120deg,#0b1220,#12203a);} html[data-cal-template="aurora"] .bcard{--card:#0f1a30;--ink:#e7ecf5;--border:#25324e;--muted:#9fb0cd;background:linear-gradient(160deg,#0f1a30,#101d38);} html[data-cal-template="aurora"] .binfo{background:linear-gradient(160deg,var(--cal-primary),var(--cal-accent));color:#fff;}
+        html[data-cal-template="aurora"] input,html[data-cal-template="aurora"] textarea,html[data-cal-template="aurora"] .timebtn,html[data-cal-template="aurora"] .datechip{background:#0c1526;color:#e7ecf5;}
+        html[data-cal-template="sunset"] body{background:linear-gradient(135deg,#f59e0b,#ef4444 60%,#7c3aed);} html[data-cal-template="sunset"] .bcard{background:rgba(255,255,255,.92);}
+        html[data-cal-template="ocean"] body{background:linear-gradient(135deg,#0369a1,#0ea5e9 60%,#22d3ee);}
+        html[data-cal-template="forest"] body{background:linear-gradient(135deg,#14532d,#16a34a 70%,#84cc16);}
+    </style>
+</head>
+<body>
+<div class="wrap"><div class="bcard" id="root"><div class="bmain"><div class="empty">Loading…</div></div></div>
+<div class="foot" id="pw">Powered by PayProTec</div></div>
+<script src="/js/brand.js?v=20260812b"></script>
+<script>
+var calId = new URLSearchParams(location.search).get('c') || new URLSearchParams(location.search).get('cal') || '';
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function api(b){ return fetch('/api/crm-book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({calendar_id:calId},b))}).then(r=>r.json()); }
+var CAL=null, SLOTS=[], BYDATE={}, SELDATE=null, SELSLOT=null, VTZ=Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function setTheme(){
+    document.documentElement.setAttribute('data-cal-template', CAL.template||'classic');
+    if(CAL.color_primary) document.documentElement.style.setProperty('--cal-primary', CAL.color_primary);
+    if(CAL.color_accent) document.documentElement.style.setProperty('--cal-accent', CAL.color_accent);
+}
+function locLabel(){ var m={in_person:'In person',phone:'Phone call',video:'Video call',custom:''}; return CAL.location_value || m[CAL.location_type] || ''; }
+function infoCol(){
+    var brandLogo=(window.__PP_BRAND && window.__PP_BRAND.logo_url) || '';
+    return '<div class="binfo">'
+      +(brandLogo?'<img class="blogo" style="display:block;" src="'+esc(brandLogo)+'" alt="">':'')
+      +'<h1 class="bname">'+esc(CAL.name)+'</h1>'
+      +'<div class="bmeta"><span class="material-icons">schedule</span> '+CAL.duration_min+' min</div>'
+      +(locLabel()?'<div class="bmeta"><span class="material-icons">'+(CAL.location_type==='video'?'videocam':CAL.location_type==='phone'?'call':'place')+'</span> '+esc(locLabel())+'</div>':'')
+      +((CAL.hosts&&CAL.hosts.length)?'<div class="bmeta"><span class="material-icons">person</span> '+esc(CAL.hosts.join(', '))+'</div>':'')
+      +'<div class="bmeta"><span class="material-icons">public</span> '+esc(VTZ.replace(/_/g,' '))+'</div>'
+      +(CAL.description?'<div class="bdesc">'+esc(CAL.description)+'</div>':'')
+      +'</div>';
+}
+function groupSlots(){
+    BYDATE={};
+    SLOTS.forEach(function(iso){
+        var d=new Date(iso);
+        var key=d.toLocaleDateString('en-CA',{timeZone:VTZ}); // YYYY-MM-DD in local tz
+        (BYDATE[key]=BYDATE[key]||[]).push(iso);
+    });
+    var keys=Object.keys(BYDATE).sort();
+    SELDATE=keys.indexOf(SELDATE)>=0?SELDATE:(keys[0]||null);
+}
+function render(){
+    var root=document.getElementById('root');
+    if(!CAL.active){ root.innerHTML=infoCol()+'<div class="bmain"><div class="empty">This calendar isn’t accepting bookings right now.</div></div>'; return; }
+    var keys=Object.keys(BYDATE).sort();
+    if(!keys.length){ root.innerHTML=infoCol()+'<div class="bmain"><div class="bstep-t">Pick a time</div><div class="empty">No available times in the next few weeks. Please check back later.</div></div>'; return; }
+    var dateChips=keys.map(function(k){
+        var d=new Date(k+'T12:00:00');
+        var on=k===SELDATE;
+        return '<div class="datechip'+(on?' active':'')+'" onclick="pickDate(\''+k+'\')">'
+          +'<div class="dow">'+d.toLocaleDateString(undefined,{weekday:'short'})+'</div>'
+          +'<div class="dnum">'+d.getDate()+'</div>'
+          +'<div class="dmo">'+d.toLocaleDateString(undefined,{month:'short'})+'</div></div>';
+    }).join('');
+    var times=(BYDATE[SELDATE]||[]).map(function(iso){
+        var t=new Date(iso).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+        return '<button class="timebtn'+(SELSLOT===iso?' active':'')+'" onclick="pickSlot(\''+iso+'\')">'+esc(t)+'</button>';
+    }).join('');
+    root.innerHTML=infoCol()+'<div class="bmain">'
+      +'<div class="bstep-t">Select a date & time</div><div class="bstep-s">Times shown in your timezone ('+esc(VTZ.replace(/_/g,' '))+').</div>'
+      +'<div class="dates">'+dateChips+'</div>'
+      +'<div class="times">'+times+'</div></div>';
+}
+window.pickDate=function(k){ SELDATE=k; SELSLOT=null; render(); };
+window.pickSlot=function(iso){ SELSLOT=iso; showForm(); };
+function showForm(){
+    var root=document.getElementById('root');
+    var when=new Date(SELSLOT).toLocaleString(undefined,{weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
+    root.innerHTML=infoCol()+'<div class="bmain">'
+      +'<button class="btn-ghost" onclick="backToSlots()"><span class="material-icons" style="font-size:16px;">arrow_back</span> Change time</button>'
+      +'<div class="bstep-t" style="margin-top:6px;">Your details</div>'
+      +'<div class="selslot"><span class="material-icons">event</span> '+esc(when)+'</div>'
+      +'<label>Name *</label><input id="bkName" placeholder="Your full name">'
+      +'<label>Email *</label><input id="bkEmail" type="email" placeholder="you@email.com">'
+      +'<label>Phone</label><input id="bkPhone" placeholder="(optional)">'
+      +'<label>Anything we should know?</label><textarea id="bkNotes" rows="3" placeholder="(optional)"></textarea>'
+      +'<button class="btn" id="bkGo" onclick="doBook()">Confirm booking</button>'
+      +'<div class="err" id="bkErr"></div></div>';
+}
+window.backToSlots=function(){ SELSLOT=null; render(); };
+window.doBook=async function(){
+    var name=(document.getElementById('bkName').value||'').trim();
+    var email=(document.getElementById('bkEmail').value||'').trim();
+    var err=document.getElementById('bkErr');
+    if(!name||!email){ err.textContent='Please enter your name and email.'; err.style.display='block'; return; }
+    var btn=document.getElementById('bkGo'); btn.disabled=true; btn.textContent='Booking…'; err.style.display='none';
+    var r=await api({action:'book_slot', start:SELSLOT, name:name, email:email, phone:(document.getElementById('bkPhone').value||'').trim(), notes:(document.getElementById('bkNotes').value||'').trim(), tz:VTZ});
+    if(!r||!r.success){ err.textContent=(r&&r.message)||'Could not book. Please pick another time.'; err.style.display='block'; btn.disabled=false; btn.textContent='Confirm booking'; if(r&&/taken|available/i.test(r.message||'')){ loadSlots(); } return; }
+    showConfirm(r.booking, r.message);
+};
+function pad(n){return (n<10?'0':'')+n;}
+function icsStamp(iso){ var d=new Date(iso); return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+'T'+pad(d.getUTCHours())+pad(d.getUTCMinutes())+pad(d.getUTCSeconds())+'Z'; }
+function googleUrl(b){ return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(b.title)+'&dates='+icsStamp(b.start)+'/'+icsStamp(b.end)+'&details='+encodeURIComponent(b.description||'')+'&location='+encodeURIComponent(b.location||''); }
+function outlookUrl(host,b){ return 'https://'+host+'/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject='+encodeURIComponent(b.title)+'&startdt='+encodeURIComponent(b.start)+'&enddt='+encodeURIComponent(b.end)+'&body='+encodeURIComponent(b.description||'')+'&location='+encodeURIComponent(b.location||''); }
+function icsData(b){
+    var lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PayProTec//Booking//EN','BEGIN:VEVENT','UID:'+(b.ics_uid||('bk'+Date.now())),'DTSTAMP:'+icsStamp(b.start),'DTSTART:'+icsStamp(b.start),'DTEND:'+icsStamp(b.end),'SUMMARY:'+(b.title||'Appointment'),'DESCRIPTION:'+String(b.description||'').replace(/\n/g,'\\n'),'LOCATION:'+(b.location||''),'END:VEVENT','END:VCALENDAR'];
+    return 'data:text/calendar;charset=utf-8,'+encodeURIComponent(lines.join('\r\n'));
+}
+window.dlIcs=function(){ var a=document.createElement('a'); a.href=icsData(window.__BK); a.download='booking.ics'; document.body.appendChild(a); a.click(); a.remove(); };
+function showConfirm(b, msg){
+    window.__BK=b;
+    var when=new Date(b.start).toLocaleString(undefined,{weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
+    var root=document.getElementById('root');
+    root.innerHTML=infoCol()+'<div class="bmain"><div class="conf">'
+      +'<div class="ok"><span class="material-icons">check</span></div>'
+      +'<div class="bstep-t">Booking confirmed</div>'
+      +'<div class="selslot" style="justify-content:center;margin:12px 0;"><span class="material-icons">event</span> '+esc(when)+'</div>'
+      +'<div class="bstep-s">'+esc(msg||'You’re all set.')+'</div>'
+      +'<div class="addcal">'
+        +'<a href="'+googleUrl(b)+'" target="_blank" rel="noopener"><span class="material-icons" style="font-size:17px;">event</span> Add to Google Calendar</a>'
+        +'<a href="'+outlookUrl('outlook.office.com',b)+'" target="_blank" rel="noopener"><span class="material-icons" style="font-size:17px;">event</span> Add to Outlook (work/school)</a>'
+        +'<a href="'+outlookUrl('outlook.live.com',b)+'" target="_blank" rel="noopener"><span class="material-icons" style="font-size:17px;">event</span> Add to Outlook.com</a>'
+        +'<button onclick="dlIcs()"><span class="material-icons" style="font-size:17px;">download</span> Download .ics (Apple / other)</button>'
+      +'</div></div></div>';
+}
+async function loadSlots(){
+    var r=await api({action:'get_slots'});
+    SLOTS=(r&&r.success&&r.slots)||[];
+    groupSlots(); render();
+}
+async function init(){
+    if(!calId){ document.getElementById('root').innerHTML='<div class="bmain"><div class="empty">Invalid booking link.</div></div>'; return; }
+    var r=await api({action:'get_public_calendar'});
+    if(!r||!r.success){ document.getElementById('root').innerHTML='<div class="bmain"><div class="empty">'+esc((r&&r.message)||'Calendar not found.')+'</div></div>'; return; }
+    CAL=r.calendar; setTheme();
+    try{ document.title='Book: '+CAL.name; }catch(e){}
+    if(!CAL.active){ render(); return; }
+    render();
+    loadSlots();
+}
+init();
+</script>
+</body>
+</html>
