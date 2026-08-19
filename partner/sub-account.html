@@ -161,28 +161,62 @@
             .conv:not(.showmain) .conv-main{ display:none; }
             .conv.showmain .conv-back{ display:inline-flex; }
         }
-        /* ── CRM interface skins (evoke HighLevel / Zoho / HubSpot / Salesforce) ── */
-        /* Recolor the whole workspace by overriding the accent + sidebar tokens. */
+        /* ══ CRM interface skins — real LAYOUT changes, not just color ══ */
+
+        /* ── HighLevel: dark side nav, teal accents (grouped left rail) ── */
         html[data-crm-ui="highlevel"]{ --teal:#2dd4bf; --teal-dark:#14b8a6; --teal-bg:#ccfbf1; --navy:#0e1b2b; }
+        html[data-crm-ui="highlevel"] .nav-item{ border-radius:8px; }
         html[data-crm-ui="highlevel"] .nav-item.active{ box-shadow:inset 3px 0 0 #2dd4bf; }
-        html[data-crm-ui="hubspot"]{ --teal:#ff7a59; --teal-dark:#e8623f; --teal-bg:#ffe7df; --navy:#33475b; --surface:#f5f8fa; }
-        html[data-crm-ui="hubspot"] .panel,html[data-crm-ui="hubspot"] .kpi{ border-radius:8px; }
-        html[data-crm-ui="salesforce"]{ --teal:#0176d3; --teal-dark:#014486; --teal-bg:#e5f3ff; --navy:#032d60; --surface:#f3f3f3; }
-        html[data-crm-ui="salesforce"] .topbar{ background:#032d60; }
-        html[data-crm-ui="salesforce"] .topbar #secTitle,html[data-crm-ui="salesforce"] .topbar a{ color:#fff !important; }
-        html[data-crm-ui="salesforce"] .panel,html[data-crm-ui="salesforce"] .kpi{ border-radius:6px; }
-        /* Zoho = light sidebar with a red accent */
-        html[data-crm-ui="zoho"]{ --teal:#e42527; --teal-dark:#c81e1e; --teal-bg:#fde8e8; --surface:#f7f8fa; }
-        html[data-crm-ui="zoho"] .sidebar{ background:#fff; box-shadow:1px 0 0 #e5e7eb; }
+
+        /* ── HubSpot: slim left rail + airy, rounded content ── */
+        html[data-crm-ui="hubspot"]{ --teal:#ff7a59; --teal-dark:#e8623f; --teal-bg:#ffe7df; --navy:#2d3e50; --surface:#f5f8fa; }
+        html[data-crm-ui="hubspot"] .sidebar{ width:208px; }
+        html[data-crm-ui="hubspot"] .main{ margin-left:208px; }
+        html[data-crm-ui="hubspot"] .content{ padding:30px 34px; max-width:1180px; }
+        html[data-crm-ui="hubspot"] .nav-item{ border-radius:6px; font-size:12.5px; }
+        html[data-crm-ui="hubspot"] .panel,html[data-crm-ui="hubspot"] .kpi{ border-radius:10px; box-shadow:0 1px 2px rgba(0,0,0,.05),0 2px 12px rgba(45,62,80,.06); }
+        @media(max-width:768px){ html[data-crm-ui="hubspot"] .main{ margin-left:0; } }
+
+        /* ── TOP-NAV LAYOUT (Salesforce & Zoho): sidebar becomes a horizontal bar ── */
+        html[data-crm-ui="salesforce"], html[data-crm-ui="zoho"]{ --surface:#f3f4f6; }
+        html[data-crm-ui="salesforce"] .sidebar, html[data-crm-ui="zoho"] .sidebar{
+            position:sticky; top:0; left:0; width:100%; height:auto; flex-direction:row; align-items:center;
+            padding:0 14px; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,.12); transform:none !important;
+        }
+        html[data-crm-ui="salesforce"] .main, html[data-crm-ui="zoho"] .main{ margin-left:0; }
+        html[data-crm-ui="salesforce"] .sidebar-header, html[data-crm-ui="zoho"] .sidebar-header{ border:none; padding:8px 12px 8px 0; flex-shrink:0; }
+        html[data-crm-ui="salesforce"] .sidebar-partner, html[data-crm-ui="zoho"] .sidebar-partner{ display:none; }
+        html[data-crm-ui="salesforce"] .sidebar-logo, html[data-crm-ui="zoho"] .sidebar-logo{ height:24px; margin:0; }
+        html[data-crm-ui="salesforce"] .sidebar-nav, html[data-crm-ui="zoho"] .sidebar-nav{ flex-direction:row; padding:0; gap:0; overflow-x:auto; flex:1; align-items:stretch; }
+        html[data-crm-ui="salesforce"] .nav-group-label, html[data-crm-ui="zoho"] .nav-group-label,
+        html[data-crm-ui="salesforce"] .nav-divider, html[data-crm-ui="zoho"] .nav-divider,
+        html[data-crm-ui="salesforce"] [data-brand-replace], html[data-crm-ui="zoho"] [data-brand-replace]{ display:none; }
+        html[data-crm-ui="salesforce"] .nav-item, html[data-crm-ui="zoho"] .nav-item{ width:auto; white-space:nowrap; padding:0 13px; height:52px; border-radius:0; font-size:12.5px; border-bottom:3px solid transparent; }
+        html[data-crm-ui="salesforce"] .nav-item .material-icons, html[data-crm-ui="zoho"] .nav-item .material-icons{ font-size:17px; }
+        html[data-crm-ui="salesforce"] .mobile-menu-btn, html[data-crm-ui="zoho"] .mobile-menu-btn{ display:none !important; }
+        html[data-crm-ui="salesforce"] .sb-overlay, html[data-crm-ui="zoho"] .sb-overlay{ display:none !important; }
+        html[data-crm-ui="salesforce"] .topbar, html[data-crm-ui="zoho"] .topbar{ background:#fff; }
+
+        /* Salesforce Lightning: deep-blue global bar, white tabs, cyan active underline, dense */
+        html[data-crm-ui="salesforce"]{ --teal:#0176d3; --teal-dark:#014486; --teal-bg:#e5f3ff; }
+        html[data-crm-ui="salesforce"] .sidebar{ background:#032d60; }
+        html[data-crm-ui="salesforce"] .sidebar-logo{ filter:brightness(0) invert(1); }
+        html[data-crm-ui="salesforce"] .nav-item{ color:rgba(255,255,255,.85); }
+        html[data-crm-ui="salesforce"] .nav-item:hover{ background:rgba(255,255,255,.10); color:#fff; }
+        html[data-crm-ui="salesforce"] .nav-item.active{ background:rgba(255,255,255,.06); color:#fff; border-bottom-color:#1ab9ff; box-shadow:none; }
+        html[data-crm-ui="salesforce"] .panel,html[data-crm-ui="salesforce"] .kpi{ border-radius:5px; }
+        html[data-crm-ui="salesforce"] thead th{ background:#f3f4f6; }
+        html[data-crm-ui="salesforce"] tbody td{ padding:7px 14px; }
+        html[data-crm-ui="salesforce"] .content{ padding:16px 20px; }
+
+        /* Zoho: white top bar, dark tabs, red active underline, dense tables */
+        html[data-crm-ui="zoho"]{ --teal:#e42527; --teal-dark:#c81e1e; --teal-bg:#fde8e8; }
+        html[data-crm-ui="zoho"] .sidebar{ background:#fff; }
         html[data-crm-ui="zoho"] .sidebar-logo{ filter:none; }
-        html[data-crm-ui="zoho"] .sidebar-name{ color:#1f2937; }
-        html[data-crm-ui="zoho"] .sidebar-tag{ color:#9ca3af; }
         html[data-crm-ui="zoho"] .nav-item{ color:#4b5563; }
-        html[data-crm-ui="zoho"] .nav-item:hover{ background:#f3f4f6; color:#111827; }
-        html[data-crm-ui="zoho"] .nav-item.active{ background:#fde8e8; color:#e42527; }
-        html[data-crm-ui="zoho"] .nav-group-label{ color:#9ca3af; }
-        html[data-crm-ui="zoho"] .nav-divider{ background:#e5e7eb; }
-        html[data-crm-ui="zoho"] .sidebar-header{ border-bottom-color:#e5e7eb; }
+        html[data-crm-ui="zoho"] .nav-item:hover{ background:#f7f8fa; color:#111827; }
+        html[data-crm-ui="zoho"] .nav-item.active{ background:transparent; color:#e42527; border-bottom-color:#e42527; box-shadow:none; }
+        html[data-crm-ui="zoho"] tbody td{ padding:8px 14px; }
     </style>
 </head>
 <body>
@@ -1304,11 +1338,11 @@ window.crmSetEmailMode = async function(mode){
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Email mode saved');
 };
 var CRM_UI_STYLES=[
-    {v:'default', t:'PayProTec', d:'The clean default look.', sb:'#001e3c', ac:'#0d9488'},
-    {v:'highlevel', t:'HighLevel', d:'Dark sidebar, teal accents.', sb:'#0e1b2b', ac:'#2dd4bf'},
-    {v:'zoho', t:'Zoho', d:'Light sidebar, red accents.', sb:'#ffffff', ac:'#e42527'},
-    {v:'hubspot', t:'HubSpot', d:'Slate sidebar, orange accents.', sb:'#33475b', ac:'#ff7a59'},
-    {v:'salesforce', t:'Salesforce', d:'Blue “Lightning” look.', sb:'#032d60', ac:'#0176d3'}
+    {v:'default', t:'PayProTec', d:'Left side nav, teal accents.', sb:'#001e3c', ac:'#0d9488', lay:'side'},
+    {v:'highlevel', t:'HighLevel', d:'Dark left rail, teal accents.', sb:'#0e1b2b', ac:'#2dd4bf', lay:'side'},
+    {v:'hubspot', t:'HubSpot', d:'Slim left rail, airy layout.', sb:'#2d3e50', ac:'#ff7a59', lay:'side'},
+    {v:'zoho', t:'Zoho', d:'Top nav bar, red accents.', sb:'#ffffff', ac:'#e42527', lay:'top', sbBorder:true},
+    {v:'salesforce', t:'Salesforce', d:'Blue top nav (Lightning).', sb:'#032d60', ac:'#0176d3', lay:'top'}
 ];
 window.crmSetUiStyle = async function(v){
     applyCrmUi(v);
@@ -1324,7 +1358,15 @@ function uiStylePanel(){
     if(!canM){ var c=CRM_UI_STYLES.filter(function(o){return o.v===cur;})[0]||CRM_UI_STYLES[0]; return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Interface style</div><div style="font-size:12px;color:var(--muted);margin-top:4px;">This CRM uses the <b>'+esc(c.t)+'</b> look.</div></div>'; }
     var cards=CRM_UI_STYLES.map(function(o){
         var on=cur===o.v;
-        var mini='<div style="display:flex;height:44px;border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:8px;"><div style="width:26%;background:'+o.sb+';"></div><div style="flex:1;background:#fff;position:relative;"><div style="position:absolute;top:8px;left:8px;right:24px;height:7px;border-radius:4px;background:#eef2f6;"></div><div style="position:absolute;top:8px;right:8px;width:12px;height:12px;border-radius:4px;background:'+o.ac+';"></div><div style="position:absolute;bottom:8px;left:8px;width:34px;height:10px;border-radius:5px;background:'+o.ac+';"></div></div></div>';
+        var brd=o.sbBorder?';border-bottom:1px solid #e5e7eb':'';
+        var mini;
+        if(o.lay==='top'){
+            mini='<div style="height:48px;border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:8px;background:#fff;">'
+              +'<div style="height:15px;background:'+o.sb+';display:flex;align-items:center;gap:4px;padding:0 6px'+brd+';"><span style="width:14px;height:5px;border-radius:3px;background:'+o.ac+';"></span><span style="width:10px;height:5px;border-radius:3px;background:'+(o.sb==='#ffffff'?'#cbd5e1':'rgba(255,255,255,.5)')+';"></span><span style="width:10px;height:5px;border-radius:3px;background:'+(o.sb==='#ffffff'?'#cbd5e1':'rgba(255,255,255,.5)')+';"></span></div>'
+              +'<div style="padding:6px 8px;position:relative;"><div style="height:6px;border-radius:4px;background:#eef2f6;margin-bottom:4px;"></div><div style="width:32px;height:8px;border-radius:4px;background:'+o.ac+';"></div></div></div>';
+        } else {
+            mini='<div style="display:flex;height:48px;border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:8px;"><div style="width:26%;background:'+o.sb+brd+';"></div><div style="flex:1;background:#fff;position:relative;"><div style="position:absolute;top:8px;left:8px;right:24px;height:7px;border-radius:4px;background:#eef2f6;"></div><div style="position:absolute;top:8px;right:8px;width:12px;height:12px;border-radius:4px;background:'+o.ac+';"></div><div style="position:absolute;bottom:8px;left:8px;width:34px;height:10px;border-radius:5px;background:'+o.ac+';"></div></div></div>';
+        }
         return '<label style="cursor:pointer;border:2px solid '+(on?'var(--teal)':'var(--border)')+';border-radius:12px;padding:10px;background:'+(on?'var(--teal-bg)':'#fff')+';">'
           +'<input type="radio" name="crmUiStyle" value="'+o.v+'"'+(on?' checked':'')+' onchange="crmSetUiStyle(\''+o.v+'\')" style="display:none;">'
           +mini+'<div style="font-weight:800;font-size:13px;color:'+(on?'var(--teal)':'var(--secondary)')+';">'+o.t+'</div>'
