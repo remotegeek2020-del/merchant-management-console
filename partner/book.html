@@ -160,7 +160,7 @@ window.doBook=async function(){
     var err=document.getElementById('bkErr');
     if(!name||!email){ err.textContent='Please enter your name and email.'; err.style.display='block'; return; }
     var btn=document.getElementById('bkGo'); btn.disabled=true; btn.textContent='Booking…'; err.style.display='none';
-    var r=await api({action:'book_slot', start:SELSLOT, name:name, email:email, phone:(document.getElementById('bkPhone').value||'').trim(), notes:(document.getElementById('bkNotes').value||'').trim(), tz:VTZ});
+    var r=await api({action:'book_slot', start:SELSLOT, name:name, email:email, phone:(document.getElementById('bkPhone').value||'').trim(), notes:(document.getElementById('bkNotes').value||'').trim(), tz:VTZ, origin:location.origin});
     if(!r||!r.success){ err.textContent=(r&&r.message)||'Could not book. Please pick another time.'; err.style.display='block'; btn.disabled=false; btn.textContent='Confirm booking'; if(r&&/taken|available/i.test(r.message||'')){ loadSlots(); } return; }
     showConfirm(r.booking, r.message);
 };
@@ -194,7 +194,49 @@ async function loadSlots(){
     SLOTS=(r&&r.success&&r.slots)||[];
     groupSlots(); render();
 }
+var MANAGE = new URLSearchParams(location.search).get('manage') || '';
+async function manageInit(){
+    var r=await fetch('/api/crm-book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_booking', manage_token:MANAGE})}).then(x=>x.json());
+    if(!r||!r.success){ document.getElementById('root').innerHTML='<div class="bmain"><div class="empty">Booking not found.</div></div>'; return; }
+    window.__MB=r.booking; calId=r.booking.calendar_id;
+    var cr=await api({action:'get_public_calendar'}); if(cr&&cr.success){ CAL=cr.calendar; setTheme(); }
+    renderManage();
+}
+function renderManage(){
+    var b=window.__MB; var root=document.getElementById('root');
+    var when=new Date(b.start).toLocaleString(undefined,{weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
+    if(b.status==='cancelled'){ root.innerHTML=(CAL?infoCol():'')+'<div class="bmain"><div class="conf"><div class="ok" style="background:#fee2e2;color:#dc2626;"><span class="material-icons">event_busy</span></div><div class="bstep-t">Booking cancelled</div><div class="bstep-s">This appointment has been cancelled.</div></div></div>'; return; }
+    root.innerHTML=(CAL?infoCol():'')+'<div class="bmain"><div class="bstep-t">Manage your booking</div>'
+      +'<div class="selslot" style="margin:12px 0;"><span class="material-icons">event</span> '+esc(when)+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      +'<button class="btn" style="width:auto;margin:0;" onclick="mbReschedule()"><span class="material-icons" style="font-size:16px;vertical-align:-3px;">edit_calendar</span> Reschedule</button>'
+      +'<button class="btn" style="width:auto;margin:0;background:#fff;color:#dc2626;border:1.5px solid #fecaca;" onclick="mbCancel()">Cancel booking</button>'
+      +'</div><div id="mbSlots" style="margin-top:16px;"></div></div>';
+}
+window.mbCancel=async function(){
+    var c=await confirmMini('Cancel this booking?'); if(!c) return;
+    var r=await fetch('/api/crm-book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cancel_booking', manage_token:MANAGE, origin:location.origin})}).then(x=>x.json());
+    if(r&&r.success){ window.__MB.status='cancelled'; renderManage(); } else alert((r&&r.message)||'Could not cancel.');
+};
+function confirmMini(msg){ return Promise.resolve(window.confirm(msg)); }
+window.mbReschedule=async function(){
+    var host=document.getElementById('mbSlots'); host.innerHTML='<div class="empty">Loading times…</div>';
+    var r=await api({action:'get_slots'}); SLOTS=(r&&r.success&&r.slots)||[]; groupSlots();
+    var keys=Object.keys(BYDATE).sort();
+    if(!keys.length){ host.innerHTML='<div class="empty">No available times right now.</div>'; return; }
+    host.innerHTML='<div class="bstep-s">Pick a new time:</div><div class="dates" id="mbDates"></div><div class="times" id="mbTimes"></div>';
+    window._mbRender=function(){ document.getElementById('mbDates').innerHTML=keys.map(function(k){ var d=new Date(k+'T12:00:00'); var on=k===SELDATE; return '<div class="datechip'+(on?' active':'')+'" onclick="mbPickDate(\''+k+'\')"><div class="dow">'+d.toLocaleDateString(undefined,{weekday:'short'})+'</div><div class="dnum">'+d.getDate()+'</div><div class="dmo">'+d.toLocaleDateString(undefined,{month:'short'})+'</div></div>'; }).join('');
+      document.getElementById('mbTimes').innerHTML=(BYDATE[SELDATE]||[]).map(function(iso){ return '<button class="timebtn" onclick="mbDoResched(\''+iso+'\')">'+esc(new Date(iso).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}))+'</button>'; }).join(''); };
+    window._mbRender();
+};
+window.mbPickDate=function(k){ SELDATE=k; window._mbRender(); };
+window.mbDoResched=async function(iso){
+    var r=await fetch('/api/crm-book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reschedule_booking', manage_token:MANAGE, start:iso, origin:location.origin})}).then(x=>x.json());
+    if(!r||!r.success){ alert((r&&r.message)||'Could not reschedule.'); return; }
+    window.__MB.start=r.booking.start; window.__MB.end=r.booking.end; renderManage();
+};
 async function init(){
+    if(MANAGE){ return manageInit(); }
     if(!calId){ document.getElementById('root').innerHTML='<div class="bmain"><div class="empty">Invalid booking link.</div></div>'; return; }
     var r=await api({action:'get_public_calendar'});
     if(!r||!r.success){ document.getElementById('root').innerHTML='<div class="bmain"><div class="empty">'+esc((r&&r.message)||'Calendar not found.')+'</div></div>'; return; }

@@ -3,10 +3,42 @@
 // (computed from availability in the calendar's timezone, minus existing bookings);
 // book_slot → creates a contact + appointment and returns add-to-calendar details.
 import { createClient } from '@supabase/supabase-js';
+import { sendAgencyEmail } from './_agency-mail.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+function icsStamp(iso) { const d = new Date(iso), p = n => (n < 10 ? '0' : '') + n; return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + 'T' + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + 'Z'; }
+function addToCalLinks(b) {
+    const g = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(b.title) + '&dates=' + icsStamp(b.start) + '/' + icsStamp(b.end) + '&details=' + encodeURIComponent(b.description || '') + '&location=' + encodeURIComponent(b.location || '');
+    const o = 'https://outlook.office.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=' + encodeURIComponent(b.title) + '&startdt=' + encodeURIComponent(b.start) + '&enddt=' + encodeURIComponent(b.end) + '&body=' + encodeURIComponent(b.description || '') + '&location=' + encodeURIComponent(b.location || '');
+    return { google: g, outlook: o };
+}
+// Confirmation / update email to the attendee, sent from the agency's white-label sender.
+async function sendBookingEmail(cal, appt, origin, kind) {
+    const start = new Date(appt.starts_at).getTime(), end = new Date(appt.ends_at).getTime();
+    const when = new Date(start).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
+    const links = addToCalLinks({ title: cal.name, start: appt.starts_at, end: appt.ends_at, location: appt.location, description: cal.description || '' });
+    const manageUrl = (origin && /^https:\/\//.test(origin) ? origin : (process.env.SITE_URL || 'https://portal.mypayprotec.com')) + '/partner/book?manage=' + appt.manage_token;
+    const title = kind === 'reschedule' ? `Updated: ${cal.name}` : (kind === 'cancel' ? `Cancelled: ${cal.name}` : `Confirmed: ${cal.name}`);
+    const intro = kind === 'reschedule' ? 'Your booking has been rescheduled.' : (kind === 'cancel' ? 'Your booking has been cancelled.' : 'Your booking is confirmed. See you then!');
+    let html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;border:1px solid #e2e8f0;border-radius:16px;">
+        <h2 style="color:#0a1628;font-size:20px;margin:0 0 6px;">${title}</h2>
+        <p style="color:#475569;line-height:1.6;">${intro}</p>
+        <div style="background:#f8fafc;border-radius:12px;padding:14px 16px;margin:16px 0;">
+          <div style="font-weight:800;font-size:15px;">${cal.name}</div>
+          <div style="color:#475569;font-size:14px;margin-top:4px;">🗓️ ${when}</div>
+          ${appt.location ? `<div style="color:#475569;font-size:14px;margin-top:2px;">📍 ${appt.location}</div>` : ''}
+        </div>`;
+    if (kind !== 'cancel') {
+        html += `<div style="margin:14px 0;"><a href="${links.google}" style="color:#0d9488;font-weight:700;text-decoration:none;margin-right:14px;">Add to Google</a><a href="${links.outlook}" style="color:#0d9488;font-weight:700;text-decoration:none;">Add to Outlook</a></div>
+          <p style="font-size:13px;color:#64748b;">Need to change it? <a href="${manageUrl}" style="color:#0d9488;font-weight:700;">Reschedule or cancel</a>.</p>`;
+    }
+    html += `</div>`;
+    const text = `${title}\n${intro}\n\n${cal.name}\n${when}${appt.location ? '\n' + appt.location : ''}\n\nManage: ${manageUrl}`;
+    try { await sendAgencyEmail(cal.portal_id, { to: appt.attendee_email, subject: title, html, text }); } catch (e) { /* best-effort */ }
+}
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_AVAIL = { mon: [{ start: '09:00', end: '17:00' }], tue: [{ start: '09:00', end: '17:00' }], wed: [{ start: '09:00', end: '17:00' }], thu: [{ start: '09:00', end: '17:00' }], fri: [{ start: '09:00', end: '17:00' }] };
@@ -67,8 +99,9 @@ export default async function handler(req, res) {
             const map = {}; hostIds.forEach(h => map[h] = []);
             if (!hostIds.length) return map;
             const { data: appts } = await supabase.from('crm_appointments')
-                .select('starts_at, ends_at, host_person_id')
+                .select('starts_at, ends_at, host_person_id, status')
                 .in('host_person_id', hostIds)
+                .neq('status', 'cancelled')
                 .gte('starts_at', rangeStartISO).lte('starts_at', rangeEndISO);
             (appts || []).forEach(a => {
                 if (!a.host_person_id || !a.starts_at) return;
@@ -146,26 +179,68 @@ export default async function handler(req, res) {
             const locMap = { in_person: cal.location_value || 'In person', phone: 'Phone call', video: cal.location_value || 'Video call', custom: cal.location_value || '' };
             const location = locMap[cal.location_type] || cal.location_value || '';
             const icsUid = 'bk-' + Math.abs(start).toString(36) + '-' + Math.random().toString(36).slice(2, 8) + '@mypayprotec';
+            const manageToken = 'm' + Math.abs(start).toString(36) + Math.random().toString(36).slice(2, 12);
             const { data: appt, error } = await supabase.from('crm_appointments').insert({
                 sub_account_id: cal.sub_account_id, portal_id: cal.portal_id, calendar_id: cal.id,
                 contact_id: contactId, host_person_id: hostId,
                 title: cal.name + ' with ' + name, starts_at: new Date(start).toISOString(), ends_at: new Date(end).toISOString(),
                 location, notes: body.notes || null, status: 'scheduled',
                 attendee_name: name, attendee_email: email, attendee_phone: phone || null,
-                ics_uid: icsUid, source: 'booking'
+                ics_uid: icsUid, source: 'booking', manage_token: manageToken
             }).select('*').single();
             if (error) return res.status(500).json({ success: false, message: 'Could not book. Please try again.' });
             // Log to the contact conversation (best-effort).
             try { await supabase.from('crm_messages').insert({ sub_account_id: cal.sub_account_id, portal_id: cal.portal_id, contact_id: contactId, direction: 'inbound', channel: 'note', body: 'Booked "' + cal.name + '" for ' + new Date(start).toISOString() }); } catch (e) {}
+            // White-label confirmation email (best-effort — booking still succeeds if email unset).
+            sendBookingEmail(cal, appt, body.origin, 'confirm');
             return res.status(200).json({
                 success: true,
                 booking: {
                     title: cal.name, start: new Date(start).toISOString(), end: new Date(end).toISOString(),
                     location, description: (cal.description || '') + (body.notes ? ('\n\nNotes: ' + body.notes) : ''),
-                    ics_uid: icsUid, duration_min: dur
+                    ics_uid: icsUid, duration_min: dur, manage_token: manageToken
                 },
                 message: cal.confirmation_message || 'Your booking is confirmed. See you then!'
             });
+        }
+
+        // ── Manage an existing booking (public, by token) ──
+        if (action === 'get_booking' || action === 'cancel_booking' || action === 'reschedule_booking') {
+            const mt = body.manage_token;
+            if (!mt) return res.status(400).json({ success: false, message: 'Missing booking reference.' });
+            const { data: appt } = await supabase.from('crm_appointments').select('*').eq('manage_token', mt).maybeSingle();
+            if (!appt) return res.status(404).json({ success: false, message: 'Booking not found.' });
+            const { data: bcal } = await supabase.from('crm_calendars').select('*').eq('id', appt.calendar_id).maybeSingle();
+
+            if (action === 'get_booking') {
+                return res.status(200).json({ success: true, booking: { title: appt.title, start: appt.starts_at, end: appt.ends_at, location: appt.location, status: appt.status, attendee_name: appt.attendee_name, calendar_name: bcal ? bcal.name : null, calendar_id: appt.calendar_id } });
+            }
+            if (action === 'cancel_booking') {
+                if (appt.status === 'cancelled') return res.status(200).json({ success: true, already: true });
+                await supabase.from('crm_appointments').update({ status: 'cancelled' }).eq('id', appt.id);
+                try { await supabase.from('crm_messages').insert({ sub_account_id: appt.sub_account_id, portal_id: appt.portal_id, contact_id: appt.contact_id, direction: 'inbound', channel: 'note', body: 'Cancelled booking "' + (bcal ? bcal.name : '') + '"' }); } catch (e) {}
+                if (bcal) sendBookingEmail(bcal, appt, body.origin, 'cancel');
+                return res.status(200).json({ success: true });
+            }
+            if (action === 'reschedule_booking') {
+                if (!bcal) return res.status(404).json({ success: false, message: 'Calendar not found.' });
+                const nStart = new Date(body.start).getTime();
+                if (isNaN(nStart)) return res.status(400).json({ success: false, message: 'Pick a time.' });
+                const nDur = bcal.duration_min || 30, nEnd = nStart + nDur * 60000;
+                if (nStart < Date.now() + (bcal.min_notice_min || 0) * 60000) return res.status(400).json({ success: false, message: 'That time is no longer available.' });
+                const bHostIds = Array.isArray(bcal.host_person_ids) ? bcal.host_person_ids : [];
+                // conflict check excluding THIS appointment
+                let conflict = false;
+                if (appt.host_person_id) {
+                    const { data: other } = await supabase.from('crm_appointments').select('starts_at,ends_at').eq('host_person_id', appt.host_person_id).neq('status', 'cancelled').neq('id', appt.id).gte('starts_at', new Date(nStart - 86400000).toISOString()).lte('starts_at', new Date(nEnd + 86400000).toISOString());
+                    conflict = (other || []).some(a => { const s = new Date(a.starts_at).getTime(), e = a.ends_at ? new Date(a.ends_at).getTime() : s + nDur * 60000; return nStart < e && nEnd > s; });
+                }
+                if (conflict) return res.status(409).json({ success: false, message: 'That time was just taken. Please pick another.' });
+                await supabase.from('crm_appointments').update({ starts_at: new Date(nStart).toISOString(), ends_at: new Date(nEnd).toISOString(), status: 'scheduled' }).eq('id', appt.id);
+                const updated = { ...appt, starts_at: new Date(nStart).toISOString(), ends_at: new Date(nEnd).toISOString() };
+                sendBookingEmail(bcal, updated, body.origin, 'reschedule');
+                return res.status(200).json({ success: true, booking: { start: updated.starts_at, end: updated.ends_at } });
+            }
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });
