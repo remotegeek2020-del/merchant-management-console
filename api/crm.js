@@ -581,6 +581,77 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── BOOKING CALENDARS (HighLevel-style scheduling pages) ─────────────
+        if (action === 'list_calendars') {
+            const acc = await subAccess(personId, body.sub_account_id, 'calendars');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data } = await supabase.from('crm_calendars').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: false });
+            return res.status(200).json({ success: true, calendars: data || [] });
+        }
+        if (action === 'get_calendar') {
+            const { data: cal } = await supabase.from('crm_calendars').select('*').eq('id', body.id).maybeSingle();
+            if (!cal) return res.status(404).json({ success: false, message: 'Calendar not found.' });
+            const acc = await subAccess(personId, cal.sub_account_id, 'calendars');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            return res.status(200).json({ success: true, calendar: cal });
+        }
+        if (action === 'create_calendar' || action === 'update_calendar') {
+            let acc, subId2, existing = null;
+            if (action === 'update_calendar') {
+                const { data: cal } = await supabase.from('crm_calendars').select('*').eq('id', body.id).maybeSingle();
+                if (!cal) return res.status(404).json({ success: false, message: 'Calendar not found.' });
+                existing = cal; subId2 = cal.sub_account_id;
+            } else { subId2 = body.sub_account_id; }
+            acc = await subAccess(personId, subId2, 'calendars');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const c = body.calendar || {};
+            const patch = {};
+            if ('name' in c) { const nm = String(c.name || '').trim(); if (!nm) return res.status(400).json({ success: false, message: 'Name required.' }); patch.name = nm; }
+            if ('description' in c) patch.description = c.description || null;
+            if ('type' in c) patch.type = ['individual', 'round_robin', 'collective'].includes(c.type) ? c.type : 'individual';
+            ['duration_min', 'buffer_before_min', 'buffer_after_min', 'min_notice_min', 'date_range_days'].forEach(k => { if (k in c) patch[k] = Math.max(0, parseInt(c[k], 10) || 0); });
+            if ('timezone' in c) patch.timezone = String(c.timezone || 'America/New_York');
+            if ('availability' in c && c.availability && typeof c.availability === 'object') patch.availability = c.availability;
+            if ('location_type' in c) patch.location_type = ['in_person', 'phone', 'video', 'custom'].includes(c.location_type) ? c.location_type : 'custom';
+            if ('location_value' in c) patch.location_value = c.location_value || null;
+            if ('host_person_ids' in c && Array.isArray(c.host_person_ids)) patch.host_person_ids = c.host_person_ids;
+            if ('template' in c) patch.template = String(c.template || 'classic').slice(0, 40);
+            if ('color_primary' in c) patch.color_primary = /^#[0-9a-fA-F]{6}$/.test(c.color_primary) ? c.color_primary : '#0d9488';
+            if ('color_accent' in c) patch.color_accent = /^#[0-9a-fA-F]{6}$/.test(c.color_accent) ? c.color_accent : '#0f766e';
+            if ('confirmation_message' in c) patch.confirmation_message = c.confirmation_message || null;
+            if ('active' in c) patch.active = !!c.active;
+            if (action === 'create_calendar') {
+                // Unique slug per CRM from the name.
+                let base = slugify(patch.name || 'calendar'), slug = base, n = 2;
+                while (true) { const { data: hit } = await supabase.from('crm_calendars').select('id').eq('sub_account_id', subId2).eq('slug', slug).maybeSingle(); if (!hit) break; slug = base + '-' + (n++); }
+                const row = Object.assign({ sub_account_id: subId2, portal_id: acc.portal_id, slug, created_by: personId }, patch);
+                const { data, error } = await supabase.from('crm_calendars').insert(row).select('*').single();
+                if (error) return res.status(500).json({ success: false, message: 'Could not create calendar.' });
+                return res.status(200).json({ success: true, calendar: data });
+            } else {
+                patch.updated_at = new Date().toISOString();
+                const { data, error } = await supabase.from('crm_calendars').update(patch).eq('id', body.id).select('*').single();
+                if (error) return res.status(500).json({ success: false, message: 'Could not update calendar.' });
+                return res.status(200).json({ success: true, calendar: data });
+            }
+        }
+        if (action === 'delete_calendar') {
+            const { data: cal } = await supabase.from('crm_calendars').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!cal) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, cal.sub_account_id, 'calendars');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_calendars').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'list_calendar_bookings') {
+            const { data: cal } = await supabase.from('crm_calendars').select('sub_account_id').eq('id', body.calendar_id).maybeSingle();
+            if (!cal) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, cal.sub_account_id, 'calendars');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const { data } = await supabase.from('crm_appointments').select('*, crm_contacts(first_name,last_name,email,phone)').eq('calendar_id', body.calendar_id).order('starts_at', { ascending: false }).limit(200);
+            return res.status(200).json({ success: true, bookings: (data || []).map(b => ({ ...b, contact: b.crm_contacts || null })) });
+        }
+
         // ── REPORTING (aggregates from this CRM's own data) ──────────────────
         // Open tasks across the CRM (for the Dashboard "tasks due" list).
         if (action === 'list_tasks') {
