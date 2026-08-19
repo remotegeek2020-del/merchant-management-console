@@ -163,7 +163,7 @@ export default async function handler(req, res) {
             if (!c) return null;
             const acc = await subAccess(personId, c.sub_account_id, area);
             if (!acc) return null;
-            return { contact: c, portal_id: acc.portal_id };
+            return { contact: c, portal_id: acc.portal_id, sub: acc.sub };
         }
 
         // ── CONTACTS ─────────────────────────────────────────────────────────
@@ -315,10 +315,29 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, created, skipped });
         }
 
+        // Returns a clash message if a contact with the same email/phone already exists
+        // in this CRM (and the CRM doesn't allow duplicates). excludeId skips self on update.
+        async function dupClash(sub, subId2, f, excludeId) {
+            if (sub && sub.allow_duplicates) return null;
+            const email = (f.email || '').trim().toLowerCase();
+            const phoneDigits = String(f.phone || '').replace(/\D/g, '');
+            if (!email && phoneDigits.length < 7) return null;
+            let q = supabase.from('crm_contacts').select('id, email, phone').eq('sub_account_id', subId2);
+            if (excludeId) q = q.neq('id', excludeId);
+            const { data: rows } = await q.limit(5000);
+            for (const r of (rows || [])) {
+                if (email && String(r.email || '').trim().toLowerCase() === email) return 'A contact with this email already exists in this CRM.';
+                if (phoneDigits.length >= 7 && String(r.phone || '').replace(/\D/g, '') === phoneDigits) return 'A contact with this phone number already exists in this CRM.';
+            }
+            return null;
+        }
+
         if (action === 'create_contact') {
             const acc = await subAccess(personId, body.sub_account_id, 'contacts');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const f = body.contact || {};
+            const clash = await dupClash(acc.sub, body.sub_account_id, f, null);
+            if (clash) return res.status(409).json({ success: false, message: clash, duplicate: true });
             const row = { sub_account_id: body.sub_account_id, portal_id: acc.portal_id, created_by: personId };
             CONTACT_FIELDS.forEach(k => { row[k] = (f[k] === '' || f[k] === undefined) ? null : f[k]; });
             if (!row.status) row.status = 'active';
@@ -335,6 +354,8 @@ export default async function handler(req, res) {
             const ca = await contactAccess(body.id, 'contacts');
             if (!ca) return res.status(403).json({ success: false, message: 'No access to this contact.' });
             const f = body.contact || {};
+            const clash = await dupClash(ca.sub, ca.contact.sub_account_id, f, body.id);
+            if (clash) return res.status(409).json({ success: false, message: clash, duplicate: true });
             const patch = {};
             CONTACT_FIELDS.forEach(k => { if (k in f) patch[k] = f[k] === '' ? null : f[k]; });
             if ('owner_person_id' in f) patch.owner_person_id = f.owner_person_id || null;
@@ -1029,6 +1050,7 @@ export default async function handler(req, res) {
             if ('restrict_to_assigned' in body) patch.restrict_to_assigned = !!body.restrict_to_assigned;
             if ('email_mode' in body && ['individual', 'shared', 'both'].includes(body.email_mode)) patch.email_mode = body.email_mode;
             if ('ui_style' in body && ['default', 'highlevel', 'zoho', 'hubspot', 'salesforce'].includes(body.ui_style)) patch.ui_style = body.ui_style;
+            if ('allow_duplicates' in body) patch.allow_duplicates = !!body.allow_duplicates;
             if (Object.keys(patch).length) await supabase.from('agency_sub_accounts').update(patch).eq('id', body.sub_account_id);
             return res.status(200).json({ success: true });
         }

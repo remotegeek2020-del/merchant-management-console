@@ -1893,6 +1893,7 @@ function renderCrmSettings(){
       uiStylePanel()
       + emailPanel()
       + emailModePanel()
+      + dedupePanel()
       + templatesPanel()
       + signaturePanel()
       + sharedMailboxPanel()
@@ -1901,6 +1902,15 @@ function renderCrmSettings(){
       +'<div class="panel" style="padding:18px 20px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Tags</div><div style="font-size:12px;color:var(--muted);">Labels to segment contacts in this CRM.</div></div>'+addBtn('openTag()','Add tag')+'</div>'+tagRows+'</div>';
 }
 function fieldIcon(t){ return t==='dropdown'?'arrow_drop_down_circle':t==='date'?'event':t==='number'?'pin':t==='checkbox'?'check_box':t==='textarea'?'notes':'text_fields'; }
+window.crmSetDup=async function(allow){ if(DATA&&DATA.sub_account) DATA.sub_account.allow_duplicates=!!allow; var r=await crmApi({action:'set_crm_setting', sub_account_id:subId, allow_duplicates:!!allow}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Saved'); };
+function dedupePanel(){
+    var canM=['owner','agency_admin','god'].indexOf(DATA&&DATA.my_role)>=0;
+    var allow=DATA&&DATA.sub_account&&DATA.sub_account.allow_duplicates===true;
+    if(!canM){ return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Duplicate contacts</div><div style="font-size:12px;color:var(--muted);margin-top:4px;">'+(allow?'Duplicate emails/phones are allowed in this CRM.':'Duplicate emails &amp; phone numbers are blocked in this CRM.')+'</div></div>'; }
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Duplicate contacts</div><div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Block contacts with an email or phone that already exists in this CRM.</div>'
+      +'<label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;cursor:pointer;"><input type="checkbox" '+(allow?'checked':'')+' onchange="crmSetDup(this.checked)"> Allow duplicate emails &amp; phone numbers</label>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">Off (recommended): adding a contact with an existing email/phone is blocked. On: duplicates are permitted.</div></div>';
+}
 function visibilityPanel(){
     var canM = ['owner','agency_admin','god'].indexOf(DATA&&DATA.my_role)>=0;
     var on = DATA && DATA.restrict_to_assigned===true;
