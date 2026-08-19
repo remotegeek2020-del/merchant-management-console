@@ -81,6 +81,56 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, ideas: (data || []).map(i => publicIdea(i, personId)), categories: ALLOWED_CATS });
         }
 
+        // Can this person see this idea? (their own, or a CRM they're a member of)
+        async function canSee(idea) {
+            if (!idea) return false;
+            if (idea.requested_by_userid === personId) return true;
+            if (idea.sub_account_id) {
+                const { data: sub } = await supabase.from('agency_sub_accounts').select('portal_id').eq('id', idea.sub_account_id).maybeSingle();
+                if (sub) {
+                    const { data: mem } = await supabase.from('partner_portal_members').select('person_id').eq('portal_id', sub.portal_id).eq('person_id', personId).maybeSingle();
+                    if (mem) return true;
+                    const { data: p } = await supabase.from('persons').select('is_portal_god').eq('id', personId).maybeSingle();
+                    if (p && p.is_portal_god) return true;
+                }
+            }
+            return false;
+        }
+
+        // Idea detail + its comment thread (team ↔ partner conversation).
+        if (action === 'get_idea') {
+            const { data: idea } = await supabase.from('feature_ideas').select('*').eq('id', body.id).maybeSingle();
+            if (!idea || !(await canSee(idea))) return res.status(403).json({ success: false, message: 'Not found.' });
+            const { data: comments } = await supabase.from('idea_comments').select('id, body, posted_by_name, author_type, created_at').eq('idea_id', idea.id).order('created_at', { ascending: true });
+            return res.status(200).json({ success: true, idea: publicIdea(idea, personId), comments: comments || [] });
+        }
+
+        if (action === 'add_comment') {
+            const { data: idea } = await supabase.from('feature_ideas').select('*').eq('id', body.id).maybeSingle();
+            if (!idea || !(await canSee(idea))) return res.status(403).json({ success: false, message: 'Not found.' });
+            const text = String(body.body || '').trim();
+            if (!text) return res.status(400).json({ success: false, message: 'Write a message first.' });
+            const { data: c, error } = await supabase.from('idea_comments')
+                .insert({ idea_id: idea.id, body: text.slice(0, 2000), posted_by_userid: personId, posted_by_name: who, author_type: 'partner' })
+                .select('id, body, posted_by_name, author_type, created_at').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not post.' });
+            // Notify the team (web dev + super admins) of the partner reply.
+            try {
+                const recipients = new Set();
+                const { data: s } = await supabase.from('site_settings').select('value').eq('key', 'web_developer_email').maybeSingle();
+                (s && s.value ? String(s.value).split(',') : []).forEach(e => { const t = e.trim(); if (t) recipients.add(t); });
+                const { data: admins } = await supabase.from('app_users').select('email').eq('role', 'super_admin').eq('is_active', true);
+                (admins || []).forEach(a => { if (a.email) recipients.add(a.email.trim()); });
+                if (recipients.size && process.env.POSTMARK_SERVER_TOKEN) {
+                    const { ServerClient } = await import('postmark');
+                    const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                    const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;"><p><strong>${esc(who)}</strong> replied on suggestion:</p><p style="font-weight:700;">${esc(idea.title)}</p><div style="background:#f8fafc;border-radius:8px;padding:12px;color:#475569;">${esc(text.slice(0, 500))}</div><p style="margin-top:14px;"><a href="https://${req.headers.host || 'portal.mypayprotec.com'}/ideas-dashboard.html">Open the Ideas board</a></p></div>`;
+                    for (const to of recipients) { try { await client.sendEmail({ From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com', To: to, Subject: `💬 Reply on "${idea.title}"`, HtmlBody: html, TextBody: `${who} replied on "${idea.title}": ${text}`, MessageStream: 'outbound' }); } catch (e) {} }
+                }
+            } catch (e) {}
+            return res.status(200).json({ success: true, comment: c });
+        }
+
         if (action === 'categories') return res.status(200).json({ success: true, categories: ALLOWED_CATS });
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });

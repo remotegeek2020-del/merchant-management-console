@@ -101,12 +101,45 @@ function render(){
     var host=document.getElementById('ideaList');
     if(!LIST.length){ host.innerHTML='<div class="panel"><div class="empty"><span class="material-icons">lightbulb</span><div style="font-weight:700;color:var(--secondary);">No suggestions yet</div><div style="font-size:13px;">Share the first idea — it reaches the product team instantly.</div></div></div>'; return; }
     host.innerHTML='<div class="panel" style="padding:6px 18px 12px;">'+LIST.map(function(i){
-        return '<div style="padding:13px 0;border-bottom:1px solid #f1f5f9;">'
+        return '<div onclick="openIdeaDetail(\''+i.id+'\')" style="padding:13px 0;border-bottom:1px solid #f1f5f9;cursor:pointer;">'
           +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;"><div style="font-weight:800;font-size:13px;">'+esc(i.title)+'</div>'+statusChip(i.status)+'</div>'
           +'<div style="font-size:12px;color:var(--secondary);margin-top:4px;white-space:pre-wrap;">'+esc(String(i.body).slice(0,240))+(String(i.body).length>240?'…':'')+'</div>'
-          +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+esc(catLabel(i.category))+' · '+fmtDate(i.created_at)+'</div></div>';
+          +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+esc(catLabel(i.category))+' · '+fmtDate(i.created_at)+' · <span style="color:var(--teal);font-weight:700;">View &amp; reply →</span></div></div>';
     }).join('')+'</div>';
 }
+function fmtDateTime(s){ try{ return new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
+function threadHtml(comments){
+    if(!comments||!comments.length) return '<div style="font-size:12px;color:var(--muted);padding:10px 0;">No replies yet. The product team will respond here.</div>';
+    return comments.map(function(c){
+        var team=c.author_type!=='partner';
+        return '<div style="display:flex;gap:8px;margin-bottom:10px;'+(team?'':'flex-direction:row-reverse;')+'">'
+          +'<div style="max-width:80%;background:'+(team?'#eef2ff':'var(--teal-bg)')+';border:1px solid '+(team?'#c7d2fe':'#99f6e4')+';border-radius:12px;padding:8px 12px;">'
+          +'<div style="font-size:10px;font-weight:800;color:'+(team?'#4338ca':'var(--teal)')+';margin-bottom:2px;">'+(team?'👩‍💻 Team':esc(c.posted_by_name||'You'))+'</div>'
+          +'<div style="font-size:13px;white-space:pre-wrap;">'+esc(c.body)+'</div>'
+          +'<div style="font-size:10px;color:var(--muted);margin-top:3px;">'+fmtDateTime(c.created_at)+'</div></div></div>';
+    }).join('');
+}
+window.openIdeaDetail=async function(id){
+    var r=await ideaApi({action:'get_idea', id:id});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not open.','error'); return; }
+    var i=r.idea;
+    var html='<div style="text-align:left;">'
+      +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+statusChip(i.status)+'<span style="font-size:11px;color:var(--muted);font-weight:700;">'+esc(catLabel(i.category))+'</span></div>'
+      +'<div style="font-size:13px;white-space:pre-wrap;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">'+esc(i.body)+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Conversation</div>'
+      +'<div id="ideaThread" style="max-height:34vh;overflow:auto;padding:2px;">'+threadHtml(r.comments)+'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;"><textarea id="ideaReply" placeholder="Reply to the team…" style="flex:1;min-height:44px;padding:9px 11px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;resize:vertical;"></textarea><button onclick="sendReply(\''+id+'\')" style="background:var(--teal);color:#fff;border:none;border-radius:10px;width:44px;flex-shrink:0;cursor:pointer;"><span class="material-icons">send</span></button></div>'
+      +'</div>';
+    Swal.fire({title:esc(i.title), html:html, width:560, showConfirmButton:false, showCloseButton:true});
+};
+window.sendReply=async function(id){
+    var el=document.getElementById('ideaReply'); var b=(el&&el.value||'').trim(); if(!b) return;
+    var r=await ideaApi({action:'add_comment', id:id, body:b});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not send.','error'); return; }
+    el.value='';
+    var g=await ideaApi({action:'get_idea', id:id});
+    if(g&&g.success){ var t=document.getElementById('ideaThread'); if(t){ t.innerHTML=threadHtml(g.comments); t.scrollTop=t.scrollHeight; } }
+};
 window.openIdea=async function(){
     var catOpts=IDEA_CATS.map(function(c){return '<option value="'+c[0]+'">'+c[1]+'</option>';}).join('');
     var res=await Swal.fire({title:'Share an idea', width:520, showCancelButton:true, confirmButtonText:'Submit', confirmButtonColor:'#0d9488', focusConfirm:false,

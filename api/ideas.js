@@ -358,10 +358,27 @@ export default async function handler(req, res) {
                 .select().single();
             if (error) throw error;
 
-            // Fetch idea title for context in emails
+            // Fetch idea for context (title + partner/CRM source for submitter loop).
             const { data: idea } = await supabase
-                .from('feature_ideas').select('title').eq('id', idea_id).single();
+                .from('feature_ideas').select('title, source, submitter_email, requested_by_userid').eq('id', idea_id).single();
             const ideaTitle = idea?.title || 'a feature request';
+
+            // If this idea came from a partner/CRM, email the submitter that the team replied
+            // (they can read + reply in their own portal/CRM Ideas view).
+            if (idea && idea.source && idea.source !== 'staff' && idea.submitter_email && idea.requested_by_userid !== posted_by_userid) {
+                await sendEmail(
+                    idea.submitter_email,
+                    `💬 New reply on your suggestion: "${ideaTitle}"`,
+                    ideaEmailWrapper(`
+                        <h3 style="color:#0d9488;margin:0 0 8px;">The team replied to your idea</h3>
+                        <div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin:12px 0;">
+                            <p style="font-weight:700;margin:0 0 8px;color:#1e293b;">${escapeHtml(ideaTitle)}</p>
+                            <p style="color:#475569;margin:0;font-size:13px;line-height:1.6;font-style:italic;">"${escapeHtml(body.trim().slice(0, 300))}${body.trim().length > 300 ? '…' : ''}"</p>
+                        </div>
+                        <p style="font-size:13px;color:#64748b;">Open <strong>Ideas &amp; Suggestions</strong> in your portal or CRM to view the full conversation and reply.</p>`),
+                    `The team replied to your suggestion "${ideaTitle}": ${body.trim().slice(0, 200)}`
+                );
+            }
 
             // Send in-app notification + email to each @mentioned user
             const safeMentions = Array.isArray(mentions) ? mentions.slice(0, 10) : [];

@@ -1255,10 +1255,10 @@ function renderIdeas(){
     if(!IDEAS_LIST.length){ rows='<div class="panel"><div class="empty"><span class="material-icons">lightbulb</span><h4>No suggestions yet</h4><p>Be the first to share an idea — it goes straight to the product team.</p></div></div>'; }
     else {
         rows='<div class="panel" style="padding:6px 18px 12px;">'+IDEAS_LIST.map(function(i){
-            return '<div style="padding:13px 0;border-bottom:1px solid #f1f5f9;">'
+            return '<div onclick="openIdeaDetail(\''+i.id+'\')" style="padding:13px 0;border-bottom:1px solid #f1f5f9;cursor:pointer;">'
               +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;"><div style="font-weight:800;font-size:13px;">'+esc(i.title)+'</div>'+ideaStatusChip(i.status)+'</div>'
               +'<div style="font-size:12px;color:var(--secondary);margin-top:4px;white-space:pre-wrap;">'+esc(String(i.body).slice(0,240))+(String(i.body).length>240?'…':'')+'</div>'
-              +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+esc(ideaCatLabel(i.category))+' · '+fmtDate(i.created_at)+(i.mine?' · <span style="color:var(--teal);font-weight:700;">You</span>':(i.by?(' · '+esc(i.by)):''))+'</div>'
+              +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+esc(ideaCatLabel(i.category))+' · '+fmtDate(i.created_at)+(i.mine?' · <span style="color:var(--teal);font-weight:700;">You</span>':(i.by?(' · '+esc(i.by)):''))+' · <span style="color:var(--teal);font-weight:700;">View & reply →</span></div>'
               +'</div>';
         }).join('')+'</div>';
     }
@@ -1276,6 +1276,38 @@ window.openIdea=async function(){
     var r=await ideaApi(Object.assign({action:'submit', source:'crm', context:(DATA&&DATA.sub_account&&DATA.sub_account.name)||''}, res.value));
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not submit.','error'); return; }
     crmToast('Thanks! Your idea was sent to the product team.'); loadIdeas();
+};
+function ideaThreadHtml(comments){
+    if(!comments||!comments.length) return '<div style="font-size:12px;color:var(--muted);padding:10px 0;">No replies yet. The product team will respond here.</div>';
+    return comments.map(function(c){
+        var team=c.author_type!=='partner';
+        return '<div style="display:flex;gap:8px;margin-bottom:10px;'+(team?'':'flex-direction:row-reverse;')+'">'
+          +'<div style="max-width:80%;background:'+(team?'#eef2ff':'var(--teal-bg)')+';border:1px solid '+(team?'#c7d2fe':'#99f6e4')+';border-radius:12px;padding:8px 12px;">'
+          +'<div style="font-size:10px;font-weight:800;color:'+(team?'#4338ca':'var(--teal)')+';margin-bottom:2px;">'+(team?'👩‍💻 Team':esc(c.posted_by_name||'You'))+'</div>'
+          +'<div style="font-size:13px;white-space:pre-wrap;">'+esc(c.body)+'</div>'
+          +'<div style="font-size:10px;color:var(--muted);margin-top:3px;">'+fmtDateTime(c.created_at)+'</div></div></div>';
+    }).join('');
+}
+window.openIdeaDetail=async function(id){
+    var r=await ideaApi({action:'get_idea', id:id});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not open.','error'); return; }
+    var i=r.idea;
+    var html='<div style="text-align:left;">'
+      +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+ideaStatusChip(i.status)+'<span style="font-size:11px;color:var(--muted);font-weight:700;">'+esc(ideaCatLabel(i.category))+'</span></div>'
+      +'<div style="font-size:13px;white-space:pre-wrap;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">'+esc(i.body)+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Conversation</div>'
+      +'<div id="ideaThread" style="max-height:34vh;overflow:auto;padding:2px;">'+ideaThreadHtml(r.comments)+'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;"><textarea id="ideaReply" placeholder="Reply to the team…" style="flex:1;min-height:44px;padding:9px 11px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;resize:vertical;"></textarea><button onclick="ideaSendReply(\''+id+'\')" style="background:var(--teal);color:#fff;border:none;border-radius:10px;width:44px;flex-shrink:0;cursor:pointer;"><span class="material-icons">send</span></button></div>'
+      +'</div>';
+    Swal.fire({title:esc(i.title), html:html, width:560, showConfirmButton:false, showCloseButton:true});
+};
+window.ideaSendReply=async function(id){
+    var el=document.getElementById('ideaReply'); var b=(el&&el.value||'').trim(); if(!b) return;
+    var r=await ideaApi({action:'add_comment', id:id, body:b});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not send.','error'); return; }
+    el.value='';
+    var g=await ideaApi({action:'get_idea', id:id});
+    if(g&&g.success){ var t=document.getElementById('ideaThread'); if(t){ t.innerHTML=ideaThreadHtml(g.comments); t.scrollTop=t.scrollHeight; } }
 };
 
 /* ── AUTOMATION (workflows: trigger → actions) ─────────────────────────────── */
