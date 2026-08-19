@@ -184,10 +184,54 @@ async function load(){
       +'</div>'
       +'<div class="section-label"><span>CRMs</span>'+(ag.can_manage?'<button class="btn btn-teal" onclick="openCreateSub()"><span class="material-icons" style="font-size:15px;">add</span> Add CRM</button>':'')+'</div>'
       +'<div class="grid">'+subCards+'</div>'
+      +'<div class="section-label"><span>Agency Calendar</span><span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;">All bookings across every CRM</span></div>'
+      +'<div class="panel" id="agCalPanel"><div style="color:var(--muted);font-size:13px;">Loading calendar…</div></div>'
       +'<div class="section-label"><span>Team &amp; Visibility</span></div>'
       +'<div class="panel" id="teamPanel"><div style="color:var(--muted);font-size:13px;">Loading team…</div></div>';
     loadTeam();
+    loadAgencyCalendar();
 }
+
+// ── AGENCY CALENDAR — bookings mixed across all CRMs (HubSpot/Zoho-style) ──
+var _AGCAL_FILTER='all';
+async function loadAgencyCalendar(){
+    var el=document.getElementById('agCalPanel'); if(!el) return;
+    var r=null;
+    try{ r=await fetch('/api/crm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'agency_calendar',token:token,portal_id:portalId})}).then(x=>x.json()); }catch(e){}
+    if(!r||!r.success){ el.innerHTML='<div style="color:var(--muted);font-size:13px;">Could not load the agency calendar.</div>'; return; }
+    window._AGCAL=(r.events||[]).filter(function(e){ return e.status!=='cancelled'; });
+    window._AGSUBS=r.sub_accounts||[];
+    renderAgencyCalendar();
+}
+function renderAgencyCalendar(){
+    var el=document.getElementById('agCalPanel'); if(!el) return;
+    var all=window._AGCAL||[]; var subs=window._AGSUBS||[];
+    var now=Date.now();
+    var events=all.filter(function(e){ return new Date(e.starts_at).getTime() >= now - 3600000; })
+                  .filter(function(e){ return _AGCAL_FILTER==='all' || e.sub_account_id===_AGCAL_FILTER; })
+                  .sort(function(a,b){ return new Date(a.starts_at)-new Date(b.starts_at); });
+    var chips='<button onclick="agCalFilter(\'all\')" class="btn '+(_AGCAL_FILTER==='all'?'btn-teal':'btn-outline')+'" style="padding:5px 12px;font-size:11px;">All CRMs</button>'
+      + subs.map(function(s){ return '<button onclick="agCalFilter(\''+s.id+'\')" class="btn '+(_AGCAL_FILTER===s.id?'btn-teal':'btn-outline')+'" style="padding:5px 12px;font-size:11px;">'+esc(s.name||'CRM')+'</button>'; }).join('');
+    var body;
+    if(!events.length){ body='<div style="color:var(--muted);font-size:13px;padding:14px 0;">No upcoming bookings across your CRMs.</div>'; }
+    else {
+        var lastDay=''; var parts=[];
+        events.forEach(function(e){
+            var d=new Date(e.starts_at); var day=d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+            if(day!==lastDay){ parts.push('<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px;">'+esc(day)+'</div>'); lastDay=day; }
+            parts.push('<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #f1f5f9;">'
+              +'<span style="width:10px;height:10px;border-radius:3px;background:'+esc(e.color||'#0d9488')+';flex-shrink:0;"></span>'
+              +'<div style="width:70px;font-size:12px;font-weight:700;color:var(--secondary);flex-shrink:0;">'+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})+'</div>'
+              +'<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(e.title||e.calendar_name||'Booking')+'</div>'
+              +'<div style="font-size:11px;color:var(--muted);">'+esc(e.who||'')+(e.location?(' · '+esc(e.location)):'')+'</div></div>'
+              +'<span style="font-size:10px;font-weight:800;color:#475569;background:#f1f5f9;border-radius:99px;padding:2px 9px;white-space:nowrap;">'+esc(e.crm_name||'')+'</span>'
+              +'</div>');
+        });
+        body=parts.join('');
+    }
+    el.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">'+chips+'</div>'+body;
+}
+window.agCalFilter=function(f){ _AGCAL_FILTER=f; renderAgencyCalendar(); };
 
 // ── TEAM & RBAC (owners + agency admins) ──
 var _team = null;

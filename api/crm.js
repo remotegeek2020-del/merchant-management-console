@@ -652,6 +652,36 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, bookings: (data || []).map(b => ({ ...b, contact: b.crm_contacts || null })) });
         }
 
+        // ── AGENCY-WIDE CALENDAR (mix bookings across every CRM the person can see) ──
+        if (action === 'agency_calendar') {
+            const portalId = body.portal_id;
+            if (!portalId) return res.status(400).json({ success: false, message: 'Missing agency.' });
+            const god = await isGod(personId);
+            const { data: subs } = await supabase.from('agency_sub_accounts').select('id, name, company_id').eq('portal_id', portalId).order('created_at');
+            let allowed = [];
+            if (god) allowed = (subs || []).map(s => s.id);
+            else {
+                const { data: mem } = await supabase.from('partner_portal_members').select('role, scope').eq('portal_id', portalId).eq('person_id', personId).maybeSingle();
+                if (!mem) return res.status(403).json({ success: false, message: 'No access to this agency.' });
+                if (mem.role === 'owner' || mem.role === 'agency_admin') allowed = (subs || []).map(s => s.id);
+                else { const g = (mem.scope && Array.isArray(mem.scope.sub_account_ids)) ? mem.scope.sub_account_ids : []; allowed = (subs || []).map(s => s.id).filter(id => g.includes(id)); }
+            }
+            const subMap = {}; (subs || []).forEach(s => subMap[s.id] = s.name);
+            if (!allowed.length) return res.status(200).json({ success: true, events: [], sub_accounts: [] });
+            const since = new Date(Date.now() - 7 * 86400000).toISOString();
+            const { data: appts } = await supabase.from('crm_appointments')
+                .select('id, sub_account_id, calendar_id, title, starts_at, ends_at, location, status, attendee_name, attendee_email, crm_contacts(first_name,last_name,email), crm_calendars(name,color_primary)')
+                .in('sub_account_id', allowed).gte('starts_at', since).order('starts_at', { ascending: true }).limit(1000);
+            const events = (appts || []).map(a => ({
+                id: a.id, sub_account_id: a.sub_account_id, crm_name: subMap[a.sub_account_id] || 'CRM',
+                title: a.title, starts_at: a.starts_at, ends_at: a.ends_at, location: a.location, status: a.status,
+                who: a.attendee_name || (a.crm_contacts ? [a.crm_contacts.first_name, a.crm_contacts.last_name].filter(Boolean).join(' ') : '') || a.attendee_email || '',
+                calendar_name: a.crm_calendars ? a.crm_calendars.name : null,
+                color: (a.crm_calendars && a.crm_calendars.color_primary) || '#0d9488'
+            }));
+            return res.status(200).json({ success: true, events, sub_accounts: allowed.map(id => ({ id, name: subMap[id] })) });
+        }
+
         // ── REPORTING (aggregates from this CRM's own data) ──────────────────
         // Open tasks across the CRM (for the Dashboard "tasks due" list).
         if (action === 'list_tasks') {
