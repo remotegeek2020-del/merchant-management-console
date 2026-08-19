@@ -1618,26 +1618,51 @@ window.deleteTag = async function(id){
 };
 
 /* ── OPPORTUNITIES / PIPELINE (drag-and-drop board) ────────────────────────── */
-var CRM_STAGES = [], CRM_OPPS = [], _dragId = null;
+var CRM_STAGES = [], CRM_OPPS = [], _dragId = null, CRM_PIPELINES = [], CRM_PIPE_ID = null, CRM_PIPELINE = null;
 async function loadOpps(){
     var host = document.getElementById('crmOpps'); if(!host) return;
+    var pl = await crmApi({action:'list_pipelines', sub_account_id:subId});
+    if(pl && /session/i.test(pl.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    CRM_PIPELINES = (pl && pl.success && pl.pipelines) || [];
+    if(!CRM_PIPE_ID || !CRM_PIPELINES.some(function(p){return p.id===CRM_PIPE_ID;})) CRM_PIPE_ID = CRM_PIPELINES[0] && CRM_PIPELINES[0].id;
     var res = await Promise.all([
-        crmApi({action:'get_pipeline', sub_account_id:subId}),
-        crmApi({action:'list_opportunities', sub_account_id:subId}),
-        crmApi({action:'list_contacts', sub_account_id:subId})
+        crmApi({action:'get_pipeline', sub_account_id:subId, pipeline_id:CRM_PIPE_ID}),
+        crmApi({action:'list_opportunities', sub_account_id:subId, pipeline_id:CRM_PIPE_ID}),
+        crmApi({action:'list_contacts', sub_account_id:subId, all:true})
     ]);
-    if(res[0] && /session/i.test(res[0].message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    CRM_PIPELINE = (res[0] && res[0].success && res[0].pipeline) || null;
     CRM_STAGES = (res[0] && res[0].success && res[0].stages) || [];
     CRM_OPPS = (res[1] && res[1].success && res[1].opportunities) || [];
     CRM_CONTACTS = (res[2] && res[2].success && res[2].contacts) || CRM_CONTACTS;
     renderBoard();
 }
+window.crmSwitchPipeline=function(id){ CRM_PIPE_ID=id; loadOpps(); };
+window.crmNewPipeline=async function(){ var r=await Swal.fire({title:'New pipeline',input:'text',inputPlaceholder:'e.g. Sales, Onboarding',showCancelButton:true,confirmButtonText:'Create',confirmButtonColor:'#0d9488'}); if(!r.isConfirmed||!r.value) return; var out=await crmApi({action:'create_pipeline',sub_account_id:subId,name:r.value.trim()}); if(!out||!out.success){ Swal.fire('Error',(out&&out.message)||'Could not create.','error'); return; } CRM_PIPE_ID=out.pipeline.id; crmToast('Pipeline created'); loadOpps(); };
+window.crmManageStages=function(){
+    var rows=CRM_STAGES.map(function(s){ var flag=s.is_won?' · Won':s.is_lost?' · Lost':''; return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9;"><span class="material-icons" style="color:var(--muted);font-size:16px;">drag_indicator</span><span style="flex:1;font-weight:700;font-size:13px;">'+esc(s.name)+'<span style="color:var(--muted);font-weight:500;font-size:11px;">'+flag+'</span></span><span class="material-icons" title="Edit" onclick="crmEditStage(\''+s.id+'\')" style="font-size:16px;color:var(--muted);cursor:pointer;">edit</span><span class="material-icons" title="Delete" onclick="crmDeleteStage(\''+s.id+'\')" style="font-size:16px;color:#cbd5e1;cursor:pointer;">delete</span></div>'; }).join('');
+    var del = CRM_PIPELINES.length>1 ? '<button onclick="crmDeletePipeline()" style="background:none;border:none;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;">Delete this pipeline</button>' : '';
+    Swal.fire({ title:'Stages · '+esc((CRM_PIPELINE&&CRM_PIPELINE.name)||''), width:480, showConfirmButton:false, showCloseButton:true,
+        html:'<div style="text-align:left;"><div style="font-size:12px;color:#64748b;margin-bottom:8px;">Rename the pipeline, edit stages, or add one.</div>'
+          +'<div style="display:flex;gap:6px;margin-bottom:12px;"><input id="pipeName" class="swal2-input" style="margin:0;flex:1;height:36px;font-size:13px;" value="'+esc((CRM_PIPELINE&&CRM_PIPELINE.name)||'')+'"><button onclick="crmRenamePipeline()" style="background:#64748b;color:#fff;border:none;border-radius:8px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;">Rename</button></div>'
+          +rows
+          +'<div style="display:flex;gap:6px;margin-top:12px;"><input id="newStageName" class="swal2-input" placeholder="New stage name" style="margin:0;flex:1;height:36px;font-size:13px;"><button onclick="crmAddStage()" style="background:var(--teal);color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:12px;font-weight:700;cursor:pointer;">Add</button></div>'
+          +'<div style="margin-top:12px;">'+del+'</div></div>' });
+};
+window.crmAddStage=async function(){ var n=(document.getElementById('newStageName').value||'').trim(); if(!n) return; var r=await crmApi({action:'add_stage', pipeline_id:CRM_PIPE_ID, name:n}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not add.','error'); return; } await loadOpps(); crmManageStages(); };
+window.crmEditStage=async function(id){ var s=CRM_STAGES.filter(function(x){return x.id===id;})[0]||{}; var r=await Swal.fire({title:'Edit stage',width:400,html:'<input id="esName" class="swal2-input" value="'+esc(s.name||'')+'" style="margin:0 0 10px;"><div style="display:flex;gap:14px;justify-content:center;font-size:13px;"><label style="display:flex;gap:5px;align-items:center;cursor:pointer;"><input type="checkbox" id="esWon" '+(s.is_won?'checked':'')+'> Won stage</label><label style="display:flex;gap:5px;align-items:center;cursor:pointer;"><input type="checkbox" id="esLost" '+(s.is_lost?'checked':'')+'> Lost stage</label></div>',showCancelButton:true,confirmButtonText:'Save',confirmButtonColor:'#0d9488',preConfirm:function(){return {name:document.getElementById('esName').value.trim(),is_won:document.getElementById('esWon').checked,is_lost:document.getElementById('esLost').checked};}}); if(!r.isConfirmed) return; var out=await crmApi(Object.assign({action:'update_stage',id:id},r.value)); if(!out||!out.success){ Swal.fire('Error',(out&&out.message)||'Could not save.','error'); return; } await loadOpps(); crmManageStages(); };
+window.crmDeleteStage=async function(id){ var c=await Swal.fire({icon:'warning',title:'Delete stage?',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; var r=await crmApi({action:'delete_stage',id:id}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; } await loadOpps(); crmManageStages(); };
+window.crmRenamePipeline=async function(){ var n=(document.getElementById('pipeName').value||'').trim(); if(!n) return; var r=await crmApi({action:'update_pipeline', id:CRM_PIPE_ID, name:n}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not rename.','error'); return; } crmToast('Renamed'); await loadOpps(); crmManageStages(); };
+window.crmDeletePipeline=async function(){ var c=await Swal.fire({icon:'warning',title:'Delete pipeline?',text:'Only works if it has no deals.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(!c.isConfirmed) return; var r=await crmApi({action:'delete_pipeline', id:CRM_PIPE_ID}); if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not delete.','error'); return; } CRM_PIPE_ID=null; Swal.close(); loadOpps(); };
 function oppContactName(o){ return o.contact ? cName(o.contact) : ''; }
 function renderBoard(){
     var host = document.getElementById('crmOpps'); if(!host) return;
     var total = CRM_OPPS.reduce(function(s,o){return s+(o.value_cents||0);},0)/100;
+    var pipeSel = '<select onchange="crmSwitchPipeline(this.value)" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;">'+CRM_PIPELINES.map(function(p){return '<option value="'+p.id+'"'+(p.id===CRM_PIPE_ID?' selected':'')+'>'+esc(p.name)+'</option>';}).join('')+'</select>';
     var toolbar = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
-      +'<div style="font-size:12px;color:var(--muted);font-weight:600;">'+CRM_OPPS.length+' deal'+(CRM_OPPS.length===1?'':'s')+' · '+money(total)+' total</div>'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+pipeSel
+      +'<button onclick="crmNewPipeline()" title="New pipeline" style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;">+ Pipeline</button>'
+      +'<button onclick="crmManageStages()" style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:15px;">tune</span> Stages</button>'
+      +'<span style="font-size:12px;color:var(--muted);font-weight:600;">'+CRM_OPPS.length+' deal'+(CRM_OPPS.length===1?'':'s')+' · '+money(total)+'</span></div>'
       +'<button onclick="openDeal()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Add deal</button></div>';
     if(!CRM_STAGES.length){ host.innerHTML = toolbar+'<div class="panel"><div class="empty"><span class="material-icons">trending_up</span><h4>No pipeline</h4><p>Could not load the pipeline.</p></div></div>'; return; }
     var cols = CRM_STAGES.map(function(st){
@@ -1696,6 +1721,7 @@ window.openDeal = async function(id, prefill){
     var res = await Swal.fire({ title:id?'Edit deal':'New deal', html:html, width:480, showCancelButton:true, confirmButtonText:id?'Save':'Create', confirmButtonColor:'#0d9488', focusConfirm:false,
         preConfirm:function(){ var t=(document.getElementById('dlTitle').value||'').trim(); if(!t){ Swal.showValidationMessage('Enter a deal title.'); return false; } var ownEl=document.getElementById('dlOwner'); return {title:t, value:document.getElementById('dlValue').value, contact_id:document.getElementById('dlContact').value||null, stage_id:document.getElementById('dlStage').value, expected_close_date:document.getElementById('dlClose').value||null, notes:document.getElementById('dlNotes').value, owner_person_id: ownEl?(ownEl.value||null):undefined}; }});
     if(!res.isConfirmed) return;
+    if(!id && CRM_PIPE_ID) res.value.pipeline_id = CRM_PIPE_ID;
     var r = id ? await crmApi({action:'update_opportunity', id:id, opp:res.value}) : await crmApi({action:'create_opportunity', sub_account_id:subId, opp:res.value});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); return; }
     crmToast(id?'Deal saved':'Deal created');

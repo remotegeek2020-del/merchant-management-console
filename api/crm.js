@@ -404,16 +404,102 @@ export default async function handler(req, res) {
             const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             // Lazily seed a default pipeline (New/Contacted/.../Won/Lost) on first view.
-            const { data: pid } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
+            const { data: pid0 } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
+            let pid = pid0;
+            if (body.pipeline_id) { const { data: chk } = await supabase.from('crm_pipelines').select('id').eq('id', body.pipeline_id).eq('sub_account_id', body.sub_account_id).maybeSingle(); if (chk) pid = chk.id; }
             const { data: pipeline } = await supabase.from('crm_pipelines').select('*').eq('id', pid).maybeSingle();
             const { data: stages } = await supabase.from('crm_pipeline_stages').select('*').eq('pipeline_id', pid).order('position', { ascending: true });
             return res.status(200).json({ success: true, pipeline, stages: stages || [] });
+        }
+        if (action === 'list_pipelines') {
+            const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
+            const { data: pipelines } = await supabase.from('crm_pipelines').select('*').eq('sub_account_id', body.sub_account_id).order('created_at', { ascending: true });
+            return res.status(200).json({ success: true, pipelines: pipelines || [] });
+        }
+        if (action === 'create_pipeline') {
+            const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const name = (body.name || '').trim(); if (!name) return res.status(400).json({ success: false, message: 'Pipeline name required.' });
+            const { data: p, error } = await supabase.from('crm_pipelines').insert({ sub_account_id: body.sub_account_id, portal_id: acc.portal_id, name }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not create pipeline.' });
+            const seed = [['New', 0, false, false], ['Contacted', 1, false, false], ['Qualified', 2, false, false], ['Won', 3, true, false], ['Lost', 4, false, true]];
+            await supabase.from('crm_pipeline_stages').insert(seed.map(s => ({ sub_account_id: body.sub_account_id, pipeline_id: p.id, name: s[0], position: s[1], is_won: s[2], is_lost: s[3] })));
+            return res.status(200).json({ success: true, pipeline: p });
+        }
+        if (action === 'update_pipeline') {
+            const { data: p } = await supabase.from('crm_pipelines').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!p) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, p.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_pipelines').update({ name: (body.name || '').trim() || 'Pipeline' }).eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'delete_pipeline') {
+            const { data: p } = await supabase.from('crm_pipelines').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!p) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, p.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const { count } = await supabase.from('crm_pipelines').select('id', { count: 'exact', head: true }).eq('sub_account_id', p.sub_account_id);
+            if ((count || 0) <= 1) return res.status(400).json({ success: false, message: 'You need at least one pipeline.' });
+            const { count: oc } = await supabase.from('crm_opportunities').select('id', { count: 'exact', head: true }).eq('pipeline_id', body.id);
+            if (oc) return res.status(400).json({ success: false, message: 'Move or delete this pipeline’s deals first.' });
+            await supabase.from('crm_pipeline_stages').delete().eq('pipeline_id', body.id);
+            await supabase.from('crm_pipelines').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'add_stage') {
+            const { data: p } = await supabase.from('crm_pipelines').select('sub_account_id').eq('id', body.pipeline_id).maybeSingle();
+            if (!p) return res.status(404).json({ success: false, message: 'Pipeline not found.' });
+            const acc = await subAccess(personId, p.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const { data: last } = await supabase.from('crm_pipeline_stages').select('position').eq('pipeline_id', body.pipeline_id).order('position', { ascending: false }).limit(1);
+            const pos = (last && last[0] ? (last[0].position || 0) : 0) + 1;
+            const { data, error } = await supabase.from('crm_pipeline_stages').insert({ sub_account_id: p.sub_account_id, pipeline_id: body.pipeline_id, name: (body.name || 'Stage').trim(), position: pos, is_won: !!body.is_won, is_lost: !!body.is_lost }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not add stage.' });
+            return res.status(200).json({ success: true, stage: data });
+        }
+        if (action === 'update_stage') {
+            const { data: st } = await supabase.from('crm_pipeline_stages').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!st) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, st.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const patch = {};
+            if ('name' in body) patch.name = (body.name || 'Stage').trim();
+            if ('is_won' in body) patch.is_won = !!body.is_won;
+            if ('is_lost' in body) patch.is_lost = !!body.is_lost;
+            await supabase.from('crm_pipeline_stages').update(patch).eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'delete_stage') {
+            const { data: st } = await supabase.from('crm_pipeline_stages').select('sub_account_id, pipeline_id').eq('id', body.id).maybeSingle();
+            if (!st) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, st.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            const { count } = await supabase.from('crm_pipeline_stages').select('id', { count: 'exact', head: true }).eq('pipeline_id', st.pipeline_id);
+            if ((count || 0) <= 1) return res.status(400).json({ success: false, message: 'A pipeline needs at least one stage.' });
+            const { count: oc } = await supabase.from('crm_opportunities').select('id', { count: 'exact', head: true }).eq('stage_id', body.id);
+            if (oc) return res.status(400).json({ success: false, message: 'Move this stage’s deals first.' });
+            await supabase.from('crm_pipeline_stages').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'reorder_stages') {
+            const ids = Array.isArray(body.stage_ids) ? body.stage_ids : [];
+            if (!body.pipeline_id || !ids.length) return res.status(400).json({ success: false, message: 'Nothing to reorder.' });
+            const { data: p } = await supabase.from('crm_pipelines').select('sub_account_id').eq('id', body.pipeline_id).maybeSingle();
+            if (!p) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, p.sub_account_id, 'opportunities');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            for (let i = 0; i < ids.length; i++) await supabase.from('crm_pipeline_stages').update({ position: i }).eq('id', ids[i]).eq('pipeline_id', body.pipeline_id);
+            return res.status(200).json({ success: true });
         }
 
         if (action === 'list_opportunities') {
             const acc = await subAccess(personId, body.sub_account_id, 'opportunities');
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             let oq = supabase.from('crm_opportunities').select('*').eq('sub_account_id', body.sub_account_id);
+            if (body.pipeline_id) oq = oq.eq('pipeline_id', body.pipeline_id);
             const oown = assignedFilter(acc); if (oown) oq = oq.eq('owner_person_id', oown);
             const { data: opps } = await oq.order('position', { ascending: true }).order('created_at', { ascending: true }).limit(2000);
             const list = opps || [];
@@ -433,7 +519,9 @@ export default async function handler(req, res) {
             const o = body.opp || {};
             const title = (o.title || '').trim();
             if (!title) return res.status(400).json({ success: false, message: 'Deal title required.' });
-            const { data: pid } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id });
+            let pid = o.pipeline_id;
+            if (pid) { const { data: chk } = await supabase.from('crm_pipelines').select('id').eq('id', pid).eq('sub_account_id', body.sub_account_id).maybeSingle(); if (!chk) pid = null; }
+            if (!pid) { const { data: dpid } = await supabase.rpc('crm_ensure_default_pipeline', { p_sub: body.sub_account_id }); pid = dpid; }
             let stageId = o.stage_id;
             if (!stageId) { const { data: st } = await supabase.from('crm_pipeline_stages').select('id').eq('pipeline_id', pid).order('position').limit(1); stageId = st && st[0] && st[0].id; }
             // place at the end of its stage
