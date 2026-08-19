@@ -343,6 +343,7 @@ if (action === 'complete_onboarding') {
         id_string: id.string,
         rev_share: id.rev,
         prime49: id.prime,
+        lifecycle: (id.lifecycle === 'old' ? 'old' : 'current'),
         status: 'active'
     }));
 
@@ -2951,6 +2952,7 @@ if (action === 'get_merchant_data_raw') {
 
         if (action === 'assign_identifier_to_partner') {
             const { person_id, id_string, rev_share, prime49: isPrime } = body;
+            const _lc = (body.lifecycle === 'old' ? 'old' : 'current');
             if (!person_id)         return res.status(400).json({ success: false, message: 'person_id is required.' });
             if (!id_string?.trim()) return res.status(400).json({ success: false, message: 'ID string is required.' });
 
@@ -2987,6 +2989,7 @@ if (action === 'get_merchant_data_raw') {
                     agent_id:  agent.id,
                     rev_share: revNum + '%',
                     prime49:   !!isPrime,
+                    lifecycle: _lc,
                     status:    'active',
                 }).eq('id', existing.id);
                 if (uErr) throw uErr;
@@ -3019,6 +3022,7 @@ if (action === 'get_merchant_data_raw') {
                 id_string: id_string.trim(),
                 rev_share: revNum + '%',
                 prime49:   !!isPrime,
+                lifecycle: _lc,
                 status:    'active',
             });
             if (iErr) throw iErr;
