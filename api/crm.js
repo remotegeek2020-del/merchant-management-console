@@ -1021,6 +1021,42 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── EMAIL TEMPLATES & SIGNATURE ──────────────────────────────────────
+        if (action === 'list_templates') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data } = await supabase.from('crm_email_templates').select('*').eq('sub_account_id', body.sub_account_id).order('name');
+            const { data: sig } = await supabase.from('crm_email_signatures').select('body').eq('sub_account_id', body.sub_account_id).eq('person_id', personId).maybeSingle();
+            return res.status(200).json({ success: true, templates: data || [], signature: (sig && sig.body) || '' });
+        }
+        if (action === 'save_template') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const t = body.template || {};
+            const name = (t.name || '').trim(); if (!name) return res.status(400).json({ success: false, message: 'Template name required.' });
+            if (body.id) {
+                const { data } = await supabase.from('crm_email_templates').update({ name, subject: t.subject || null, body: t.body || null, updated_at: new Date().toISOString() }).eq('id', body.id).eq('sub_account_id', body.sub_account_id).select('*').single();
+                return res.status(200).json({ success: true, template: data });
+            }
+            const { data, error } = await supabase.from('crm_email_templates').insert({ sub_account_id: body.sub_account_id, portal_id: acc.portal_id, name, subject: t.subject || null, body: t.body || null, created_by: personId }).select('*').single();
+            if (error) return res.status(500).json({ success: false, message: 'Could not save template.' });
+            return res.status(200).json({ success: true, template: data });
+        }
+        if (action === 'delete_template') {
+            const { data: tp } = await supabase.from('crm_email_templates').select('sub_account_id').eq('id', body.id).maybeSingle();
+            if (!tp) return res.status(404).json({ success: false, message: 'Not found.' });
+            const acc = await subAccess(personId, tp.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access.' });
+            await supabase.from('crm_email_templates').delete().eq('id', body.id);
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'save_signature') {
+            const acc = await subAccess(personId, body.sub_account_id, 'conversations');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            await supabase.from('crm_email_signatures').upsert({ sub_account_id: body.sub_account_id, person_id: personId, body: body.body || '', updated_at: new Date().toISOString() }, { onConflict: 'sub_account_id,person_id' });
+            return res.status(200).json({ success: true });
+        }
+
         // ── EMAIL CHANNEL (unified crm_emails store; synced from all accessible mailboxes) ──
         if (action === 'contact_emails') {
             const ca = await contactAccess(body.id, 'conversations');
@@ -1100,7 +1136,12 @@ export default async function handler(req, res) {
             if (!at) return res.status(400).json({ success: false, message: 'That mailbox needs reconnecting.' });
             const to = (body.to || ca.contact.email || '').trim();
             const subject = (body.subject || '').trim() || '(no subject)';
-            const html = (body.body || '').replace(/\n/g, '<br>');
+            let html = (body.body || '').replace(/\n/g, '<br>');
+            // Append the sender's signature (unless the caller opts out).
+            if (body.append_signature !== false) {
+                const { data: sig } = await supabase.from('crm_email_signatures').select('body').eq('sub_account_id', ca.contact.sub_account_id).eq('person_id', personId).maybeSingle();
+                if (sig && sig.body && sig.body.trim()) html += '<br><br>' + sig.body.replace(/\n/g, '<br>');
+            }
             if (!to) return res.status(400).json({ success: false, message: 'No recipient email.' });
             const ccList = (Array.isArray(body.cc) ? body.cc : String(body.cc || '').split(/[,;]/))
                 .map(x => String(x).trim()).filter(Boolean)
