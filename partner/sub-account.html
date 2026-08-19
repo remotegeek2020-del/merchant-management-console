@@ -268,9 +268,8 @@ if (!token) window.location.href = '/partner';
 function ppClearPartner(){ ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){localStorage.removeItem(k);}); }
 const subId = new URLSearchParams(location.search).get('sub') || localStorage.getItem('pp_active_sub_account') || '';
 
-function applyCrmUi(style){ document.documentElement.setAttribute('data-crm-ui', style || 'default'); }
-// Instant apply from cache to avoid a flash before DATA loads.
-try{ var _cui=localStorage.getItem('pp_crm_ui:'+subId); if(_cui) applyCrmUi(_cui); }catch(e){}
+// CRM interface skins are COMING SOON — kept in code/schema but not applied yet.
+function applyCrmUi(style){ document.documentElement.setAttribute('data-crm-ui', 'default'); }
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function initials(n){ return (String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
@@ -405,8 +404,7 @@ async function load(){
     DATA = r;
     localStorage.setItem('pp_active_sub_account', subId);
     var sa = r.sub_account;
-    applyCrmUi(sa.ui_style || 'default');
-    try{ localStorage.setItem('pp_crm_ui:'+subId, sa.ui_style || 'default'); }catch(e){}
+    applyCrmUi('default'); // skins coming soon
     document.getElementById('sidebarName').textContent = sa.name || 'CRM';
     document.getElementById('sidebarAvatar').textContent = initials(sa.name || 'C');
     var tagEl = document.querySelector('.sidebar-tag'); if (tagEl) tagEl.textContent = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'CRM';
@@ -1353,11 +1351,8 @@ window.crmSetUiStyle = async function(v){
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Interface style saved');
 };
 function uiStylePanel(){
-    var canM=['owner','agency_admin','god'].indexOf(DATA&&DATA.my_role)>=0;
-    var cur=(DATA&&DATA.sub_account&&DATA.sub_account.ui_style)||'default';
-    if(!canM){ var c=CRM_UI_STYLES.filter(function(o){return o.v===cur;})[0]||CRM_UI_STYLES[0]; return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Interface style</div><div style="font-size:12px;color:var(--muted);margin-top:4px;">This CRM uses the <b>'+esc(c.t)+'</b> look.</div></div>'; }
     var cards=CRM_UI_STYLES.map(function(o){
-        var on=cur===o.v;
+        var on=false;
         var brd=o.sbBorder?';border-bottom:1px solid #e5e7eb':'';
         var mini;
         if(o.lay==='top'){
@@ -1367,13 +1362,12 @@ function uiStylePanel(){
         } else {
             mini='<div style="display:flex;height:48px;border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:8px;"><div style="width:26%;background:'+o.sb+brd+';"></div><div style="flex:1;background:#fff;position:relative;"><div style="position:absolute;top:8px;left:8px;right:24px;height:7px;border-radius:4px;background:#eef2f6;"></div><div style="position:absolute;top:8px;right:8px;width:12px;height:12px;border-radius:4px;background:'+o.ac+';"></div><div style="position:absolute;bottom:8px;left:8px;width:34px;height:10px;border-radius:5px;background:'+o.ac+';"></div></div></div>';
         }
-        return '<label style="cursor:pointer;border:2px solid '+(on?'var(--teal)':'var(--border)')+';border-radius:12px;padding:10px;background:'+(on?'var(--teal-bg)':'#fff')+';">'
-          +'<input type="radio" name="crmUiStyle" value="'+o.v+'"'+(on?' checked':'')+' onchange="crmSetUiStyle(\''+o.v+'\')" style="display:none;">'
-          +mini+'<div style="font-weight:800;font-size:13px;color:'+(on?'var(--teal)':'var(--secondary)')+';">'+o.t+'</div>'
-          +'<div style="font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px;">'+o.d+'</div></label>';
+        return '<div style="border:2px solid var(--border);border-radius:12px;padding:10px;background:#fff;opacity:.6;filter:grayscale(.35);cursor:not-allowed;">'
+          +mini+'<div style="font-weight:800;font-size:13px;color:var(--secondary);">'+o.t+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px;">'+o.d+'</div></div>';
     }).join('');
-    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Interface style</div>'
-      +'<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Give this CRM the look & feel your team knows. Owners & agency admins choose.</div>'
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="display:flex;align-items:center;gap:8px;"><div style="font-weight:800;font-size:15px;">Interface style</div><span class="soon">COMING SOON</span></div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Give this CRM the look &amp; feel your team knows (HighLevel, Zoho, HubSpot, Salesforce). We’re polishing the layouts — this will switch on soon.</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">'+cards+'</div></div>';
 }
 function emailModePanel(){
