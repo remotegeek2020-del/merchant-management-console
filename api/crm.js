@@ -789,6 +789,7 @@ export default async function handler(req, res) {
             const patch = {};
             if ('restrict_to_assigned' in body) patch.restrict_to_assigned = !!body.restrict_to_assigned;
             if ('email_mode' in body && ['individual', 'shared', 'both'].includes(body.email_mode)) patch.email_mode = body.email_mode;
+            if ('ui_style' in body && ['default', 'highlevel', 'zoho', 'hubspot', 'salesforce'].includes(body.ui_style)) patch.ui_style = body.ui_style;
             if (Object.keys(patch).length) await supabase.from('agency_sub_accounts').update(patch).eq('id', body.sub_account_id);
             return res.status(200).json({ success: true });
         }

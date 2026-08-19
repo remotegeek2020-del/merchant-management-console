@@ -161,6 +161,28 @@
             .conv:not(.showmain) .conv-main{ display:none; }
             .conv.showmain .conv-back{ display:inline-flex; }
         }
+        /* ── CRM interface skins (evoke HighLevel / Zoho / HubSpot / Salesforce) ── */
+        /* Recolor the whole workspace by overriding the accent + sidebar tokens. */
+        html[data-crm-ui="highlevel"]{ --teal:#2dd4bf; --teal-dark:#14b8a6; --teal-bg:#ccfbf1; --navy:#0e1b2b; }
+        html[data-crm-ui="highlevel"] .nav-item.active{ box-shadow:inset 3px 0 0 #2dd4bf; }
+        html[data-crm-ui="hubspot"]{ --teal:#ff7a59; --teal-dark:#e8623f; --teal-bg:#ffe7df; --navy:#33475b; --surface:#f5f8fa; }
+        html[data-crm-ui="hubspot"] .panel,html[data-crm-ui="hubspot"] .kpi{ border-radius:8px; }
+        html[data-crm-ui="salesforce"]{ --teal:#0176d3; --teal-dark:#014486; --teal-bg:#e5f3ff; --navy:#032d60; --surface:#f3f3f3; }
+        html[data-crm-ui="salesforce"] .topbar{ background:#032d60; }
+        html[data-crm-ui="salesforce"] .topbar #secTitle,html[data-crm-ui="salesforce"] .topbar a{ color:#fff !important; }
+        html[data-crm-ui="salesforce"] .panel,html[data-crm-ui="salesforce"] .kpi{ border-radius:6px; }
+        /* Zoho = light sidebar with a red accent */
+        html[data-crm-ui="zoho"]{ --teal:#e42527; --teal-dark:#c81e1e; --teal-bg:#fde8e8; --surface:#f7f8fa; }
+        html[data-crm-ui="zoho"] .sidebar{ background:#fff; box-shadow:1px 0 0 #e5e7eb; }
+        html[data-crm-ui="zoho"] .sidebar-logo{ filter:none; }
+        html[data-crm-ui="zoho"] .sidebar-name{ color:#1f2937; }
+        html[data-crm-ui="zoho"] .sidebar-tag{ color:#9ca3af; }
+        html[data-crm-ui="zoho"] .nav-item{ color:#4b5563; }
+        html[data-crm-ui="zoho"] .nav-item:hover{ background:#f3f4f6; color:#111827; }
+        html[data-crm-ui="zoho"] .nav-item.active{ background:#fde8e8; color:#e42527; }
+        html[data-crm-ui="zoho"] .nav-group-label{ color:#9ca3af; }
+        html[data-crm-ui="zoho"] .nav-divider{ background:#e5e7eb; }
+        html[data-crm-ui="zoho"] .sidebar-header{ border-bottom-color:#e5e7eb; }
     </style>
 </head>
 <body>
@@ -211,6 +233,10 @@ const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
 function ppClearPartner(){ ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){localStorage.removeItem(k);}); }
 const subId = new URLSearchParams(location.search).get('sub') || localStorage.getItem('pp_active_sub_account') || '';
+
+function applyCrmUi(style){ document.documentElement.setAttribute('data-crm-ui', style || 'default'); }
+// Instant apply from cache to avoid a flash before DATA loads.
+try{ var _cui=localStorage.getItem('pp_crm_ui:'+subId); if(_cui) applyCrmUi(_cui); }catch(e){}
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
 function initials(n){ return (String(n||'?').trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('')||'?').toUpperCase(); }
@@ -345,6 +371,8 @@ async function load(){
     DATA = r;
     localStorage.setItem('pp_active_sub_account', subId);
     var sa = r.sub_account;
+    applyCrmUi(sa.ui_style || 'default');
+    try{ localStorage.setItem('pp_crm_ui:'+subId, sa.ui_style || 'default'); }catch(e){}
     document.getElementById('sidebarName').textContent = sa.name || 'CRM';
     document.getElementById('sidebarAvatar').textContent = initials(sa.name || 'C');
     var tagEl = document.querySelector('.sidebar-tag'); if (tagEl) tagEl.textContent = (r.agency && (r.agency.agency_name || r.agency.relationship_id)) || 'CRM';
@@ -1275,6 +1303,37 @@ window.crmSetEmailMode = async function(mode){
     var r = await crmApi({action:'set_crm_setting', sub_account_id:subId, email_mode:mode});
     if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Email mode saved');
 };
+var CRM_UI_STYLES=[
+    {v:'default', t:'PayProTec', d:'The clean default look.', sb:'#001e3c', ac:'#0d9488'},
+    {v:'highlevel', t:'HighLevel', d:'Dark sidebar, teal accents.', sb:'#0e1b2b', ac:'#2dd4bf'},
+    {v:'zoho', t:'Zoho', d:'Light sidebar, red accents.', sb:'#ffffff', ac:'#e42527'},
+    {v:'hubspot', t:'HubSpot', d:'Slate sidebar, orange accents.', sb:'#33475b', ac:'#ff7a59'},
+    {v:'salesforce', t:'Salesforce', d:'Blue “Lightning” look.', sb:'#032d60', ac:'#0176d3'}
+];
+window.crmSetUiStyle = async function(v){
+    applyCrmUi(v);
+    try{ localStorage.setItem('pp_crm_ui:'+subId, v); }catch(e){}
+    if(DATA && DATA.sub_account) DATA.sub_account.ui_style=v;
+    renderCrmSettings();
+    var r = await crmApi({action:'set_crm_setting', sub_account_id:subId, ui_style:v});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Interface style saved');
+};
+function uiStylePanel(){
+    var canM=['owner','agency_admin','god'].indexOf(DATA&&DATA.my_role)>=0;
+    var cur=(DATA&&DATA.sub_account&&DATA.sub_account.ui_style)||'default';
+    if(!canM){ var c=CRM_UI_STYLES.filter(function(o){return o.v===cur;})[0]||CRM_UI_STYLES[0]; return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Interface style</div><div style="font-size:12px;color:var(--muted);margin-top:4px;">This CRM uses the <b>'+esc(c.t)+'</b> look.</div></div>'; }
+    var cards=CRM_UI_STYLES.map(function(o){
+        var on=cur===o.v;
+        var mini='<div style="display:flex;height:44px;border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:8px;"><div style="width:26%;background:'+o.sb+';"></div><div style="flex:1;background:#fff;position:relative;"><div style="position:absolute;top:8px;left:8px;right:24px;height:7px;border-radius:4px;background:#eef2f6;"></div><div style="position:absolute;top:8px;right:8px;width:12px;height:12px;border-radius:4px;background:'+o.ac+';"></div><div style="position:absolute;bottom:8px;left:8px;width:34px;height:10px;border-radius:5px;background:'+o.ac+';"></div></div></div>';
+        return '<label style="cursor:pointer;border:2px solid '+(on?'var(--teal)':'var(--border)')+';border-radius:12px;padding:10px;background:'+(on?'var(--teal-bg)':'#fff')+';">'
+          +'<input type="radio" name="crmUiStyle" value="'+o.v+'"'+(on?' checked':'')+' onchange="crmSetUiStyle(\''+o.v+'\')" style="display:none;">'
+          +mini+'<div style="font-weight:800;font-size:13px;color:'+(on?'var(--teal)':'var(--secondary)')+';">'+o.t+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);line-height:1.35;margin-top:2px;">'+o.d+'</div></label>';
+    }).join('');
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Interface style</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Give this CRM the look & feel your team knows. Owners & agency admins choose.</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">'+cards+'</div></div>';
+}
 function emailModePanel(){
     var mb=CRM_MAILBOXES||{}; var mode=mb.email_mode||'both'; var canM=!!mb.can_manage;
     var opts=[
@@ -1365,7 +1424,8 @@ function renderCrmSettings(){
     }).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 0;">No tags yet.</div>';
     var addBtn = function(fn,label){ return '<button onclick="'+fn+'" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">add</span> '+label+'</button>'; };
     host.innerHTML =
-      emailPanel()
+      uiStylePanel()
+      + emailPanel()
       + emailModePanel()
       + sharedMailboxPanel()
       + visibilityPanel()
