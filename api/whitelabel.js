@@ -253,8 +253,9 @@ function sanitizePerms(perms, role) {
     if (role === 'agency_admin') PERM_AREAS_AGENCY.forEach(k => { out[k] = (k in p) ? !!p[k] : false; });
     return out;
 }
+// Returns { sent:boolean, error:string|null } so the caller can surface a copy-link fallback.
 async function sendInviteEmail(email, agencyName, url, roleLabel) {
-    if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[AGENCY INVITE] ${email} -> ${url}`); return; }
+    if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[AGENCY INVITE] ${email} -> ${url}`); return { sent: false, error: 'Email service not configured' }; }
     try {
         const { ServerClient } = await import('postmark');
         const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
@@ -271,7 +272,8 @@ async function sendInviteEmail(email, agencyName, url, roleLabel) {
             TextBody: `You've been invited to ${agencyName} as ${roleLabel}. Accept: ${url}`,
             MessageStream: 'outbound'
         });
-    } catch (e) { console.error('[AGENCY INVITE] Email failed:', e.message); }
+        return { sent: true, error: null };
+    } catch (e) { console.error('[AGENCY INVITE] Email failed:', e.message); return { sent: false, error: e.message || 'Email failed' }; }
 }
 
 // ── Agency membership (owners + admins) ──────────────────────────────────────
@@ -702,7 +704,7 @@ export default async function handler(req, res) {
                         assignable_roles: assignableRoles(role, god),
                         members, candidates,
                         sub_accounts: (subs || []).map(s => ({ id: s.id, name: s.name, type: s.company_id ? 'company' : 'client' })),
-                        invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], created_at: i.created_at })),
+                        invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], token: i.token, created_at: i.created_at })),
                         perm_areas: { agency: PERM_AREAS_AGENCY, crm: PERM_AREAS_CRM }
                     });
                 }
@@ -769,26 +771,28 @@ export default async function handler(req, res) {
                     if (!grantRole || grantRole === 'owner') return res.status(400).json({ success: false, message: 'Invite as agency admin or CRM admin.' });
                     const scope = grantRole === 'crm_admin' ? { sub_account_ids: Array.isArray(body.sub_account_ids) ? body.sub_account_ids : [] } : {};
                     const permissions = sanitizePerms(body.permissions, grantRole);
-                    const { data: existing } = await supabase.from('persons').select('id').ilike('email', email).limit(1);
+                    const { data: existing } = await supabase.from('persons').select('id, full_name').ilike('email', email).limit(1);
                     if (existing && existing.length) {
+                        // Already in the program → add straight to the team. They log in with
+                        // their EXISTING credentials, so no setup email is sent (or needed).
                         await supabase.from('partner_portal_members').upsert({ portal_id: portal.id, person_id: existing[0].id, role: grantRole, scope, permissions, added_by: personId }, { onConflict: 'portal_id,person_id' });
-                        return res.status(200).json({ success: true, added: true, members: await loadMembers(portal.id) });
+                        return res.status(200).json({ success: true, added: true, existing_account: true, member_name: existing[0].full_name || email, message: `${existing[0].full_name || email} already has a login and was added to the team — no setup email needed. They can sign in with their existing password.`, members: await loadMembers(portal.id) });
                     }
                     const token = crypto.randomBytes(24).toString('hex');
                     const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
                     await supabase.from('agency_invites').insert({ portal_id: portal.id, email, role: grantRole, scope, permissions, invited_by: personId, token, expires_at: expires });
                     const { data: pr } = await supabase.from('partner_portals').select('agency_name').eq('id', portal.id).maybeSingle();
                     const acceptUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?invite=${token}`;
-                    await sendInviteEmail(email, (pr && pr.agency_name) || 'the agency', acceptUrl, grantRole === 'agency_admin' ? 'an Agency Admin' : 'a CRM Admin');
+                    const mail = await sendInviteEmail(email, (pr && pr.agency_name) || 'the agency', acceptUrl, grantRole === 'agency_admin' ? 'an Agency Admin' : 'a CRM Admin');
                     const { data: invites } = await supabase.from('agency_invites').select('*').eq('portal_id', portal.id).eq('status', 'pending').order('created_at', { ascending: false });
-                    return res.status(200).json({ success: true, invited: true, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], created_at: i.created_at })) });
+                    return res.status(200).json({ success: true, invited: true, email_sent: !!(mail && mail.sent), email_error: (mail && mail.error) || null, accept_url: acceptUrl, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], token: i.token, created_at: i.created_at })) });
                 }
 
                 if (action === 'agency_revoke_invite') {
                     if (!canManage) return res.status(403).json({ success: false, message: 'Only owners and admins can manage invites.' });
                     await supabase.from('agency_invites').update({ status: 'revoked' }).eq('id', body.invite_id).eq('portal_id', portal.id);
                     const { data: invites } = await supabase.from('agency_invites').select('*').eq('portal_id', portal.id).eq('status', 'pending').order('created_at', { ascending: false });
-                    return res.status(200).json({ success: true, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], created_at: i.created_at })) });
+                    return res.status(200).json({ success: true, invites: (invites || []).map(i => ({ id: i.id, email: i.email, role: i.role, sub_account_ids: (i.scope && i.scope.sub_account_ids) || [], token: i.token, created_at: i.created_at })) });
                 }
 
                 if (action === 'my_companies') {
