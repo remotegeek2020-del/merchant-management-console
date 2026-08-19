@@ -27,11 +27,18 @@ function parseAddr(s) {
 // their own personal mailbox). Shared tokens live in crm_mailboxes; personal in
 // partner_email_connections.
 async function accessibleMailboxes(personId, subId) {
+    // Per-CRM email mode governs which mailboxes are in play.
+    const { data: sub } = await supabase.from('agency_sub_accounts').select('email_mode').eq('id', subId).maybeSingle();
+    const mode = (sub && sub.email_mode) || 'both';
     const out = [];
-    const { data: shared } = await supabase.from('crm_mailboxes').select('id, provider, email').eq('sub_account_id', subId).eq('status', 'active');
-    (shared || []).forEach(m => out.push({ kind: 'shared', shared_mailbox_id: m.id, person_id: null, provider: m.provider, email: m.email }));
-    const conn = await emailConn(personId);
-    if (conn) out.push({ kind: 'personal', shared_mailbox_id: null, person_id: personId, provider: conn.provider, email: conn.email });
+    if (mode !== 'individual') {
+        const { data: shared } = await supabase.from('crm_mailboxes').select('id, provider, email').eq('sub_account_id', subId).eq('status', 'active');
+        (shared || []).forEach(m => out.push({ kind: 'shared', shared_mailbox_id: m.id, person_id: null, provider: m.provider, email: m.email }));
+    }
+    if (mode !== 'shared') {
+        const conn = await emailConn(personId);
+        if (conn) out.push({ kind: 'personal', shared_mailbox_id: null, person_id: personId, provider: conn.provider, email: conn.email });
+    }
     return out;
 }
 async function mailboxToken(mb) {
@@ -680,6 +687,7 @@ export default async function handler(req, res) {
             if (!['owner', 'agency_admin', 'god'].includes(acc.role)) return res.status(403).json({ success: false, message: 'Only owners and agency admins can change this.' });
             const patch = {};
             if ('restrict_to_assigned' in body) patch.restrict_to_assigned = !!body.restrict_to_assigned;
+            if ('email_mode' in body && ['individual', 'shared', 'both'].includes(body.email_mode)) patch.email_mode = body.email_mode;
             if (Object.keys(patch).length) await supabase.from('agency_sub_accounts').update(patch).eq('id', body.sub_account_id);
             return res.status(200).json({ success: true });
         }
@@ -693,7 +701,7 @@ export default async function handler(req, res) {
             if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
             const { data: shared } = await supabase.from('crm_mailboxes').select('id, provider, email, label, status, connected_by, created_at').eq('sub_account_id', body.sub_account_id).order('created_at');
             const conn = await emailConn(personId);
-            return res.status(200).json({ success: true, shared: shared || [], personal: conn || null, can_manage: canManageCrm(acc) });
+            return res.status(200).json({ success: true, shared: shared || [], personal: conn || null, email_mode: (acc.sub && acc.sub.email_mode) || 'both', can_manage: canManageCrm(acc) });
         }
         // OAuth URL to connect a SHARED mailbox (owner/admin only). Signs scope into state.
         if (action === 'oauth_url_shared') {

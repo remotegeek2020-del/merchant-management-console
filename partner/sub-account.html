@@ -1166,8 +1166,36 @@ window.crmDisconnectShared = async function(id){
     await crmApi({action:'disconnect_shared_mailbox', sub_account_id:subId, mailbox_id:id});
     loadCrmSettings();
 };
+window.crmSetEmailMode = async function(mode){
+    CRM_MAILBOXES.email_mode = mode;
+    renderCrmSettings();
+    var r = await crmApi({action:'set_crm_setting', sub_account_id:subId, email_mode:mode});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not save.','error'); } else crmToast('Email mode saved');
+};
+function emailModePanel(){
+    var mb=CRM_MAILBOXES||{}; var mode=mb.email_mode||'both'; var canM=!!mb.can_manage;
+    var opts=[
+        {v:'individual', t:'Individual', d:'Each user sees & sends from their own connected mailbox (like today).'},
+        {v:'shared', t:'Shared inbox', d:'Everyone works one shared team mailbox for this CRM.'},
+        {v:'both', t:'Both', d:'Shared team inbox + each user’s personal mailbox, side by side.'}
+    ];
+    if(!canM){
+        var cur=opts.filter(function(o){return o.v===mode;})[0]||opts[2];
+        return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Email mode</div><div style="font-size:12px;color:var(--muted);margin-top:4px;">This CRM uses <b>'+esc(cur.t)+'</b> email. '+esc(cur.d)+'</div></div>';
+    }
+    var cards=opts.map(function(o){
+        var on=mode===o.v;
+        return '<label style="flex:1;min-width:150px;border:2px solid '+(on?'var(--teal)':'var(--border)')+';border-radius:12px;padding:12px;cursor:pointer;background:'+(on?'var(--teal-bg)':'#fff')+';">'
+          +'<div style="display:flex;align-items:center;gap:7px;"><input type="radio" name="crmEmailMode" value="'+o.v+'"'+(on?' checked':'')+' onchange="crmSetEmailMode(\''+o.v+'\')"><span style="font-weight:800;font-size:13px;color:'+(on?'var(--teal)':'var(--secondary)')+';">'+o.t+'</span></div>'
+          +'<div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4;">'+o.d+'</div></label>';
+    }).join('');
+    return '<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="font-weight:800;font-size:15px;">Email mode</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">How email works for this CRM. Owners & agency admins choose.</div>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;">'+cards+'</div></div>';
+}
 function sharedMailboxPanel(){
     var mb=CRM_MAILBOXES||{}; var shared=mb.shared||[];
+    if((mb.email_mode||'both')==='individual') return ''; // shared inbox not used in individual mode
     var rows = shared.map(function(s){
         var err=s.status==='error';
         return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;">'
@@ -1235,6 +1263,7 @@ function renderCrmSettings(){
     var addBtn = function(fn,label){ return '<button onclick="'+fn+'" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">add</span> '+label+'</button>'; };
     host.innerHTML =
       emailPanel()
+      + emailModePanel()
       + sharedMailboxPanel()
       + visibilityPanel()
       +'<div class="panel" style="padding:18px 20px;margin-bottom:18px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div><div style="font-weight:800;font-size:15px;">Custom Fields</div><div style="font-size:12px;color:var(--muted);">Extra fields shown on the contact form for this CRM.</div></div>'+addBtn('openField()','Add field')+'</div>'+fieldRows+'</div>'
