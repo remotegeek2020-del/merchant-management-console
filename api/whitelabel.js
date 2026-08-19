@@ -254,13 +254,16 @@ function sanitizePerms(perms, role) {
     return out;
 }
 // Returns { sent:boolean, error:string|null } so the caller can surface a copy-link fallback.
+// Reads Postmark from Vercel env first, then the Secret Dungeon (app_config) store.
 async function sendInviteEmail(email, agencyName, url, roleLabel) {
-    if (!process.env.POSTMARK_SERVER_TOKEN) { console.log(`[AGENCY INVITE] ${email} -> ${url}`); return { sent: false, error: 'Email service not configured' }; }
+    const token = process.env.POSTMARK_SERVER_TOKEN || await getConfigValue('POSTMARK_SERVER_TOKEN');
+    const from = process.env.EMAIL_FROM || await getConfigValue('EMAIL_FROM') || 'noreply@mypayprotec.com';
+    if (!token) { console.log(`[AGENCY INVITE] ${email} -> ${url}`); return { sent: false, error: 'Email service not configured' }; }
     try {
         const { ServerClient } = await import('postmark');
-        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        const client = new ServerClient(token);
         await client.sendEmail({
-            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+            From: from,
             To: email,
             Subject: `You've been invited to ${agencyName}`,
             HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
