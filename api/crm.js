@@ -224,6 +224,62 @@ export default async function handler(req, res) {
             return res.status(400).json({ success: false, message: 'Unknown bulk op.' });
         }
 
+        // Find likely duplicate contacts (same email / phone / name), grouped.
+        if (action === 'find_duplicates') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const { data: contacts } = await supabase.from('crm_contacts').select('id, first_name, last_name, email, phone, company, created_at').eq('sub_account_id', body.sub_account_id).limit(5000);
+            const list = contacts || [];
+            // Union-find over match keys (email, phone digits, name).
+            const parent = {}; list.forEach(c => parent[c.id] = c.id);
+            function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+            function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
+            const byKey = {};
+            list.forEach(c => {
+                const keys = [];
+                if (c.email) keys.push('e:' + String(c.email).toLowerCase().trim());
+                const ph = String(c.phone || '').replace(/\D/g, ''); if (ph.length >= 7) keys.push('p:' + ph);
+                const nm = [c.first_name, c.last_name].filter(Boolean).join(' ').toLowerCase().trim(); if (nm && nm.length > 3) keys.push('n:' + nm);
+                keys.forEach(k => { if (byKey[k]) union(byKey[k], c.id); else byKey[k] = c.id; });
+            });
+            const groups = {};
+            list.forEach(c => { const r = find(c.id); (groups[r] = groups[r] || []).push(c); });
+            const dupeGroups = Object.values(groups).filter(g => g.length > 1)
+                .map(g => g.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+            return res.status(200).json({ success: true, groups: dupeGroups });
+        }
+        // Merge duplicate contacts into a primary (moves all related records, fills blanks).
+        if (action === 'merge_contacts') {
+            const acc = await subAccess(personId, body.sub_account_id, 'contacts');
+            if (!acc) return res.status(403).json({ success: false, message: 'No access to this CRM.' });
+            const primaryId = body.primary_id;
+            const dupeIds = (Array.isArray(body.duplicate_ids) ? body.duplicate_ids : []).filter(id => id && id !== primaryId);
+            if (!primaryId || !dupeIds.length) return res.status(400).json({ success: false, message: 'Pick a primary and at least one duplicate.' });
+            // All must belong to this CRM.
+            const { data: rows } = await supabase.from('crm_contacts').select('*').eq('sub_account_id', body.sub_account_id).in('id', [primaryId, ...dupeIds]);
+            const primary = (rows || []).find(r => r.id === primaryId);
+            const dupes = (rows || []).filter(r => dupeIds.includes(r.id));
+            if (!primary || !dupes.length) return res.status(400).json({ success: false, message: 'Contacts not found in this CRM.' });
+            // Reassign related records to the primary.
+            for (const d of dupes) {
+                for (const tbl of ['crm_notes', 'crm_tasks', 'crm_opportunities', 'crm_messages', 'crm_emails', 'crm_appointments']) {
+                    try { await supabase.from(tbl).update({ contact_id: primaryId }).eq('contact_id', d.id); } catch (e) {}
+                }
+                // Tags: move any the primary doesn't already have.
+                const { data: dtags } = await supabase.from('crm_contact_tags').select('tag_id').eq('contact_id', d.id);
+                if (dtags && dtags.length) { await supabase.from('crm_contact_tags').upsert(dtags.map(t => ({ contact_id: primaryId, tag_id: t.tag_id })), { onConflict: 'contact_id,tag_id' }); await supabase.from('crm_contact_tags').delete().eq('contact_id', d.id); }
+            }
+            // Fill primary blanks from dupes; merge custom jsonb (primary wins).
+            const patch = {}; const mergedCustom = Object.assign({}, ...dupes.map(d => d.custom || {}), primary.custom || {});
+            ['first_name', 'last_name', 'email', 'phone', 'company', 'title', 'source', 'notes', 'owner_person_id'].forEach(k => {
+                if (!primary[k]) { const src = dupes.find(d => d[k]); if (src) patch[k] = src[k]; }
+            });
+            patch.custom = mergedCustom;
+            if (Object.keys(patch).length) await supabase.from('crm_contacts').update(patch).eq('id', primaryId);
+            await supabase.from('crm_contacts').delete().in('id', dupeIds);
+            return res.status(200).json({ success: true, merged: dupeIds.length });
+        }
+
         // Import contacts from parsed CSV rows (client parses the file → array of {header:value}).
         if (action === 'import_contacts') {
             const acc = await subAccess(personId, body.sub_account_id, 'contacts');

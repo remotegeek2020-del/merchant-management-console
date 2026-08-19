@@ -511,6 +511,7 @@ function renderContacts(){
       +'<div style="position:relative;flex:1;min-width:200px;"><span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px;">search</span>'
       +'<input id="crmSearch" value="'+esc(CRM_Q)+'" oninput="crmFilter(this.value)" placeholder="Search contacts…" style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;outline:none;"></div>'
       +statusSel+ownerSel+sortSel
+      +'<button onclick="crmFindDupes()" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">join_full</span> Dedupe</button>'
       +'<button onclick="crmImportModal()" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">upload_file</span> Import</button>'
       +'<button onclick="crmExport()" style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:var(--secondary);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:15px;">download</span> Export</button>'
       +'<button onclick="openContact()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">person_add</span> Add</button>'
@@ -589,6 +590,41 @@ function parseCSV(text){
     }
     if(cur!==''||row.length){ row.push(cur); rows.push(row); }
     return rows.filter(function(r){ return r.some(function(x){return String(x).trim()!=='';}); });
+}
+window.crmFindDupes=async function(){
+    Swal.fire({title:'Scanning for duplicates…',didOpen:function(){Swal.showLoading();}});
+    var r=await crmApi({action:'find_duplicates', sub_account_id:subId});
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not scan.','error'); return; }
+    window._dupeGroups=r.groups||[];
+    if(!window._dupeGroups.length){ Swal.fire({icon:'success',title:'No duplicates found',text:'Your contacts look clean. 🎉'}); return; }
+    renderDupeModal(0);
+};
+function renderDupeModal(idx){
+    var groups=window._dupeGroups||[]; if(!groups.length){ Swal.close(); loadContacts(); return; }
+    idx=Math.max(0,Math.min(idx,groups.length-1));
+    var g=groups[idx];
+    var rows=g.map(function(c,i){
+        return '<label style="display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;">'
+          +'<input type="radio" name="dupePrimary" value="'+c.id+'"'+(i===0?' checked':'')+'>'
+          +'<div style="flex:1;text-align:left;"><div style="font-weight:700;font-size:13px;">'+esc(cName(c))+'</div><div style="font-size:11px;color:var(--muted);">'+esc(c.email||'—')+' · '+esc(c.phone||'—')+(c.company?(' · '+esc(c.company)):'')+'</div></div>'
+          +'<span style="font-size:10px;color:var(--muted);white-space:nowrap;">'+fmtDate(c.created_at)+'</span></label>';
+    }).join('');
+    Swal.fire({
+        title:'Duplicates ('+(idx+1)+' of '+groups.length+')', width:560, showCancelButton:true, cancelButtonText:'Skip', confirmButtonText:'Merge these', confirmButtonColor:'#0d9488',
+        html:'<div style="text-align:left;"><div style="font-size:12px;color:#64748b;margin-bottom:10px;">'+g.length+' contacts look like the same person. Pick the one to <b>keep</b> — the rest merge into it (their tags, notes, deals, emails & activity move over).</div>'+rows+'</div>',
+        preConfirm:function(){ var p=(document.querySelector('input[name=dupePrimary]:checked')||{}).value; if(!p){Swal.showValidationMessage('Pick the contact to keep.');return false;} return p; }
+    }).then(async function(res){
+        if(res.isConfirmed){
+            var primary=res.value; var dupes=g.map(function(c){return c.id;}).filter(function(id){return id!==primary;});
+            var mr=await crmApi({action:'merge_contacts', sub_account_id:subId, primary_id:primary, duplicate_ids:dupes});
+            if(!mr||!mr.success){ Swal.fire('Error',(mr&&mr.message)||'Could not merge.','error'); return; }
+            crmToast('Merged '+dupes.length+' contact'+(dupes.length===1?'':'s'));
+        }
+        // Move to next group (whether merged or skipped).
+        window._dupeGroups.splice(idx,1);
+        if(window._dupeGroups.length) renderDupeModal(idx);
+        else { Swal.fire({icon:'success',title:'All done',timer:1200,showConfirmButton:false}); loadContacts(); }
+    });
 }
 window.crmImportModal = function(){
     var inp=document.createElement('input'); inp.type='file'; inp.accept='.csv,text/csv';
