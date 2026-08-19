@@ -319,7 +319,8 @@ function setSort(mode) {
     renderIdeas();
 }
 
-const catLabels = { general: 'General', ui_ux: 'UI / UX', api: 'API', reporting: 'Reporting', performance: 'Performance', security: 'Security', other: 'Other' };
+const catLabels = { communications: 'Communications', general: 'General', ui_ux: 'UI / UX', api: 'API', reporting: 'Reporting', performance: 'Performance', security: 'Security', calendars: 'Calendars', automation: 'Automation', billing: 'Billing', other: 'Other' };
+function sourceBadge(idea){ if(!idea.source||idea.source==='staff') return ''; var lbl=idea.source==='crm'?'CRM':'Partner'; var ctx=idea.source_context?(' · '+escHtml(idea.source_context)):''; return '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:#ede9fe;color:#6d28d9;">'+lbl+ctx+'</span>'; }
 
 const statusLabels = {
     open: 'Open', in_review: 'In Review', planned: 'Planned', done: 'Done',
@@ -403,6 +404,7 @@ function renderIdeas() {
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
                     ${statusBadge(idea.status)}
                     <span class="cat-badge">${catLabels[idea.category] || idea.category}</span>
+                    ${sourceBadge(idea)}
                 </div>
                 <div class="idea-title">${escHtml(idea.title)}</div>
                 <div class="idea-desc">${escHtml(idea.body)}</div>

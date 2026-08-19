@@ -282,6 +282,19 @@
         merchants.parentNode.insertBefore(a, merchants.nextSibling);
     }
 
+    // Inject "Ideas & Suggestions" into the sidebar on every partner page.
+    function injectIdeasNav() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (!nav || nav.querySelector('a[href="/partner/ideas"]')) return;
+        var anchor = nav.querySelector('a[href="/partner/profile"]') || nav.querySelector('a[href="/partner/settings"]');
+        var a = document.createElement('a');
+        a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/ideas') !== -1 ? ' active' : '');
+        a.href = '/partner/ideas';
+        a.innerHTML = '<span class="material-icons">lightbulb</span> Ideas &amp; Suggestions';
+        if (anchor) anchor.parentNode.insertBefore(a, anchor);
+        else nav.appendChild(a);
+    }
+
     // ── PARTNER PORTAL SECTION TOGGLES ───────────────────────────
     // Admin can turn portal sections off (Marketing → Partner Portal → Sections).
     // Hide the sidebar link for a disabled section, and bounce off its page.
@@ -432,6 +445,7 @@
             injectResidualsNav();
             injectLeaderboardNav();
             injectPosLeadNav();
+            injectIdeasNav();
             maybeInjectCrmNav();
         }
         injectNotificationBell();

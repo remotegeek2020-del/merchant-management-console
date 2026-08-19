@@ -125,7 +125,7 @@ export default async function handler(req, res) {
             if (!title?.trim()) return res.status(400).json({ success: false, message: 'Title is required.' });
             if (!body?.trim()) return res.status(400).json({ success: false, message: 'Description is required.' });
             if (!requested_by_userid) return res.status(400).json({ success: false, message: 'User ID is required.' });
-            const allowedCats = ['general','ui_ux','api','reporting','performance','security','other'];
+            const allowedCats = ['communications','general','ui_ux','api','reporting','performance','security','calendars','automation','billing','other'];
             const safeCat = allowedCats.includes(category) ? category : 'general';
             const { data, error } = await supabase
                 .from('feature_ideas')

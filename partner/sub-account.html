@@ -239,6 +239,7 @@
         <a class="nav-item" data-section="automation" onclick="showSection('automation')"><span class="material-icons">bolt</span> Automation</a>
         <a class="nav-item" data-section="forms" onclick="showSection('forms')"><span class="material-icons">description</span> Forms</a>
         <a class="nav-item" data-section="reporting" onclick="showSection('reporting')"><span class="material-icons">insights</span> Reporting</a>
+        <a class="nav-item" data-section="ideas" onclick="showSection('ideas')"><span class="material-icons">lightbulb</span> Ideas &amp; Suggestions</a>
         <div class="nav-group-label">Company Data</div>
         <a class="nav-item" data-section="merchants" onclick="showSection('merchants')"><span class="material-icons">storefront</span> Merchants</a>
         <a class="nav-item" data-section="partner_ids" onclick="showSection('partner_ids')"><span class="material-icons">badge</span> Partner IDs</a>
@@ -316,7 +317,7 @@ function subPartnersPanel(){
     }).join('');
     return '<div class="panel" style="overflow-x:auto;"><table><thead><tr><th>Sub-Agent</th><th>Email</th><th>Partner ID</th><th>Rev Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', forms:'Forms', reporting:'Reporting', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
+var SECTION_TITLES = { dashboard:'Dashboard', contacts:'Contacts', opportunities:'Opportunities', conversations:'Conversations', calendars:'Calendars', automation:'Automation', forms:'Forms', reporting:'Reporting', ideas:'Ideas & Suggestions', merchants:'Merchants', partner_ids:'Partner IDs', sub_partners:'Sub-Partners', settings:'CRM Settings' };
 var SECTIONS = {
     dashboard: dashboardSection,
     contacts: function(){ setTimeout(loadContacts, 0); return '<div id="crmContacts"><div class="empty"><span class="material-icons">contacts</span><h4>Loading contacts…</h4></div></div>'; },
@@ -324,6 +325,7 @@ var SECTIONS = {
     conversations: function(){ setTimeout(loadConversations, 0); return '<div id="crmConv"><div class="empty"><span class="material-icons">forum</span><h4>Loading…</h4></div></div>'; },
     calendars: function(){ setTimeout(loadCalendar, 0); return '<div id="crmCal"><div class="empty"><span class="material-icons">event</span><h4>Loading…</h4></div></div>'; },
     automation: function(){ setTimeout(loadWorkflows, 0); return '<div id="crmAuto"><div class="empty"><span class="material-icons">bolt</span><h4>Loading…</h4></div></div>'; },
+    ideas: function(){ setTimeout(loadIdeas, 0); return '<div id="crmIdeas"><div class="empty"><span class="material-icons">lightbulb</span><h4>Loading…</h4></div></div>'; },
     forms: function(){ setTimeout(loadForms, 0); return '<div id="crmForms"><div class="empty"><span class="material-icons">description</span><h4>Loading forms…</h4></div></div>'; },
     reporting: function(){ setTimeout(loadReport, 0); return '<div id="crmReport"><div class="empty"><span class="material-icons">insights</span><h4>Loading reporting…</h4></div></div>'; },
     merchants: merchantsPanel,
@@ -1227,6 +1229,54 @@ window.convLog=async function(){
 window.convDelMsg=async function(id){ await crmApi({action:'delete_message', id:id}); await convOpen(CONV_ACTIVE); };
 window.convComposeEmail=function(){ cdCompose(); };
 function convScrollBottom(){ setTimeout(function(){ var b=document.getElementById('convBody'); if(b) b.scrollTop=b.scrollHeight; }, 30); }
+
+/* ── IDEAS & SUGGESTIONS (white-labeled; routes to the product team) ────────── */
+var IDEA_CATS=[['communications','Communications'],['general','General'],['ui_ux','Design / UX'],['reporting','Reporting'],['calendars','Calendars'],['automation','Automation'],['billing','Billing'],['other','Other']];
+function ideaApi(b){ return fetch('/api/partner-ideas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token, sub_account_id:subId},b))}).then(function(r){return r.json();}); }
+function ideaCatLabel(k){ var x=IDEA_CATS.filter(function(c){return c[0]===k;})[0]; return x?x[1]:k; }
+var IDEAS_LIST=[];
+async function loadIdeas(){
+    var host=document.getElementById('crmIdeas'); if(!host) return;
+    var r=await ideaApi({action:'my_list'});
+    if(r && /session/i.test(r.message||'')){ ppClearPartner(); location.href='/partner'; return; }
+    IDEAS_LIST=(r&&r.success&&r.ideas)||[];
+    renderIdeas();
+}
+function ideaStatusChip(s){ var m={open:['New','#0369a1','#e0f2fe'],in_review:['In review','#6d28d9','#ede9fe'],planned:['Planned','#0ea5e9','#e0f2fe'],in_progress:['In progress','#b45309','#fef3c7'],done:['Done','#166534','#dcfce7'],rejected:['Declined','#991b1b','#fee2e2']}[s]||['New','#475569','#f1f5f9']; return '<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>'; }
+function renderIdeas(){
+    var host=document.getElementById('crmIdeas'); if(!host) return;
+    var top='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px;"><div><div style="font-weight:800;font-size:16px;">Ideas &amp; Suggestions</div><div style="font-size:12px;color:var(--muted);">Tell us what would make this platform better — feature ideas, improvements, anything.</div></div><button onclick="openIdea()" style="display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;"><span class="material-icons" style="font-size:16px;">add</span> Share an idea</button></div>';
+    // Little dashboard: counts by status.
+    var counts={}; IDEAS_LIST.forEach(function(i){counts[i.status]=(counts[i.status]||0)+1;});
+    var tiles=[['','Total',IDEAS_LIST.length],['open','New',counts.open||0],['in_progress','In progress',(counts.in_progress||0)+(counts.planned||0)+(counts.in_review||0)],['done','Done',counts.done||0]]
+      .map(function(t){return '<div class="kpi"><div class="kpi-label">'+t[1]+'</div><div class="kpi-value">'+t[2]+'</div></div>';}).join('');
+    var tilesRow='<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin:12px 0 16px;">'+tiles+'</div>';
+    var rows;
+    if(!IDEAS_LIST.length){ rows='<div class="panel"><div class="empty"><span class="material-icons">lightbulb</span><h4>No suggestions yet</h4><p>Be the first to share an idea — it goes straight to the product team.</p></div></div>'; }
+    else {
+        rows='<div class="panel" style="padding:6px 18px 12px;">'+IDEAS_LIST.map(function(i){
+            return '<div style="padding:13px 0;border-bottom:1px solid #f1f5f9;">'
+              +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;"><div style="font-weight:800;font-size:13px;">'+esc(i.title)+'</div>'+ideaStatusChip(i.status)+'</div>'
+              +'<div style="font-size:12px;color:var(--secondary);margin-top:4px;white-space:pre-wrap;">'+esc(String(i.body).slice(0,240))+(String(i.body).length>240?'…':'')+'</div>'
+              +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+esc(ideaCatLabel(i.category))+' · '+fmtDate(i.created_at)+(i.mine?' · <span style="color:var(--teal);font-weight:700;">You</span>':(i.by?(' · '+esc(i.by)):''))+'</div>'
+              +'</div>';
+        }).join('')+'</div>';
+    }
+    host.innerHTML=top+tilesRow+rows;
+}
+window.openIdea=async function(){
+    var catOpts=IDEA_CATS.map(function(c){return '<option value="'+c[0]+'">'+c[1]+'</option>';}).join('');
+    var res=await Swal.fire({title:'Share an idea', width:520, showCancelButton:true, confirmButtonText:'Submit', confirmButtonColor:'#0d9488', focusConfirm:false,
+        html:'<div style="text-align:left;">'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Category</label><select id="ideaCat" class="swal2-select" style="margin:4px 0 10px;width:100%;font-size:13px;">'+catOpts+'</select>'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Title</label><input id="ideaTitle" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" placeholder="A short summary">'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Describe your idea</label><textarea id="ideaBody" class="swal2-textarea" style="margin:4px 0 0;width:100%;font-size:13px;min-height:120px;" placeholder="What would you like to see? What problem does it solve?"></textarea></div>',
+        preConfirm:function(){ var t=(document.getElementById('ideaTitle').value||'').trim(); var b=(document.getElementById('ideaBody').value||'').trim(); if(!t){Swal.showValidationMessage('Add a short title.');return false;} if(!b){Swal.showValidationMessage('Describe your idea.');return false;} return {title:t, body:b, category:document.getElementById('ideaCat').value}; }});
+    if(!res.isConfirmed) return;
+    var r=await ideaApi(Object.assign({action:'submit', source:'crm', context:(DATA&&DATA.sub_account&&DATA.sub_account.name)||''}, res.value));
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not submit.','error'); return; }
+    crmToast('Thanks! Your idea was sent to the product team.'); loadIdeas();
+};
 
 /* ── AUTOMATION (workflows: trigger → actions) ─────────────────────────────── */
 var WF_LIST=[];

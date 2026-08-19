@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-pp-world="portal">
+<head>
+    <script src="/js/pp-session.js?v=20260812b"></script>
+    <script src="/js/brand-boot.js?v=20260812b"></script>
+    <script src="/js/world-transition.js?v=20260812b"></script>
+    <link rel="icon" href="/api/favicon" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ideas &amp; Suggestions</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--teal:#0d9488;--teal-dark:#0f766e;--teal-bg:#f0fdfa;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+        .sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,0.15);}
+        .sidebar-header{padding:20px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo{height:26px;filter:brightness(0) invert(1);display:block;margin-bottom:14px;}
+        .sidebar-partner{display:flex;align-items:center;gap:10px;}
+        .sidebar-avatar{width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:white;flex-shrink:0;overflow:hidden;}
+        .sidebar-avatar img{width:100%;height:100%;object-fit:cover;}
+        .sidebar-name{font-size:12px;font-weight:700;color:white;}
+        .sidebar-tag{font-size:10px;color:rgba(255,255,255,0.4);}
+        .sidebar-nav{flex:1;padding:12px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;font-size:12px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;}
+        .nav-item:hover{background:rgba(255,255,255,0.08);color:white;}
+        .nav-item.active{background:var(--teal);color:white;}
+        .nav-item .material-icons{font-size:18px;flex-shrink:0;}
+        .nav-divider{height:1px;background:rgba(255,255,255,0.08);margin:6px 0;}
+        .main{margin-left:240px;min-height:100vh;}
+        .topbar{background:white;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;}
+        .topbar-title{font-size:1.1rem;font-weight:800;margin:0;}
+        .content{padding:24px;max-width:820px;}
+        .panel{background:white;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);}
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0;}
+        .kpi{background:white;border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-sm);}
+        .kpi-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
+        .kpi-value{font-size:1.5rem;font-weight:800;font-family:'DM Mono',monospace;}
+        .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;border:none;background:var(--teal);color:#fff;}
+        .empty{padding:48px 24px;text-align:center;color:var(--muted);}
+        .empty .material-icons{font-size:44px;opacity:.3;display:block;margin:0 auto 10px;}
+        @media(max-width:640px){.sidebar{transform:translateX(-100%);}.main{margin-left:0;}.content{padding:16px;}.kpi-grid{grid-template-columns:1fr 1fr;}}
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-tag">Partner Portal</div></div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item" href="/partner/webinars"><span class="material-icons">video_library</span> Webinars</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item active" href="/partner/ideas"><span class="material-icons">lightbulb</span> Ideas &amp; Suggestions</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+</div>
+<div class="main">
+    <div class="topbar"><h1 class="topbar-title">💡 Ideas &amp; Suggestions</h1></div>
+    <div class="content">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+            <div><div style="font-weight:800;font-size:16px;">Help shape the platform</div><div style="font-size:13px;color:var(--muted);">Share feature ideas and improvements — they go straight to the product team.</div></div>
+            <button class="btn" onclick="openIdea()"><span class="material-icons" style="font-size:16px;">add</span> Share an idea</button>
+        </div>
+        <div class="kpi-grid" id="ideaTiles"></div>
+        <div id="ideaList"></div>
+    </div>
+</div>
+<script>
+var token = localStorage.getItem('pp_partner_token');
+if(!token) location.href='/partner';
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+function fmtDate(s){ try{ return new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return ''; } }
+function ideaApi(b){ return fetch('/api/partner-ideas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(function(r){return r.json();}); }
+function pdApi(b){ return fetch('/api/community',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:token},b))}).then(function(r){return r.json();}); }
+var IDEA_CATS=[['communications','Communications'],['general','General'],['ui_ux','Design / UX'],['reporting','Reporting'],['calendars','Calendars'],['automation','Automation'],['billing','Billing'],['other','Other']];
+function catLabel(k){ var x=IDEA_CATS.filter(function(c){return c[0]===k;})[0]; return x?x[1]:k; }
+function statusChip(s){ var m={open:['New','#0369a1','#e0f2fe'],in_review:['In review','#6d28d9','#ede9fe'],planned:['Planned','#0ea5e9','#e0f2fe'],in_progress:['In progress','#b45309','#fef3c7'],done:['Done','#166534','#dcfce7'],rejected:['Declined','#991b1b','#fee2e2']}[s]||['New','#475569','#f1f5f9']; return '<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:'+m[2]+';color:'+m[1]+';">'+m[0]+'</span>'; }
+var LIST=[];
+async function load(){
+    var r=await ideaApi({action:'my_list'});
+    if(r && /session/i.test(r.message||'')){ location.href='/partner'; return; }
+    LIST=(r&&r.success&&r.ideas)||[];
+    render();
+}
+function render(){
+    var counts={}; LIST.forEach(function(i){counts[i.status]=(counts[i.status]||0)+1;});
+    document.getElementById('ideaTiles').innerHTML=[['Total',LIST.length],['New',counts.open||0],['In progress',(counts.in_progress||0)+(counts.planned||0)+(counts.in_review||0)],['Done',counts.done||0]]
+      .map(function(t){return '<div class="kpi"><div class="kpi-label">'+t[0]+'</div><div class="kpi-value">'+t[1]+'</div></div>';}).join('');
+    var host=document.getElementById('ideaList');
+    if(!LIST.length){ host.innerHTML='<div class="panel"><div class="empty"><span class="material-icons">lightbulb</span><div style="font-weight:700;color:var(--secondary);">No suggestions yet</div><div style="font-size:13px;">Share the first idea — it reaches the product team instantly.</div></div></div>'; return; }
+    host.innerHTML='<div class="panel" style="padding:6px 18px 12px;">'+LIST.map(function(i){
+        return '<div style="padding:13px 0;border-bottom:1px solid #f1f5f9;">'
+          +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;"><div style="font-weight:800;font-size:13px;">'+esc(i.title)+'</div>'+statusChip(i.status)+'</div>'
+          +'<div style="font-size:12px;color:var(--secondary);margin-top:4px;white-space:pre-wrap;">'+esc(String(i.body).slice(0,240))+(String(i.body).length>240?'…':'')+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+esc(catLabel(i.category))+' · '+fmtDate(i.created_at)+'</div></div>';
+    }).join('')+'</div>';
+}
+window.openIdea=async function(){
+    var catOpts=IDEA_CATS.map(function(c){return '<option value="'+c[0]+'">'+c[1]+'</option>';}).join('');
+    var res=await Swal.fire({title:'Share an idea', width:520, showCancelButton:true, confirmButtonText:'Submit', confirmButtonColor:'#0d9488', focusConfirm:false,
+        html:'<div style="text-align:left;">'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Category</label><select id="ideaCat" class="swal2-select" style="margin:4px 0 10px;width:100%;font-size:13px;">'+catOpts+'</select>'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Title</label><input id="ideaTitle" class="swal2-input" style="margin:4px 0 10px;width:100%;height:38px;font-size:13px;" placeholder="A short summary">'
+          +'<label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">Describe your idea</label><textarea id="ideaBody" class="swal2-textarea" style="margin:4px 0 0;width:100%;font-size:13px;min-height:120px;" placeholder="What would you like to see?"></textarea></div>',
+        preConfirm:function(){ var t=(document.getElementById('ideaTitle').value||'').trim(); var b=(document.getElementById('ideaBody').value||'').trim(); if(!t){Swal.showValidationMessage('Add a short title.');return false;} if(!b){Swal.showValidationMessage('Describe your idea.');return false;} return {title:t, body:b, category:document.getElementById('ideaCat').value}; }});
+    if(!res.isConfirmed) return;
+    var r=await ideaApi(Object.assign({action:'submit', source:'partner'}, res.value));
+    if(!r||!r.success){ Swal.fire('Error',(r&&r.message)||'Could not submit.','error'); return; }
+    Swal.fire({icon:'success',title:'Thank you!',text:'Your idea was sent to the product team.',timer:1600,showConfirmButton:false}); load();
+};
+async function setIdentity(){
+    try{ var p=await pdApi({action:'get_profile'}); if(p&&p.success&&p.profile){ var nm=p.profile.full_name||p.profile.display_name||'Partner'; document.getElementById('sidebarName').innerText=nm; var init=(nm||'?').split(' ').map(function(w){return w[0];}).join('').toUpperCase().slice(0,2); document.getElementById('sidebarAvatar').innerHTML=p.profile.avatar_url?('<img src="'+esc(p.profile.avatar_url)+'">'):init; } }catch(e){}
+}
+function handleLogout(){ fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token:token})}).finally(function(){ ['pp_partner_token','pp_partner_id','pp_impersonating','pp_active_portal','pp_active_sub_account','pp_active_company'].forEach(function(k){localStorage.removeItem(k);}); location.href='/partner'; }); }
+setIdentity(); load();
+</script>
+<script src="/js/site-config.js?v=20260812b"></script>
+<script src="/js/partner-nav.js?v=20260812b"></script>
+</body>
+</html>
