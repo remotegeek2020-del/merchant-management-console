@@ -262,6 +262,8 @@ export default async function handler(req, res) {
 
             if (action === 'create_campaign' || action === 'update_campaign') {
                 const b = req.body;
+                // Trim + cap a string field (used by the event-mode phase labels below).
+                const str = (v, n) => (v == null ? '' : String(v)).slice(0, n);
                 // Variant B body is rich-text too — sanitize it before storing.
                 let variantB = (b.variant_b && typeof b.variant_b === 'object') ? { ...b.variant_b } : {};
                 if (variantB.body_text != null) variantB.body_text = await sanitizeBody(variantB.body_text);
