@@ -252,6 +252,7 @@
           </label>
           <div id="eventFields" style="display:none;margin-top:8px;border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px;">
             <div class="muted" style="font-size:12px;margin-bottom:8px;">The announcement changes itself by date — its <b>title</b>, button and link all swap per phase. Opt-in closes at the time below (optional); the event goes live between start & end; after that it becomes the replay. Set an "Announcement title for this phase" under each stage (e.g. Upcoming → Live → Replay); leave blank to keep the main title. The whole campaign still ends at its Expiration date.</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;">🕓 All times below are in your timezone: <b id="tzLabelEvent">…</b></div>
             <div class="row2">
               <div><label class="fld" style="margin-top:0;">Opt-in closes <span class="muted">(optional)</span></label><input class="inp" type="datetime-local" id="f_optin_until"></div>
               <div></div>
@@ -630,7 +631,7 @@ function relabelTz(){
     var off=tzOffsetMin(COMPANY_TZ, new Date()), s=off>=0?'+':'-', a=Math.abs(off);
     var pad=function(n){return (n<10?'0':'')+n;};
     var label=COMPANY_TZ+' (GMT'+s+pad(Math.floor(a/60))+':'+pad(a%60)+')';
-    ['tzLabelCampaign','tzLabelGate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent=label; });
+    ['tzLabelCampaign','tzLabelGate','tzLabelEvent'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent=label; });
   }catch(e){}
 }
 relabelTz();
