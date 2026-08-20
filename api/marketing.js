@@ -17,6 +17,7 @@ import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghl
 import { setConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
+import { normEmail, recordOptin, recordOptins, optedInIds } from './_marketing-optins.js';
 
 // Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
 // sites, so this is the authoritative XSS boundary — allowlist only. The
@@ -61,6 +62,35 @@ function embedLoaderSource(origin, siteKey) {
 }
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// Resolve a portal viewer's email (partner → persons.email, staff → app_users.email).
+// Used for cross-device opt-in suppression. Best-effort; returns '' if unknown.
+async function viewerEmailOf(who) {
+    if (!who || !who.id) return '';
+    try {
+        if (who.type === 'partner') {
+            const { data } = await supabase.from('persons').select('email').eq('id', who.id).maybeSingle();
+            return normEmail(data && data.email);
+        }
+        if (who.type === 'staff') {
+            const { data } = await supabase.from('app_users').select('email').eq('userid', who.id).maybeSingle();
+            return normEmail(data && data.email);
+        }
+    } catch (_) { /* best-effort */ }
+    return '';
+}
+
+// Authoritative backfill: pull a campaign's GHL gate/conversion-form submissions
+// and record each signer's email into the opt-in registry, so the announcement
+// stays hidden for people who registered even if the browser never fired a
+// dismiss. Best-effort; only runs for campaigns wired to a GHL conversion form.
+async function syncCampaignOptins(c) {
+    if (!c || !c.conv_location_id || !(c.conv_form_id || c.conv_calendar_id)) return 0;
+    try {
+        const list = await convFetch(c);
+        return await recordOptins(supabase, c.id, list, 'ghl_sync');
+    } catch (_) { return 0; }
+}
 
 // ── Conversions (GHL) helpers, shared by get_conversions / export / dashboard ──
 const PARTNER_TAG = 'ppt partner';
@@ -165,7 +195,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'export_conversions', 'scan_cta',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -379,10 +409,11 @@ export default async function handler(req, res) {
 
             if (action === 'get_stats') {
                 const { id } = req.body;
-                const [{ data: ev }, { data: campRow }] = await Promise.all([
+                const [{ data: ev }, { data: campRow }, { count: optedInCount }] = await Promise.all([
                     supabase.from('marketing_events')
                         .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id).limit(50000),
-                    supabase.from('marketing_campaigns').select('event_mode, campaign_kind').eq('id', id).maybeSingle()
+                    supabase.from('marketing_campaigns').select('event_mode, campaign_kind').eq('id', id).maybeSingle(),
+                    supabase.from('marketing_optins').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
                 ]);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
@@ -544,6 +575,7 @@ export default async function handler(req, res) {
                     dismissers: peopleFor('dismiss'),
                     ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null,
                     by_phase: byPhase,
+                    opted_in: optedInCount || 0,   // people who registered → announcement suppressed for them
                     by_site: bySite,
                     traffic
                 });
@@ -830,6 +862,9 @@ export default async function handler(req, res) {
                     .select('conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
                 if (!c || !c.conv_location_id || (!c.conv_form_id && !c.conv_calendar_id)) return ok(res, { configured: false, count: 0, list: [] });
                 const list = await convFetch(c);
+                // Authoritatively backfill the opt-in registry from GHL so registered
+                // people stay suppressed even if their browser never fired a dismiss.
+                recordOptins(supabase, id, list, 'ghl_sync').catch(() => {});
                 const partners = await convEnrichPartners(list, c.conv_location_id, 150);
                 const byType = {};
                 list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
@@ -847,6 +882,27 @@ export default async function handler(req, res) {
                 const header = 'type,name,email,phone,current_partner,opt_in_page,source,at';
                 const csv = [header].concat(list.map(r => [r.type, r.name, r.email, r.phone, r.is_partner ? 'yes' : 'no', r.page || '', r.source || '', r.at].map(esc).join(','))).join('\n');
                 return ok(res, { csv });
+            }
+
+            // Manually backfill the opt-in registry from GHL for one campaign (or all
+            // conversion-wired campaigns). Registered people are then suppressed
+            // everywhere they're identified, across devices.
+            if (action === 'sync_optins') {
+                const { id } = req.body;
+                let camps = [];
+                if (id) {
+                    const { data: c } = await supabase.from('marketing_campaigns')
+                        .select('id, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
+                    if (c) camps = [c];
+                } else {
+                    const { data } = await supabase.from('marketing_campaigns')
+                        .select('id, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at')
+                        .not('conv_location_id', 'is', null);
+                    camps = data || [];
+                }
+                let total = 0, done = 0;
+                for (const c of camps) { const n = await syncCampaignOptins(c); total += n; done++; }
+                return ok(res, { campaigns: done, opted_in: total });
             }
 
             // ── Webflow connector ────────────────────────────────────────────
@@ -1043,13 +1099,19 @@ export default async function handler(req, res) {
                     });
                 }
 
-                // exclude ones this user dismissed
+                // exclude ones this user dismissed (by id) OR opted into (by email,
+                // cross-device — Option A: register once, hidden everywhere they're known).
                 const ids = live.map(c => c.id);
                 let dismissed = new Set();
                 if (ids.length) {
                     const { data: dis } = await supabase.from('marketing_dismissals')
                         .select('campaign_id').in('campaign_id', ids).eq('user_id', who.id);
                     dismissed = new Set((dis || []).map(d => d.campaign_id));
+                    const vEmail = await viewerEmailOf(who);
+                    if (vEmail) {
+                        const opted = await optedInIds(supabase, vEmail, ids);
+                        opted.forEach(id => dismissed.add(id));
+                    }
                 }
                 const out = live.filter(c => !dismissed.has(c.id)).map(c => {
                     // ── A/B: deterministically show variant A or B per user ──────
@@ -1101,6 +1163,13 @@ export default async function handler(req, res) {
                     campaign_id, user_id: who.id, user_type: who.type, event_type: 'click',
                     target: 'survey', variant: (variant === 'A' || variant === 'B') ? variant : null
                 });
+                // Register the opt-in (cross-device suppression) + mark dismissed.
+                const rEmail = normEmail(email) || await viewerEmailOf(who);
+                if (rEmail) {
+                    await recordOptin(supabase, campaign_id, rEmail, 'survey');
+                    await supabase.from('marketing_dismissals')
+                        .upsert({ campaign_id, user_id: who.id, user_type: who.type }, { onConflict: 'campaign_id,user_id' }).then(() => {}, () => {});
+                }
                 // Push the lead to a GHL sub-account (with tags) if the campaign is configured for it.
                 if (email || phone) {
                     const { data: camp } = await supabase.from('marketing_campaigns').select('survey').eq('id', campaign_id).maybeSingle();
@@ -1136,6 +1205,9 @@ export default async function handler(req, res) {
                 await supabase.from('marketing_dismissals')
                     .upsert({ campaign_id, user_id: who.id, user_type: who.type }, { onConflict: 'campaign_id,user_id' });
                 await supabase.from('marketing_events').insert({ campaign_id, user_id: who.id, user_type: who.type, event_type: 'dismiss' });
+                // Register the opt-in by email so it stays hidden on their other devices.
+                const dEmail = normEmail(req.body?.email) || await viewerEmailOf(who);
+                if (dEmail) await recordOptin(supabase, campaign_id, dEmail, 'portal');
                 return ok(res, { dismissed: true });
             }
         }

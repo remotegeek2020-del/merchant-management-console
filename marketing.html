@@ -2016,6 +2016,7 @@ async function showStats(id, title){
     <div style="margin-top:14px;font-size:13px;color:var(--secondary);">
       <div>${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
       <div style="margin-top:6px;">Clicks by channel: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff · <b>${s.clicks_by_audience.prospect||0}</b> prospect · <b>${s.clicks_by_audience.ghl||0}</b> GHL · <b>${s.clicks_by_audience.website||0}</b> website</div>
+      ${s.opted_in?`<div style="margin-top:6px;">✅ <b>${s.opted_in}</b> registered — this announcement is hidden for them (on every device they're identified on).</div>`:''}
     </div>
     ${phaseSection(s.by_phase)}
     ${abSection(s.ab)}

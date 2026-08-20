@@ -128,6 +128,9 @@
 
     function api(body) {
         body.site_key = SITE_KEY; body.viewer_id = VIEWER; if (GHL_LOC) body.ghl_location = GHL_LOC;
+        // Pass the known email so opt-in suppression follows the person across
+        // devices (server records/checks marketing_optins by email).
+        if (EMAIL) body.email = EMAIL.toLowerCase();
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
     }
     function track(id, type, target, variant) {

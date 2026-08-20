@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { ghlUpsertContact } from './_ghl.js';
+import { emailFromViewer, normEmail, recordOptin, optedInIds } from './_marketing-optins.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -75,6 +76,11 @@ export default async function handler(req, res) {
     const action = body?.action;
     const siteKey = body?.site_key;
     const viewer = String(body?.viewer_id || '').slice(0, 200);
+    // The viewer's email, if we can identify them: an explicit email field, or an
+    // email-shaped viewer_id (e.g. inside a GHL sub-account). Drives cross-device
+    // opt-in suppression; anonymous visitors have '' here and fall back to the
+    // per-browser localStorage dismiss.
+    const viewerEmail = normEmail(body?.email) || normEmail(body?.viewer_email) || emailFromViewer(viewer);
     const ghlLoc = body?.ghl_location ? String(body.ghl_location).slice(0, 100) : null;
     // Coarse geo from the edge (no precise location); works on Vercel.
     const country = (req.headers['x-vercel-ip-country'] || req.headers['cf-ipcountry'] || '') || null;
@@ -133,13 +139,18 @@ export default async function handler(req, res) {
                 (!Array.isArray(c.ghl_location_ids) || c.ghl_location_ids.length === 0 ||
                     (ghlLoc && c.ghl_location_ids.map(String).includes(String(ghlLoc)))));
 
-            // Exclude ones this viewer permanently dismissed.
+            // Exclude ones this viewer permanently dismissed (per-browser) OR has
+            // already opted into (per-email, cross-device — Option A).
             const ids = live.map(c => c.id);
             let dismissed = new Set();
             if (ids.length) {
                 const { data: dis } = await supabase.from('marketing_dismissals')
                     .select('campaign_id').in('campaign_id', ids).eq('user_id', viewer);
                 dismissed = new Set((dis || []).map(d => d.campaign_id));
+                if (viewerEmail) {
+                    const opted = await optedInIds(supabase, viewerEmail, ids);
+                    opted.forEach(id => dismissed.add(id));
+                }
             }
 
             const out = live.filter(c => !dismissed.has(c.id)).map(c => {
@@ -252,6 +263,9 @@ export default async function handler(req, res) {
             await supabase.from('marketing_dismissals')
                 .upsert({ campaign_id, user_id: viewer, user_type: 'embed' }, { onConflict: 'campaign_id,user_id' });
             await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'dismiss', site_id: siteId });
+            // A gate-submit dismiss with a known email → register the opt-in so it
+            // stays suppressed on this person's other devices too.
+            if (viewerEmail || normEmail(body.email)) await recordOptin(supabase, campaign_id, viewerEmail || body.email, 'embed');
             return ok(res, { dismissed: true });
         }
 
@@ -270,6 +284,14 @@ export default async function handler(req, res) {
                 country, meta: cleanMeta(body.meta)
             });
             await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'click', target: 'survey', site_id: siteId, ghl_location: ghlLoc, country });
+            // Native contact-capture gives us the email directly → register the
+            // opt-in (cross-device suppression) + drop the per-browser dismiss too.
+            const optEmail = normEmail(email) || viewerEmail;
+            if (optEmail) {
+                await recordOptin(supabase, campaign_id, optEmail, 'survey');
+                await supabase.from('marketing_dismissals')
+                    .upsert({ campaign_id, user_id: viewer, user_type: 'embed' }, { onConflict: 'campaign_id,user_id' }).then(() => {}, () => {});
+            }
             // Push the lead to a GHL sub-account (with tags) if configured.
             if (email || phone) {
                 const { data: camp } = await supabase.from('marketing_campaigns').select('survey').eq('id', campaign_id).maybeSingle();
