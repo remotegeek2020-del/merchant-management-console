@@ -166,7 +166,14 @@ export default async function handler(req, res) {
                     const nowMs = Date.now();
                     const liveAt = em.live_at ? new Date(em.live_at).getTime() : null;
                     const liveUntil = em.live_until ? new Date(em.live_until).getTime() : null;
-                    if (liveAt && nowMs < liveAt) {
+                    const optInUntil = em.opt_in_until ? new Date(em.opt_in_until).getTime() : null;
+                    if (liveAt && nowMs < liveAt && optInUntil && nowMs >= optInUntil) {
+                        eventPhase = 'closed';                    // opt-in closed, before it starts
+                        gateActive = false;
+                        if (em.closed_label) ctaLabel = em.closed_label;
+                        ctaUrl = em.closed_url || null;           // usually no link — info-only "starting soon"
+                        if (em.closed_headline) headline = em.closed_headline;
+                    } else if (liveAt && nowMs < liveAt) {
                         eventPhase = 'pre';                       // gated "save your spot"
                         if (em.pre_label) ctaLabel = em.pre_label;
                         if (em.pre_url) ctaUrl = em.pre_url;

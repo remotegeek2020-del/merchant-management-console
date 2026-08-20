@@ -189,6 +189,7 @@
             // Fluid width, viewport-capped height, scrolls internally if tall.
             '.ppx-modal{background:#fff;border-radius:16px;width:min(460px,100%);max-height:90vh;max-height:90dvh;overflow-y:auto;overflow-x:hidden;box-shadow:0 24px 70px rgba(0,0,0,.4);position:relative;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0a1628;animation:ppxUp .25s ease;-webkit-overflow-scrolling:touch;}',
             '@keyframes ppxUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}',
+            '@keyframes ppxpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}',
             '.ppx-img{position:relative;line-height:0;}',
             '.ppx-img img{width:100%;height:auto;display:block;}',
             '.ppx-hot{position:absolute;display:block;cursor:pointer;border-radius:6px;}',
@@ -382,6 +383,7 @@
         var th = theme(c);
         var imgBlock = showGraphic ? ('<div class="ppx-img"><img src="' + esc(safeUrl(c.image_url)) + '" alt="">' + hot + '</div>') : '';
         var inner = '';
+        if (c.event_phase === 'live') inner += '<div style="display:inline-flex;align-items:center;gap:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:99px;margin-bottom:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:ppxpulse 1.2s infinite;"></span>LIVE NOW</div>';
         if (showText && c.title) inner += '<div class="ppx-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
         if (showText && c.body_text) inner += '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
         if (c.cta_enabled && c.cta_url) {
