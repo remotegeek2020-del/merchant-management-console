@@ -251,7 +251,7 @@
             <input type="checkbox" id="f_event_enabled" onchange="document.getElementById('eventFields').style.display=this.checked?'block':'none';"> <span style="font-weight:800;">🎬 YouTube event lifecycle</span> <span class="muted" style="font-weight:400;">(one announcement: opt-in → closed → live → replay)</span>
           </label>
           <div id="eventFields" style="display:none;margin-top:8px;border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px;">
-            <div class="muted" style="font-size:12px;margin-bottom:8px;">The announcement changes itself by date. Opt-in closes at the time below (optional); the event goes live between start & end; after that it becomes the replay. The whole campaign still ends at its Expiration date.</div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">The announcement changes itself by date — its <b>title</b>, button and link all swap per phase. Opt-in closes at the time below (optional); the event goes live between start & end; after that it becomes the replay. Set an "Announcement title for this phase" under each stage (e.g. Upcoming → Live → Replay); leave blank to keep the main title. The whole campaign still ends at its Expiration date.</div>
             <div class="row2">
               <div><label class="fld" style="margin-top:0;">Opt-in closes <span class="muted">(optional)</span></label><input class="inp" type="datetime-local" id="f_optin_until"></div>
               <div></div>
@@ -262,16 +262,20 @@
             </div>
             <div style="margin-top:10px;font-size:11px;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:.4px;">① Opt-in — “Save your spot”</div>
             <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_pre_label" placeholder="Save your spot"></div><div><label class="fld" style="margin-top:2px;">Link (optional)</label><input class="inp" id="f_pre_url" placeholder="(uses the CTA link / gate form)"></div></div>
-            <input class="inp" id="f_pre_headline" placeholder="Headline override (optional)" style="margin-top:6px;">
+            <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
+            <input class="inp" id="f_pre_headline" placeholder="e.g. Upcoming: Save your spot for our live event" style="margin-top:2px;">
             <div style="margin-top:10px;font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.4px;">② Opt-in closed — “Starting soon” <span class="muted" style="font-weight:400;text-transform:none;">(after opt-in closes, before live)</span></div>
             <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_closed_label" placeholder="Registration closed"></div><div><label class="fld" style="margin-top:2px;">Link (optional)</label><input class="inp" id="f_closed_url" placeholder="(optional)"></div></div>
-            <input class="inp" id="f_closed_headline" placeholder="Headline override (optional) — e.g. Starting soon!" style="margin-top:6px;">
+            <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
+            <input class="inp" id="f_closed_headline" placeholder="e.g. Starting soon — doors closing!" style="margin-top:2px;">
             <div style="margin-top:10px;font-size:11px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.4px;">③ Happening now — “Watch live” 🔴 (shows a LIVE badge)</div>
             <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_live_label" placeholder="🔴 Watch it live now"></div><div><label class="fld" style="margin-top:2px;">Live link</label><input class="inp" id="f_live_url" placeholder="https://youtube.com/live/…"></div></div>
-            <input class="inp" id="f_live_headline" placeholder="Headline override (optional) — e.g. We're live now!" style="margin-top:6px;">
+            <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
+            <input class="inp" id="f_live_headline" placeholder="e.g. 🔴 We’re live now — join us!" style="margin-top:2px;">
             <div style="margin-top:10px;font-size:11px;font-weight:800;color:#6d28d9;text-transform:uppercase;letter-spacing:.4px;">④ After — “Watch the replay”</div>
             <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_replay_label" placeholder="Watch the replay"></div><div><label class="fld" style="margin-top:2px;">Replay link</label><input class="inp" id="f_replay_url" placeholder="https://youtube.com/watch?v=…"></div></div>
-            <input class="inp" id="f_replay_headline" placeholder="Headline override (optional)" style="margin-top:6px;">
+            <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
+            <input class="inp" id="f_replay_headline" placeholder="e.g. Missed it? Watch the replay" style="margin-top:2px;">
           </div>
           </div>
         </div>
