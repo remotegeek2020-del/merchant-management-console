@@ -243,6 +243,27 @@
               <div class="muted" style="font-size:11px;margin-top:3px;">🕓 In your timezone: <b id="tzLabelGate">…</b>. After this time the form is skipped and the button goes straight to the link (e.g. once the live has started, send people right to the replay). Leave blank to always gate.</div>
             </div>
           </div>
+
+          <!-- ── EVENT MODE: gated → live → replay, auto-switching by date ── -->
+          <label class="fld" style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;">
+            <input type="checkbox" id="f_event_enabled" onchange="document.getElementById('eventFields').style.display=this.checked?'block':'none';"> Live event mode <span class="muted" style="font-weight:400;">(one announcement that changes itself: Save spot → Watch live → Replay)</span>
+          </label>
+          <div id="eventFields" style="display:none;margin-top:8px;border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px;">
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">Set the event start & end. Before it starts, viewers see the <b>Save your spot</b> button (gate above, if on). During the event it switches to <b>Watch live</b>, and after it ends to <b>Watch the replay</b> — automatically.</div>
+            <div class="row2">
+              <div><label class="fld" style="margin-top:0;">Event starts (goes live)</label><input class="inp" type="datetime-local" id="f_live_at"></div>
+              <div><label class="fld" style="margin-top:0;">Event ends (→ replay)</label><input class="inp" type="datetime-local" id="f_live_until"></div>
+            </div>
+            <div style="margin-top:10px;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">① Before — “Save your spot”</div>
+            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_pre_label" placeholder="Save your spot"></div><div><label class="fld" style="margin-top:2px;">Link (optional)</label><input class="inp" id="f_pre_url" placeholder="(uses the CTA link / gate form)"></div></div>
+            <input class="inp" id="f_pre_headline" placeholder="Headline override (optional)" style="margin-top:6px;">
+            <div style="margin-top:10px;font-size:11px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.4px;">② Happening now — “Watch live”</div>
+            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_live_label" placeholder="🔴 Watch it live now"></div><div><label class="fld" style="margin-top:2px;">Live link</label><input class="inp" id="f_live_url" placeholder="https://youtube.com/live/…"></div></div>
+            <input class="inp" id="f_live_headline" placeholder="Headline override (optional) — e.g. We're live now!" style="margin-top:6px;">
+            <div style="margin-top:10px;font-size:11px;font-weight:800;color:#6d28d9;text-transform:uppercase;letter-spacing:.4px;">③ After — “Watch the replay”</div>
+            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_replay_label" placeholder="Watch the replay"></div><div><label class="fld" style="margin-top:2px;">Replay link</label><input class="inp" id="f_replay_url" placeholder="https://youtube.com/watch?v=…"></div></div>
+            <input class="inp" id="f_replay_headline" placeholder="Headline override (optional)" style="margin-top:6px;">
+          </div>
         </div>
       </div>
 
@@ -972,6 +993,8 @@ function openEditor(type){
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('gate_location').innerHTML='<option value="">— select —</option>'; document.getElementById('gate_form').innerHTML='<option value="">— pick a sub-account first —</option>'; document.getElementById('f_gate_until').value='';
+  document.getElementById('f_event_enabled').checked=false; document.getElementById('eventFields').style.display='none';
+  ['f_live_at','f_live_until','f_pre_label','f_pre_url','f_pre_headline','f_live_label','f_live_url','f_live_headline','f_replay_label','f_replay_url','f_replay_headline'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_sv_scale').value='5';
@@ -1028,6 +1051,11 @@ async function editCampaign(id){
   { var g=c.cta_gate||{}; document.getElementById('f_gate_enabled').checked=!!g.enabled; document.getElementById('gateFields').style.display=g.enabled?'block':'none';
     document.getElementById('f_gate_until').value = g.until ? toLocalInput(g.until) : '';
     if(g.enabled){ populateGateLocations(g.location_id||'').then(function(){ if(g.location_id) return loadGateForms(g.form_id||''); }); } }
+  { var em=c.event_mode||{}; document.getElementById('f_event_enabled').checked=!!em.enabled; document.getElementById('eventFields').style.display=em.enabled?'block':'none';
+    document.getElementById('f_live_at').value=em.live_at?toLocalInput(em.live_at):''; document.getElementById('f_live_until').value=em.live_until?toLocalInput(em.live_until):'';
+    document.getElementById('f_pre_label').value=em.pre_label||''; document.getElementById('f_pre_url').value=em.pre_url||''; document.getElementById('f_pre_headline').value=em.pre_headline||'';
+    document.getElementById('f_live_label').value=em.live_label||''; document.getElementById('f_live_url').value=em.live_url||''; document.getElementById('f_live_headline').value=em.live_headline||'';
+    document.getElementById('f_replay_label').value=em.replay_label||''; document.getElementById('f_replay_url').value=em.replay_url||''; document.getElementById('f_replay_headline').value=em.replay_headline||''; }
   loadTheme(c.theme);
   await loadSurvey(c.survey);
   document.getElementById('f_audience').value=c.audience||'partner';
@@ -1288,6 +1316,14 @@ async function saveCampaign(){
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
     cta_gate: (document.getElementById('f_gate_enabled').checked && document.getElementById('gate_form').value)
       ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null, until: fromLocalInput(document.getElementById('f_gate_until').value) } : null,
+    event_mode: document.getElementById('f_event_enabled').checked ? {
+      enabled:true,
+      live_at: fromLocalInput(document.getElementById('f_live_at').value),
+      live_until: fromLocalInput(document.getElementById('f_live_until').value),
+      pre_label: document.getElementById('f_pre_label').value.trim()||null, pre_url: document.getElementById('f_pre_url').value.trim()||null, pre_headline: document.getElementById('f_pre_headline').value.trim()||null,
+      live_label: document.getElementById('f_live_label').value.trim()||null, live_url: document.getElementById('f_live_url').value.trim()||null, live_headline: document.getElementById('f_live_headline').value.trim()||null,
+      replay_label: document.getElementById('f_replay_label').value.trim()||null, replay_url: document.getElementById('f_replay_url').value.trim()||null, replay_headline: document.getElementById('f_replay_headline').value.trim()||null
+    } : { enabled:false },
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),

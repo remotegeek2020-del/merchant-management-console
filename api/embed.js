@@ -158,14 +158,42 @@ export default async function handler(req, res) {
                 // Behavior (dismissible | persistent | until_action) parsed from display_mode.
                 const dm = c.display_mode || 'card_dismissible';
                 const behavior = dm.slice(dm.indexOf('_') + 1) || 'dismissible';
+                // ── 3-phase event mode: gated (pre) → live → replay, by date ──
+                let ctaLabel = v.cta_label, ctaUrl = v.cta_url, headline = v.title, eventPhase = null;
+                let gateActive = (c.cta_gate && c.cta_gate.enabled && c.cta_gate.form_id && (!c.cta_gate.until || Date.now() < new Date(c.cta_gate.until).getTime()));
+                const em = c.event_mode;
+                if (em && em.enabled && (em.live_at || em.live_until)) {
+                    const nowMs = Date.now();
+                    const liveAt = em.live_at ? new Date(em.live_at).getTime() : null;
+                    const liveUntil = em.live_until ? new Date(em.live_until).getTime() : null;
+                    if (liveAt && nowMs < liveAt) {
+                        eventPhase = 'pre';                       // gated "save your spot"
+                        if (em.pre_label) ctaLabel = em.pre_label;
+                        if (em.pre_url) ctaUrl = em.pre_url;
+                        if (em.pre_headline) headline = em.pre_headline;
+                    } else if ((!liveAt || nowMs >= liveAt) && (!liveUntil || nowMs <= liveUntil)) {
+                        eventPhase = 'live';                      // happening now → watch live, ungated
+                        gateActive = false;
+                        if (em.live_label) ctaLabel = em.live_label;
+                        if (em.live_url) ctaUrl = em.live_url;
+                        if (em.live_headline) headline = em.live_headline;
+                    } else {
+                        eventPhase = 'replay';                    // after event → watch replay, ungated
+                        gateActive = false;
+                        if (em.replay_label) ctaLabel = em.replay_label;
+                        if (em.replay_url) ctaUrl = em.replay_url;
+                        if (em.replay_headline) headline = em.replay_headline;
+                    }
+                }
                 return {
-                    id: c.id, title: v.title, body_text: v.body_text, image_url: v.image_url,
-                    content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: v.cta_label,
-                    cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
+                    id: c.id, title: headline, body_text: v.body_text, image_url: v.image_url,
+                    content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: ctaLabel,
+                    cta_url: ctaUrl, hotspots: v.hotspots || [], priority: c.priority,
                     behavior, reshow_minutes: c.reshow_minutes || 5, survey: c.survey || null, theme: c.theme || null,
                     embed_format: c.embed_format || 'modal', embed_trigger: c.embed_trigger || 'load', embed_delay: c.embed_delay || 5,
-                    // Gate is dropped once it expires → CTA becomes a plain link (e.g. replay).
-                    cta_gate: (c.cta_gate && c.cta_gate.enabled && c.cta_gate.form_id && (!c.cta_gate.until || Date.now() < new Date(c.cta_gate.until).getTime())) ? { form_id: c.cta_gate.form_id, location_id: c.cta_gate.location_id || null } : null,
+                    event_phase: eventPhase,
+                    // Gate is dropped during live/replay (and once expired) → CTA becomes a plain link.
+                    cta_gate: gateActive ? { form_id: c.cta_gate.form_id, location_id: c.cta_gate.location_id || null } : null,
                     variant
                 };
             });

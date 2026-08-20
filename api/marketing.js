@@ -317,6 +317,16 @@ export default async function handler(req, res) {
                         ? { enabled: true, form_id: String(b.cta_gate.form_id).trim(), location_id: b.cta_gate.location_id ? String(b.cta_gate.location_id).trim() : null, until: b.cta_gate.until || null }
                         : null,
                     is_active: !!b.is_active,
+                    // 3-phase event mode (gated → live → replay), driven by dates.
+                    event_mode: (b.event_mode && b.event_mode.enabled && (b.event_mode.live_at || b.event_mode.live_until)) ? {
+                        enabled: true,
+                        live_at: b.event_mode.live_at || null,
+                        live_until: b.event_mode.live_until || null,
+                        pre_label: str(b.event_mode.pre_label, 60) || null, pre_url: str(b.event_mode.pre_url, 1000) || null,
+                        live_label: str(b.event_mode.live_label, 60) || null, live_url: str(b.event_mode.live_url, 1000) || null,
+                        replay_label: str(b.event_mode.replay_label, 60) || null, replay_url: str(b.event_mode.replay_url, 1000) || null,
+                        pre_headline: str(b.event_mode.pre_headline, 160) || null, live_headline: str(b.event_mode.live_headline, 160) || null, replay_headline: str(b.event_mode.replay_headline, 160) || null
+                    } : {},
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
                     priority: Number.isFinite(+b.priority) ? +b.priority : 0,
