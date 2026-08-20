@@ -377,8 +377,11 @@ export default async function handler(req, res) {
 
             if (action === 'get_stats') {
                 const { id } = req.body;
-                const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id).limit(50000);
+                const [{ data: ev }, { data: campRow }] = await Promise.all([
+                    supabase.from('marketing_events')
+                        .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id).limit(50000),
+                    supabase.from('marketing_campaigns').select('event_mode, campaign_kind').eq('id', id).maybeSingle()
+                ]);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
                 const impressions = rows.filter(r => r.event_type === 'impression').length;
@@ -493,6 +496,42 @@ export default async function handler(req, res) {
                     devices: bucket(r => (r.meta && r.meta.device) || '(unknown)')
                 } : null;
 
+                // ── YouTube lifecycle breakdown: upcoming / live / replay ─────────
+                // Each tracked event is bucketed by the phase it happened in, using
+                // the SAME date logic as api/embed.js (created_at vs the event_mode
+                // dates). 'closed' (opt-in shut, before live) folds into 'upcoming'.
+                let byPhase = null;
+                const em = campRow && campRow.event_mode;
+                if (em && em.enabled && (em.live_at || em.live_until)) {
+                    const liveAt = em.live_at ? new Date(em.live_at).getTime() : null;
+                    const liveUntil = em.live_until ? new Date(em.live_until).getTime() : null;
+                    const phaseAt = (ts) => {
+                        const t = new Date(ts).getTime();
+                        if (liveAt && t < liveAt) return 'upcoming';                 // opt-in + closed
+                        if ((!liveAt || t >= liveAt) && (!liveUntil || t <= liveUntil)) return 'live';
+                        return 'replay';
+                    };
+                    const mk = () => ({ impressions: 0, clicks: 0, dismissals: 0, _impU: new Set(), _clkU: new Set() });
+                    const buckets = { upcoming: mk(), live: mk(), replay: mk() };
+                    rows.forEach(r => {
+                        const b = buckets[phaseAt(r.created_at)]; if (!b) return;
+                        if (r.event_type === 'impression') { b.impressions++; if (r.user_id) b._impU.add(r.user_id); }
+                        else if (r.event_type === 'click') { b.clicks++; if (r.user_id) b._clkU.add(r.user_id); }
+                        else if (r.event_type === 'dismiss') { b.dismissals++; }
+                    });
+                    const finalize = (b) => {
+                        const ui = b._impU.size, uc = b._clkU.size;
+                        return { impressions: b.impressions, clicks: b.clicks, dismissals: b.dismissals,
+                            unique_impressions: ui, unique_clicks: uc, ctr: ui ? Math.round((uc / ui) * 1000) / 10 : 0 };
+                    };
+                    byPhase = {
+                        upcoming: finalize(buckets.upcoming),
+                        live: finalize(buckets.live),
+                        replay: finalize(buckets.replay),
+                        window: { opt_in_until: em.opt_in_until || null, live_at: em.live_at || null, live_until: em.live_until || null }
+                    };
+                }
+
                 return ok(res, {
                     impressions, clicks, dismissals,
                     unique_impressions: uImp, unique_clicks: uClick,
@@ -502,6 +541,7 @@ export default async function handler(req, res) {
                     viewers: peopleFor('impression'),
                     dismissers: peopleFor('dismiss'),
                     ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null,
+                    by_phase: byPhase,
                     by_site: bySite,
                     traffic
                 });

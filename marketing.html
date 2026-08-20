@@ -2017,6 +2017,7 @@ async function showStats(id, title){
       <div>${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
       <div style="margin-top:6px;">Clicks by channel: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff · <b>${s.clicks_by_audience.prospect||0}</b> prospect · <b>${s.clicks_by_audience.ghl||0}</b> GHL · <b>${s.clicks_by_audience.website||0}</b> website</div>
     </div>
+    ${phaseSection(s.by_phase)}
     ${abSection(s.ab)}
     ${siteSection(s.by_site)}
     ${trafficSection(s.traffic)}
@@ -2125,6 +2126,33 @@ async function loadConversions(id, clicks){
     </div>
     ${rate!=null?`<div class="muted" style="font-size:12px;margin-top:6px;">${rate}% of clicks converted.</div>`:''}
     ${rows||'<div class="muted" style="font-size:12px;margin-top:6px;">No conversions in this campaign window yet.</div>'}`;
+}
+
+// YouTube lifecycle breakdown: views/clicks/CTR per phase (upcoming/live/replay).
+function phaseSection(bp){
+  if (!bp) return '';
+  const fmt=function(iso){ if(!iso) return '—'; try{ return new Intl.DateTimeFormat('en-US',{timeZone:COMPANY_TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso)); }catch(e){ return new Date(iso).toLocaleString(); } };
+  const w=bp.window||{};
+  const meta={
+    upcoming:{label:'Upcoming',icon:'schedule',color:'#0369a1',when:(w.opt_in_until?('opt-in until '+fmt(w.opt_in_until)):'before '+fmt(w.live_at))},
+    live:{label:'Live',icon:'sensors',color:'#dc2626',when:(fmt(w.live_at)+' → '+(w.live_until?fmt(w.live_until):'end'))},
+    replay:{label:'Replay',icon:'replay',color:'#6d28d9',when:(w.live_until?('after '+fmt(w.live_until)):'after the event')}
+  };
+  const card=function(key){
+    const p=bp[key]||{impressions:0,clicks:0,ctr:0,unique_impressions:0,unique_clicks:0}; const m=meta[key];
+    return `<div class="statbox" style="text-align:left;border-top:3px solid ${m.color};">
+      <div class="l" style="margin:0 0 6px;display:flex;align-items:center;gap:5px;color:${m.color};font-weight:800;"><span class="material-icons" style="font-size:15px;">${m.icon}</span>${m.label}</div>
+      <div style="display:flex;gap:14px;align-items:baseline;">
+        <div><div style="font-size:19px;font-weight:800;font-family:'DM Mono',monospace;">${p.impressions}</div><div class="muted" style="font-size:11px;">views</div></div>
+        <div><div style="font-size:19px;font-weight:800;font-family:'DM Mono',monospace;">${p.clicks}</div><div class="muted" style="font-size:11px;">clicks</div></div>
+        <div><div style="font-size:19px;font-weight:800;font-family:'DM Mono',monospace;color:var(--green);">${p.ctr}%</div><div class="muted" style="font-size:11px;">CTR</div></div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:6px;">${p.unique_impressions} unique viewers · ${p.unique_clicks} unique clickers</div>
+      <div class="muted" style="font-size:10.5px;margin-top:3px;opacity:.8;">${m.when}</div>
+    </div>`;
+  };
+  return `<label class="fld" style="margin-top:16px;">📺 YouTube lifecycle stats <span class="muted" style="font-weight:400;">(by phase, times in ${esc(COMPANY_TZ)})</span></label>
+    <div class="statgrid" style="grid-template-columns:repeat(3,1fr);">${card('upcoming')}${card('live')}${card('replay')}</div>`;
 }
 
 // A/B comparison block (only when the campaign has variant events).
