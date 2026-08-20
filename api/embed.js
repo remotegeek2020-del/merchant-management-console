@@ -10,7 +10,7 @@
 // anonymous visitor id.
 
 import { createClient } from '@supabase/supabase-js';
-import { ghlUpsertContact } from './_ghl.js';
+import { ghlUpsertContact, ghlAddContactToWorkflow } from './_ghl.js';
 import { emailFromViewer, normEmail, recordOptin, optedInIds } from './_marketing-optins.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -253,6 +253,18 @@ export default async function handler(req, res) {
                 target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null,
                 meta: cleanMeta(body.meta), country
             });
+            // Identified CTA click → trigger the campaign's HighLevel workflow (only
+            // works when we know the viewer's email; anonymous clicks can't be enrolled).
+            if (event_type === 'click' && (target === 'cta' || !target) && viewerEmail) {
+                try {
+                    const { data: c } = await supabase.from('marketing_campaigns').select('click_workflow').eq('id', campaign_id).maybeSingle();
+                    const cw = c && c.click_workflow;
+                    if (cw && cw.enabled && cw.location_id) {
+                        const up = await ghlUpsertContact(cw.location_id, { email: viewerEmail }, Array.isArray(cw.tags) ? cw.tags : []);
+                        if (up.ok && up.id && cw.workflow_id) await ghlAddContactToWorkflow(cw.location_id, up.id, cw.workflow_id);
+                    }
+                } catch (_) { /* best-effort */ }
+            }
             return ok(res, { logged: true });
         }
 

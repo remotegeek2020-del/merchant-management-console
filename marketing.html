@@ -460,6 +460,21 @@
 
       <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px;">
         <label style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;cursor:pointer;margin:0;">
+          <span class="switch"><input type="checkbox" id="f_cw_enabled" onchange="toggleClickWf(this)"><span class="slider"></span></span> When clicked → trigger a HighLevel workflow
+        </label>
+        <div class="muted" style="font-size:11px;margin:6px 0 8px;">Fires for <b>portal</b> clicks (partner/lead) — which otherwise never reach HighLevel — and for embed clicks where we know the visitor's email. On click we upsert the person in the sub-account, apply any tags, and enroll them in the workflow.</div>
+        <div id="clickWfFields" style="display:none;">
+          <label class="fld" style="margin-top:0;">Sub-account</label>
+          <select class="sel" id="cw_location" onchange="loadClickWf()"><option value="">— select —</option></select>
+          <label class="fld">Workflow</label>
+          <select class="sel" id="cw_workflow"><option value="">— pick a sub-account first —</option></select>
+          <label class="fld">Tags to apply on click <span class="muted" style="font-weight:400;">(comma-separated, optional)</span></label>
+          <input class="inp" id="cw_tags" placeholder="e.g. webinar-clicked, hot-lead">
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px;">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;cursor:pointer;margin:0;">
           <span class="switch"><input type="checkbox" id="f_ab_enabled" onchange="onAbToggle()"><span class="slider"></span></span> A/B test — show two versions & compare CTR
         </label>
         <div id="abFields" style="display:none;margin-top:12px;">
@@ -1028,6 +1043,7 @@ function openEditor(type){
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('gate_location').innerHTML='<option value="">— select —</option>'; document.getElementById('gate_form').innerHTML='<option value="">— pick a sub-account first —</option>'; document.getElementById('f_gate_until').value='';
+  document.getElementById('f_cw_enabled').checked=false; document.getElementById('clickWfFields').style.display='none'; document.getElementById('cw_location').innerHTML='<option value="">— select —</option>'; document.getElementById('cw_workflow').innerHTML='<option value="">— pick a sub-account first —</option>'; document.getElementById('cw_tags').value='';
   ['f_optin_until','f_live_at','f_live_until','f_pre_label','f_pre_url','f_pre_headline','f_closed_label','f_closed_url','f_closed_headline','f_live_label','f_live_url','f_live_headline','f_replay_label','f_replay_url','f_replay_headline'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   // YouTube kind → show the event lifecycle block and turn it on; Classic → hide it.
   var _kind = window._campaignKind || 'classic';
@@ -1093,6 +1109,9 @@ async function editCampaign(id){
   { var g=c.cta_gate||{}; document.getElementById('f_gate_enabled').checked=!!g.enabled; document.getElementById('gateFields').style.display=g.enabled?'block':'none';
     document.getElementById('f_gate_until').value = g.until ? toLocalInput(g.until) : '';
     if(g.enabled){ populateGateLocations(g.location_id||'').then(function(){ if(g.location_id) return loadGateForms(g.form_id||''); }); } }
+  { var cw=c.click_workflow||{}; document.getElementById('f_cw_enabled').checked=!!cw.enabled; document.getElementById('clickWfFields').style.display=cw.enabled?'block':'none';
+    document.getElementById('cw_tags').value=Array.isArray(cw.tags)?cw.tags.join(', '):'';
+    if(cw.enabled){ populateClickWfLocations(cw.location_id||'').then(function(){ if(cw.location_id) return loadClickWf(cw.workflow_id||''); }); } }
   { var em=c.event_mode||{}; var isYT=(c.campaign_kind==='youtube')||!!em.enabled; window._campaignKind=isYT?'youtube':'classic';
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1364,6 +1383,11 @@ async function saveCampaign(){
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
     cta_gate: (document.getElementById('f_gate_enabled').checked && document.getElementById('gate_form').value)
       ? { enabled:true, form_id:document.getElementById('gate_form').value, location_id:document.getElementById('gate_location').value||null, until: fromLocalInput(document.getElementById('f_gate_until').value) } : null,
+    click_workflow: (document.getElementById('f_cw_enabled').checked && document.getElementById('cw_location').value)
+      ? { enabled:true, location_id:document.getElementById('cw_location').value,
+          workflow_id:document.getElementById('cw_workflow').value||null,
+          workflow_name:(document.getElementById('cw_workflow').options[document.getElementById('cw_workflow').selectedIndex]||{}).text||null,
+          tags:(document.getElementById('cw_tags').value||'').split(',').map(t=>t.trim()).filter(Boolean) } : { enabled:false },
     campaign_kind: window._campaignKind || (document.getElementById('f_event_enabled').checked ? 'youtube' : 'classic'),
     event_mode: document.getElementById('f_event_enabled').checked ? {
       enabled:true,
@@ -1939,6 +1963,29 @@ async function loadGateForms(preFormId){
   fSel.innerHTML='<option value="">— select a form —</option>'+forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
   if(!forms.length) fSel.innerHTML='<option value="">No forms found (check this sub-account’s token)</option>';
   if(preFormId){ if(!Array.from(fSel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; fSel.appendChild(o);} fSel.value=preFormId; }
+}
+// ── Click → HighLevel workflow ──────────────────────────────────────────────
+async function toggleClickWf(cb){
+  document.getElementById('clickWfFields').style.display=cb.checked?'block':'none';
+  if(cb.checked && document.getElementById('cw_location').options.length<=1) await populateClickWfLocations('');
+}
+async function populateClickWfLocations(selectedId){
+  const sel=document.getElementById('cw_location');
+  const data=await getGhlLocations();
+  const locs=(data.locations||[]);
+  sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent=selectedId; sel.appendChild(o);} sel.value=selectedId; }
+}
+async function loadClickWf(preWfId){
+  const loc=document.getElementById('cw_location').value;
+  const wSel=document.getElementById('cw_workflow');
+  if(!loc){ wSel.innerHTML='<option value="">— pick a sub-account first —</option>'; return; }
+  wSel.innerHTML='<option value="">Loading…</option>';
+  const r=await api({action:'ghl_workflows',location_id:loc});
+  const wfs=(r.success?r.data:[])||[];
+  wSel.innerHTML='<option value="">— none (upsert + tags only) —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}${w.status&&w.status!=='published'?' ('+esc(w.status)+')':''}</option>`).join('');
+  if(!wfs.length) wSel.innerHTML='<option value="">No workflows found (check this sub-account’s token)</option>';
+  if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
 }
 async function scanCta(btn){
   const url=(document.getElementById('f_cta_url').value||'').trim();

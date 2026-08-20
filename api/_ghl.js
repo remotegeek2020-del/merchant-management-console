@@ -94,6 +94,28 @@ export async function ghlListTags(locationId) {
     return (d?.tags || []).map(t => ({ id: t.id, name: t.name || t.id }));
 }
 
+// Workflows in a sub-account (for the "click → trigger workflow" picker).
+export async function ghlListWorkflows(locationId) {
+    const d = await locGet(locationId, `/workflows/?locationId=${encodeURIComponent(locationId)}`);
+    return (d?.workflows || []).map(w => ({ id: w.id, name: w.name || w.id, status: w.status || '' }));
+}
+
+// Enroll a contact into a HighLevel workflow (fires its automation).
+export async function ghlAddContactToWorkflow(locationId, contactId, workflowId) {
+    if (!locationId || !contactId || !workflowId) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}/workflow/${encodeURIComponent(workflowId)}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
 // Create/update a contact in a sub-account with optional tags (lead push).
 export async function ghlUpsertContact(locationId, contact = {}, tags = []) {
     const lt = await ghlLocationToken(locationId);

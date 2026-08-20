@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
@@ -90,6 +90,38 @@ async function syncCampaignOptins(c) {
         const list = await convFetch(c);
         return await recordOptins(supabase, c.id, list, 'ghl_sync');
     } catch (_) { return 0; }
+}
+
+// Fire a campaign's "click → HighLevel workflow" action for one clicker.
+// Upserts the contact in the configured sub-account (with tags) and enrolls them
+// in the chosen workflow. Best-effort/non-blocking — a click is never held up or
+// failed because GHL is slow/down. `person` = { name, email, phone }.
+async function fireClickWorkflow(campaignId, person) {
+    try {
+        if (!person || !person.email) return;   // need an identity to upsert
+        const { data: c } = await supabase.from('marketing_campaigns').select('click_workflow').eq('id', campaignId).maybeSingle();
+        const cw = c && c.click_workflow;
+        if (!cw || !cw.enabled || !cw.location_id) return;
+        const up = await ghlUpsertContact(cw.location_id, person, Array.isArray(cw.tags) ? cw.tags : []);
+        if (up.ok && up.id && cw.workflow_id) {
+            await ghlAddContactToWorkflow(cw.location_id, up.id, cw.workflow_id);
+        }
+    } catch (_) { /* best-effort */ }
+}
+
+// Resolve a portal viewer's contact details (name/email/phone) for the workflow push.
+async function viewerContactOf(who) {
+    if (!who || !who.id) return null;
+    try {
+        if (who.type === 'partner') {
+            const { data } = await supabase.from('persons').select('full_name, email, phone_number').eq('id', who.id).maybeSingle();
+            if (data && data.email) return { name: data.full_name || '', email: data.email, phone: data.phone_number || '' };
+        } else if (who.type === 'staff') {
+            const { data } = await supabase.from('app_users').select('first_name, last_name, email').eq('userid', who.id).maybeSingle();
+            if (data && data.email) return { name: `${data.first_name || ''} ${data.last_name || ''}`.trim(), email: data.email, phone: '' };
+        }
+    } catch (_) { /* ignore */ }
+    return null;
 }
 
 // ── Conversions (GHL) helpers, shared by get_conversions / export / dashboard ──
@@ -195,7 +227,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -343,6 +375,16 @@ export default async function handler(req, res) {
                     conv_location_id: b.conv_location_id || null,
                     conv_form_id: b.conv_form_id || null, conv_form_name: b.conv_form_name || null,
                     conv_calendar_id: b.conv_calendar_id || null, conv_calendar_name: b.conv_calendar_name || null,
+                    // "When clicked → trigger a HighLevel workflow" (portal + identified embed clicks).
+                    click_workflow: (b.click_workflow && b.click_workflow.enabled && b.click_workflow.location_id)
+                        ? {
+                            enabled: true,
+                            location_id: String(b.click_workflow.location_id).trim(),
+                            workflow_id: b.click_workflow.workflow_id ? String(b.click_workflow.workflow_id).trim() : null,
+                            workflow_name: b.click_workflow.workflow_name ? String(b.click_workflow.workflow_name).slice(0, 200) : null,
+                            tags: Array.isArray(b.click_workflow.tags) ? b.click_workflow.tags.map(t => String(t).slice(0, 80)).filter(Boolean).slice(0, 20) : []
+                        }
+                        : {},
                     // CTA opt-in gate (external sites only): a HighLevel form shown before
                     // the CTA link (e.g. a YouTube live). Submissions become conversions.
                     cta_gate: (b.cta_gate && b.cta_gate.enabled && b.cta_gate.form_id)
@@ -829,6 +871,10 @@ export default async function handler(req, res) {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListCalendars(req.body.location_id));
             }
+            if (action === 'ghl_workflows') {
+                if (!req.body.location_id) return ok(res, []);
+                return ok(res, await ghlListWorkflows(req.body.location_id));
+            }
 
             // Scan a CTA landing page for an embedded GHL form / calendar and
             // return its type + id (handles GHL widgets embedded on Webflow).
@@ -1196,6 +1242,13 @@ export default async function handler(req, res) {
                     campaign_id, user_id: who.id, user_type: who.type, event_type,
                     target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null
                 });
+                // Portal CTA click → trigger the campaign's HighLevel workflow (the
+                // hole: portal clicks otherwise never reach GHL). Awaited so it runs
+                // before the serverless function freezes; best-effort inside.
+                if (event_type === 'click' && (target === 'cta' || !target)) {
+                    const person = await viewerContactOf(who);
+                    if (person) await fireClickWorkflow(campaign_id, person);
+                }
                 return ok(res, { logged: true });
             }
 
