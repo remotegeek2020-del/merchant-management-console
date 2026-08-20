@@ -175,6 +175,9 @@ export default async function handler(req, res) {
                         if (em.closed_headline) headline = em.closed_headline;
                     } else if (liveAt && nowMs < liveAt) {
                         eventPhase = 'pre';                       // gated "save your spot"
+                        // In YouTube mode the opt-in window (this phase) governs the gate,
+                        // so keep the form active regardless of any separate gate-expiry.
+                        if (c.cta_gate && c.cta_gate.enabled && c.cta_gate.form_id) gateActive = true;
                         if (em.pre_label) ctaLabel = em.pre_label;
                         if (em.pre_url) ctaUrl = em.pre_url;
                         if (em.pre_headline) headline = em.pre_headline;

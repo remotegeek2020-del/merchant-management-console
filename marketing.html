@@ -238,10 +238,11 @@
               <div><label class="fld" style="margin-top:0;">HighLevel sub-account</label><select class="sel" id="gate_location" onchange="loadGateForms()"><option value="">— select —</option></select></div>
               <div><label class="fld" style="margin-top:0;">Opt-in form</label><select class="sel" id="gate_form"><option value="">— pick a sub-account first —</option></select></div>
             </div>
-            <div style="margin-top:8px;"><label class="fld" style="margin-top:0;">Gate expires <span class="muted">(optional)</span></label>
+            <div style="margin-top:8px;" id="gateExpiresRow"><label class="fld" style="margin-top:0;">Gate expires <span class="muted">(optional)</span></label>
               <input class="inp" type="datetime-local" id="f_gate_until">
               <div class="muted" style="font-size:11px;margin-top:3px;">🕓 In your timezone: <b id="tzLabelGate">…</b>. After this time the form is skipped and the button goes straight to the link (e.g. once the live has started, send people right to the replay). Leave blank to always gate.</div>
             </div>
+            <div id="gateYtNote" class="muted" style="display:none;font-size:11px;margin-top:8px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 10px;color:#0369a1;">For YouTube announcements, the <b>Opt-in closes</b> date below controls when the form stops showing — no separate gate-expiry needed.</div>
           </div>
 
           <!-- ── YOUTUBE EVENT MODE: opt-in → opt-in closed → live → replay (dated) ── -->
@@ -1029,6 +1030,8 @@ function openEditor(type){
   document.getElementById('eventModeBlock').style.display = _isYT ? 'block' : 'none';
   document.getElementById('f_event_enabled').checked = _isYT;
   document.getElementById('eventFields').style.display = _isYT ? 'block' : 'none';
+  document.getElementById('gateExpiresRow').style.display = _isYT ? 'none' : '';
+  document.getElementById('gateYtNote').style.display = _isYT ? 'block' : 'none';
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_sv_scale').value='5';
@@ -1087,6 +1090,8 @@ async function editCampaign(id){
     if(g.enabled){ populateGateLocations(g.location_id||'').then(function(){ if(g.location_id) return loadGateForms(g.form_id||''); }); } }
   { var em=c.event_mode||{}; var isYT=(c.campaign_kind==='youtube')||!!em.enabled; window._campaignKind=isYT?'youtube':'classic';
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
+    document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
+    document.getElementById('gateYtNote').style.display=isYT?'block':'none';
     document.getElementById('f_event_enabled').checked=!!em.enabled; document.getElementById('eventFields').style.display=em.enabled?'block':'none';
     document.getElementById('f_optin_until').value=em.opt_in_until?toLocalInput(em.opt_in_until):'';
     document.getElementById('f_live_at').value=em.live_at?toLocalInput(em.live_at):''; document.getElementById('f_live_until').value=em.live_until?toLocalInput(em.live_until):'';
