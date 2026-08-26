@@ -636,8 +636,10 @@ async function buildPartnersData() {
 
     const partnersData = buildPartnersDataFromCache(cache, dateStr, leaderboardRes.data, freshTopSubmitting, newMerchantsDetail);
 
-    // New partner IDs (agent_identifiers) — this week (rolling 7d) + yesterday (24h),
-    // with agent/company names. Matches how new_agents_this_week is counted.
+    // New partner IDs (agent_identifiers) this week/yesterday, split into:
+    //   • NEW PARTNERS — the partner's FIRST-EVER ID appeared in the window
+    //   • NEW IDs on existing partners — partner existed before, just got more IDs
+    // A partner that merely gets another (e.g. Prime49) ID is NOT a new partner.
     try {
         const weekAgoIso = new Date(Date.now() - 7 * 864e5).toISOString();
         const dayAgoIso = new Date(Date.now() - 1 * 864e5).toISOString();
@@ -649,36 +651,58 @@ async function buildPartnersData() {
             .limit(500);
         const agentIds = [...new Set((newAgentRows || []).map(r => r.agent_id).filter(Boolean))];
         let agMap = {};
+        const earliestByAgent = {};   // agent_id → earliest-ever identifier date
         if (agentIds.length) {
-            const { data: agRows } = await supabase.from('agents').select('id, agent_name, company_id').in('id', agentIds);
+            const [{ data: agRows }, { data: allIds }] = await Promise.all([
+                supabase.from('agents').select('id, agent_name, company_id, created_at').in('id', agentIds),
+                supabase.from('agent_identifiers').select('agent_id, created_at').in('agent_id', agentIds).limit(5000)
+            ]);
             const coIds = [...new Set((agRows || []).map(a => a.company_id).filter(Boolean))];
             let coMap = {};
             if (coIds.length) {
                 const { data: coRows } = await supabase.from('companies').select('id, company_name').in('id', coIds);
                 (coRows || []).forEach(c => { coMap[c.id] = c.company_name; });
             }
-            (agRows || []).forEach(a => { agMap[a.id] = { agent_name: a.agent_name, agent_company: coMap[a.company_id] || '' }; });
+            (agRows || []).forEach(a => { agMap[a.id] = { agent_name: a.agent_name, agent_company: coMap[a.company_id] || '', created_at: a.created_at }; });
+            (allIds || []).forEach(r => {
+                if (!r.agent_id) return;
+                if (!earliestByAgent[r.agent_id] || r.created_at < earliestByAgent[r.agent_id]) earliestByAgent[r.agent_id] = r.created_at;
+            });
         }
-        // Consolidate by PERSON (agent): one entry per partner, listing all their
-        // new IDs — a partner often gets several IDs at once.
+        // A partner is NEW if their first-ever ID (or agent record) falls in the window.
+        const firstSeen = agentId => {
+            const byId = earliestByAgent[agentId];
+            const byAgent = agMap[agentId] && agMap[agentId].created_at;
+            if (byId && byAgent) return byId < byAgent ? byId : byAgent;
+            return byId || byAgent || null;
+        };
+        // Group new-this-week identifiers by partner, listing the new IDs.
         const groupByAgent = rows => {
             const g = {};
             (rows || []).forEach(r => {
                 const info = agMap[r.agent_id] || {};
                 const name = info.agent_name || '—';
                 const key = r.agent_id || ('name:' + name);
-                if (!g[key]) g[key] = { agent_name: name, agent_company: info.agent_company || '', ids: [], created_at: r.created_at };
+                if (!g[key]) g[key] = { agent_id: r.agent_id, agent_name: name, agent_company: info.agent_company || '', ids: [], created_at: r.created_at };
                 if (r.id_string) g[key].ids.push(r.id_string);
                 if (r.created_at > g[key].created_at) g[key].created_at = r.created_at;
             });
             return Object.values(g).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
         };
         const weekGroups = groupByAgent(newAgentRows);
-        const yestGroups = groupByAgent((newAgentRows || []).filter(r => r.created_at >= dayAgoIso));
-        partnersData.newPartnersWeek = weekGroups;
-        partnersData.newPartnersWeekCount = weekGroups.length;          // distinct partners
-        partnersData.newPartnersYesterday = yestGroups;
-        partnersData.newPartnersYesterdayCount = yestGroups.length;
+        const isNew = (grp, sinceIso) => { const fs = firstSeen(grp.agent_id); return fs != null && fs >= sinceIso; };
+
+        const newPartnersWeek = weekGroups.filter(g => isNew(g, weekAgoIso));
+        const newPartnersYesterday = weekGroups.filter(g => isNew(g, dayAgoIso));
+        // Existing partners that only received new IDs this week (not brand new).
+        const newIdsWeek = weekGroups.filter(g => !isNew(g, weekAgoIso));
+
+        partnersData.newPartnersWeek = newPartnersWeek;
+        partnersData.newPartnersWeekCount = newPartnersWeek.length;
+        partnersData.newPartnersYesterday = newPartnersYesterday;
+        partnersData.newPartnersYesterdayCount = newPartnersYesterday.length;
+        partnersData.newIdsWeek = newIdsWeek;
+        partnersData.newIdsWeekCount = newIdsWeek.length;
     } catch (_) { /* non-fatal — report still sends without the new-partners lists */ }
 
     return partnersData;
@@ -1125,16 +1149,19 @@ function buildReportMarkdown(reportType, d) {
         const idPart = ids.length ? ` · ${ids.length > 1 ? 'IDs ' : ''}${ids.join(', ')}` : '';
         return `${p.agent_name || '—'}${p.agent_company ? ` (${p.agent_company})` : ''}${idPart}`;
     };
-    // Show ALL new partners (already consolidated by person), not just a top slice.
-    const npWeek = (d.newPartnersWeek || []).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
-    const npYest = (d.newPartnersYesterday || []).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
+    // Show ALL entries (already consolidated by person), not just a top slice.
+    const listAll = arr => (arr || []).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
+    const npWeek = listAll(d.newPartnersWeek);
+    const npYest = listAll(d.newPartnersYesterday);
+    const newIds = listAll(d.newIdsWeek);
     return `📊 **Partners & Merchants Report** — ${d.date}\n`
         + `• Merchants: **${n(d.totalMerchants)}** (approved **${n(d.approvedMerchants)}**)\n`
         + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
         + `• New merchants — today **${n(d.newMerchantsYesterday)}**, this week **${n(d.newMerchantsThisWeek)}** · Approved this week **${n(d.approvedThisWeek)}**\n`
-        + `• New partners — yesterday **${n(d.newPartnersYesterdayCount != null ? d.newPartnersYesterdayCount : d.newAgentsThisWeek)}**, this week **${n(d.newPartnersWeekCount != null ? d.newPartnersWeekCount : d.newAgentsThisWeek)}**\n`
+        + `• New partners — yesterday **${n(d.newPartnersYesterdayCount || 0)}**, this week **${n(d.newPartnersWeekCount || 0)}** · New IDs on existing partners this week **${n(d.newIdsWeekCount || 0)}**\n`
         + (npYest ? `\n**New partners yesterday:**\n${npYest}\n` : '')
         + (npWeek ? `\n**New partners this week:**\n${npWeek}\n` : '')
+        + (newIds ? `\n**New IDs added to existing partners (this week):**\n${newIds}\n` : '')
         + (topP ? `\n**Top submitting partners (this week):**\n${topP}` : '');
 }
 
