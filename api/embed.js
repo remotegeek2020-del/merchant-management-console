@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { ghlUpsertContact, ghlAddContactToWorkflow } from './_ghl.js';
 import { emailFromViewer, normEmail, recordOptin, optedInIds } from './_marketing-optins.js';
+import { ytEmbed } from './_yt.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -170,7 +171,7 @@ export default async function handler(req, res) {
                 const dm = c.display_mode || 'card_dismissible';
                 const behavior = dm.slice(dm.indexOf('_') + 1) || 'dismissible';
                 // ── 3-phase event mode: gated (pre) → live → replay, by date ──
-                let ctaLabel = v.cta_label, ctaUrl = v.cta_url, headline = v.title, eventPhase = null;
+                let ctaLabel = v.cta_label, ctaUrl = v.cta_url, headline = v.title, bodyText = v.body_text, eventPhase = null, videoUrl = null;
                 let gateActive = (c.cta_gate && c.cta_gate.enabled && c.cta_gate.form_id && (!c.cta_gate.until || Date.now() < new Date(c.cta_gate.until).getTime()));
                 const em = c.event_mode;
                 if (em && em.enabled && (em.live_at || em.live_until)) {
@@ -184,6 +185,7 @@ export default async function handler(req, res) {
                         if (em.closed_label) ctaLabel = em.closed_label;
                         ctaUrl = em.closed_url || null;           // usually no link — info-only "starting soon"
                         if (em.closed_headline) headline = em.closed_headline;
+                        if (em.closed_body) bodyText = em.closed_body;
                     } else if (liveAt && nowMs < liveAt) {
                         eventPhase = 'pre';                       // gated "save your spot"
                         // In YouTube mode the opt-in window (this phase) governs the gate,
@@ -192,24 +194,30 @@ export default async function handler(req, res) {
                         if (em.pre_label) ctaLabel = em.pre_label;
                         if (em.pre_url) ctaUrl = em.pre_url;
                         if (em.pre_headline) headline = em.pre_headline;
+                        if (em.pre_body) bodyText = em.pre_body;
                     } else if ((!liveAt || nowMs >= liveAt) && (!liveUntil || nowMs <= liveUntil)) {
                         eventPhase = 'live';                      // happening now → watch live, ungated
                         gateActive = false;
                         if (em.live_label) ctaLabel = em.live_label;
                         if (em.live_url) ctaUrl = em.live_url;
                         if (em.live_headline) headline = em.live_headline;
+                        if (em.live_body) bodyText = em.live_body;
+                        // Play the video right inside the popup; CTA becomes "watch on YouTube".
+                        videoUrl = ytEmbed(em.live_url || ctaUrl);
                     } else {
                         eventPhase = 'replay';                    // after event → watch replay, ungated
                         gateActive = false;
                         if (em.replay_label) ctaLabel = em.replay_label;
                         if (em.replay_url) ctaUrl = em.replay_url;
                         if (em.replay_headline) headline = em.replay_headline;
+                        if (em.replay_body) bodyText = em.replay_body;
+                        videoUrl = ytEmbed(em.replay_url || ctaUrl);
                     }
                 }
                 return {
-                    id: c.id, title: headline, body_text: v.body_text, image_url: v.image_url,
+                    id: c.id, title: headline, body_text: bodyText, image_url: v.image_url,
                     content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: ctaLabel,
-                    cta_url: ctaUrl, hotspots: v.hotspots || [], priority: c.priority,
+                    cta_url: ctaUrl, video_url: videoUrl, hotspots: v.hotspots || [], priority: c.priority,
                     behavior, reshow_minutes: c.reshow_minutes || 5, survey: c.survey || null, theme: c.theme || null,
                     embed_format: c.embed_format || 'modal', embed_trigger: c.embed_trigger || 'load', embed_delay: c.embed_delay || 5,
                     event_phase: eventPhase,

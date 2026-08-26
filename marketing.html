@@ -270,13 +270,18 @@
             <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
             <input class="inp" id="f_closed_headline" placeholder="e.g. Starting soon — doors closing!" style="margin-top:2px;">
             <div style="margin-top:10px;font-size:11px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.4px;">③ Happening now — “Watch live” 🔴 (shows a LIVE badge)</div>
-            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_live_label" placeholder="🔴 Watch it live now"></div><div><label class="fld" style="margin-top:2px;">Live link</label><input class="inp" id="f_live_url" placeholder="https://youtube.com/live/…"></div></div>
+            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_live_label" placeholder="🔴 Watch it live now"></div><div><label class="fld" style="margin-top:2px;">Live link (YouTube)</label><input class="inp" id="f_live_url" placeholder="https://youtube.com/live/…"></div></div>
+            <div class="muted" style="font-size:11px;margin-top:4px;">📺 While live, the YouTube video plays right inside the announcement pop-up; the button below still links out to YouTube for anyone who prefers to watch there.</div>
             <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
             <input class="inp" id="f_live_headline" placeholder="e.g. 🔴 We’re live now — join us!" style="margin-top:2px;">
+            <label class="fld" style="margin-top:6px;">Description for this phase <span class="muted">(optional — defaults to the main description)</span></label>
+            <textarea class="inp" id="f_live_body" rows="2" placeholder="e.g. We’re live! Watch below or open it on YouTube." style="margin-top:2px;resize:vertical;"></textarea>
             <div style="margin-top:10px;font-size:11px;font-weight:800;color:#6d28d9;text-transform:uppercase;letter-spacing:.4px;">④ After — “Watch the replay”</div>
-            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_replay_label" placeholder="Watch the replay"></div><div><label class="fld" style="margin-top:2px;">Replay link</label><input class="inp" id="f_replay_url" placeholder="https://youtube.com/watch?v=…"></div></div>
+            <div class="row2"><div><label class="fld" style="margin-top:2px;">Button label</label><input class="inp" id="f_replay_label" placeholder="Watch the replay"></div><div><label class="fld" style="margin-top:2px;">Replay link (YouTube)</label><input class="inp" id="f_replay_url" placeholder="https://youtube.com/watch?v=…"></div></div>
             <label class="fld" style="margin-top:6px;">Announcement title for this phase <span class="muted">(optional — defaults to the main title)</span></label>
             <input class="inp" id="f_replay_headline" placeholder="e.g. Missed it? Watch the replay" style="margin-top:2px;">
+            <label class="fld" style="margin-top:6px;">Description for this phase <span class="muted">(optional — defaults to the main description)</span></label>
+            <textarea class="inp" id="f_replay_body" rows="2" placeholder="e.g. Couldn’t make it live? Catch the full replay below." style="margin-top:2px;resize:vertical;"></textarea>
           </div>
           </div>
         </div>
@@ -623,6 +628,30 @@
       <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('statsModal').style.display='none'">close</span>
     </div>
     <div class="modal-body" id="statsBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="sendStatsModal">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">send</span>
+      <h2>Send stats</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('sendStatsModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body">
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">Email this campaign's stats (conversions first) to selected users. Add extra emails if needed.</div>
+      <input class="inp" id="ssRecipSearch" placeholder="Search users…" oninput="ssFilterRecips()" style="margin-bottom:8px;">
+      <div id="ssRecipList" style="max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px;">
+        <div class="muted" style="font-size:12px;padding:10px;text-align:center;">Loading users…</div>
+      </div>
+      <label class="fld" style="margin-top:10px;">Also send to (comma-separated emails)</label>
+      <input class="inp" id="ssExtraEmails" placeholder="e.g. boss@company.com, owner@company.com">
+      <div id="ssSendResult" class="muted" style="font-size:12px;margin-top:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        <button class="btn btn-neutral" onclick="document.getElementById('sendStatsModal').style.display='none'">Cancel</button>
+        <button class="btn btn-brand" id="ssSendBtn" onclick="doSendStats(this)"><span class="material-icons" style="font-size:16px;">send</span> Send now</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1044,7 +1073,7 @@ function openEditor(type){
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_gate_enabled').checked=false; document.getElementById('gateFields').style.display='none'; document.getElementById('gate_location').innerHTML='<option value="">— select —</option>'; document.getElementById('gate_form').innerHTML='<option value="">— pick a sub-account first —</option>'; document.getElementById('f_gate_until').value='';
   document.getElementById('f_cw_enabled').checked=false; document.getElementById('clickWfFields').style.display='none'; document.getElementById('cw_location').innerHTML='<option value="">— select —</option>'; document.getElementById('cw_workflow').innerHTML='<option value="">— pick a sub-account first —</option>'; document.getElementById('cw_tags').value='';
-  ['f_optin_until','f_live_at','f_live_until','f_pre_label','f_pre_url','f_pre_headline','f_closed_label','f_closed_url','f_closed_headline','f_live_label','f_live_url','f_live_headline','f_replay_label','f_replay_url','f_replay_headline'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  ['f_optin_until','f_live_at','f_live_until','f_pre_label','f_pre_url','f_pre_headline','f_closed_label','f_closed_url','f_closed_headline','f_live_label','f_live_url','f_live_headline','f_live_body','f_replay_label','f_replay_url','f_replay_headline','f_replay_body'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   // YouTube kind → show the event lifecycle block and turn it on; Classic → hide it.
   var _kind = window._campaignKind || 'classic';
   var _isYT = (type==='announcement' && _kind==='youtube');
@@ -1121,8 +1150,8 @@ async function editCampaign(id){
     document.getElementById('f_live_at').value=em.live_at?toLocalInput(em.live_at):''; document.getElementById('f_live_until').value=em.live_until?toLocalInput(em.live_until):'';
     document.getElementById('f_pre_label').value=em.pre_label||''; document.getElementById('f_pre_url').value=em.pre_url||''; document.getElementById('f_pre_headline').value=em.pre_headline||'';
     document.getElementById('f_closed_label').value=em.closed_label||''; document.getElementById('f_closed_url').value=em.closed_url||''; document.getElementById('f_closed_headline').value=em.closed_headline||'';
-    document.getElementById('f_live_label').value=em.live_label||''; document.getElementById('f_live_url').value=em.live_url||''; document.getElementById('f_live_headline').value=em.live_headline||'';
-    document.getElementById('f_replay_label').value=em.replay_label||''; document.getElementById('f_replay_url').value=em.replay_url||''; document.getElementById('f_replay_headline').value=em.replay_headline||''; }
+    document.getElementById('f_live_label').value=em.live_label||''; document.getElementById('f_live_url').value=em.live_url||''; document.getElementById('f_live_headline').value=em.live_headline||''; document.getElementById('f_live_body').value=em.live_body||'';
+    document.getElementById('f_replay_label').value=em.replay_label||''; document.getElementById('f_replay_url').value=em.replay_url||''; document.getElementById('f_replay_headline').value=em.replay_headline||''; document.getElementById('f_replay_body').value=em.replay_body||''; }
   loadTheme(c.theme);
   await loadSurvey(c.survey);
   document.getElementById('f_audience').value=c.audience||'partner';
@@ -1396,8 +1425,8 @@ async function saveCampaign(){
       live_until: fromLocalInput(document.getElementById('f_live_until').value),
       pre_label: document.getElementById('f_pre_label').value.trim()||null, pre_url: document.getElementById('f_pre_url').value.trim()||null, pre_headline: document.getElementById('f_pre_headline').value.trim()||null,
       closed_label: document.getElementById('f_closed_label').value.trim()||null, closed_url: document.getElementById('f_closed_url').value.trim()||null, closed_headline: document.getElementById('f_closed_headline').value.trim()||null,
-      live_label: document.getElementById('f_live_label').value.trim()||null, live_url: document.getElementById('f_live_url').value.trim()||null, live_headline: document.getElementById('f_live_headline').value.trim()||null,
-      replay_label: document.getElementById('f_replay_label').value.trim()||null, replay_url: document.getElementById('f_replay_url').value.trim()||null, replay_headline: document.getElementById('f_replay_headline').value.trim()||null
+      live_label: document.getElementById('f_live_label').value.trim()||null, live_url: document.getElementById('f_live_url').value.trim()||null, live_headline: document.getElementById('f_live_headline').value.trim()||null, live_body: document.getElementById('f_live_body').value.trim()||null,
+      replay_label: document.getElementById('f_replay_label').value.trim()||null, replay_url: document.getElementById('f_replay_url').value.trim()||null, replay_headline: document.getElementById('f_replay_headline').value.trim()||null, replay_body: document.getElementById('f_replay_body').value.trim()||null
     } : { enabled:false },
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
@@ -2051,7 +2080,8 @@ async function showStats(id, title){
   const s=r.data;
   const targets = Object.entries(s.clicks_by_target||{});
   document.getElementById('statsBody').innerHTML=`
-    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-brand" onclick='openSendStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">send</span> Send stats</button>
       <button class="btn btn-neutral" onclick='exportClicks(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">download</span> Export clickers (CSV)</button>
     </div>
     <div class="statgrid">
@@ -2247,6 +2277,42 @@ function siteSection(bySite){
   return `<label class="fld">External sites (embed)</label>${rows}`;
 }
 
+// ── Send stats email (with recipient picker) ──
+var _ssStatsId=null, _ssRecips=[];
+async function openSendStats(id, title){
+  _ssStatsId=id;
+  document.getElementById('ssSendResult').textContent='';
+  document.getElementById('ssExtraEmails').value='';
+  document.getElementById('ssRecipSearch').value='';
+  document.getElementById('sendStatsModal').style.display='flex';
+  if(!_ssRecips.length){
+    const r=await api({action:'staff_recipients'});
+    _ssRecips=(r.success&&Array.isArray(r.data))?r.data:[];
+  }
+  renderSsRecips('');
+}
+function renderSsRecips(q){
+  q=(q||'').toLowerCase();
+  const list=document.getElementById('ssRecipList');
+  const rows=_ssRecips.filter(u=>!q||(u.name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q));
+  if(!rows.length){ list.innerHTML='<div class="muted" style="font-size:12px;padding:10px;text-align:center;">No matching users.</div>'; return; }
+  list.innerHTML=rows.map(u=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px;">
+    <input type="checkbox" class="ss-recip" value="${esc(u.userid)}"> <span style="flex:1;">${esc(u.name)}</span>
+    <span class="muted" style="font-size:11px;">${esc(u.email)}</span></label>`).join('');
+}
+function ssFilterRecips(){ renderSsRecips(document.getElementById('ssRecipSearch').value); }
+async function doSendStats(btn){
+  const ids=Array.from(document.querySelectorAll('.ss-recip:checked')).map(c=>c.value);
+  const emails=(document.getElementById('ssExtraEmails').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(!ids.length && !emails.length){ document.getElementById('ssSendResult').innerHTML='<span style="color:var(--red);">Pick at least one recipient or add an email.</span>'; return; }
+  btn.disabled=true; document.getElementById('ssSendResult').textContent='Sending…';
+  const r=await api({action:'send_stats', id:_ssStatsId, user_ids:ids, emails});
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('ssSendResult').innerHTML='<span style="color:var(--red);">'+esc(r.message||'Send failed.')+'</span>'; return; }
+  const d=r.data||{};
+  document.getElementById('ssSendResult').innerHTML='✅ Sent to <b>'+(d.sent||0)+'</b> of '+(d.recipients||0)+(d.failed&&d.failed.length?(' · failed: '+esc(d.failed.join(', '))):'');
+  if(d.sent){ setTimeout(function(){ document.getElementById('sendStatsModal').style.display='none'; }, 1400); }
+}
 // ── CSV export of clickers ──
 function csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 async function exportClicks(id, title){

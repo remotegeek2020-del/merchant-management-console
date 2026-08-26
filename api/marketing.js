@@ -18,6 +18,7 @@ import { setConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
 import { normEmail, recordOptin, recordOptins, optedInIds } from './_marketing-optins.js';
+import { ytEmbed } from './_yt.js';
 
 // Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
 // sites, so this is the authoritative XSS boundary — allowlist only. The
@@ -124,6 +125,88 @@ async function viewerContactOf(who) {
     return null;
 }
 
+// Send an email via platform Postmark (best-effort). Returns {ok,error}.
+async function sendMailPostmark(to, subject, htmlBody, textBody) {
+    if (!process.env.POSTMARK_SERVER_TOKEN || !to) return { ok: false, error: 'no token/recipient' };
+    try {
+        const { ServerClient } = await import('postmark');
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        await client.sendEmail({ From: process.env.EMAIL_FROM, To: to, Subject: subject, HtmlBody: htmlBody, TextBody: textBody || '', MessageStream: 'outbound' });
+        return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// Build a stats summary (conversions-first) for a campaign, for the manual send.
+async function buildStatsSummary(id) {
+    const { data: c } = await supabase.from('marketing_campaigns')
+        .select('title, event_mode, campaign_kind, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
+    if (!c) return null;
+    const [{ data: ev }, { count: optedIn }] = await Promise.all([
+        supabase.from('marketing_events').select('event_type, user_id').eq('campaign_id', id).limit(50000),
+        supabase.from('marketing_optins').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
+    ]);
+    const rows = ev || [];
+    const impressions = rows.filter(r => r.event_type === 'impression').length;
+    const clicks = rows.filter(r => r.event_type === 'click').length;
+    const uImp = new Set(rows.filter(r => r.event_type === 'impression').map(r => r.user_id)).size;
+    const uClick = new Set(rows.filter(r => r.event_type === 'click').map(r => r.user_id)).size;
+    const ctr = uImp ? Math.round((uClick / uImp) * 1000) / 10 : 0;
+    let conv = null;
+    if (c.conv_location_id && (c.conv_form_id || c.conv_calendar_id)) {
+        try {
+            const list = await convFetch(c);
+            const partners = await convEnrichPartners(list, c.conv_location_id, 150);
+            const byType = {};
+            list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
+            conv = { total: list.length, partners, non_partners: list.length - partners, by_type: byType, list: list.slice(0, 50) };
+            recordOptins(supabase, id, list, 'ghl_sync').catch(() => {});
+        } catch (_) { conv = { total: 0, partners: 0, non_partners: 0, by_type: {}, list: [] }; }
+    }
+    return { title: c.title || 'Announcement', impressions, clicks, unique_impressions: uImp, unique_clicks: uClick, ctr, opted_in: optedIn || 0, conversions: conv };
+}
+
+// Render the stats summary → an HTML email (conversions emphasized).
+function statsEmailHtml(s) {
+    const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const tile = (n, l, color) => `<td style="padding:10px 14px;text-align:center;border:1px solid #e2e8f0;border-radius:10px;"><div style="font-size:24px;font-weight:800;color:${color || '#0a1628'};font-family:monospace;">${esc(n)}</div><div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">${esc(l)}</div></td>`;
+    const conv = s.conversions;
+    let convBlock = '';
+    if (conv) {
+        const bt = conv.by_type || {};
+        convBlock = `<h3 style="margin:22px 0 8px;color:#16a34a;">✅ Conversions</h3>
+            <table style="width:100%;border-collapse:separate;border-spacing:8px;"><tr>
+              ${tile(conv.total, 'Total', '#16a34a')}
+              ${tile(conv.partners || 0, 'Current partners', '#92400e')}
+              ${tile(conv.non_partners != null ? conv.non_partners : (conv.total - (conv.partners || 0)), 'New / non-partner')}
+              ${tile(bt.appointment || 0, 'Booked')}
+            </tr></table>`;
+        if (conv.list && conv.list.length) {
+            convBlock += `<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;">
+              <tr style="text-align:left;color:#64748b;"><th style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">Name</th><th style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">Email</th><th style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">Type</th></tr>
+              ${conv.list.slice(0, 30).map(r => `<tr><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(r.name || '')}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(r.email || '')}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(r.type || '')}</td></tr>`).join('')}
+            </table>${conv.total > 30 ? `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">…and ${conv.total - 30} more.</div>` : ''}`;
+        } else {
+            convBlock += `<div style="font-size:12px;color:#94a3b8;margin-top:6px;">No conversions in this campaign window yet.</div>`;
+        }
+    } else {
+        convBlock = `<div style="font-size:12px;color:#94a3b8;margin-top:10px;">No conversion tracking configured for this campaign.</div>`;
+    }
+    return `<div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:auto;padding:28px;color:#1e293b;">
+        <h2 style="color:#004990;margin:0 0 4px;">PayProTec — Campaign Stats</h2>
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px;">${esc(s.title)}</div>
+        ${convBlock}
+        <h3 style="margin:22px 0 8px;color:#0a1628;">Engagement</h3>
+        <table style="width:100%;border-collapse:separate;border-spacing:8px;"><tr>
+          ${tile(s.impressions, 'Views')}
+          ${tile(s.clicks, 'Clicks')}
+          ${tile(s.ctr + '%', 'CTR', '#16a34a')}
+          ${tile(s.opted_in, 'Registered')}
+        </tr></table>
+        <div style="font-size:12px;color:#64748b;margin-top:8px;">${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:12px;">Sent from the PayProTec marketing dashboard.</div>
+    </div>`;
+}
+
 // ── Conversions (GHL) helpers, shared by get_conversions / export / dashboard ──
 const PARTNER_TAG = 'ppt partner';
 async function convFetch(c) {
@@ -227,7 +310,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -400,8 +483,8 @@ export default async function handler(req, res) {
                         live_until: b.event_mode.live_until || null,
                         pre_label: str(b.event_mode.pre_label, 60) || null, pre_url: str(b.event_mode.pre_url, 1000) || null, pre_headline: str(b.event_mode.pre_headline, 160) || null,
                         closed_label: str(b.event_mode.closed_label, 60) || null, closed_url: str(b.event_mode.closed_url, 1000) || null, closed_headline: str(b.event_mode.closed_headline, 160) || null,
-                        live_label: str(b.event_mode.live_label, 60) || null, live_url: str(b.event_mode.live_url, 1000) || null, live_headline: str(b.event_mode.live_headline, 160) || null,
-                        replay_label: str(b.event_mode.replay_label, 60) || null, replay_url: str(b.event_mode.replay_url, 1000) || null, replay_headline: str(b.event_mode.replay_headline, 160) || null
+                        live_label: str(b.event_mode.live_label, 60) || null, live_url: str(b.event_mode.live_url, 1000) || null, live_headline: str(b.event_mode.live_headline, 160) || null, live_body: str(b.event_mode.live_body, 2000) || null,
+                        replay_label: str(b.event_mode.replay_label, 60) || null, replay_url: str(b.event_mode.replay_url, 1000) || null, replay_headline: str(b.event_mode.replay_headline, 160) || null, replay_body: str(b.event_mode.replay_body, 2000) || null
                     } : {},
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -951,6 +1034,42 @@ export default async function handler(req, res) {
                 return ok(res, { campaigns: done, opted_in: total });
             }
 
+            // Staff users who can receive a manually-sent stats email (picker source).
+            if (action === 'staff_recipients') {
+                const { data } = await supabase.from('app_users')
+                    .select('userid, first_name, last_name, email, is_active')
+                    .order('first_name', { ascending: true });
+                const list = (data || [])
+                    .filter(u => u.email && u.is_active !== false)
+                    .map(u => ({ userid: u.userid, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email, email: u.email }));
+                return ok(res, list);
+            }
+
+            // Manually email a campaign's stats (conversions-first) to chosen users.
+            if (action === 'send_stats') {
+                const { id, user_ids, emails } = req.body;
+                if (!id) return bad(res, 'campaign_id required');
+                // Resolve recipient emails from selected staff ids + any free-typed emails.
+                const set = new Set();
+                if (Array.isArray(user_ids) && user_ids.length) {
+                    const { data } = await supabase.from('app_users').select('userid, email').in('userid', user_ids.map(String));
+                    (data || []).forEach(u => { if (u.email) set.add(String(u.email).trim().toLowerCase()); });
+                }
+                if (Array.isArray(emails)) emails.forEach(e => { const n = normEmail(e); if (n) set.add(n); });
+                const recipients = [...set];
+                if (!recipients.length) return bad(res, 'Pick at least one recipient.');
+                const summary = await buildStatsSummary(id);
+                if (!summary) return bad(res, 'Campaign not found.');
+                const html = statsEmailHtml(summary);
+                const subject = `📊 Campaign stats: ${summary.title}`;
+                let sent = 0; const failed = [];
+                for (const to of recipients) {
+                    const r = await sendMailPostmark(to, subject, html, `Stats for ${summary.title}. Conversions: ${summary.conversions ? summary.conversions.total : 'n/a'}, Views: ${summary.impressions}, Clicks: ${summary.clicks}, CTR: ${summary.ctr}%.`);
+                    if (r.ok) sent++; else failed.push(to);
+                }
+                return ok(res, { sent, failed, recipients: recipients.length });
+            }
+
             // ── Webflow connector ────────────────────────────────────────────
             if (action === 'webflow_status') {
                 const token = await webflow.getToken();
@@ -1179,14 +1298,50 @@ export default async function handler(req, res) {
                             };
                         }
                     }
+                    // ── YouTube lifecycle: gated (pre) → live → replay, by date ──
+                    let ctaLabel = v.cta_label, ctaUrl = v.cta_url, headline = v.title, bodyText = v.body_text, eventPhase = null, videoUrl = null;
+                    const em = c.event_mode;
+                    if (em && em.enabled && (em.live_at || em.live_until)) {
+                        const liveAt = em.live_at ? new Date(em.live_at).getTime() : null;
+                        const liveUntil = em.live_until ? new Date(em.live_until).getTime() : null;
+                        const optInUntil = em.opt_in_until ? new Date(em.opt_in_until).getTime() : null;
+                        if (liveAt && now < liveAt && optInUntil && now >= optInUntil) {
+                            eventPhase = 'closed';
+                            if (em.closed_label) ctaLabel = em.closed_label;
+                            ctaUrl = em.closed_url || null;
+                            if (em.closed_headline) headline = em.closed_headline;
+                            if (em.closed_body) bodyText = em.closed_body;
+                        } else if (liveAt && now < liveAt) {
+                            eventPhase = 'pre';
+                            if (em.pre_label) ctaLabel = em.pre_label;
+                            if (em.pre_url) ctaUrl = em.pre_url;
+                            if (em.pre_headline) headline = em.pre_headline;
+                            if (em.pre_body) bodyText = em.pre_body;
+                        } else if ((!liveAt || now >= liveAt) && (!liveUntil || now <= liveUntil)) {
+                            eventPhase = 'live';
+                            if (em.live_label) ctaLabel = em.live_label;
+                            if (em.live_url) ctaUrl = em.live_url;
+                            if (em.live_headline) headline = em.live_headline;
+                            if (em.live_body) bodyText = em.live_body;
+                            videoUrl = ytEmbed(em.live_url || ctaUrl);
+                        } else {
+                            eventPhase = 'replay';
+                            if (em.replay_label) ctaLabel = em.replay_label;
+                            if (em.replay_url) ctaUrl = em.replay_url;
+                            if (em.replay_headline) headline = em.replay_headline;
+                            if (em.replay_body) bodyText = em.replay_body;
+                            videoUrl = ytEmbed(em.replay_url || ctaUrl);
+                        }
+                    }
                     return {
-                        id: c.id, title: v.title, body_text: v.body_text, image_url: v.image_url,
-                        content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: v.cta_label,
-                        cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
+                        id: c.id, title: headline, body_text: bodyText, image_url: v.image_url,
+                        content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: ctaLabel,
+                        cta_url: ctaUrl, video_url: videoUrl, hotspots: v.hotspots || [], priority: c.priority,
                         display_mode: c.display_mode || 'card_dismissible',
                         reshow_minutes: c.reshow_minutes || 5,
                         survey: c.survey || null,
                         theme: c.theme || null,
+                        event_phase: eventPhase,
                         variant
                     };
                 });

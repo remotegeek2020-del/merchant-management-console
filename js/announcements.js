@@ -92,6 +92,7 @@
             /* floating */
             '.ppa-float{position:fixed;right:18px;bottom:52px;z-index:99990;width:300px;max-width:calc(100vw - 36px);background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.18);overflow:hidden;animation:ppaIn .35s ease;}',
             '@keyframes ppaIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}',
+            '@keyframes ppaPulse{0%{opacity:1;}50%{opacity:.35;}100%{opacity:1;}}',
             '.ppa-float .ppa-fimg{position:relative;line-height:0;}',
             '.ppa-float .ppa-fimg img{width:100%;display:block;}',
             '.ppa-float .ppa-fbody{padding:12px 14px;}',
@@ -159,10 +160,13 @@
         if (canDismiss) html += '<button class="ppa-x" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:18px;">close</span></button>';
         if (showGraphic) html += '<div class="ppa-imgwrap"><img src="' + esc(safeUrl(c.image_url)) + '" alt="' + esc(c.title) + '">' + hotspotHtml(c, 'ppa-hotspot') + '</div>';
         var hasSurvey = c.survey && c.survey.enabled;
-        if (showText || (c.cta_enabled && c.cta_url) || hasSurvey) {
+        if (showText || (c.cta_enabled && c.cta_url) || hasSurvey || c.video_url) {
             html += '<div class="ppa-body" style="text-align:' + th.align + ';">';
+            if (c.event_phase === 'live') html += '<div style="display:inline-flex;align-items:center;gap:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:99px;margin-bottom:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:ppaPulse 1.2s infinite;"></span>LIVE NOW</div>';
             if (showText && c.title) html += '<div class="ppa-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
             if (showText && c.body_text) html += '<div class="ppa-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
+            // Live/replay: play the YouTube video inside the card; CTA still links out.
+            if (c.video_url) html += '<div style="position:relative;width:100%;padding-top:56.25%;margin-top:14px;border-radius:10px;overflow:hidden;background:#000;"><iframe src="' + esc(safeUrl(c.video_url)) + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="' + esc(c.title || 'Video') + '"></iframe></div>';
             if (c.cta_enabled && c.cta_url) html += '<div style="margin-top:14px;' + th.btnRow + '"><a class="ppa-cta" style="' + th.btn + th.btnWrap + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a></div>';
             html += surveyHtml(c);
             html += '</div>';

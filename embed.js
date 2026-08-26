@@ -389,6 +389,9 @@
         if (c.event_phase === 'live') inner += '<div style="display:inline-flex;align-items:center;gap:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:99px;margin-bottom:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:ppxpulse 1.2s infinite;"></span>LIVE NOW</div>';
         if (showText && c.title) inner += '<div class="ppx-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
         if (showText && c.body_text) inner += '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
+        // Live/replay: play the YouTube video right in the popup. The CTA below
+        // still links out to YouTube for those who want to watch there.
+        if (c.video_url) inner += '<div style="position:relative;width:100%;padding-top:56.25%;margin-top:14px;border-radius:10px;overflow:hidden;background:#000;"><iframe src="' + esc(safeUrl(c.video_url)) + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="' + esc(c.title || 'Video') + '"></iframe></div>';
         if (c.cta_enabled && c.cta_url) {
             var btnInner;
             if (c.cta_gate && c.cta_gate.form_id) {
