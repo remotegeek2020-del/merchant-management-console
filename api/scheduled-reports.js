@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { ServerClient } from 'postmark';
+import { setConfigValue, getConfigValue } from './api-config.js';
+import { clickUpConfigured, cuListWorkspaces, cuListChannels, cuPostMessage } from './_clickup.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -1013,6 +1015,72 @@ async function getStaffConfig(reportType) {
     };
 }
 
+// ── ClickUp Chat delivery ────────────────────────────────────────────────────
+// Build a concise markdown summary of a report for ClickUp Chat.
+function buildReportMarkdown(reportType, d) {
+    const money = fmt, n = num;
+    if (reportType === 'ops') {
+        const y = d.yesterday || {};
+        return `📦 **Operations Report** — ${d.date}\n`
+            + `• Deployments (${y.label || 'yesterday'}): **${n((y.deployments || []).length)}**\n`
+            + `• Returns (${y.label || 'yesterday'}): **${n((y.returns || []).length)}**`;
+    }
+    if (reportType === 'prime49') {
+        return `💎 **Prime49 Daily Update** — ${d.date}\n`
+            + `• Partners: **${n(d.totalPartners)}** · Merchants: **${n(d.totalMerchants)}**\n`
+            + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
+            + `• Net residual: **${money(d.totalNetResidual)}** (PPT ${money(d.totalPptResidual)} · Agents ${money(d.totalAgentResidual)})\n`
+            + `• New IDs this week: **${n(d.newIdsThisWeek)}** · New merchants — today **${n(d.newMerchantsYesterdayCount)}**, week **${n(d.newMerchantsWeekCount)}**, month **${n(d.newMerchantsMonthCount)}**`;
+    }
+    if (reportType === 'activity') {
+        const top = (d.topUsers || []).slice(0, 5).map((u, i) => `${i + 1}. ${u.name} — ${n(u.count)}`).join('\n');
+        return `📋 **Activity Leaderboard** — ${d.date}\n`
+            + `• ${d.windowLabel}: **${n(d.totalEvents)}** actions by **${n(d.activeUsers)}** users\n`
+            + (top ? `\n**Top users:**\n${top}` : '');
+    }
+    // partners_merchants (default)
+    const topP = (d.topSubmittingPartners || d.topPartners || []).slice(0, 5)
+        .map((p, i) => `${i + 1}. ${p.partner_name || p.name || '—'}${p.merchant_count != null ? ` — ${n(p.merchant_count)}` : ''}`).join('\n');
+    return `📊 **Partners & Merchants Report** — ${d.date}\n`
+        + `• Merchants: **${n(d.totalMerchants)}** (approved **${n(d.approvedMerchants)}**)\n`
+        + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
+        + `• New merchants — today **${n(d.newMerchantsYesterday)}**, this week **${n(d.newMerchantsThisWeek)}** · Approved this week **${n(d.approvedThisWeek)}**\n`
+        + (topP ? `\n**Top partners:**\n${topP}` : '');
+}
+
+// Read the ClickUp report config from app_settings (+ token from app_config).
+async function getClickUpConfig() {
+    const keys = ['clickup_enabled', 'clickup_workspace_id', 'clickup_workspace_name',
+        'clickup_channel_partners_merchants', 'clickup_channel_ops', 'clickup_channel_prime49', 'clickup_channel_activity'];
+    const { data } = await supabase.from('app_settings').select('key, value').in('key', keys);
+    const m = Object.fromEntries((data || []).map(r => [r.key, r.value]));
+    return {
+        enabled: m.clickup_enabled === 'true',
+        workspace_id: m.clickup_workspace_id || '',
+        workspace_name: m.clickup_workspace_name || '',
+        channels: {
+            partners_merchants: m.clickup_channel_partners_merchants || '',
+            ops: m.clickup_channel_ops || '',
+            prime49: m.clickup_channel_prime49 || '',
+            activity: m.clickup_channel_activity || ''
+        }
+    };
+}
+
+// Post a report to its configured ClickUp channel (best-effort, non-blocking).
+async function postReportToClickUp(reportType, reportData) {
+    try {
+        const cfg = await getClickUpConfig();
+        if (!cfg.enabled || !cfg.workspace_id) return { skipped: 'clickup disabled' };
+        const channelId = cfg.channels[reportType];
+        if (!channelId) return { skipped: 'no channel for ' + reportType };
+        if (!(await clickUpConfigured())) return { skipped: 'no clickup token' };
+        const md = buildReportMarkdown(reportType, reportData);
+        const r = await cuPostMessage(cfg.workspace_id, channelId, md);
+        return r.ok ? { posted: true } : { error: r.error };
+    } catch (e) { return { error: e.message }; }
+}
+
 async function sendReport(reportType, trigger = 'cron', testEmail = null) {
     let recipients;
     if (testEmail) {
@@ -1037,7 +1105,19 @@ async function sendReport(reportType, trigger = 'cron', testEmail = null) {
         if (error) throw error;
         recipients = data;
     }
-    if (!recipients || recipients.length === 0) return { sent: 0, skipped: 'no recipients', report_type: reportType };
+    // ClickUp can be the ONLY delivery: if email has no recipients but ClickUp is
+    // wired for this report, still build the data + post to ClickUp.
+    let cuWillPost = false;
+    if (!testEmail) {
+        try {
+            const cuCfg = await getClickUpConfig();
+            cuWillPost = !!(cuCfg.enabled && cuCfg.workspace_id && cuCfg.channels[reportType]);
+        } catch (_) { cuWillPost = false; }
+    }
+    if (!recipients || recipients.length === 0) {
+        if (!cuWillPost) return { sent: 0, skipped: 'no recipients', report_type: reportType };
+        recipients = [];   // ClickUp-only delivery
+    }
 
     let html, subject, reportData, attachments = null;
     try {
@@ -1095,27 +1175,33 @@ async function sendReport(reportType, trigger = 'cron', testEmail = null) {
         throw buildErr;
     }
 
-    if (!process.env.POSTMARK_SERVER_TOKEN) throw new Error('POSTMARK_SERVER_TOKEN not configured');
-    const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
-
-    const emailPayload = {
-        From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
-        Subject: subject,
-        HtmlBody: html,
-        MessageStream: 'outbound'
-    };
-    if (attachments) emailPayload.Attachments = attachments;
-
-    const results = await Promise.allSettled(
-        recipients.map(r => client.sendEmail({ ...emailPayload, To: r.email }))
-    );
-
     let sent = 0;
     const errors = [];
-    results.forEach((r, i) => {
-        if (r.status === 'fulfilled') { sent++; }
-        else { errors.push(`${recipients[i].email}: ${r.reason?.message || 'unknown error'}`); }
-    });
+    // Email delivery (skipped when ClickUp-only, i.e. no email recipients).
+    if (recipients.length) {
+        if (!process.env.POSTMARK_SERVER_TOKEN) throw new Error('POSTMARK_SERVER_TOKEN not configured');
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        const emailPayload = {
+            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+            Subject: subject,
+            HtmlBody: html,
+            MessageStream: 'outbound'
+        };
+        if (attachments) emailPayload.Attachments = attachments;
+        const results = await Promise.allSettled(
+            recipients.map(r => client.sendEmail({ ...emailPayload, To: r.email }))
+        );
+        results.forEach((r, i) => {
+            if (r.status === 'fulfilled') { sent++; }
+            else { errors.push(`${recipients[i].email}: ${r.reason?.message || 'unknown error'}`); }
+        });
+    }
+
+    // ClickUp Chat delivery (best-effort; independent of email).
+    let clickup = null;
+    if (cuWillPost && reportData) {
+        clickup = await postReportToClickUp(reportType, reportData);
+    }
 
     await supabase.from('report_send_log').insert({
         trigger,
@@ -1125,7 +1211,7 @@ async function sendReport(reportType, trigger = 'cron', testEmail = null) {
         error_message: errors.length > 0 ? errors.join('; ') : null
     });
 
-    return { sent, total: recipients.length, errors, report_type: reportType };
+    return { sent, total: recipients.length, errors, report_type: reportType, clickup };
 }
 
 // Legacy export kept for cron-daily-report.js
@@ -1375,6 +1461,53 @@ export default async function handler(req, res) {
             const { data: row } = await supabase
                 .from('merchant_aggregate_stats_cache').select('computed_at').eq('id', 1).maybeSingle();
             return res.status(200).json({ success: true, computed_at: row?.computed_at });
+        }
+
+        // ── ClickUp Chat integration ─────────────────────────────────────────
+        if (action === 'get_clickup_config') {
+            const cfg = await getClickUpConfig();
+            const hasToken = await clickUpConfigured();
+            return res.status(200).json({ success: true, data: { ...cfg, has_token: hasToken } });
+        }
+        if (action === 'save_clickup_config') {
+            const b = req.body;
+            const now = new Date().toISOString();
+            // Token: only overwrite when a new one is provided (kept encrypted in app_config).
+            if (typeof b.token === 'string' && b.token.trim()) {
+                await setConfigValue('CLICKUP_API_TOKEN', b.token.trim());
+            } else if (b.clear_token) {
+                await setConfigValue('CLICKUP_API_TOKEN', '');
+            }
+            const ups = [];
+            const put = (k, v) => ups.push({ key: k, value: String(v == null ? '' : v), updated_at: now });
+            if (b.enabled != null) put('clickup_enabled', b.enabled ? 'true' : 'false');
+            if (b.workspace_id != null) put('clickup_workspace_id', b.workspace_id);
+            if (b.workspace_name != null) put('clickup_workspace_name', b.workspace_name);
+            if (b.channels && typeof b.channels === 'object') {
+                ['partners_merchants', 'ops', 'prime49', 'activity'].forEach(rt => {
+                    if (b.channels[rt] != null) put('clickup_channel_' + rt, b.channels[rt]);
+                });
+            }
+            if (ups.length) { const { error } = await supabase.from('app_settings').upsert(ups, { onConflict: 'key' }); if (error) throw error; }
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'clickup_workspaces') {
+            const r = await cuListWorkspaces();
+            if (!r.ok) return res.status(200).json({ success: false, message: r.error || 'Could not load workspaces (check the token).' });
+            return res.status(200).json({ success: true, data: r.workspaces });
+        }
+        if (action === 'clickup_channels') {
+            const r = await cuListChannels(req.body.workspace_id);
+            if (!r.ok) return res.status(200).json({ success: false, message: r.error || 'Could not load channels.' });
+            return res.status(200).json({ success: true, data: r.channels });
+        }
+        if (action === 'clickup_test') {
+            const cfg = await getClickUpConfig();
+            const wid = req.body.workspace_id || cfg.workspace_id;
+            const cid = req.body.channel_id;
+            if (!wid || !cid) return res.status(400).json({ success: false, message: 'Pick a workspace and channel first.' });
+            const r = await cuPostMessage(wid, cid, `✅ **PayProTec** test message — ClickUp Chat is connected. Reports will post here.`);
+            return res.status(200).json({ success: r.ok, message: r.ok ? 'Test message sent to ClickUp.' : (r.error || 'Send failed.') });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });
