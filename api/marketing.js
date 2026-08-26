@@ -19,6 +19,7 @@ import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
 import { normEmail, recordOptin, recordOptins, optedInIds } from './_marketing-optins.js';
 import { ytEmbed } from './_yt.js';
+import { clickUpConfigured, cuListChannels, cuPostMessage } from './_clickup.js';
 
 // Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
 // sites, so this is the authoritative XSS boundary — allowlist only. The
@@ -314,6 +315,51 @@ function statsEmailHtml(s) {
     </div>`;
 }
 
+// Render the stats summary → a ClickUp Chat markdown message (conversions first).
+function statsMarkdown(s) {
+    const money = fmt, n = num;
+    const conv = s.conversions;
+    let out = `📊 **${s.title}**${s.is_youtube ? ' _(YouTube)_' : ''}\n`;
+    if (s.starts_at || s.ends_at) {
+        const d = iso => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        out += `_Window: ${d(s.starts_at)} → ${s.ends_at ? d(s.ends_at) : 'ongoing'}_\n`;
+    }
+    if (conv) {
+        const bt = conv.by_type || {};
+        out += `\n✅ **Conversions: ${n(conv.total)}**${conv.rate != null ? ` (${conv.rate}% of clicks)` : ''}\n`;
+        out += `• Current partners **${n(conv.partners || 0)}** · New/non-partner **${n(conv.non_partners != null ? conv.non_partners : (conv.total - (conv.partners || 0)))}** · Booked **${n(bt.appointment || 0)}**\n`;
+        if (conv.list && conv.list.length) {
+            out += (conv.list.slice(0, 20).map((r, i) => `   ${i + 1}. ${r.name || '—'}${r.email ? ` · ${r.email}` : ''}${r.type ? ` · ${r.type}` : ''}`).join('\n')) + '\n';
+            if (conv.total > 20) out += `   …and ${n(conv.total - 20)} more.\n`;
+        }
+    } else {
+        out += `\n_No conversion tracking configured._\n`;
+    }
+    out += `\n**Engagement**\n`;
+    out += `• Views **${n(s.impressions)}** · Clicks **${n(s.clicks)}** · CTR **${s.ctr}%** · Dismissed **${n(s.dismissals)}**\n`;
+    out += `• ${n(s.unique_impressions)} unique viewers · ${n(s.unique_clicks)} unique clickers · ${n(s.opted_in)} registered\n`;
+    const a = s.by_audience || {};
+    out += `• Clicks by channel: 🤝 ${n(a.partner)} · 🧑‍💼 ${n(a.staff)} · 🔎 ${n(a.prospect)} · 🌐 ${n(a.ghl)} · 💻 ${n(a.website)}\n`;
+    if (s.by_phase) {
+        const p = s.by_phase;
+        out += `\n📺 **YouTube lifecycle**\n`;
+        out += `• Upcoming: ${n(p.upcoming.impressions)} views / ${n(p.upcoming.clicks)} clicks (${p.upcoming.ctr}%)\n`;
+        out += `• Live: ${n(p.live.impressions)} views / ${n(p.live.clicks)} clicks (${p.live.ctr}%)\n`;
+        out += `• Replay: ${n(p.replay.impressions)} views / ${n(p.replay.clicks)} clicks (${p.replay.ctr}%)\n`;
+    }
+    return out;
+}
+
+// Marketing ClickUp config: reuse the workspace/token set in Secret Dungeon
+// (app_settings.clickup_workspace_id + app_config.CLICKUP_API_TOKEN); the chosen
+// campaign channel is remembered in app_settings.clickup_channel_marketing.
+async function getMarketingClickUp() {
+    const { data } = await supabase.from('app_settings').select('key, value')
+        .in('key', ['clickup_workspace_id', 'clickup_workspace_name', 'clickup_channel_marketing']);
+    const m = Object.fromEntries((data || []).map(r => [r.key, r.value]));
+    return { workspace_id: m.clickup_workspace_id || '', workspace_name: m.clickup_workspace_name || '', channel: m.clickup_channel_marketing || '' };
+}
+
 // ── Conversions (GHL) helpers, shared by get_conversions / export / dashboard ──
 const PARTNER_TAG = 'ppt partner';
 async function convFetch(c) {
@@ -417,7 +463,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -1175,6 +1221,35 @@ export default async function handler(req, res) {
                     if (r.ok) sent++; else failed.push(to);
                 }
                 return ok(res, { sent, failed, recipients: recipients.length });
+            }
+
+            // ── Send campaign stats to ClickUp Chat ───────────────────────────
+            // Reuses the workspace/token configured in Secret Dungeon → Sending Reports.
+            if (action === 'clickup_status') {
+                const cfg = await getMarketingClickUp();
+                const configured = await clickUpConfigured();
+                let channels = [];
+                if (configured && cfg.workspace_id) {
+                    const r = await cuListChannels(cfg.workspace_id);
+                    if (r.ok) channels = r.channels;
+                }
+                return ok(res, { configured, workspace_id: cfg.workspace_id, workspace_name: cfg.workspace_name, channel: cfg.channel, channels });
+            }
+            if (action === 'send_stats_clickup') {
+                const { id, channel_id } = req.body;
+                if (!id) return bad(res, 'campaign_id required');
+                const cfg = await getMarketingClickUp();
+                if (!(await clickUpConfigured()) || !cfg.workspace_id) return bad(res, 'ClickUp is not connected. Set it up in Secret Dungeon → Sending Reports first.');
+                const chId = channel_id || cfg.channel;
+                if (!chId) return bad(res, 'Pick a ClickUp channel.');
+                const summary = await buildStatsSummary(id);
+                if (!summary) return bad(res, 'Campaign not found.');
+                const r = await cuPostMessage(cfg.workspace_id, chId, statsMarkdown(summary));
+                if (!r.ok) return bad(res, r.error || 'ClickUp send failed.');
+                // Remember the chosen channel as the default for campaign stats.
+                if (channel_id) await supabase.from('app_settings').upsert(
+                    { key: 'clickup_channel_marketing', value: String(channel_id), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+                return ok(res, { posted: true });
             }
 
             // ── Webflow connector ────────────────────────────────────────────

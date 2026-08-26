@@ -655,6 +655,22 @@
   </div>
 </div>
 
+<div class="modal" id="cuStatsModal">
+  <div class="modal-box" style="max-width:460px;">
+    <div class="modal-head">
+      <span class="material-icons" style="color:#7c3aed;">forum</span>
+      <h2>Send stats to ClickUp</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('cuStatsModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body">
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">Posts this campaign's stats (conversions first) to a ClickUp Chat channel. Uses the ClickUp connection from Secret Dungeon → Sending Reports.</div>
+      <div id="cuStatsBody">
+        <div class="muted" style="font-size:12px;padding:10px;text-align:center;">Checking ClickUp connection…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const token = localStorage.getItem('pp_session_token') || '';
 if (!token) location.href = '/';
@@ -2080,8 +2096,9 @@ async function showStats(id, title){
   const s=r.data;
   const targets = Object.entries(s.clicks_by_target||{});
   document.getElementById('statsBody').innerHTML=`
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="btn btn-brand" onclick='openSendStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">send</span> Send stats</button>
+      <button class="btn btn-neutral" style="background:#faf5ff;color:#7c3aed;border-color:#a78bfa;" onclick='openClickupStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">forum</span> Send to ClickUp</button>
       <button class="btn btn-neutral" onclick='exportClicks(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">download</span> Export clickers (CSV)</button>
     </div>
     <div class="statgrid">
@@ -2277,6 +2294,43 @@ function siteSection(bySite){
   return `<label class="fld">External sites (embed)</label>${rows}`;
 }
 
+// ── Send campaign stats to ClickUp ──
+var _cuStatsId=null;
+async function openClickupStats(id, title){
+  _cuStatsId=id;
+  document.getElementById('cuStatsModal').style.display='flex';
+  const body=document.getElementById('cuStatsBody');
+  body.innerHTML='<div class="muted" style="font-size:12px;padding:10px;text-align:center;">Checking ClickUp connection…</div>';
+  const r=await api({action:'clickup_status'});
+  if(!r.success || !r.data || !r.data.configured){
+    body.innerHTML='<div style="font-size:13px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;">ClickUp isn\'t connected yet. Set it up in <b>Secret Dungeon → Sending Reports</b> (paste the API token & pick a workspace), then come back.</div>';
+    return;
+  }
+  const d=r.data;
+  if(!d.channels || !d.channels.length){
+    body.innerHTML='<div style="font-size:13px;color:#b45309;">No ClickUp channels found for '+esc(d.workspace_name||'the workspace')+'. Check the token/workspace in Secret Dungeon.</div>';
+    return;
+  }
+  const opts=d.channels.map(c=>`<option value="${esc(c.id)}" ${c.id===d.channel?'selected':''}>${esc(c.name)}</option>`).join('');
+  body.innerHTML=`
+    <label class="fld" style="margin-top:0;">Channel <span class="muted">(${esc(d.workspace_name||'workspace')})</span></label>
+    <select class="inp" id="cuStatsChannel">${opts}</select>
+    <div id="cuStatsResult" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button class="btn btn-neutral" onclick="document.getElementById('cuStatsModal').style.display='none'">Cancel</button>
+      <button class="btn btn-brand" style="background:#7c3aed;" id="cuStatsSendBtn" onclick="doSendClickupStats(this)"><span class="material-icons" style="font-size:16px;">send</span> Post to ClickUp</button>
+    </div>`;
+}
+async function doSendClickupStats(btn){
+  const chId=document.getElementById('cuStatsChannel').value;
+  const res=document.getElementById('cuStatsResult');
+  if(!chId){ res.innerHTML='<span style="color:var(--red);">Pick a channel.</span>'; return; }
+  btn.disabled=true; res.textContent='Posting…';
+  const r=await api({action:'send_stats_clickup', id:_cuStatsId, channel_id:chId});
+  btn.disabled=false;
+  if(r.success){ res.innerHTML='<span style="color:#16a34a;">✓ Posted to ClickUp.</span>'; setTimeout(function(){ document.getElementById('cuStatsModal').style.display='none'; },1200); }
+  else { res.innerHTML='<span style="color:var(--red);">'+esc(r.message||'Failed.')+'</span>'; }
+}
 // ── Send stats email (with recipient picker) ──
 var _ssStatsId=null, _ssRecips=[];
 async function openSendStats(id, title){
