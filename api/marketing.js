@@ -147,15 +147,54 @@ async function buildStatsSummary(id) {
         .select('title, event_mode, campaign_kind, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
     if (!c) return null;
     const [{ data: ev }, { count: optedIn }] = await Promise.all([
-        supabase.from('marketing_events').select('event_type, user_id').eq('campaign_id', id).limit(50000),
+        supabase.from('marketing_events').select('event_type, user_id, user_type, target, created_at, ghl_location, site_id').eq('campaign_id', id).limit(50000),
         supabase.from('marketing_optins').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
     ]);
     const rows = ev || [];
     const impressions = rows.filter(r => r.event_type === 'impression').length;
     const clicks = rows.filter(r => r.event_type === 'click').length;
+    const dismissals = rows.filter(r => r.event_type === 'dismiss').length;
     const uImp = new Set(rows.filter(r => r.event_type === 'impression').map(r => r.user_id)).size;
     const uClick = new Set(rows.filter(r => r.event_type === 'click').map(r => r.user_id)).size;
     const ctr = uImp ? Math.round((uClick / uImp) * 1000) / 10 : 0;
+
+    // Clicks by channel (partner/staff/prospect/ghl/website).
+    const byAudience = { partner: 0, staff: 0, prospect: 0, ghl: 0, website: 0 };
+    rows.filter(r => r.event_type === 'click').forEach(r => {
+        let ch = 'website';
+        if (r.user_type === 'partner') ch = 'partner';
+        else if (r.user_type === 'staff') ch = 'staff';
+        else if (r.user_type === 'lead') ch = 'prospect';
+        else if (r.ghl_location) ch = 'ghl';
+        if (byAudience[ch] != null) byAudience[ch]++;
+    });
+    // Clicks by button / hotspot target.
+    const byTarget = {};
+    rows.filter(r => r.event_type === 'click').forEach(r => { const k = r.target || 'cta'; byTarget[k] = (byTarget[k] || 0) + 1; });
+
+    // YouTube lifecycle breakdown (upcoming/live/replay), same logic as get_stats.
+    let byPhase = null;
+    const em = c.event_mode;
+    if (em && em.enabled && (em.live_at || em.live_until)) {
+        const liveAt = em.live_at ? new Date(em.live_at).getTime() : null;
+        const liveUntil = em.live_until ? new Date(em.live_until).getTime() : null;
+        const phaseAt = (ts) => {
+            const t = new Date(ts).getTime();
+            if (liveAt && t < liveAt) return 'upcoming';
+            if ((!liveAt || t >= liveAt) && (!liveUntil || t <= liveUntil)) return 'live';
+            return 'replay';
+        };
+        const mk = () => ({ impressions: 0, clicks: 0, _i: new Set(), _c: new Set() });
+        const b = { upcoming: mk(), live: mk(), replay: mk() };
+        rows.forEach(r => {
+            const k = b[phaseAt(r.created_at)]; if (!k) return;
+            if (r.event_type === 'impression') { k.impressions++; if (r.user_id) k._i.add(r.user_id); }
+            else if (r.event_type === 'click') { k.clicks++; if (r.user_id) k._c.add(r.user_id); }
+        });
+        const fin = x => ({ impressions: x.impressions, clicks: x.clicks, ctr: x._i.size ? Math.round((x._c.size / x._i.size) * 1000) / 10 : 0 });
+        byPhase = { upcoming: fin(b.upcoming), live: fin(b.live), replay: fin(b.replay) };
+    }
+
     let conv = null;
     if (c.conv_location_id && (c.conv_form_id || c.conv_calendar_id)) {
         try {
@@ -163,52 +202,115 @@ async function buildStatsSummary(id) {
             const partners = await convEnrichPartners(list, c.conv_location_id, 150);
             const byType = {};
             list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
-            conv = { total: list.length, partners, non_partners: list.length - partners, by_type: byType, list: list.slice(0, 50) };
+            const convRate = clicks ? Math.round((list.length / clicks) * 1000) / 10 : null;
+            conv = { total: list.length, partners, non_partners: list.length - partners, by_type: byType, rate: convRate, list: list.slice(0, 50) };
             recordOptins(supabase, id, list, 'ghl_sync').catch(() => {});
-        } catch (_) { conv = { total: 0, partners: 0, non_partners: 0, by_type: {}, list: [] }; }
+        } catch (_) { conv = { total: 0, partners: 0, non_partners: 0, by_type: {}, rate: null, list: [] }; }
     }
-    return { title: c.title || 'Announcement', impressions, clicks, unique_impressions: uImp, unique_clicks: uClick, ctr, opted_in: optedIn || 0, conversions: conv };
+    return {
+        title: c.title || 'Announcement', is_youtube: !!(c.campaign_kind === 'youtube' || (em && em.enabled)),
+        impressions, clicks, dismissals, unique_impressions: uImp, unique_clicks: uClick, ctr,
+        opted_in: optedIn || 0, by_audience: byAudience, by_target: byTarget, by_phase: byPhase,
+        window: em ? { opt_in_until: em.opt_in_until || null, live_at: em.live_at || null, live_until: em.live_until || null } : null,
+        starts_at: c.starts_at || null, ends_at: c.ends_at || null, conversions: conv
+    };
 }
 
-// Render the stats summary → an HTML email (conversions emphasized).
+// Render the stats summary → a detailed HTML email (conversions emphasized).
 function statsEmailHtml(s) {
     const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const tile = (n, l, color) => `<td style="padding:10px 14px;text-align:center;border:1px solid #e2e8f0;border-radius:10px;"><div style="font-size:24px;font-weight:800;color:${color || '#0a1628'};font-family:monospace;">${esc(n)}</div><div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.4px;">${esc(l)}</div></td>`;
+    const fmtDate = iso => { if (!iso) return '—'; try { return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); } catch (_) { return String(iso); } };
+    const tile = (n, l, color, bg) => `<td style="padding:12px 14px;text-align:center;border:1px solid #e2e8f0;border-radius:10px;background:${bg || '#ffffff'};"><div style="font-size:24px;font-weight:800;color:${color || '#0a1628'};font-family:monospace;">${esc(n)}</div><div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;">${esc(l)}</div></td>`;
+    const h3 = (t, color) => `<h3 style="margin:24px 0 8px;font-size:14px;color:${color || '#0a1628'};border-bottom:2px solid #eef2f7;padding-bottom:6px;">${t}</h3>`;
     const conv = s.conversions;
+
+    // ── Conversions (highlighted) ──
     let convBlock = '';
     if (conv) {
         const bt = conv.by_type || {};
-        convBlock = `<h3 style="margin:22px 0 8px;color:#16a34a;">✅ Conversions</h3>
+        convBlock = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:16px;margin-top:8px;">
+            <div style="font-size:14px;font-weight:800;color:#16a34a;margin-bottom:10px;">✅ Conversions${conv.rate != null ? ` <span style="font-weight:600;color:#15803d;">· ${conv.rate}% of clicks converted</span>` : ''}</div>
             <table style="width:100%;border-collapse:separate;border-spacing:8px;"><tr>
-              ${tile(conv.total, 'Total', '#16a34a')}
-              ${tile(conv.partners || 0, 'Current partners', '#92400e')}
-              ${tile(conv.non_partners != null ? conv.non_partners : (conv.total - (conv.partners || 0)), 'New / non-partner')}
-              ${tile(bt.appointment || 0, 'Booked')}
+              ${tile(conv.total, 'Total', '#16a34a', '#ffffff')}
+              ${tile(conv.partners || 0, 'Current partners', '#92400e', '#ffffff')}
+              ${tile(conv.non_partners != null ? conv.non_partners : (conv.total - (conv.partners || 0)), 'New / non-partner', '#0a1628', '#ffffff')}
+              ${tile(bt.appointment || 0, 'Booked', '#0a1628', '#ffffff')}
             </tr></table>`;
         if (conv.list && conv.list.length) {
-            convBlock += `<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;">
-              <tr style="text-align:left;color:#64748b;"><th style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">Name</th><th style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">Email</th><th style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">Type</th></tr>
-              ${conv.list.slice(0, 30).map(r => `<tr><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(r.name || '')}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(r.email || '')}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(r.type || '')}</td></tr>`).join('')}
-            </table>${conv.total > 30 ? `<div style="font-size:11px;color:#94a3b8;margin-top:4px;">…and ${conv.total - 30} more.</div>` : ''}`;
+            convBlock += `<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:12px;background:#fff;border-radius:8px;overflow:hidden;">
+              <tr style="text-align:left;color:#64748b;background:#f8fafc;"><th style="padding:6px 8px;">Name</th><th style="padding:6px 8px;">Email</th><th style="padding:6px 8px;">Type</th><th style="padding:6px 8px;">When</th></tr>
+              ${conv.list.slice(0, 30).map(r => `<tr><td style="padding:6px 8px;border-top:1px solid #f1f5f9;">${esc(r.name || '')}</td><td style="padding:6px 8px;border-top:1px solid #f1f5f9;">${esc(r.email || '')}</td><td style="padding:6px 8px;border-top:1px solid #f1f5f9;">${esc(r.type || '')}</td><td style="padding:6px 8px;border-top:1px solid #f1f5f9;color:#94a3b8;">${r.at ? fmtDate(r.at) : ''}</td></tr>`).join('')}
+            </table>${conv.total > 30 ? `<div style="font-size:11px;color:#94a3b8;margin-top:6px;">…and ${conv.total - 30} more.</div>` : ''}`;
         } else {
-            convBlock += `<div style="font-size:12px;color:#94a3b8;margin-top:6px;">No conversions in this campaign window yet.</div>`;
+            convBlock += `<div style="font-size:12px;color:#94a3b8;margin-top:8px;">No conversions in this campaign window yet.</div>`;
         }
+        convBlock += `</div>`;
     } else {
-        convBlock = `<div style="font-size:12px;color:#94a3b8;margin-top:10px;">No conversion tracking configured for this campaign.</div>`;
+        convBlock = `<div style="font-size:12px;color:#94a3b8;margin-top:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;">No conversion tracking configured for this campaign.</div>`;
     }
-    return `<div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:auto;padding:28px;color:#1e293b;">
+
+    // ── Clicks by channel ──
+    const a = s.by_audience || {};
+    const chanRow = (l, n, color) => `<tr><td style="padding:5px 8px;font-size:12px;color:#334155;">${esc(l)}</td><td style="padding:5px 8px;font-size:12px;font-weight:700;text-align:right;color:${color || '#0a1628'};">${esc(n || 0)}</td></tr>`;
+    const channelBlock = `<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+        ${chanRow('🤝 Partners', a.partner, '#004990')}
+        ${chanRow('🧑‍💼 Staff', a.staff)}
+        ${chanRow('🔎 Prospects', a.prospect)}
+        ${chanRow('🌐 GoHighLevel', a.ghl)}
+        ${chanRow('💻 Website', a.website)}
+      </table>`;
+
+    // ── Clicks by button / hotspot ──
+    const bt2 = s.by_target || {};
+    const targetKeys = Object.keys(bt2);
+    const targetBlock = targetKeys.length
+        ? `<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin-top:10px;">${targetKeys.map(k => chanRow(k, bt2[k])).join('')}</table>`
+        : '';
+
+    // ── YouTube lifecycle breakdown ──
+    let phaseBlock = '';
+    if (s.by_phase) {
+        const w = s.window || {};
+        const p = (key, label, color, when) => {
+            const x = s.by_phase[key] || { impressions: 0, clicks: 0, ctr: 0 };
+            return `<td style="padding:12px;border:1px solid #e2e8f0;border-top:3px solid ${color};border-radius:10px;vertical-align:top;">
+                <div style="font-weight:800;color:${color};font-size:12px;margin-bottom:6px;">${label}</div>
+                <div style="font-size:12px;color:#334155;">${x.impressions} views · ${x.clicks} clicks</div>
+                <div style="font-size:16px;font-weight:800;color:#16a34a;font-family:monospace;margin-top:2px;">${x.ctr}% CTR</div>
+                <div style="font-size:10.5px;color:#94a3b8;margin-top:6px;">${esc(when)}</div>
+            </td>`;
+        };
+        phaseBlock = h3('📺 YouTube lifecycle', '#6d28d9') +
+            `<table style="width:100%;border-collapse:separate;border-spacing:8px;"><tr>
+              ${p('upcoming', 'Upcoming', '#0369a1', w.opt_in_until ? ('opt-in until ' + fmtDate(w.opt_in_until)) : ('before ' + fmtDate(w.live_at)))}
+              ${p('live', 'Live', '#dc2626', fmtDate(w.live_at) + ' → ' + (w.live_until ? fmtDate(w.live_until) : 'end'))}
+              ${p('replay', 'Replay', '#6d28d9', w.live_until ? ('after ' + fmtDate(w.live_until)) : 'after the event')}
+            </tr></table>
+            <div style="font-size:10.5px;color:#94a3b8;margin-top:4px;">Times in America/New_York.</div>`;
+    }
+
+    const windowLine = (s.starts_at || s.ends_at)
+        ? `<div style="font-size:12px;color:#64748b;margin-bottom:16px;">Campaign window: ${fmtDate(s.starts_at)} → ${s.ends_at ? fmtDate(s.ends_at) : 'ongoing'}</div>`
+        : '';
+
+    return `<div style="font-family:Inter,Arial,sans-serif;max-width:640px;margin:auto;padding:28px;color:#1e293b;background:#ffffff;">
         <h2 style="color:#004990;margin:0 0 4px;">PayProTec — Campaign Stats</h2>
-        <div style="font-size:15px;font-weight:700;margin-bottom:16px;">${esc(s.title)}</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${esc(s.title)}${s.is_youtube ? ' <span style="font-size:11px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:99px;padding:1px 8px;vertical-align:middle;">YouTube</span>' : ''}</div>
+        ${windowLine}
         ${convBlock}
-        <h3 style="margin:22px 0 8px;color:#0a1628;">Engagement</h3>
+        ${h3('Engagement')}
         <table style="width:100%;border-collapse:separate;border-spacing:8px;"><tr>
           ${tile(s.impressions, 'Views')}
           ${tile(s.clicks, 'Clicks')}
-          ${tile(s.ctr + '%', 'CTR', '#16a34a')}
-          ${tile(s.opted_in, 'Registered')}
+          ${tile(s.ctr + '%', 'CTR (unique)', '#16a34a')}
+          ${tile(s.dismissals, 'Dismissed')}
         </tr></table>
-        <div style="font-size:12px;color:#64748b;margin-top:8px;">${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:12px;">Sent from the PayProTec marketing dashboard.</div>
+        <div style="font-size:12px;color:#64748b;margin-top:8px;">${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers · ${s.opted_in} registered (suppressed for them)</div>
+        ${h3('Clicks by channel')}
+        ${channelBlock}
+        ${targetKeys.length ? h3('Clicks by button / hotspot') + targetBlock : ''}
+        ${phaseBlock}
+        <div style="font-size:11px;color:#94a3b8;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:12px;">Sent from the PayProTec marketing dashboard.</div>
     </div>`;
 }
 
