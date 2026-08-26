@@ -634,7 +634,46 @@ async function buildPartnersData() {
     // Leaderboard is a separate fast query with no cache rebuild side-effect.
     const leaderboardRes = await supabase.rpc('get_partner_leaderboard', { lim: 10 });
 
-    return buildPartnersDataFromCache(cache, dateStr, leaderboardRes.data, freshTopSubmitting, newMerchantsDetail);
+    const partnersData = buildPartnersDataFromCache(cache, dateStr, leaderboardRes.data, freshTopSubmitting, newMerchantsDetail);
+
+    // New partner IDs (agent_identifiers) — this week (rolling 7d) + yesterday (24h),
+    // with agent/company names. Matches how new_agents_this_week is counted.
+    try {
+        const weekAgoIso = new Date(Date.now() - 7 * 864e5).toISOString();
+        const dayAgoIso = new Date(Date.now() - 1 * 864e5).toISOString();
+        const { data: newAgentRows } = await supabase
+            .from('agent_identifiers')
+            .select('id_string, agent_id, created_at, lifecycle')
+            .gte('created_at', weekAgoIso)
+            .order('created_at', { ascending: false })
+            .limit(500);
+        const agentIds = [...new Set((newAgentRows || []).map(r => r.agent_id).filter(Boolean))];
+        let agMap = {};
+        if (agentIds.length) {
+            const { data: agRows } = await supabase.from('agents').select('id, agent_name, company_id').in('id', agentIds);
+            const coIds = [...new Set((agRows || []).map(a => a.company_id).filter(Boolean))];
+            let coMap = {};
+            if (coIds.length) {
+                const { data: coRows } = await supabase.from('companies').select('id, company_name').in('id', coIds);
+                (coRows || []).forEach(c => { coMap[c.id] = c.company_name; });
+            }
+            (agRows || []).forEach(a => { agMap[a.id] = { agent_name: a.agent_name, agent_company: coMap[a.company_id] || '' }; });
+        }
+        const mapRow = r => ({
+            id_string: r.id_string,
+            agent_name: (agMap[r.agent_id] && agMap[r.agent_id].agent_name) || '—',
+            agent_company: (agMap[r.agent_id] && agMap[r.agent_id].agent_company) || '',
+            created_at: r.created_at
+        });
+        const weekList = (newAgentRows || []).map(mapRow);
+        const yestList = (newAgentRows || []).filter(r => r.created_at >= dayAgoIso).map(mapRow);
+        partnersData.newPartnersWeek = weekList;
+        partnersData.newPartnersWeekCount = weekList.length;
+        partnersData.newPartnersYesterday = yestList;
+        partnersData.newPartnersYesterdayCount = yestList.length;
+    } catch (_) { /* non-fatal — report still sends without the new-partners lists */ }
+
+    return partnersData;
 }
 
 function buildPartnersDataFromCache(cache, dateStr, leaderboard = [], topSubmittingOverride = null, newMerchantsDetail = []) {
@@ -1073,10 +1112,16 @@ function buildReportMarkdown(reportType, d) {
         const appr = p.approved != null ? ` (${n(p.approved)} approved)` : '';
         return `${i + 1}. ${name}${cnt != null ? ` — ${n(cnt)}${appr}` : ''}`;
     }).join('\n');
+    const npName = p => `${p.agent_name || '—'}${p.agent_company ? ` (${p.agent_company})` : ''}${p.id_string ? ` · ${p.id_string}` : ''}`;
+    const npWeek = (d.newPartnersWeek || []).slice(0, 5).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
+    const npYest = (d.newPartnersYesterday || []).slice(0, 5).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
     return `📊 **Partners & Merchants Report** — ${d.date}\n`
         + `• Merchants: **${n(d.totalMerchants)}** (approved **${n(d.approvedMerchants)}**)\n`
         + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
         + `• New merchants — today **${n(d.newMerchantsYesterday)}**, this week **${n(d.newMerchantsThisWeek)}** · Approved this week **${n(d.approvedThisWeek)}**\n`
+        + `• New partners — yesterday **${n(d.newPartnersYesterdayCount != null ? d.newPartnersYesterdayCount : d.newAgentsThisWeek)}**, this week **${n(d.newPartnersWeekCount != null ? d.newPartnersWeekCount : d.newAgentsThisWeek)}**\n`
+        + (npYest ? `\n**New partners yesterday:**\n${npYest}\n` : '')
+        + (npWeek ? `\n**New partners this week:**\n${npWeek}\n` : '')
         + (topP ? `\n**Top submitting partners (this week):**\n${topP}` : '');
 }
 
