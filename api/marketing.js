@@ -317,7 +317,8 @@ function statsEmailHtml(s) {
 
 // Render the stats summary → a ClickUp Chat markdown message (conversions first).
 function statsMarkdown(s) {
-    const money = fmt, n = num;
+    const money = v => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(v) || 0);
+    const n = v => Number(v || 0).toLocaleString();
     const conv = s.conversions;
     let out = `📊 **${s.title}**${s.is_youtube ? ' _(YouTube)_' : ''}\n`;
     if (s.starts_at || s.ends_at) {
