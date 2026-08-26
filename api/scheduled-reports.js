@@ -1021,16 +1021,38 @@ function buildReportMarkdown(reportType, d) {
     const money = fmt, n = num;
     if (reportType === 'ops') {
         const y = d.yesterday || {};
+        const inv = d.inventory || {}, dep = d.deployments || {}, ret = d.returns || {};
+        const terms = Object.entries(inv.terminal_breakdown || {}).sort((a, b) => b[1] - a[1]).slice(0, 5)
+            .map(([t, c]) => `   • ${t}: **${n(c)}**`).join('\n');
+        const yDeps = (y.deployments || []), yRets = (y.returns || []);
+        const yDepLines = yDeps.slice(0, 8).map(x => `   • ${x.dba_name || '—'} (${x.terminal_type || '—'})${x.tracking_id ? ` · 📦 ${x.tracking_id}` : ''}`).join('\n');
+        const yRetLines = yRets.slice(0, 8).map(x => `   • ${x.dba_name || '—'} (${x.terminal_type || '—'})${x.return_reason ? ` · ${x.return_reason}` : ''}`).join('\n');
         return `📦 **Operations Report** — ${d.date}\n`
-            + `• Deployments (${y.label || 'yesterday'}): **${n((y.deployments || []).length)}**\n`
-            + `• Returns (${y.label || 'yesterday'}): **${n((y.returns || []).length)}**`;
+            + `\n**Inventory**\n`
+            + `• Total units: **${n(inv.total)}** · In stock **${n(inv.stocked)}** · Deployed **${n(inv.deployed)}** · Repairing **${n(inv.repairing)}** · New this week **${n(inv.new_this_week)}**\n`
+            + (terms ? `• Top terminals:\n${terms}\n` : '')
+            + `\n**Deployments**\n`
+            + `• Open **${n(dep.open)}** · Closed **${n(dep.closed)}** · New this week **${n(dep.new_this_week)}**\n`
+            + `• ${y.label || 'Yesterday'}: **${n(yDeps.length)}**${yDepLines ? `\n${yDepLines}` : ''}\n`
+            + `\n**Returns**\n`
+            + `• Open **${n(ret.open)}** · Closed **${n(ret.closed)}** · New this week **${n(ret.new_this_week)}**\n`
+            + `• ${y.label || 'Yesterday'}: **${n(yRets.length)}**${yRetLines ? `\n${yRetLines}` : ''}`;
     }
     if (reportType === 'prime49') {
+        const partners = (d.partnerBreakdown || []).slice(0, 5).map((p, i) =>
+            `${i + 1}. ${p.partner_name || '—'} — ${n(p.merchant_count)} merchants · ${money(p.volume_30d)} vol · payout ${money(p.agent_payout)}`).join('\n');
+        const newM = (d.newMerchantsWeek || []).slice(0, 5).map((m, i) =>
+            `${i + 1}. ${m.dba_name || '—'} (${m.merchant_id || '—'})${m.partner_name ? ` · ${m.partner_name}` : ''}${m.account_status ? ` · ${m.account_status}` : ''}`).join('\n');
+        const newIds = (d.newIdDetails || []).slice(0, 5).map((x, i) =>
+            `${i + 1}. ${x.agent_name || '—'}${x.agent_company && x.agent_company !== '—' ? ` (${x.agent_company})` : ''} · ${x.id_string || '—'}`).join('\n');
         return `💎 **Prime49 Daily Update** — ${d.date}\n`
             + `• Partners: **${n(d.totalPartners)}** · Merchants: **${n(d.totalMerchants)}**\n`
             + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
             + `• Net residual: **${money(d.totalNetResidual)}** (PPT ${money(d.totalPptResidual)} · Agents ${money(d.totalAgentResidual)})\n`
-            + `• New IDs this week: **${n(d.newIdsThisWeek)}** · New merchants — today **${n(d.newMerchantsYesterdayCount)}**, week **${n(d.newMerchantsWeekCount)}**, month **${n(d.newMerchantsMonthCount)}**`;
+            + `• New merchants — today **${n(d.newMerchantsYesterdayCount)}**, week **${n(d.newMerchantsWeekCount)}**, month **${n(d.newMerchantsMonthCount)}** · New IDs this week **${n(d.newIdsThisWeek)}**\n`
+            + (partners ? `\n**Top partners (by payout):**\n${partners}\n` : '')
+            + (newM ? `\n**New merchants this week:**\n${newM}\n` : '')
+            + (newIds ? `\n**New Prime49 IDs this week:**\n${newIds}` : '');
     }
     if (reportType === 'activity') {
         const top = (d.topUsers || []).slice(0, 5).map((u, i) => `${i + 1}. ${u.name} — ${n(u.count)}`).join('\n');
