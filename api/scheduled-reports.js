@@ -1048,6 +1048,14 @@ function buildReportMarkdown(reportType, d) {
         + (topP ? `\n**Top partners:**\n${topP}` : '');
 }
 
+// Build a report's data payload by type (used by the ClickUp test sample).
+async function buildReportData(reportType) {
+    if (reportType === 'ops') return await buildOpsData();
+    if (reportType === 'prime49') return await buildPrime49Data();
+    if (reportType === 'activity') return await buildActivityData();
+    return await buildPartnersData();
+}
+
 // Read the ClickUp report config from app_settings (+ token from app_config).
 async function getClickUpConfig() {
     const keys = ['clickup_enabled', 'clickup_workspace_id', 'clickup_workspace_name',
@@ -1506,8 +1514,18 @@ export default async function handler(req, res) {
             const wid = req.body.workspace_id || cfg.workspace_id;
             const cid = req.body.channel_id;
             if (!wid || !cid) return res.status(400).json({ success: false, message: 'Pick a workspace and channel first.' });
-            const r = await cuPostMessage(wid, cid, `✅ **PayProTec** test message — ClickUp Chat is connected. Reports will post here.`);
-            return res.status(200).json({ success: r.ok, message: r.ok ? 'Test message sent to ClickUp.' : (r.error || 'Send failed.') });
+            const rt = ['ops', 'prime49', 'activity', 'partners_merchants'].includes(req.body.report_type) ? req.body.report_type : 'partners_merchants';
+            // Post a REAL sample of the report (built from live data) so the test
+            // shows exactly what will land in the channel — with a test banner.
+            let md;
+            try {
+                const data = await buildReportData(rt);
+                md = `🧪 *Test — this is a live sample of what this report will post here.*\n\n` + buildReportMarkdown(rt, data);
+            } catch (e) {
+                md = `✅ **PayProTec** test — ClickUp Chat is connected. (Couldn't build a live sample: ${e.message})`;
+            }
+            const r = await cuPostMessage(wid, cid, md);
+            return res.status(200).json({ success: r.ok, message: r.ok ? 'Sample report sent to ClickUp.' : (r.error || 'Send failed.') });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });
