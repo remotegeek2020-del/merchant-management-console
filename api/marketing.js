@@ -19,7 +19,7 @@ import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
 import { normEmail, recordOptin, recordOptins, optedInIds } from './_marketing-optins.js';
 import { ytEmbed } from './_yt.js';
-import { clickUpConfigured, cuListChannels, cuPostMessage } from './_clickup.js';
+import { clickUpConfigured, cuListChannels, cuPostMessage, cuPostLong } from './_clickup.js';
 
 // Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
 // sites, so this is the authoritative XSS boundary — allowlist only. The
@@ -204,7 +204,7 @@ async function buildStatsSummary(id) {
             const byType = {};
             list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
             const convRate = clicks ? Math.round((list.length / clicks) * 1000) / 10 : null;
-            conv = { total: list.length, partners, non_partners: list.length - partners, by_type: byType, rate: convRate, list: list.slice(0, 50) };
+            conv = { total: list.length, partners, non_partners: list.length - partners, by_type: byType, rate: convRate, list };
             recordOptins(supabase, id, list, 'ghl_sync').catch(() => {});
         } catch (_) { conv = { total: 0, partners: 0, non_partners: 0, by_type: {}, rate: null, list: [] }; }
     }
@@ -330,8 +330,7 @@ function statsMarkdown(s) {
         out += `\n✅ **Conversions: ${n(conv.total)}**${conv.rate != null ? ` (${conv.rate}% of clicks)` : ''}\n`;
         out += `• Current partners **${n(conv.partners || 0)}** · New/non-partner **${n(conv.non_partners != null ? conv.non_partners : (conv.total - (conv.partners || 0)))}** · Booked **${n(bt.appointment || 0)}**\n`;
         if (conv.list && conv.list.length) {
-            out += (conv.list.slice(0, 20).map((r, i) => `   ${i + 1}. ${r.name || '—'}${r.email ? ` · ${r.email}` : ''}${r.type ? ` · ${r.type}` : ''}`).join('\n')) + '\n';
-            if (conv.total > 20) out += `   …and ${n(conv.total - 20)} more.\n`;
+            out += (conv.list.map((r, i) => `   ${i + 1}. ${r.name || '—'}${r.email ? ` · ${r.email}` : ''}${r.type ? ` · ${r.type}` : ''}`).join('\n')) + '\n';
         }
     } else {
         out += `\n_No conversion tracking configured._\n`;
@@ -1245,7 +1244,8 @@ export default async function handler(req, res) {
                 if (!chId) return bad(res, 'Pick a ClickUp channel.');
                 const summary = await buildStatsSummary(id);
                 if (!summary) return bad(res, 'Campaign not found.');
-                const r = await cuPostMessage(cfg.workspace_id, chId, statsMarkdown(summary));
+                // Post ALL conversions — split into multiple messages if it's long.
+                const r = await cuPostLong(cfg.workspace_id, chId, statsMarkdown(summary));
                 if (!r.ok) return bad(res, r.error || 'ClickUp send failed.');
                 // Remember the chosen channel as the default for campaign stats.
                 if (channel_id) await supabase.from('app_settings').upsert(

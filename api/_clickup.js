@@ -57,6 +57,34 @@ export async function cuListChannels(workspaceId) {
     } catch (e) { return { ok: false, error: e.message, channels: [] }; }
 }
 
+// Post a possibly-long markdown message, splitting into multiple messages at line
+// boundaries so nothing is truncated (ClickUp caps a single message ~20k chars).
+export async function cuPostLong(workspaceId, channelId, markdown, limit = 18000) {
+    const text = String(markdown || '');
+    if (text.length <= limit) return cuPostMessage(workspaceId, channelId, text);
+    const lines = text.split('\n');
+    const chunks = [];
+    let buf = '';
+    for (const line of lines) {
+        // A single over-long line is hard-split as a last resort.
+        if (line.length > limit) {
+            if (buf) { chunks.push(buf); buf = ''; }
+            for (let i = 0; i < line.length; i += limit) chunks.push(line.slice(i, i + limit));
+            continue;
+        }
+        if ((buf + '\n' + line).length > limit) { chunks.push(buf); buf = line; }
+        else { buf = buf ? (buf + '\n' + line) : line; }
+    }
+    if (buf) chunks.push(buf);
+    let ok = true, error = null;
+    for (let i = 0; i < chunks.length; i++) {
+        const head = chunks.length > 1 ? `_(part ${i + 1}/${chunks.length})_\n` : '';
+        const r = await cuPostMessage(workspaceId, channelId, head + chunks[i]);
+        if (!r.ok) { ok = false; error = r.error; break; }
+    }
+    return { ok, error, parts: chunks.length };
+}
+
 // Post a markdown message into a Chat channel.
 export async function cuPostMessage(workspaceId, channelId, markdown) {
     const token = await getClickUpToken();

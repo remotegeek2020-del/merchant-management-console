@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { ServerClient } from 'postmark';
 import { setConfigValue, getConfigValue } from './api-config.js';
-import { clickUpConfigured, cuListWorkspaces, cuListChannels, cuPostMessage } from './_clickup.js';
+import { clickUpConfigured, cuListWorkspaces, cuListChannels, cuPostMessage, cuPostLong } from './_clickup.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -1201,7 +1201,7 @@ async function postReportToClickUp(reportType, reportData) {
         if (!channelId) return { skipped: 'no channel for ' + reportType };
         if (!(await clickUpConfigured())) return { skipped: 'no clickup token' };
         const md = buildReportMarkdown(reportType, reportData);
-        const r = await cuPostMessage(cfg.workspace_id, channelId, md);
+        const r = await cuPostLong(cfg.workspace_id, channelId, md);
         return r.ok ? { posted: true } : { error: r.error };
     } catch (e) { return { error: e.message }; }
 }
@@ -1641,7 +1641,7 @@ export default async function handler(req, res) {
             } catch (e) {
                 md = `✅ **PayProTec** test — ClickUp Chat is connected. (Couldn't build a live sample: ${e.message})`;
             }
-            const r = await cuPostMessage(wid, cid, md);
+            const r = await cuPostLong(wid, cid, md);
             return res.status(200).json({ success: r.ok, message: r.ok ? 'Sample report sent to ClickUp.' : (r.error || 'Send failed.') });
         }
 
