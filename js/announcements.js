@@ -148,7 +148,8 @@
         var c = visible[cardIdx];
         // Already showing this exact card → don't re-render (avoids flicker + re-tracking).
         if (shownCardId === c.id && cardWrap.firstChild) return;
-        var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
+        // During live/replay the video takes the place of the static graphic.
+        var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url && !c.video_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var dismissible = /dismissible$/.test(c.display_mode || '');
         var persistent = /persistent$/.test(c.display_mode || '');
