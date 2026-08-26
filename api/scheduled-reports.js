@@ -1125,8 +1125,9 @@ function buildReportMarkdown(reportType, d) {
         const idPart = ids.length ? ` · ${ids.length > 1 ? 'IDs ' : ''}${ids.join(', ')}` : '';
         return `${p.agent_name || '—'}${p.agent_company ? ` (${p.agent_company})` : ''}${idPart}`;
     };
-    const npWeek = (d.newPartnersWeek || []).slice(0, 5).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
-    const npYest = (d.newPartnersYesterday || []).slice(0, 5).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
+    // Show ALL new partners (already consolidated by person), not just a top slice.
+    const npWeek = (d.newPartnersWeek || []).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
+    const npYest = (d.newPartnersYesterday || []).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
     return `📊 **Partners & Merchants Report** — ${d.date}\n`
         + `• Merchants: **${n(d.totalMerchants)}** (approved **${n(d.approvedMerchants)}**)\n`
         + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
