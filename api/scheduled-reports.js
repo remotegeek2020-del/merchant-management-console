@@ -1038,14 +1038,24 @@ function buildReportMarkdown(reportType, d) {
             + `• ${d.windowLabel}: **${n(d.totalEvents)}** actions by **${n(d.activeUsers)}** users\n`
             + (top ? `\n**Top users:**\n${top}` : '');
     }
-    // partners_merchants (default)
-    const topP = (d.topSubmittingPartners || d.topPartners || []).slice(0, 5)
-        .map((p, i) => `${i + 1}. ${p.partner_name || p.name || '—'}${p.merchant_count != null ? ` — ${n(p.merchant_count)}` : ''}`).join('\n');
+    // partners_merchants (default). Top submitters carry agent_name/submitted/approved;
+    // the leaderboard fallback may carry partner_name/merchant_count instead.
+    const tp = (Array.isArray(d.topSubmittingPartners) && d.topSubmittingPartners.length)
+        ? d.topSubmittingPartners
+        : (Array.isArray(d.topPartners) ? d.topPartners : []);
+    const topP = tp.slice(0, 5).map((p, i) => {
+        const name = p.agent_name || p.partner_name || p.name || p.full_name || '—';
+        const cnt = p.submitted != null ? p.submitted
+            : (p.merchant_count != null ? p.merchant_count
+            : (p.count != null ? p.count : null));
+        const appr = p.approved != null ? ` (${n(p.approved)} approved)` : '';
+        return `${i + 1}. ${name}${cnt != null ? ` — ${n(cnt)}${appr}` : ''}`;
+    }).join('\n');
     return `📊 **Partners & Merchants Report** — ${d.date}\n`
         + `• Merchants: **${n(d.totalMerchants)}** (approved **${n(d.approvedMerchants)}**)\n`
         + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
         + `• New merchants — today **${n(d.newMerchantsYesterday)}**, this week **${n(d.newMerchantsThisWeek)}** · Approved this week **${n(d.approvedThisWeek)}**\n`
-        + (topP ? `\n**Top partners:**\n${topP}` : '');
+        + (topP ? `\n**Top submitting partners (this week):**\n${topP}` : '');
 }
 
 // Build a report's data payload by type (used by the ClickUp test sample).
