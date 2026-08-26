@@ -659,18 +659,26 @@ async function buildPartnersData() {
             }
             (agRows || []).forEach(a => { agMap[a.id] = { agent_name: a.agent_name, agent_company: coMap[a.company_id] || '' }; });
         }
-        const mapRow = r => ({
-            id_string: r.id_string,
-            agent_name: (agMap[r.agent_id] && agMap[r.agent_id].agent_name) || '—',
-            agent_company: (agMap[r.agent_id] && agMap[r.agent_id].agent_company) || '',
-            created_at: r.created_at
-        });
-        const weekList = (newAgentRows || []).map(mapRow);
-        const yestList = (newAgentRows || []).filter(r => r.created_at >= dayAgoIso).map(mapRow);
-        partnersData.newPartnersWeek = weekList;
-        partnersData.newPartnersWeekCount = weekList.length;
-        partnersData.newPartnersYesterday = yestList;
-        partnersData.newPartnersYesterdayCount = yestList.length;
+        // Consolidate by PERSON (agent): one entry per partner, listing all their
+        // new IDs — a partner often gets several IDs at once.
+        const groupByAgent = rows => {
+            const g = {};
+            (rows || []).forEach(r => {
+                const info = agMap[r.agent_id] || {};
+                const name = info.agent_name || '—';
+                const key = r.agent_id || ('name:' + name);
+                if (!g[key]) g[key] = { agent_name: name, agent_company: info.agent_company || '', ids: [], created_at: r.created_at };
+                if (r.id_string) g[key].ids.push(r.id_string);
+                if (r.created_at > g[key].created_at) g[key].created_at = r.created_at;
+            });
+            return Object.values(g).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+        };
+        const weekGroups = groupByAgent(newAgentRows);
+        const yestGroups = groupByAgent((newAgentRows || []).filter(r => r.created_at >= dayAgoIso));
+        partnersData.newPartnersWeek = weekGroups;
+        partnersData.newPartnersWeekCount = weekGroups.length;          // distinct partners
+        partnersData.newPartnersYesterday = yestGroups;
+        partnersData.newPartnersYesterdayCount = yestGroups.length;
     } catch (_) { /* non-fatal — report still sends without the new-partners lists */ }
 
     return partnersData;
@@ -1112,7 +1120,11 @@ function buildReportMarkdown(reportType, d) {
         const appr = p.approved != null ? ` (${n(p.approved)} approved)` : '';
         return `${i + 1}. ${name}${cnt != null ? ` — ${n(cnt)}${appr}` : ''}`;
     }).join('\n');
-    const npName = p => `${p.agent_name || '—'}${p.agent_company ? ` (${p.agent_company})` : ''}${p.id_string ? ` · ${p.id_string}` : ''}`;
+    const npName = p => {
+        const ids = Array.isArray(p.ids) ? p.ids : (p.id_string ? [p.id_string] : []);
+        const idPart = ids.length ? ` · ${ids.length > 1 ? 'IDs ' : ''}${ids.join(', ')}` : '';
+        return `${p.agent_name || '—'}${p.agent_company ? ` (${p.agent_company})` : ''}${idPart}`;
+    };
     const npWeek = (d.newPartnersWeek || []).slice(0, 5).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
     const npYest = (d.newPartnersYesterday || []).slice(0, 5).map((p, i) => `${i + 1}. ${npName(p)}`).join('\n');
     return `📊 **Partners & Merchants Report** — ${d.date}\n`
