@@ -14,7 +14,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
 import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow } from './_ghl.js';
-import { setConfigValue } from './api-config.js';
+import { setConfigValue, getConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
 import { normEmail, recordOptin, recordOptins, optedInIds } from './_marketing-optins.js';
@@ -125,13 +125,18 @@ async function viewerContactOf(who) {
     return null;
 }
 
-// Send an email via platform Postmark (best-effort). Returns {ok,error}.
+// Send an email via platform Postmark (best-effort). Reads the token/From from
+// Vercel env first, then the Secret Dungeon config (app_config), matching
+// whitelabel.js. Returns {ok,error}.
 async function sendMailPostmark(to, subject, htmlBody, textBody) {
-    if (!process.env.POSTMARK_SERVER_TOKEN || !to) return { ok: false, error: 'no token/recipient' };
+    if (!to) return { ok: false, error: 'no recipient' };
+    const token = process.env.POSTMARK_SERVER_TOKEN || await getConfigValue('POSTMARK_SERVER_TOKEN');
+    const from = process.env.EMAIL_FROM || await getConfigValue('EMAIL_FROM') || 'noreply@mypayprotec.com';
+    if (!token) return { ok: false, error: 'Postmark not configured (add POSTMARK_SERVER_TOKEN in Secret Dungeon).' };
     try {
         const { ServerClient } = await import('postmark');
-        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
-        await client.sendEmail({ From: process.env.EMAIL_FROM, To: to, Subject: subject, HtmlBody: htmlBody, TextBody: textBody || '', MessageStream: 'outbound' });
+        const client = new ServerClient(token);
+        await client.sendEmail({ From: from, To: to, Subject: subject, HtmlBody: htmlBody, TextBody: textBody || '', MessageStream: 'outbound' });
         return { ok: true };
     } catch (e) { return { ok: false, error: e.message }; }
 }
