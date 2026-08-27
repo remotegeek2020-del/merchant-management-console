@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event — PayProTec</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px;}
+h1{font-size:22px;color:var(--navy);margin:0 0 4px;}
+.muted{color:var(--muted);}
+.big{font-size:34px;font-weight:800;font-family:'DM Mono',monospace;color:var(--navy);}
+.tiles{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;}
+.tile{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 18px;min-width:120px;}
+.tile .n{font-size:24px;font-weight:800;font-family:'DM Mono',monospace;color:var(--navy);}
+.tile .l{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+.seg{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;}
+.seg button{border:1px solid var(--border);background:#fff;border-radius:99px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#334155;}
+.seg button.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+th,td{padding:9px 12px;text-align:left;font-size:13px;border-bottom:1px solid #f1f5f9;}
+th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+.chip{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;}
+.c-announcement{background:#e0f2fe;color:#0369a1;} .c-email_blast{background:#dcfce7;color:#166534;}
+.c-sms_blast{background:#fef9c3;color:#854d0e;} .c-ads{background:#fee2e2;color:#991b1b;} .c-other{background:#ede9fe;color:#5b21b6;}
+.center{text-align:center;padding:80px 20px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="center muted">Loading…</div></div>
+<script>
+const CH_LABELS = { announcement:'Announcement', email_blast:'Email blast', sms_blast:'SMS blast', ads:'Ads', other:'Other' };
+const chLabel = k => CH_LABELS[k] || String(k||'other').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const token = new URLSearchParams(location.search).get('token') || '';
+let _data=null, _channel='';
+
+async function load(){
+  if(!token){ document.getElementById('app').innerHTML='<div class="center muted">Invalid link.</div>'; return; }
+  const r = await (await fetch('/api/event-public',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})})).json();
+  if(!r.success){
+    document.getElementById('app').innerHTML='<div class="center"><span class="material-icons" style="font-size:44px;color:#cbd5e1;">link_off</span><h1 style="margin-top:10px;">Not available</h1><div class="muted">'+esc(r.message||'This link is not active.')+'</div></div>';
+    return;
+  }
+  _data=r; render();
+}
+function render(){
+  const d=_data; const chKeys=Object.keys(d.by_channel||{}).sort();
+  const tiles = `<div class="tile"><div class="n">${d.total}</div><div class="l">Total contacts</div></div>` +
+    chKeys.map(k=>`<div class="tile"><div class="n">${d.by_channel[k]}</div><div class="l">${esc(chLabel(k))}</div></div>`).join('');
+  let contactsBlock='';
+  if(d.show_contacts){
+    const seg = `<button class="${_channel===''?'on':''}" onclick="setCh('')">All (${d.total})</button>` +
+      chKeys.map(k=>`<button class="${_channel===k?'on':''}" onclick="setCh('${esc(k)}')">${esc(chLabel(k))} (${d.by_channel[k]})</button>`).join('');
+    let rows=d.contacts||[]; if(_channel) rows=rows.filter(r=>r.channel===_channel);
+    const table = rows.length ? (`<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Channel</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td><b>${esc(r.name||'—')}</b></td><td>${esc(r.email||'')}</td><td>${esc(r.phone||'')}</td><td><span class="chip c-${esc(r.channel)}">${esc(chLabel(r.channel))}</span></td></tr>`).join('')+`</tbody></table>`)
+      : '<div class="muted" style="padding:20px;">No contacts in this view.</div>';
+    contactsBlock = `<div class="seg">${seg}</div>${table}`;
+  }
+  document.getElementById('app').innerHTML = `
+    <h1>${esc(d.event.name)}</h1>
+    <div class="muted">${d.event.event_date?esc(d.event.event_date):''}${d.event.description?' · '+esc(d.event.description):''}</div>
+    <div class="tiles">${tiles}</div>
+    ${contactsBlock}
+    <div class="muted" style="font-size:11px;margin-top:26px;border-top:1px solid var(--border);padding-top:12px;">PayProTec · shared event view</div>`;
+}
+function setCh(c){ _channel=c; render(); }
+load();
+</script>
+</body>
+</html>

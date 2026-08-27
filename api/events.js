@@ -3,6 +3,7 @@
 // CSV import, or GHL tag backfill — each tagged with a channel. Gated on staff
 // session + access_marketing (super_admin / admin always allowed).
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
 import { getConfigValue, setConfigValue } from './api-config.js';
 import { ghlSearchContactsByTag } from './_ghl.js';
@@ -159,6 +160,40 @@ export default async function handler(req, res) {
             }
             await supabase.from('marketing_show_events').update({ updated_at: new Date().toISOString() }).eq('id', id);
             return ok(res, { imported });
+        }
+
+        // ── Public share link (manual on/off + optional auto-expire date) ──
+        if (action === 'get_share' || action === 'set_share' || action === 'regen_share') {
+            const { id } = req.body;
+            if (!id) return bad(res, 'id required');
+            let { data: ev } = await supabase.from('marketing_show_events')
+                .select('id, share_token, share_active, share_until, share_show_contacts').eq('id', id).maybeSingle();
+            if (!ev) return bad(res, 'Event not found.');
+            const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+            const host = req.headers['x-forwarded-host'] || req.headers.host;
+            const mkToken = () => randomBytes(18).toString('base64url');
+
+            if (action === 'regen_share') {
+                const token = mkToken();
+                await supabase.from('marketing_show_events').update({ share_token: token }).eq('id', id);
+                ev.share_token = token;
+            }
+            if (action === 'set_share') {
+                const patch = {};
+                if (req.body.active !== undefined) patch.share_active = !!req.body.active;
+                if (req.body.until !== undefined) patch.share_until = req.body.until || null;
+                if (req.body.show_contacts !== undefined) patch.share_show_contacts = !!req.body.show_contacts;
+                // Turning it on for the first time mints a token.
+                if (patch.share_active && !ev.share_token) patch.share_token = mkToken();
+                patch.updated_at = new Date().toISOString();
+                const { error } = await supabase.from('marketing_show_events').update(patch).eq('id', id);
+                if (error) throw error;
+                ev = { ...ev, ...patch };
+            }
+            const token = ev.share_token || null;
+            const url = token ? `${proto}://${host}/event-view?token=${token}` : null;
+            const live = !!(ev.share_active && token && (!ev.share_until || new Date(ev.share_until + 'T23:59:59') >= new Date()));
+            return ok(res, { token, url, active: !!ev.share_active, until: ev.share_until || null, show_contacts: ev.share_show_contacts !== false, live });
         }
 
         // Delete one contact row (fix a single bad entry).

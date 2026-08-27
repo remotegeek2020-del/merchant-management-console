@@ -133,6 +133,7 @@ function renderDetail(){
         <button class="btn btn-neutral btn-sm" onclick="exportCsv()"><span class="material-icons">download</span> Export</button>
         <button class="btn btn-neutral btn-sm" onclick="openBackfill()"><span class="material-icons">sync</span> Backfill (GHL)</button>
         <button class="btn btn-purple btn-sm" onclick="openSendClickup()"><span class="material-icons">forum</span> ClickUp</button>
+        <button class="btn btn-neutral btn-sm" onclick="openShare()"><span class="material-icons">link</span> Share link</button>
         <button class="btn btn-neutral btn-sm" onclick="openEditEvent()"><span class="material-icons">edit</span> Edit</button>
       </div>
     </div>
@@ -363,6 +364,52 @@ async function doSendClickup(btn){
   btn.disabled=false;
   document.getElementById('cuMsg').innerHTML = r.success ? '<span style="color:var(--green);">✓ Posted'+(r.parts>1?(' ('+r.parts+' messages)'):'')+'.</span>' : '<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>';
   if(r.success) setTimeout(closeModal,1200);
+}
+
+// ── Public share link ──
+async function openShare(){
+  openModal(`<h2>Share link</h2><div id="shBody"><div class="muted" style="font-size:12px;">Loading…</div></div>`);
+  const r=await api({ action:'get_share', id:_ev.id });
+  renderShare(r);
+}
+function renderShare(r){
+  if(!r.success){ document.getElementById('shBody').innerHTML='<div class="hint">'+esc(r.message||'Failed')+'</div>'; return; }
+  const url = r.url || '(link appears once you turn it on)';
+  const liveBadge = r.active
+    ? (r.live ? '<span style="color:var(--green);font-weight:700;">● Live</span>' : '<span style="color:#b45309;font-weight:700;">On, but past the active-until date</span>')
+    : '<span style="color:var(--red);font-weight:700;">Off</span>';
+  document.getElementById('shBody').innerHTML=`
+    <div class="hint" style="margin-bottom:12px;">A read-only public page for this event. Anyone with the link can view it while it's <b>on</b> and (if set) before the <b>active-until</b> date. Turn it off anytime.</div>
+    <label class="fld">Link</label>
+    <div style="display:flex;gap:8px;"><input class="inp" id="sh_url" value="${esc(url)}" readonly><button class="btn btn-neutral" onclick="copyShare()">Copy</button></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;font-weight:700;cursor:pointer;">
+      <input type="checkbox" id="sh_active" ${r.active?'checked':''}> Link is ON &nbsp; ${liveBadge}
+    </label>
+    <label class="fld">Active until <span class="muted">(optional — leave blank to stay on until you turn it off)</span></label>
+    <input class="inp" type="date" id="sh_until" value="${r.until?esc(r.until):''}">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="sh_contacts" ${r.show_contacts?'checked':''}> Show the contact list on the shared page <span class="muted">(off = counts only)</span>
+    </label>
+    <div id="shMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">
+      <button class="btn btn-neutral btn-sm" onclick="regenShare(this)">Regenerate link</button>
+      <div style="display:flex;gap:8px;"><button class="btn btn-neutral" onclick="closeModal()">Close</button><button class="btn btn-brand" onclick="saveShare(this)">Save</button></div>
+    </div>`;
+}
+function copyShare(){ const el=document.getElementById('sh_url'); el.select(); try{ navigator.clipboard.writeText(el.value); document.getElementById('shMsg').innerHTML='<span style="color:var(--green);">Copied.</span>'; }catch(e){ document.execCommand('copy'); } }
+async function saveShare(btn){
+  btn.disabled=true;
+  const r=await api({ action:'set_share', id:_ev.id, active:document.getElementById('sh_active').checked, until:document.getElementById('sh_until').value||null, show_contacts:document.getElementById('sh_contacts').checked });
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('shMsg').innerHTML='<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>'; return; }
+  renderShare(r); document.getElementById('shMsg').innerHTML='<span style="color:var(--green);">✓ Saved.</span>';
+}
+async function regenShare(btn){
+  if(!confirm('Generate a new link? The old link will stop working.')) return;
+  btn.disabled=true;
+  const r=await api({ action:'regen_share', id:_ev.id });
+  btn.disabled=false;
+  renderShare(r);
 }
 
 // ── Webhook setup ──
