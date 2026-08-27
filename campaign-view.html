@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campaign Stats — PayProTec</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--green:#16a34a;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.wrap{max-width:820px;margin:0 auto;padding:28px 20px 60px;}
+h1{font-size:22px;color:var(--navy);margin:0 0 4px;}
+h3{font-size:14px;color:var(--navy);border-bottom:2px solid #eef2f7;padding-bottom:6px;margin:24px 0 10px;}
+.muted{color:var(--muted);}
+.tiles{display:flex;gap:10px;flex-wrap:wrap;}
+.tile{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;text-align:center;min-width:96px;flex:1;}
+.tile .n{font-size:22px;font-weight:800;font-family:'DM Mono',monospace;color:var(--navy);}
+.tile .l{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:2px;}
+.conv{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:16px;}
+.conv .hd{font-size:14px;font-weight:800;color:var(--green);margin-bottom:10px;}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:10px;}
+th,td{padding:8px 10px;text-align:left;font-size:12px;border-bottom:1px solid #f1f5f9;}
+th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);}
+.center{text-align:center;padding:80px 20px;}
+.badge{font-size:11px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:99px;padding:1px 8px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="center muted">Loading…</div></div>
+<script>
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const n = v => Number(v||0).toLocaleString();
+const token = new URLSearchParams(location.search).get('token') || '';
+
+async function load(){
+  if(!token){ document.getElementById('app').innerHTML='<div class="center muted">Invalid link.</div>'; return; }
+  const r = await (await fetch('/api/campaign-public',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})})).json();
+  if(!r.success){
+    document.getElementById('app').innerHTML='<div class="center"><span class="material-icons" style="font-size:44px;color:#cbd5e1;">link_off</span><h1 style="margin-top:10px;">Not available</h1><div class="muted">'+esc(r.message||'This link is not active.')+'</div></div>';
+    return;
+  }
+  render(r.summary);
+}
+function render(s){
+  const tile=(v,l,color)=>`<div class="tile"><div class="n"${color?` style="color:${color}"`:''}>${esc(v)}</div><div class="l">${esc(l)}</div></div>`;
+  const conv=s.conversions;
+  let convBlock='';
+  if(conv){
+    const bt=conv.by_type||{};
+    let rows='';
+    if(conv.list && conv.list.length){
+      rows=`<table><thead><tr><th>Name</th><th>Email</th><th>Type</th></tr></thead><tbody>`+
+        conv.list.map(r=>`<tr><td>${esc(r.name||'—')}</td><td>${esc(r.email||'')}</td><td>${esc(r.type||'')}</td></tr>`).join('')+`</tbody></table>`;
+    } else if(s.contacts_hidden){ rows='<div class="muted" style="font-size:12px;margin-top:8px;">Contact details hidden by the sharer.</div>'; }
+    convBlock=`<div class="conv">
+      <div class="hd">✅ Conversions: ${n(conv.total)}${conv.rate!=null?` · ${conv.rate}% of clicks`:''}</div>
+      <div class="tiles">
+        ${tile(conv.total,'Total','#16a34a')}
+        ${tile(conv.partners||0,'Current partners','#92400e')}
+        ${tile(conv.non_partners!=null?conv.non_partners:(conv.total-(conv.partners||0)),'New / non-partner')}
+        ${tile(bt.appointment||0,'Booked')}
+      </div>${rows}</div>`;
+  } else { convBlock='<div class="muted" style="font-size:12px;">No conversion tracking configured.</div>'; }
+
+  const a=s.by_audience||{};
+  let phase='';
+  if(s.by_phase){ const p=s.by_phase;
+    phase=`<h3>📺 YouTube lifecycle</h3><div class="tiles">
+      ${tile(p.upcoming.clicks+'/'+p.upcoming.impressions,'Upcoming (clicks/views)')}
+      ${tile(p.live.clicks+'/'+p.live.impressions,'Live (clicks/views)')}
+      ${tile(p.replay.clicks+'/'+p.replay.impressions,'Replay (clicks/views)')}
+    </div>`;
+  }
+
+  document.getElementById('app').innerHTML=`
+    <h1>${esc(s.title)} ${s.is_youtube?'<span class="badge">YouTube</span>':''}</h1>
+    <div class="muted" style="margin-bottom:16px;">Campaign stats</div>
+    ${convBlock}
+    <h3>Engagement</h3>
+    <div class="tiles">
+      ${tile(n(s.impressions),'Views')}
+      ${tile(n(s.clicks),'Clicks')}
+      ${tile(s.ctr+'%','CTR','#16a34a')}
+      ${tile(n(s.dismissals),'Dismissed')}
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px;">${n(s.unique_impressions)} unique viewers · ${n(s.unique_clicks)} unique clickers · ${n(s.opted_in)} registered</div>
+    <div class="muted" style="font-size:12px;margin-top:6px;">Clicks by channel: 🤝 ${n(a.partner)} · 🧑‍💼 ${n(a.staff)} · 🔎 ${n(a.prospect)} · 🌐 ${n(a.ghl)} · 💻 ${n(a.website)}</div>
+    ${phase}
+    <div class="muted" style="font-size:11px;margin-top:26px;border-top:1px solid var(--border);padding-top:12px;">PayProTec · shared campaign view</div>`;
+}
+load();
+</script>
+</body>
+</html>

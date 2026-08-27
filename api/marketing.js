@@ -143,7 +143,7 @@ async function sendMailPostmark(to, subject, htmlBody, textBody) {
 }
 
 // Build a stats summary (conversions-first) for a campaign, for the manual send.
-async function buildStatsSummary(id) {
+export async function buildStatsSummary(id) {
     const { data: c } = await supabase.from('marketing_campaigns')
         .select('title, event_mode, campaign_kind, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
     if (!c) return null;
@@ -463,7 +463,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -1221,6 +1221,37 @@ export default async function handler(req, res) {
                     if (r.ok) sent++; else failed.push(to);
                 }
                 return ok(res, { sent, failed, recipients: recipients.length });
+            }
+
+            // ── Public share link for a campaign's stats page ─────────────────
+            if (action === 'get_share' || action === 'set_share' || action === 'regen_share') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'campaign_id required');
+                let { data: c } = await supabase.from('marketing_campaigns')
+                    .select('id, share_token, share_active, share_until, share_show_contacts').eq('id', id).maybeSingle();
+                if (!c) return bad(res, 'Campaign not found.');
+                const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+                const host = req.headers['x-forwarded-host'] || req.headers.host;
+                const mkToken = () => randomBytes(18).toString('base64url');
+                if (action === 'regen_share') {
+                    const token = mkToken();
+                    await supabase.from('marketing_campaigns').update({ share_token: token }).eq('id', id);
+                    c.share_token = token;
+                }
+                if (action === 'set_share') {
+                    const patch = {};
+                    if (req.body.active !== undefined) patch.share_active = !!req.body.active;
+                    if (req.body.until !== undefined) patch.share_until = req.body.until || null;
+                    if (req.body.show_contacts !== undefined) patch.share_show_contacts = !!req.body.show_contacts;
+                    if (patch.share_active && !c.share_token) patch.share_token = mkToken();
+                    const { error } = await supabase.from('marketing_campaigns').update(patch).eq('id', id);
+                    if (error) throw error;
+                    c = { ...c, ...patch };
+                }
+                const token = c.share_token || null;
+                const url = token ? `${proto}://${host}/campaign-view?token=${token}` : null;
+                const live = !!(c.share_active && token && (!c.share_until || new Date(c.share_until + 'T23:59:59') >= new Date()));
+                return ok(res, { token, url, active: !!c.share_active, until: c.share_until || null, show_contacts: c.share_show_contacts !== false, live });
             }
 
             // ── Send campaign stats to ClickUp Chat ───────────────────────────

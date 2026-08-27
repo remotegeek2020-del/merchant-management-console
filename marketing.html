@@ -656,6 +656,17 @@
   </div>
 </div>
 
+<div class="modal" id="campaignShareModal">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">link</span>
+      <h2>Share link</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('campaignShareModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body" id="campaignShareBody"><div class="muted" style="font-size:12px;">Loading…</div></div>
+  </div>
+</div>
+
 <div class="modal" id="cuStatsModal">
   <div class="modal-box" style="max-width:460px;">
     <div class="modal-head">
@@ -2100,6 +2111,7 @@ async function showStats(id, title){
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="btn btn-brand" onclick='openSendStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">send</span> Send stats</button>
       <button class="btn btn-neutral" style="background:#faf5ff;color:#7c3aed;border-color:#a78bfa;" onclick='openClickupStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">forum</span> Send to ClickUp</button>
+      <button class="btn btn-neutral" onclick='openCampaignShare(${JSON.stringify(id)})'><span class="material-icons" style="font-size:16px;">link</span> Share link</button>
       <button class="btn btn-neutral" onclick='exportClicks(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">download</span> Export clickers (CSV)</button>
     </div>
     <div class="statgrid">
@@ -2295,6 +2307,45 @@ function siteSection(bySite){
   return `<label class="fld">External sites (embed)</label>${rows}`;
 }
 
+// ── Campaign public share link ──
+var _shId=null;
+async function openCampaignShare(id){
+  _shId=id;
+  document.getElementById('campaignShareModal').style.display='flex';
+  document.getElementById('campaignShareBody').innerHTML='<div class="muted" style="font-size:12px;">Loading…</div>';
+  renderCampaignShare(await api({action:'get_share', id}));
+}
+function renderCampaignShare(r){
+  const body=document.getElementById('campaignShareBody');
+  if(!r.success){ body.innerHTML='<div style="font-size:12px;color:var(--red);">'+esc(r.message||'Failed')+'</div>'; return; }
+  const url=r.url||'(link appears once you turn it on)';
+  const badge=r.active?(r.live?'<span style="color:#16a34a;font-weight:700;">● Live</span>':'<span style="color:#b45309;font-weight:700;">On, but past the active-until date</span>'):'<span style="color:var(--red);font-weight:700;">Off</span>';
+  body.innerHTML=`
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">A read-only public stats page for this campaign. Anyone with the link can view it while it's <b>on</b> and (if set) before the <b>active-until</b> date.</div>
+    <label class="fld" style="margin-top:0;">Link</label>
+    <div style="display:flex;gap:8px;"><input class="inp" id="sh_url" value="${esc(url)}" readonly><button class="btn btn-neutral" onclick="copyCampaignShare()">Copy</button></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;font-weight:700;cursor:pointer;"><input type="checkbox" id="sh_active" ${r.active?'checked':''}> Link is ON &nbsp; ${badge}</label>
+    <label class="fld">Active until <span class="muted">(optional — blank = on until you turn it off)</span></label>
+    <input class="inp" type="date" id="sh_until" value="${r.until?esc(r.until):''}">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="sh_contacts" ${r.show_contacts?'checked':''}> Show conversion names/emails on the shared page <span class="muted">(off = counts only)</span></label>
+    <div id="sh_msg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">
+      <button class="btn btn-neutral" onclick="regenCampaignShare(this)">Regenerate</button>
+      <div style="display:flex;gap:8px;"><button class="btn btn-neutral" onclick="document.getElementById('campaignShareModal').style.display='none'">Close</button><button class="btn btn-brand" onclick="saveCampaignShare(this)">Save</button></div>
+    </div>`;
+}
+function copyCampaignShare(){ const el=document.getElementById('sh_url'); el.select(); try{ navigator.clipboard.writeText(el.value); document.getElementById('sh_msg').innerHTML='<span style="color:#16a34a;">Copied.</span>'; }catch(e){ try{document.execCommand('copy');}catch(_){} } }
+async function saveCampaignShare(btn){
+  btn.disabled=true;
+  const r=await api({action:'set_share', id:_shId, active:document.getElementById('sh_active').checked, until:document.getElementById('sh_until').value||null, show_contacts:document.getElementById('sh_contacts').checked});
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('sh_msg').innerHTML='<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>'; return; }
+  renderCampaignShare(r); document.getElementById('sh_msg').innerHTML='<span style="color:#16a34a;">✓ Saved.</span>';
+}
+async function regenCampaignShare(btn){
+  if(!confirm('Generate a new link? The old one stops working.')) return;
+  btn.disabled=true; const r=await api({action:'regen_share', id:_shId}); btn.disabled=false; renderCampaignShare(r);
+}
 // ── Send campaign stats to ClickUp ──
 var _cuStatsId=null;
 async function openClickupStats(id, title){
