@@ -48,14 +48,19 @@ async function load(){
   }
   _data=r; render();
 }
+const BASE_CHANNELS = ['announcement','email_blast','sms_blast','ads'];
+function channelKeys(byCh){
+  const extras = Object.keys(byCh||{}).filter(k=>!BASE_CHANNELS.includes(k)).sort();
+  return BASE_CHANNELS.concat(extras);
+}
 function render(){
-  const d=_data; const chKeys=Object.keys(d.by_channel||{}).sort();
+  const d=_data; const chKeys=channelKeys(d.by_channel);
   const tiles = `<div class="tile"><div class="n">${d.total}</div><div class="l">Total contacts</div></div>` +
-    chKeys.map(k=>`<div class="tile"><div class="n">${d.by_channel[k]}</div><div class="l">${esc(chLabel(k))}</div></div>`).join('');
+    chKeys.map(k=>`<div class="tile"><div class="n">${d.by_channel[k]||0}</div><div class="l">${esc(chLabel(k))}</div></div>`).join('');
   let contactsBlock='';
   if(d.show_contacts){
     const seg = `<button class="${_channel===''?'on':''}" onclick="setCh('')">All (${d.total})</button>` +
-      chKeys.map(k=>`<button class="${_channel===k?'on':''}" onclick="setCh('${esc(k)}')">${esc(chLabel(k))} (${d.by_channel[k]})</button>`).join('');
+      chKeys.map(k=>`<button class="${_channel===k?'on':''}" onclick="setCh('${esc(k)}')">${esc(chLabel(k))} (${d.by_channel[k]||0})</button>`).join('');
     let rows=d.contacts||[]; if(_channel) rows=rows.filter(r=>r.channel===_channel);
     const table = rows.length ? (`<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Channel</th></tr></thead><tbody>`+
       rows.map(r=>`<tr><td><b>${esc(r.name||'—')}</b></td><td>${esc(r.email||'')}</td><td>${esc(r.phone||'')}</td><td><span class="chip c-${esc(r.channel)}">${esc(chLabel(r.channel))}</span></td></tr>`).join('')+`</tbody></table>`)

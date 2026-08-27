@@ -117,10 +117,15 @@ async function openEvent(id){
 }
 function backToList(){ document.getElementById('detailView').classList.add('hidden'); document.getElementById('listView').classList.remove('hidden'); loadEvents(); }
 
+const BASE_CHANNELS = ['announcement','email_blast','sms_blast','ads'];
+function channelKeys(byCh){
+  const extras = Object.keys(byCh||{}).filter(k=>!BASE_CHANNELS.includes(k)).sort();
+  return BASE_CHANNELS.concat(extras);
+}
 function renderDetail(){
-  const st=_stats; const chKeys=Object.keys(st.by_channel||{}).sort();
+  const st=_stats; const chKeys=channelKeys(st.by_channel);
   const seg = `<button class="${_channel===''?'on':''}" onclick="setChannel('')">All (${st.total})</button>` +
-    chKeys.map(k=>`<button class="${_channel===k?'on':''}" onclick="setChannel('${esc(k)}')">${esc(chLabel(k))} (${st.by_channel[k]})</button>`).join('');
+    chKeys.map(k=>`<button class="${_channel===k?'on':''}" onclick="setChannel('${esc(k)}')">${esc(chLabel(k))} (${st.by_channel[k]||0})</button>`).join('');
   document.getElementById('detailView').innerHTML = `
     <button class="btn btn-neutral btn-sm" onclick="backToList()"><span class="material-icons">arrow_back</span> All events</button>
     <div class="top" style="margin-top:14px;">
