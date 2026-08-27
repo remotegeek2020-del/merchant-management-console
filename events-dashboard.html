@@ -137,7 +137,10 @@ function renderDetail(){
       </div>
     </div>
     <div class="seg">${seg}</div>
-    <div style="margin-bottom:10px;"><input class="inp" id="cSearch" placeholder="Search name / email / phone…" oninput="renderContacts()" style="max-width:320px;"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+      <input class="inp" id="cSearch" placeholder="Search name / email / phone…" oninput="renderContacts()" style="max-width:320px;">
+      ${_channel?`<button class="btn btn-danger btn-sm" onclick="clearChannel()"><span class="material-icons">delete_sweep</span> Clear “${esc(chLabel(_channel))}”</button>`:''}
+    </div>
     <div id="contactsWrap"><div class="muted" style="padding:20px;">Loading…</div></div>`;
 }
 function setChannel(c){ _channel=c; renderDetail(); loadContacts(); }
@@ -152,13 +155,30 @@ function renderContacts(){
   if(q) rows = rows.filter(r=>(r.name||'').toLowerCase().includes(q)||(r.email||'').toLowerCase().includes(q)||(r.phone||'').includes(q));
   const wrap = document.getElementById('contactsWrap');
   if(!rows.length){ wrap.innerHTML='<div class="muted" style="padding:20px;">No contacts'+(q?' match your search':'')+'.</div>'; return; }
-  wrap.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Channel</th><th>Source</th><th>Added</th></tr></thead><tbody>`+
+  wrap.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Channel</th><th>Source</th><th>Added</th><th></th></tr></thead><tbody>`+
     rows.map(r=>`<tr>
       <td><b>${esc(r.name||'—')}</b></td><td>${esc(r.email||'')}</td><td>${esc(r.phone||'')}</td>
       <td><span class="chip c-${esc(r.channel)}">${esc(chLabel(r.channel))}</span></td>
       <td class="muted">${esc(r.source||'')}</td>
       <td class="muted" style="font-size:11px;">${r.created_at?new Date(r.created_at).toLocaleDateString():''}</td>
+      <td style="text-align:right;"><button title="Delete this contact" onclick="delContact('${r.id}')" style="background:none;border:none;color:#cbd5e1;cursor:pointer;padding:2px;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#cbd5e1'"><span class="material-icons" style="font-size:17px;">delete</span></button></td>
     </tr>`).join('') + `</tbody></table>`;
+}
+async function delContact(cid){
+  if(!confirm('Delete this contact from the event?')) return;
+  const r=await api({ action:'delete_contact', contact_id:cid });
+  if(!r.success){ alert(r.message||'Failed'); return; }
+  _contacts=_contacts.filter(c=>c.id!==cid);
+  // Refresh counts by reloading the event header.
+  const gr=await api({ action:'get_event', id:_ev.id }); if(gr.success){ _stats=gr.stats; renderDetail(); loadContacts(); }
+  else renderContacts();
+}
+async function clearChannel(){
+  if(!_channel) return;
+  if(!confirm('Delete ALL contacts in the “'+chLabel(_channel)+'” channel for this event? This cannot be undone.')) return;
+  const r=await api({ action:'clear_channel', id:_ev.id, channel:_channel });
+  if(!r.success){ alert(r.message||'Failed'); return; }
+  _channel=''; openEvent(_ev.id);
 }
 
 // ── New / edit event ──

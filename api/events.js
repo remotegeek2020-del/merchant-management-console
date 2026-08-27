@@ -161,6 +161,28 @@ export default async function handler(req, res) {
             return ok(res, { imported });
         }
 
+        // Delete one contact row (fix a single bad entry).
+        if (action === 'delete_contact') {
+            const { contact_id } = req.body;
+            if (!contact_id) return bad(res, 'contact_id required');
+            const { error } = await supabase.from('marketing_event_contacts').delete().eq('id', contact_id);
+            if (error) throw error;
+            return ok(res);
+        }
+
+        // Clear all contacts in one channel of an event (undo a bad tab import).
+        // Pass channel omitted/'' to clear the WHOLE event's contacts.
+        if (action === 'clear_channel') {
+            const { id, channel } = req.body;
+            if (!id) return bad(res, 'id required');
+            let del = supabase.from('marketing_event_contacts').delete().eq('event_id', id);
+            if (channel) del = del.eq('channel', normChannel(channel));
+            const { error } = await del;
+            if (error) throw error;
+            await supabase.from('marketing_show_events').update({ updated_at: new Date().toISOString() }).eq('id', id);
+            return ok(res);
+        }
+
         // Backfill from GHL by tag → a channel.
         if (action === 'backfill_ghl') {
             const { id, location_id, tag, channel } = req.body;
