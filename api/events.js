@@ -33,18 +33,35 @@ function normChannel(x) {
     return slug(s).replace(/-/g, '_') || 'other';
 }
 
-// Per-channel counts for a set of events.
+// Per-channel counts via SQL aggregate (accurate — not subject to the 1000-row cap).
 async function channelCounts(eventIds) {
     if (!eventIds.length) return {};
-    const { data } = await supabase.from('marketing_event_contacts')
-        .select('event_id, channel').in('event_id', eventIds).limit(100000);
+    const single = eventIds.length === 1 ? eventIds[0] : null;
+    const { data } = await supabase.rpc('event_channel_counts', { p_event: single });
+    const want = new Set(eventIds.map(String));
     const out = {};
     (data || []).forEach(r => {
+        if (!single && !want.has(String(r.event_id))) return;
         (out[r.event_id] || (out[r.event_id] = { total: 0, by_channel: {} }));
-        out[r.event_id].total++;
-        out[r.event_id].by_channel[r.channel] = (out[r.event_id].by_channel[r.channel] || 0) + 1;
+        out[r.event_id].total += Number(r.cnt) || 0;
+        out[r.event_id].by_channel[r.channel] = Number(r.cnt) || 0;
     });
     return out;
+}
+
+// Fetch ALL contacts for an event (paginated past the PostgREST 1000-row cap).
+async function fetchAllContacts(eventId, channel, cols = '*') {
+    const all = []; const size = 1000;
+    for (let page = 0; page < 60; page++) {
+        let q = supabase.from('marketing_event_contacts').select(cols).eq('event_id', eventId)
+            .order('created_at', { ascending: false }).range(page * size, page * size + size - 1);
+        if (channel) q = q.eq('channel', channel);
+        const { data } = await q;
+        if (!data || !data.length) break;
+        all.push(...data);
+        if (data.length < size) break;
+    }
+    return all;
 }
 
 export default async function handler(req, res) {
@@ -116,10 +133,7 @@ export default async function handler(req, res) {
         if (action === 'list_contacts') {
             const { id, channel, q } = req.body;
             if (!id) return bad(res, 'id required');
-            let query = supabase.from('marketing_event_contacts').select('*').eq('event_id', id).order('created_at', { ascending: false }).limit(5000);
-            if (channel) query = query.eq('channel', channel);
-            const { data } = await query;
-            let rows = data || [];
+            let rows = await fetchAllContacts(id, channel || null);
             if (q) {
                 const s = String(q).toLowerCase();
                 rows = rows.filter(r => (r.name || '').toLowerCase().includes(s) || (r.email || '').toLowerCase().includes(s) || (r.phone || '').includes(s));
@@ -262,7 +276,7 @@ export default async function handler(req, res) {
             const chId = channel_id || m.clickup_channel_events;
             if (!(await clickUpConfigured()) || !wid) return bad(res, 'ClickUp not connected (set it up in Secret Dungeon → Sending Reports).');
             if (!chId) return bad(res, 'Pick a ClickUp channel.');
-            const { data: contacts } = await supabase.from('marketing_event_contacts').select('*').eq('event_id', id).order('channel').limit(100000);
+            const contacts = await fetchAllContacts(id, null);
             const byCh = {};
             (contacts || []).forEach(c => { (byCh[c.channel] || (byCh[c.channel] = [])).push(c); });
             let md = `🎬 **${ev.name}**${ev.event_date ? ` — ${ev.event_date}` : ''}\n• Total contacts: **${(contacts || []).length}**\n`;

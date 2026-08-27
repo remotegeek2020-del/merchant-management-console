@@ -30,22 +30,33 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: false, inactive: true, message: reason });
     }
 
-    const { data: contacts } = await supabase.from('marketing_event_contacts')
-        .select('name, email, phone, channel, source, created_at').eq('event_id', ev.id).order('created_at', { ascending: false }).limit(100000);
-    const rows = contacts || [];
+    // Accurate per-channel counts via SQL aggregate (not the 1000-row cap).
+    const { data: counts } = await supabase.rpc('event_channel_counts', { p_event: ev.id });
     const byChannel = {};
-    rows.forEach(r => { byChannel[r.channel] = (byChannel[r.channel] || 0) + 1; });
+    let total = 0;
+    (counts || []).forEach(r => { byChannel[r.channel] = Number(r.cnt) || 0; total += Number(r.cnt) || 0; });
 
     const showContacts = ev.share_show_contacts !== false;
-    // Optional channel filter (public viewer navigation).
-    const ch = body.channel ? String(body.channel) : '';
+    // Fetch ALL contacts (paginated past the 1000-row cap) when the list is shown.
+    let contacts = [];
+    if (showContacts) {
+        const size = 1000;
+        for (let page = 0; page < 60; page++) {
+            const { data } = await supabase.from('marketing_event_contacts')
+                .select('name, email, phone, channel, source, created_at').eq('event_id', ev.id)
+                .order('created_at', { ascending: false }).range(page * size, page * size + size - 1);
+            if (!data || !data.length) break;
+            contacts.push(...data);
+            if (data.length < size) break;
+        }
+    }
 
     return ok(res, {
         event: { name: ev.name, event_date: ev.event_date, description: ev.description },
-        total: rows.length,
+        total,
         by_channel: byChannel,
         channel_labels: CHANNEL_LABELS,
         show_contacts: showContacts,
-        contacts: showContacts ? (ch ? rows.filter(r => r.channel === ch) : rows) : []
+        contacts
     });
 }
