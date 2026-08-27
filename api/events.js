@@ -15,6 +15,12 @@ const bad = (res, message, status = 400) => res.status(status).json({ success: f
 
 const CHANNEL_LABELS = { announcement: 'Announcement', email_blast: 'Email blast', sms_blast: 'SMS blast', ads: 'Ads', other: 'Other' };
 const chLabel = k => CHANNEL_LABELS[k] || String(k || 'other').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+const BASE_CHANNELS = ['announcement', 'email_blast', 'sms_blast', 'ads'];
+// Standard channels first (even if empty), then any custom ones present.
+function channelKeysOrdered(byCh) {
+    const extras = Object.keys(byCh || {}).filter(k => !BASE_CHANNELS.includes(k)).sort();
+    return BASE_CHANNELS.concat(extras);
+}
 
 function slug(s) {
     return String(s == null ? '' : s).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -265,30 +271,47 @@ export default async function handler(req, res) {
             return ok(res);
         }
 
-        // Post an event summary (per-channel + contacts) to ClickUp.
-        if (action === 'send_clickup') {
+        // Preview / send an event SUMMARY (per-source counts + a clickable share
+        // link) to ClickUp. clickup_preview returns the exact message text; send
+        // posts it AND turns the public share link ON so members can open it.
+        if (action === 'clickup_preview' || action === 'send_clickup') {
             const { id, channel_id } = req.body;
             const { data: ev } = await supabase.from('marketing_show_events').select('*').eq('id', id).maybeSingle();
             if (!ev) return bad(res, 'Event not found.');
+            const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+            const host = req.headers['x-forwarded-host'] || req.headers.host;
+
+            // Accurate per-channel counts.
+            const cc = (await channelCounts([id]))[id] || { total: 0, by_channel: {} };
+            const keys = channelKeysOrdered(cc.by_channel);
+
+            // Ensure a share token exists so we can show/emit a clickable link.
+            let token = ev.share_token;
+            if (!token) { token = randomBytes(18).toString('base64url'); await supabase.from('marketing_show_events').update({ share_token: token }).eq('id', id); }
+            const shareUrl = `${proto}://${host}/event-view?token=${token}`;
+
+            let md = `🎬 **${ev.name}**${ev.event_date ? ` — ${ev.event_date}` : ''}\n`;
+            md += `• Total contacts: **${cc.total}**\n`;
+            md += keys.map(k => `• ${chLabel(k)}: **${cc.by_channel[k] || 0}**`).join('\n');
+            md += `\n\n🔗 **View the full dashboard:** ${shareUrl}`;
+
+            if (action === 'clickup_preview') {
+                return ok(res, { markdown: md, url: shareUrl, share_active: !!ev.share_active });
+            }
+
+            // send_clickup
             const { data: settings } = await supabase.from('app_settings').select('key, value').in('key', ['clickup_workspace_id', 'clickup_channel_events']);
             const m = Object.fromEntries((settings || []).map(r => [r.key, r.value]));
             const wid = m.clickup_workspace_id;
             const chId = channel_id || m.clickup_channel_events;
             if (!(await clickUpConfigured()) || !wid) return bad(res, 'ClickUp not connected (set it up in Secret Dungeon → Sending Reports).');
             if (!chId) return bad(res, 'Pick a ClickUp channel.');
-            const contacts = await fetchAllContacts(id, null);
-            const byCh = {};
-            (contacts || []).forEach(c => { (byCh[c.channel] || (byCh[c.channel] = [])).push(c); });
-            let md = `🎬 **${ev.name}**${ev.event_date ? ` — ${ev.event_date}` : ''}\n• Total contacts: **${(contacts || []).length}**\n`;
-            md += Object.keys(byCh).sort().map(k => `• ${chLabel(k)}: **${byCh[k].length}**`).join('\n') + '\n';
-            Object.keys(byCh).sort().forEach(k => {
-                md += `\n**${chLabel(k)} (${byCh[k].length})**\n`;
-                md += byCh[k].map((c, i) => `   ${i + 1}. ${c.name || '—'}${c.email ? ` · ${c.email}` : ''}${c.phone ? ` · ${c.phone}` : ''}`).join('\n') + '\n';
-            });
+            // Turn the public link ON so the link in the message actually works.
+            await supabase.from('marketing_show_events').update({ share_active: true, updated_at: new Date().toISOString() }).eq('id', id);
             const r = await cuPostLong(wid, chId, md);
             if (!r.ok) return bad(res, r.error || 'ClickUp send failed.');
             if (channel_id) await supabase.from('app_settings').upsert({ key: 'clickup_channel_events', value: String(channel_id), updated_at: new Date().toISOString() }, { onConflict: 'key' });
-            return ok(res, { posted: true, parts: r.parts || 1 });
+            return ok(res, { posted: true, parts: r.parts || 1, url: shareUrl });
         }
         if (action === 'clickup_channels') {
             const { data: settings } = await supabase.from('app_settings').select('key, value').in('key', ['clickup_workspace_id', 'clickup_workspace_name', 'clickup_channel_events']);

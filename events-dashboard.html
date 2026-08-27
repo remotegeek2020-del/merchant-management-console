@@ -358,17 +358,26 @@ async function openSendClickup(){
   if(!r.success||!r.configured){ body.innerHTML='<div class="hint" style="color:#b45309;">ClickUp isn\'t connected. Set it up in <b>Secret Dungeon → Sending Reports</b> first.</div>'; return; }
   if(!(r.channels||[]).length){ body.innerHTML='<div class="hint" style="color:#b45309;">No ClickUp channels found.</div>'; return; }
   const opts=r.channels.map(c=>`<option value="${esc(c.id)}" ${c.id===r.channel?'selected':''}>${esc(c.name)}</option>`).join('');
-  body.innerHTML=`<div class="muted" style="font-size:12px;margin-bottom:8px;">Posts this event's contacts by channel to a ClickUp Chat channel (${esc(r.workspace_name||'workspace')}).</div>
+  body.innerHTML=`<div class="muted" style="font-size:12px;margin-bottom:8px;">Posts a <b>summary of each source</b> + a clickable link to the full dashboard, to a ClickUp Chat channel (${esc(r.workspace_name||'workspace')}).</div>
     <label class="fld">Channel</label><select class="inp" id="cu_ch">${opts}</select>
+    <label class="fld">Preview</label>
+    <pre id="cuPreview" style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px;white-space:pre-wrap;word-break:break-word;font-family:inherit;max-height:240px;overflow:auto;margin:0;">Loading preview…</pre>
+    <div class="muted" style="font-size:11px;margin-top:6px;">Posting will turn the public link <b>ON</b> so members can open it.</div>
     <div id="cuMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-purple" onclick="doSendClickup(this)">Post to ClickUp</button></div>`;
+  loadCuPreview();
+}
+async function loadCuPreview(){
+  const pre=document.getElementById('cuPreview'); if(!pre) return;
+  const r=await api({ action:'clickup_preview', id:_ev.id });
+  pre.textContent = r.success ? r.markdown : ('Preview unavailable: '+(r.message||''));
 }
 async function doSendClickup(btn){
   btn.disabled=true; document.getElementById('cuMsg').textContent='Posting…';
   const r=await api({ action:'send_clickup', id:_ev.id, channel_id:document.getElementById('cu_ch').value });
   btn.disabled=false;
-  document.getElementById('cuMsg').innerHTML = r.success ? '<span style="color:var(--green);">✓ Posted'+(r.parts>1?(' ('+r.parts+' messages)'):'')+'.</span>' : '<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>';
-  if(r.success) setTimeout(closeModal,1200);
+  document.getElementById('cuMsg').innerHTML = r.success ? '<span style="color:var(--green);">✓ Posted'+(r.parts>1?(' ('+r.parts+' messages)'):'')+' — public link is now on.</span>' : '<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>';
+  if(r.success) setTimeout(closeModal,1400);
 }
 
 // ── Public share link ──
