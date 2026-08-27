@@ -6,6 +6,7 @@
 <title>Events & Shows — PayProTec</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--navy:#002d5a;--blue:#0369a1;--teal:#0d9488;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--red:#dc2626;--green:#16a34a;--purple:#7c3aed;}
 *{box-sizing:border-box;}
@@ -208,13 +209,24 @@ async function deleteEvent(btn){
 // ── Import CSV ──
 function openImport(){
   const chOpts = ['announcement','email_blast','sms_blast','ads','other'].map(k=>`<option value="${k}">${chLabel(k)}</option>`).join('');
-  openModal(`<h2>Import CSV</h2>
-    <div class="hint" style="margin-bottom:10px;">Expected columns: <b>Name, Email, Phone, Source</b> (extra columns ignored). All rows import into the channel you pick.</div>
-    <label class="fld">Channel</label><select class="inp" id="imp_ch">${chOpts}</select>
-    <label class="fld">CSV file</label><input class="inp" type="file" id="imp_file" accept=".csv">
+  openModal(`<h2>Import contacts</h2>
+    <div class="hint" style="margin-bottom:10px;">Columns: <b>Name, Email, Phone, Source</b> (extra columns ignored).<br>
+      • <b>CSV</b> → all rows go into the channel you pick below.<br>
+      • <b>Excel (.xlsx)</b> with multiple tabs → <b>each tab becomes a channel</b> (by its tab name, e.g. a tab called "Ads" imports as Ads). The dropdown is ignored for multi-tab Excel.</div>
+    <label class="fld">Channel <span class="muted">(for CSV / single-sheet)</span></label><select class="inp" id="imp_ch">${chOpts}</select>
+    <label class="fld">File (.csv or .xlsx)</label><input class="inp" type="file" id="imp_file" accept=".csv,.xlsx,.xls">
     <div id="mErr" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
     <div id="impMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-brand" onclick="doImport(this)">Import</button></div>`);
+}
+// Map an array-of-arrays (first row = header) → [{name,email,phone,source}].
+function rowsFromAOA(aoa){
+  const grid=(aoa||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c==null?'':c).trim()!==''));
+  if(grid.length<2) return [];
+  const header=grid[0].map(h=>String(h==null?'':h).trim().toLowerCase());
+  const idx=n=>header.findIndex(h=>h.includes(n));
+  const iName=idx('name'), iEmail=idx('email'), iPhone=idx('phone'), iSource=idx('source');
+  return grid.slice(1).map(r=>({ name:iName>-1?r[iName]:'', email:iEmail>-1?r[iEmail]:'', phone:iPhone>-1?r[iPhone]:'', source:iSource>-1?r[iSource]:'' }));
 }
 function parseCsv(text){
   const rows=[]; let i=0, field='', row=[], inq=false;
@@ -228,20 +240,53 @@ function parseCsv(text){
 }
 async function doImport(btn){
   const f=document.getElementById('imp_file').files[0];
-  if(!f){ document.getElementById('mErr').textContent='Pick a CSV file.'; return; }
+  const err=document.getElementById('mErr'), msg=document.getElementById('impMsg');
+  err.textContent=''; if(!f){ err.textContent='Pick a file.'; return; }
+  const isExcel=/\.xlsx?$/i.test(f.name);
+
+  if(isExcel){
+    if(typeof XLSX==='undefined'){ err.textContent='Spreadsheet reader not loaded — refresh and try again.'; return; }
+    let wb;
+    try{ wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); }
+    catch(e){ err.textContent='Could not read the Excel file.'; return; }
+    // Build {sheetName → rows}; each tab = a channel (by tab name).
+    const sheets=(wb.SheetNames||[]).map(nm=>({ name:nm, rows:rowsFromAOA(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,blankrows:false,defval:''})) })).filter(s=>s.rows.length);
+    if(!sheets.length){ err.textContent='No data rows found in any tab (need a header row + Name/Email/Phone/Source).'; return; }
+    btn.disabled=true;
+    let total=0; const parts=[];
+    for(const s of sheets){
+      msg.textContent='Importing tab “'+s.name+'” ('+s.rows.length+' rows)…';
+      const r=await api({ action:'import_csv', id:_ev.id, channel:s.name, rows:s.rows });
+      if(r.success){ total+=r.imported; parts.push(chLabel(normChKey(s.name))+': '+r.imported); }
+      else parts.push(s.name+': failed');
+    }
+    btn.disabled=false;
+    msg.innerHTML='<span style="color:var(--green);">✓ Imported '+total+' contacts across '+sheets.length+' tab(s).</span><br><span class="muted">'+esc(parts.join(' · '))+'</span>';
+    setTimeout(()=>{ closeModal(); openEvent(_ev.id); }, 1600);
+    return;
+  }
+
+  // CSV (single channel).
   const text=await f.text();
   const grid=parseCsv(text).filter(r=>r.some(c=>String(c).trim()!==''));
-  if(grid.length<2){ document.getElementById('mErr').textContent='CSV looks empty.'; return; }
-  const header=grid[0].map(h=>String(h).trim().toLowerCase());
-  const idx=n=>header.findIndex(h=>h.includes(n));
-  const iName=idx('name'), iEmail=idx('email'), iPhone=idx('phone'), iSource=idx('source');
-  const rows=grid.slice(1).map(r=>({ name:iName>-1?r[iName]:'', email:iEmail>-1?r[iEmail]:'', phone:iPhone>-1?r[iPhone]:'', source:iSource>-1?r[iSource]:'' }));
-  btn.disabled=true; document.getElementById('impMsg').textContent='Importing '+rows.length+' rows…';
+  if(grid.length<2){ err.textContent='CSV looks empty.'; return; }
+  const rows=rowsFromAOA(grid);
+  btn.disabled=true; msg.textContent='Importing '+rows.length+' rows…';
   const r=await api({ action:'import_csv', id:_ev.id, channel:document.getElementById('imp_ch').value, rows });
   btn.disabled=false;
-  if(!r.success){ document.getElementById('mErr').textContent=r.message||'Failed'; return; }
-  document.getElementById('impMsg').innerHTML='<span style="color:var(--green);">✓ Imported '+r.imported+' contacts.</span>';
+  if(!r.success){ err.textContent=r.message||'Failed'; return; }
+  msg.innerHTML='<span style="color:var(--green);">✓ Imported '+r.imported+' contacts.</span>';
   setTimeout(()=>{ closeModal(); openEvent(_ev.id); }, 900);
+}
+// Mirror server-side channel normalization for the preview label.
+function normChKey(x){
+  const s=String(x||'').trim().toLowerCase();
+  if(!s) return 'other';
+  if(/announc|organic/.test(s)) return 'announcement';
+  if(/e-?mail/.test(s)) return 'email_blast';
+  if(/sms|text/.test(s)) return 'sms_blast';
+  if(/\bads?\b|paid|facebook|google|meta/.test(s)) return 'ads';
+  return s.replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'other';
 }
 
 // ── Export ──
