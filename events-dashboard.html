@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Events & Shows — PayProTec</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--teal:#0d9488;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--red:#dc2626;--green:#16a34a;--purple:#7c3aed;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+a{color:inherit;}
+.wrap{max-width:1140px;margin:0 auto;padding:24px 20px 60px;}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
+.top h1{font-size:22px;margin:0;color:var(--navy);display:flex;align-items:center;gap:10px;}
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn .material-icons{font-size:17px;}
+.btn-brand{background:var(--navy);color:#fff;}
+.btn-purple{background:var(--purple);color:#fff;}
+.btn-neutral{background:#fff;color:#334155;border:1px solid var(--border);}
+.btn-danger{background:#fee2e2;color:#991b1b;}
+.btn-sm{padding:6px 11px;font-size:12px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);cursor:pointer;transition:.15s;}
+.card:hover{box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-1px);}
+.card h3{margin:0 0 4px;font-size:15px;color:var(--navy);}
+.card .date{font-size:12px;color:var(--muted);}
+.card .big{font-size:30px;font-weight:800;font-family:'DM Mono',monospace;color:var(--navy);margin:10px 0 6px;}
+.chips{display:flex;flex-wrap:wrap;gap:5px;}
+.chip{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;}
+.c-announcement{background:#e0f2fe;color:#0369a1;} .c-email_blast{background:#dcfce7;color:#166534;}
+.c-sms_blast{background:#fef9c3;color:#854d0e;} .c-ads{background:#fee2e2;color:#991b1b;}
+.c-other{background:#ede9fe;color:#5b21b6;}
+.seg{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;}
+.seg button{border:1px solid var(--border);background:#fff;border-radius:99px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#334155;}
+.seg button.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+th,td{padding:9px 12px;text-align:left;font-size:13px;border-bottom:1px solid #f1f5f9;}
+th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+.inp{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;}
+.muted{color:var(--muted);}
+.modal-back{position:fixed;inset:0;background:rgba(4,10,22,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;}
+.modal{background:#fff;border-radius:16px;max-width:480px;width:100%;padding:22px;max-height:90vh;overflow:auto;}
+.modal h2{margin:0 0 14px;font-size:17px;color:var(--navy);}
+.fld{display:block;font-size:12px;font-weight:700;color:#475569;margin:10px 0 4px;}
+.hidden{display:none;}
+.hint{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:12px;color:#475569;}
+code{background:#0f172a;color:#e2e8f0;padding:2px 6px;border-radius:5px;font-family:'DM Mono',monospace;font-size:12px;word-break:break-all;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1><span class="material-icons" style="color:var(--purple);">theaters</span> Events &amp; Shows</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-neutral" onclick="openWebhookSetup()"><span class="material-icons">webhook</span> Webhook setup</button>
+      <button class="btn btn-brand" onclick="openNewEvent()"><span class="material-icons">add</span> New event</button>
+    </div>
+  </div>
+
+  <div id="listView">
+    <div id="eventsGrid" class="grid"><div class="muted" style="padding:30px;text-align:center;">Loading…</div></div>
+  </div>
+
+  <div id="detailView" class="hidden"></div>
+</div>
+
+<div class="modal-back" id="modalBack"><div class="modal" id="modalBox"></div></div>
+
+<script>
+const TOKEN = localStorage.getItem('pp_session_token') || '';
+if (!TOKEN) { document.querySelector('.wrap').innerHTML = '<div style="padding:60px;text-align:center;" class="muted">Please sign in to the staff portal first. <a href="/">Go to login</a></div>'; }
+const CH_LABELS = { announcement:'Announcement', email_blast:'Email blast', sms_blast:'SMS blast', ads:'Ads', other:'Other' };
+const chLabel = k => CH_LABELS[k] || String(k||'other').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+async function api(body){
+  const r = await fetch('/api/events', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+TOKEN }, body: JSON.stringify(body) });
+  return r.json();
+}
+function openModal(html){ document.getElementById('modalBox').innerHTML = html; document.getElementById('modalBack').style.display='flex'; }
+function closeModal(){ document.getElementById('modalBack').style.display='none'; }
+document.getElementById('modalBack').addEventListener('click', e=>{ if(e.target.id==='modalBack') closeModal(); });
+
+// ── Events list ──
+async function loadEvents(){
+  const r = await api({ action:'list_events' });
+  const grid = document.getElementById('eventsGrid');
+  if(!r.success){ grid.innerHTML='<div class="muted" style="padding:30px;text-align:center;">'+esc(r.message||'Failed to load.')+'</div>'; return; }
+  const events = r.events||[];
+  if(!events.length){ grid.innerHTML='<div class="muted" style="padding:30px;text-align:center;">No events yet. Click <b>New event</b>, or contacts will appear here automatically once your HighLevel webhook fires.</div>'; return; }
+  grid.innerHTML = events.map(e=>{
+    const st = e.stats||{total:0,by_channel:{}};
+    const chips = Object.keys(st.by_channel||{}).sort().map(k=>`<span class="chip c-${esc(k)}">${esc(chLabel(k))} ${st.by_channel[k]}</span>`).join('');
+    return `<div class="card" onclick="openEvent('${e.id}')">
+      <h3>${esc(e.name)}</h3>
+      <div class="date">${e.event_date?esc(e.event_date):'—'}${e.status==='archived'?' · <span style="color:#b45309;">archived</span>':''}</div>
+      <div class="big">${st.total}</div>
+      <div class="muted" style="font-size:11px;margin-bottom:8px;">total contacts</div>
+      <div class="chips">${chips||'<span class="muted" style="font-size:11px;">no contacts yet</span>'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Event detail ──
+let _ev=null, _stats=null, _channel='', _contacts=[];
+async function openEvent(id){
+  const r = await api({ action:'get_event', id });
+  if(!r.success){ alert(r.message||'Failed'); return; }
+  _ev=r.event; _stats=r.stats||{total:0,by_channel:{}}; _channel='';
+  document.getElementById('listView').classList.add('hidden');
+  document.getElementById('detailView').classList.remove('hidden');
+  renderDetail();
+  loadContacts();
+}
+function backToList(){ document.getElementById('detailView').classList.add('hidden'); document.getElementById('listView').classList.remove('hidden'); loadEvents(); }
+
+function renderDetail(){
+  const st=_stats; const chKeys=Object.keys(st.by_channel||{}).sort();
+  const seg = `<button class="${_channel===''?'on':''}" onclick="setChannel('')">All (${st.total})</button>` +
+    chKeys.map(k=>`<button class="${_channel===k?'on':''}" onclick="setChannel('${esc(k)}')">${esc(chLabel(k))} (${st.by_channel[k]})</button>`).join('');
+  document.getElementById('detailView').innerHTML = `
+    <button class="btn btn-neutral btn-sm" onclick="backToList()"><span class="material-icons">arrow_back</span> All events</button>
+    <div class="top" style="margin-top:14px;">
+      <div>
+        <h1 style="font-size:20px;">${esc(_ev.name)}</h1>
+        <div class="muted" style="font-size:12px;">${_ev.event_date?esc(_ev.event_date)+' · ':''}key: <code style="background:#eef2f7;color:#334155;">${esc(_ev.event_key)}</code> · ${st.total} contacts</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-neutral btn-sm" onclick="openImport()"><span class="material-icons">upload_file</span> Import CSV</button>
+        <button class="btn btn-neutral btn-sm" onclick="exportCsv()"><span class="material-icons">download</span> Export</button>
+        <button class="btn btn-neutral btn-sm" onclick="openBackfill()"><span class="material-icons">sync</span> Backfill (GHL)</button>
+        <button class="btn btn-purple btn-sm" onclick="openSendClickup()"><span class="material-icons">forum</span> ClickUp</button>
+        <button class="btn btn-neutral btn-sm" onclick="openEditEvent()"><span class="material-icons">edit</span> Edit</button>
+      </div>
+    </div>
+    <div class="seg">${seg}</div>
+    <div style="margin-bottom:10px;"><input class="inp" id="cSearch" placeholder="Search name / email / phone…" oninput="renderContacts()" style="max-width:320px;"></div>
+    <div id="contactsWrap"><div class="muted" style="padding:20px;">Loading…</div></div>`;
+}
+function setChannel(c){ _channel=c; renderDetail(); loadContacts(); }
+async function loadContacts(){
+  const r = await api({ action:'list_contacts', id:_ev.id, channel:_channel||undefined });
+  _contacts = r.success ? (r.contacts||[]) : [];
+  renderContacts();
+}
+function renderContacts(){
+  const q = (document.getElementById('cSearch')?.value||'').toLowerCase();
+  let rows = _contacts;
+  if(q) rows = rows.filter(r=>(r.name||'').toLowerCase().includes(q)||(r.email||'').toLowerCase().includes(q)||(r.phone||'').includes(q));
+  const wrap = document.getElementById('contactsWrap');
+  if(!rows.length){ wrap.innerHTML='<div class="muted" style="padding:20px;">No contacts'+(q?' match your search':'')+'.</div>'; return; }
+  wrap.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Channel</th><th>Source</th><th>Added</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr>
+      <td><b>${esc(r.name||'—')}</b></td><td>${esc(r.email||'')}</td><td>${esc(r.phone||'')}</td>
+      <td><span class="chip c-${esc(r.channel)}">${esc(chLabel(r.channel))}</span></td>
+      <td class="muted">${esc(r.source||'')}</td>
+      <td class="muted" style="font-size:11px;">${r.created_at?new Date(r.created_at).toLocaleDateString():''}</td>
+    </tr>`).join('') + `</tbody></table>`;
+}
+
+// ── New / edit event ──
+function eventForm(ev){
+  return `<label class="fld">Event / show name</label><input class="inp" id="e_name" value="${ev?esc(ev.name):''}" placeholder="e.g. Matt Hoskins Live — Aug 27">
+    <label class="fld">Event date</label><input class="inp" type="date" id="e_date" value="${ev&&ev.event_date?esc(ev.event_date):''}">
+    <label class="fld">GHL sub-account ID (for backfill, optional)</label><input class="inp" id="e_loc" value="${ev&&ev.ghl_location_id?esc(ev.ghl_location_id):''}" placeholder="location id">
+    <label class="fld">Description (optional)</label><textarea class="inp" id="e_desc" rows="2">${ev&&ev.description?esc(ev.description):''}</textarea>`;
+}
+function openNewEvent(){
+  openModal(`<h2>New event</h2>${eventForm(null)}
+    <div id="mErr" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-brand" onclick="saveNewEvent(this)">Create</button></div>`);
+}
+async function saveNewEvent(btn){
+  const name=document.getElementById('e_name').value.trim();
+  if(!name){ document.getElementById('mErr').textContent='Name required.'; return; }
+  btn.disabled=true;
+  const r = await api({ action:'create_event', name, event_date:document.getElementById('e_date').value||null, ghl_location_id:document.getElementById('e_loc').value.trim()||null, description:document.getElementById('e_desc').value.trim()||null });
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('mErr').textContent=r.message||'Failed'; return; }
+  closeModal(); loadEvents();
+}
+function openEditEvent(){
+  openModal(`<h2>Edit event</h2>${eventForm(_ev)}
+    <label class="fld">Status</label><select class="inp" id="e_status"><option value="active"${_ev.status==='active'?' selected':''}>Active</option><option value="archived"${_ev.status==='archived'?' selected':''}>Archived</option></select>
+    <div id="mErr" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">
+      <button class="btn btn-danger" onclick="deleteEvent(this)">Delete</button>
+      <div style="display:flex;gap:8px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-brand" onclick="saveEditEvent(this)">Save</button></div>
+    </div>`);
+}
+async function saveEditEvent(btn){
+  btn.disabled=true;
+  const r = await api({ action:'update_event', id:_ev.id, name:document.getElementById('e_name').value.trim(), event_date:document.getElementById('e_date').value||null, ghl_location_id:document.getElementById('e_loc').value.trim()||null, description:document.getElementById('e_desc').value.trim()||null, status:document.getElementById('e_status').value });
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('mErr').textContent=r.message||'Failed'; return; }
+  closeModal(); openEvent(_ev.id);
+}
+async function deleteEvent(btn){
+  if(!confirm('Delete this event and all its contacts? This cannot be undone.')) return;
+  btn.disabled=true;
+  const r = await api({ action:'delete_event', id:_ev.id });
+  if(!r.success){ alert(r.message||'Failed'); btn.disabled=false; return; }
+  closeModal(); backToList();
+}
+
+// ── Import CSV ──
+function openImport(){
+  const chOpts = ['announcement','email_blast','sms_blast','ads','other'].map(k=>`<option value="${k}">${chLabel(k)}</option>`).join('');
+  openModal(`<h2>Import CSV</h2>
+    <div class="hint" style="margin-bottom:10px;">Expected columns: <b>Name, Email, Phone, Source</b> (extra columns ignored). All rows import into the channel you pick.</div>
+    <label class="fld">Channel</label><select class="inp" id="imp_ch">${chOpts}</select>
+    <label class="fld">CSV file</label><input class="inp" type="file" id="imp_file" accept=".csv">
+    <div id="mErr" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div id="impMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-brand" onclick="doImport(this)">Import</button></div>`);
+}
+function parseCsv(text){
+  const rows=[]; let i=0, field='', row=[], inq=false;
+  while(i<text.length){ const c=text[i];
+    if(inq){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inq=false; } else field+=c; }
+    else { if(c==='"') inq=true; else if(c===','){ row.push(field); field=''; } else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; if(field!==''||row.length){ row.push(field); rows.push(row); row=[]; field=''; } } else field+=c; }
+    i++;
+  }
+  if(field!==''||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+async function doImport(btn){
+  const f=document.getElementById('imp_file').files[0];
+  if(!f){ document.getElementById('mErr').textContent='Pick a CSV file.'; return; }
+  const text=await f.text();
+  const grid=parseCsv(text).filter(r=>r.some(c=>String(c).trim()!==''));
+  if(grid.length<2){ document.getElementById('mErr').textContent='CSV looks empty.'; return; }
+  const header=grid[0].map(h=>String(h).trim().toLowerCase());
+  const idx=n=>header.findIndex(h=>h.includes(n));
+  const iName=idx('name'), iEmail=idx('email'), iPhone=idx('phone'), iSource=idx('source');
+  const rows=grid.slice(1).map(r=>({ name:iName>-1?r[iName]:'', email:iEmail>-1?r[iEmail]:'', phone:iPhone>-1?r[iPhone]:'', source:iSource>-1?r[iSource]:'' }));
+  btn.disabled=true; document.getElementById('impMsg').textContent='Importing '+rows.length+' rows…';
+  const r=await api({ action:'import_csv', id:_ev.id, channel:document.getElementById('imp_ch').value, rows });
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('mErr').textContent=r.message||'Failed'; return; }
+  document.getElementById('impMsg').innerHTML='<span style="color:var(--green);">✓ Imported '+r.imported+' contacts.</span>';
+  setTimeout(()=>{ closeModal(); openEvent(_ev.id); }, 900);
+}
+
+// ── Export ──
+function exportCsv(){
+  const rows=_contacts;
+  if(!rows.length){ alert('No contacts to export in this view.'); return; }
+  const cell=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[['Name','Email','Phone','Channel','Source','Added'].join(',')].concat(rows.map(r=>[r.name,r.email,r.phone,chLabel(r.channel),r.source,r.created_at].map(cell).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=(_ev.event_key||'event')+(_channel?('_'+_channel):'')+'_contacts.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+
+// ── Backfill from GHL ──
+function openBackfill(){
+  const chOpts = ['announcement','email_blast','sms_blast','ads','other'].map(k=>`<option value="${k}">${chLabel(k)}</option>`).join('');
+  openModal(`<h2>Backfill from HighLevel</h2>
+    <div class="hint" style="margin-bottom:10px;">Pulls contacts carrying a GHL <b>tag</b> into a channel (for historical / missed contacts). Uses the sub-account ID + tag you set in the workflow.</div>
+    <label class="fld">GHL sub-account ID</label><input class="inp" id="bf_loc" value="${_ev.ghl_location_id?esc(_ev.ghl_location_id):''}" placeholder="location id">
+    <label class="fld">Tag</label><input class="inp" id="bf_tag" placeholder="e.g. matt-hoskins-aug27">
+    <label class="fld">Channel</label><select class="inp" id="bf_ch">${chOpts}</select>
+    <div id="mErr" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div id="bfMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-brand" onclick="doBackfill(this)">Backfill</button></div>`);
+}
+async function doBackfill(btn){
+  const location_id=document.getElementById('bf_loc').value.trim(), tag=document.getElementById('bf_tag').value.trim();
+  if(!location_id||!tag){ document.getElementById('mErr').textContent='Sub-account ID and tag required.'; return; }
+  btn.disabled=true; document.getElementById('bfMsg').textContent='Pulling from HighLevel…';
+  const r=await api({ action:'backfill_ghl', id:_ev.id, location_id, tag, channel:document.getElementById('bf_ch').value });
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('mErr').textContent=r.message||'Failed'; return; }
+  document.getElementById('bfMsg').innerHTML='<span style="color:var(--green);">✓ Found '+r.found+', added '+r.added+'.</span>'+(r.error?' <span class="muted">('+esc(r.error)+')</span>':'');
+  setTimeout(()=>{ closeModal(); openEvent(_ev.id); }, 1200);
+}
+
+// ── Send to ClickUp ──
+async function openSendClickup(){
+  openModal(`<h2>Send to ClickUp</h2><div id="cuBody"><div class="muted" style="font-size:12px;">Checking ClickUp connection…</div></div>`);
+  const r=await api({ action:'clickup_channels' });
+  const body=document.getElementById('cuBody');
+  if(!r.success||!r.configured){ body.innerHTML='<div class="hint" style="color:#b45309;">ClickUp isn\'t connected. Set it up in <b>Secret Dungeon → Sending Reports</b> first.</div>'; return; }
+  if(!(r.channels||[]).length){ body.innerHTML='<div class="hint" style="color:#b45309;">No ClickUp channels found.</div>'; return; }
+  const opts=r.channels.map(c=>`<option value="${esc(c.id)}" ${c.id===r.channel?'selected':''}>${esc(c.name)}</option>`).join('');
+  body.innerHTML=`<div class="muted" style="font-size:12px;margin-bottom:8px;">Posts this event's contacts by channel to a ClickUp Chat channel (${esc(r.workspace_name||'workspace')}).</div>
+    <label class="fld">Channel</label><select class="inp" id="cu_ch">${opts}</select>
+    <div id="cuMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-purple" onclick="doSendClickup(this)">Post to ClickUp</button></div>`;
+}
+async function doSendClickup(btn){
+  btn.disabled=true; document.getElementById('cuMsg').textContent='Posting…';
+  const r=await api({ action:'send_clickup', id:_ev.id, channel_id:document.getElementById('cu_ch').value });
+  btn.disabled=false;
+  document.getElementById('cuMsg').innerHTML = r.success ? '<span style="color:var(--green);">✓ Posted'+(r.parts>1?(' ('+r.parts+' messages)'):'')+'.</span>' : '<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>';
+  if(r.success) setTimeout(closeModal,1200);
+}
+
+// ── Webhook setup ──
+async function openWebhookSetup(){
+  openModal(`<h2>HighLevel webhook</h2><div id="whBody"><div class="muted" style="font-size:12px;">Loading…</div></div>`);
+  const r=await api({ action:'get_webhook_info' });
+  const body=document.getElementById('whBody');
+  if(!r.success){ body.innerHTML='<div class="hint">'+esc(r.message||'Failed')+'</div>'; return; }
+  body.innerHTML=`
+    <div class="hint" style="margin-bottom:12px;">In your HighLevel workflow, add a <b>Webhook</b> action → POST to:<br><br>
+      <code>${esc(r.url)}?secret=YOUR_SECRET</code><br><br>
+      Send JSON fields: <b>event</b>, <b>channel</b>, <b>name</b>, <b>email</b>, <b>phone</b>, <b>source</b>, <b>contact_id</b>. The workflow's own logic decides the event + channel.</div>
+    <div style="font-size:12px;margin-bottom:8px;">Secret status: ${r.has_secret?'<span style="color:var(--green);font-weight:700;">configured</span>'+(r.secret_in_env?' (in Vercel env)':''):'<span style="color:var(--red);font-weight:700;">not set</span>'}</div>
+    ${r.secret_in_env?'<div class="muted" style="font-size:12px;">Secret is set via Vercel env (EVENTS_WEBHOOK_SECRET).</div>':`
+      <label class="fld">Set / change secret</label>
+      <div style="display:flex;gap:8px;"><input class="inp" id="wh_secret" placeholder="min 8 chars"><button class="btn btn-brand" onclick="saveSecret(this)">Save</button></div>
+      <div id="whMsg" class="muted" style="font-size:12px;margin-top:8px;"></div>`}`;
+}
+async function saveSecret(btn){
+  const s=document.getElementById('wh_secret').value.trim();
+  if(s.length<8){ document.getElementById('whMsg').innerHTML='<span style="color:var(--red);">At least 8 characters.</span>'; return; }
+  btn.disabled=true;
+  const r=await api({ action:'set_webhook_secret', secret:s });
+  btn.disabled=false;
+  document.getElementById('whMsg').innerHTML = r.success ? '<span style="color:var(--green);">✓ Saved.</span>' : '<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>';
+}
+
+if (TOKEN) loadEvents();
+</script>
+</body>
+</html>
