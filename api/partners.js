@@ -1543,6 +1543,35 @@ if (action === 'get_merchant_data') {
             return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: RELEASE AN IDENTIFIER (detach from the person; free it up) ---
+        if (action === 'release_identifier') {
+            const { identifier_id } = body;
+            if (!identifier_id) return res.status(400).json({ success: false, message: 'Missing identifier_id' });
+            const INDEPENDENT_PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+
+            const { data: identRow, error: e1 } = await supabase
+                .from('agent_identifiers').select('agent_id, id_string').eq('id', identifier_id).single();
+            if (e1) throw e1;
+            const sourceAgentId = identRow.agent_id;
+
+            // Detach: park on the placeholder agent (no person linked → "unassigned"),
+            // clear any parent link, and mark released. It can be reassigned later.
+            const { error: e2 } = await supabase.from('agent_identifiers')
+                .update({ agent_id: INDEPENDENT_PLACEHOLDER, parent_config_id: null, status: 'released' })
+                .eq('id', identifier_id);
+            if (e2) throw e2;
+
+            // Clean up the source agent if it now has no identifiers left.
+            if (sourceAgentId && sourceAgentId !== INDEPENDENT_PLACEHOLDER) {
+                const { data: remaining } = await supabase
+                    .from('agent_identifiers').select('id').eq('agent_id', sourceAgentId).limit(1);
+                if (remaining && remaining.length === 0) {
+                    await supabase.from('agents').delete().eq('id', sourceAgentId);
+                }
+            }
+            return res.status(200).json({ success: true, id_string: identRow.id_string });
+        }
+
         // --- ACTION: GET ALL STATS (for page-level trend calculation) ---
 if (action === 'get_all_stats') {
     try {

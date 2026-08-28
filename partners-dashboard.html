@@ -1873,10 +1873,11 @@ async function submitOnboarding() {
 
                 <!-- ── MOVE PANEL ── -->
                 <div id="panel-move" style="display:none;">
-                    <div style="display:flex;gap:5px;margin-bottom:14px;">
+                    <div style="display:flex;gap:5px;margin-bottom:14px;flex-wrap:wrap;">
                         <button id="move-company"     type="button" style="${MODE_ACTIVE}">🏢 Company</button>
                         <button id="move-agent"       type="button" style="${MODE_INACTIVE}">🔀 Agent</button>
                         <button id="move-independent" type="button" style="${MODE_INACTIVE}">🏠 Independent</button>
+                        <button id="move-release"     type="button" style="${MODE_INACTIVE}">🔓 Release</button>
                     </div>
 
                     <div id="co-section">
@@ -1900,6 +1901,13 @@ async function submitOnboarding() {
                         <div id="swal-ag-selected" style="display:none;margin-top:8px;padding:8px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:13px;">
                             <span style="color:#0369a1;font-weight:700;">Selected: </span><span id="swal-ag-selected-name"></span>
                         </div>
+                    </div>
+
+                    <div id="release-section" style="display:none;padding:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;text-align:center;">
+                        <span class="material-icons" style="font-size:28px;color:#c2410c;display:block;margin-bottom:6px;">lock_open</span>
+                        <div style="font-weight:800;color:#9a3412;font-size:13px;">Release this ID from ${name ? '' : 'this person'}</div>
+                        <div style="color:#9a3412;font-size:12px;margin-top:4px;">The ID will be <b>detached from this person</b> and freed up — it becomes unassigned and can be assigned to another partner later.</div>
+                        <div style="color:#b45309;font-size:11px;margin-top:8px;">You'll be asked to confirm before it's released.</div>
                     </div>
 
                     <div id="indep-section" style="display:none;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;text-align:center;">
@@ -2000,23 +2008,31 @@ async function submitOnboarding() {
                 const btnCo    = document.getElementById('move-company');
                 const btnAg    = document.getElementById('move-agent');
                 const btnIndep = document.getElementById('move-independent');
+                const btnRel   = document.getElementById('move-release');
                 const coSec    = document.getElementById('co-section');
                 const agSec    = document.getElementById('ag-section');
                 const indepSec = document.getElementById('indep-section');
+                const relSec   = document.getElementById('release-section');
 
                 const setMoveMode = (m) => {
                     moveMode = m;
                     btnCo.style.cssText    = m === 'company'     ? MODE_ACTIVE : MODE_INACTIVE;
                     btnAg.style.cssText    = m === 'agent'       ? MODE_ACTIVE : MODE_INACTIVE;
                     btnIndep.style.cssText = m === 'independent' ? MODE_ACTIVE : MODE_INACTIVE;
+                    if (btnRel) btnRel.style.cssText = m === 'release' ? MODE_ACTIVE : MODE_INACTIVE;
                     coSec.style.display    = m === 'company'     ? 'block' : 'none';
                     agSec.style.display    = m === 'agent'       ? 'block' : 'none';
                     indepSec.style.display = m === 'independent' ? 'block' : 'none';
+                    if (relSec) relSec.style.display = m === 'release' ? 'block' : 'none';
+                    // Confirm button reflects the destructive release.
+                    const cb = Swal.getConfirmButton();
+                    if (cb) { cb.textContent = (m === 'release') ? 'Release ID' : 'Confirm Move'; cb.style.background = (m === 'release') ? '#c2410c' : '#dc2626'; }
                     if (m === 'agent' && !allAgentsForTransfer) loadAgents();
                 };
                 btnCo.addEventListener('click',    () => setMoveMode('company'));
                 btnAg.addEventListener('click',    () => setMoveMode('agent'));
                 btnIndep.addEventListener('click', () => setMoveMode('independent'));
+                if (btnRel) btnRel.addEventListener('click', () => setMoveMode('release'));
 
                 // ── Move: company search ──
                 const coInput   = document.getElementById('swal-co-input');
@@ -2212,6 +2228,44 @@ async function submitOnboarding() {
                     await loadPartners();
                     Swal.fire({ icon: 'success', title: 'Updated!', showConfirmButton: false, timer: 1500 });
                 } else throw new Error(data.message || 'Update failed');
+            } catch (err) { Swal.fire('Error', err.message, 'error'); }
+
+        } else if (result.mode === 'release') {
+            // ── Release: 2-step confirmation, then detach the ID from the person ──
+            const confirm2 = await Swal.fire({
+                icon: 'warning',
+                title: 'Release this ID?',
+                html: `<div style="text-align:left;font-size:13px;line-height:1.7;">
+                        You are about to <strong>release</strong><br>
+                        <span style="font-family:monospace;font-weight:700;color:#c2410c;">${name}</span><br><br>
+                        <span style="color:#64748b;">This ID will be <b>detached from this person</b> and freed up.</span><br>
+                        <span style="color:#64748b;">It becomes <b>unassigned</b> and can be assigned to another partner later.</span><br><br>
+                        <span style="color:#c2410c;font-weight:700;">Any company / sub-partner link on this ID will be removed.</span>
+                       </div>`,
+                showCancelButton: true,
+                confirmButtonColor: '#c2410c',
+                confirmButtonText: 'Yes, Release It',
+                cancelButtonText: 'Go Back'
+            });
+            if (!confirm2.isConfirmed) return;
+
+            Swal.fire({ title: 'Releasing ID…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') },
+                    body: JSON.stringify({ action: 'release_identifier', identifier_id: db_id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    await logAuditAction('Partner ID Released', 'success', {
+                        target_id: name, target_type: 'agent_identifier',
+                        old_value: { identifier: name, owner: 'assigned' },
+                        new_value: { status: 'released', owner: 'unassigned' }
+                    });
+                    await loadPartners();
+                    Swal.fire({ icon: 'success', title: 'Released!', text: `${name} is now unassigned and available.`, showConfirmButton: false, timer: 2200 });
+                } else throw new Error(data.message || 'Release failed');
             } catch (err) { Swal.fire('Error', err.message, 'error'); }
 
         } else {
