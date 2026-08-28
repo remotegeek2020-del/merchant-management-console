@@ -49,6 +49,15 @@
     }
     var variantMap = {};   // campaign id → 'A' | 'B' | null (for A/B stats attribution)
     function track(id, type, target) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variantMap[id] || null }).catch(function () {}); }
+    // ── Watch-time milestones for live/replay video cards ──
+    var _annWatch = [];
+    function clearAnnWatch() { _annWatch.forEach(clearTimeout); _annWatch = []; }
+    function startAnnWatch(id) {
+        clearAnnWatch();
+        _annWatch.push(setTimeout(function () { track(id, 'watch', 'w10'); }, 10000));
+        _annWatch.push(setTimeout(function () { track(id, 'watch', 'w60'); }, 60000));
+        _annWatch.push(setTimeout(function () { track(id, 'watch', 'wlong'); }, 300000));
+    }
     function dismissServer(id) { api({ action: 'dismiss', campaign_id: id }).catch(function () {}); }
 
     // ── snooze (X / CTA close) ───────────────────────────────────────────────
@@ -143,7 +152,7 @@
     function renderCards() {
         if (!cardWrap) return;
         var visible = cardList.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });
-        if (!visible.length) { cardWrap.style.display = 'none'; cardWrap.innerHTML = ''; shownCardId = null; return; }
+        if (!visible.length) { cardWrap.style.display = 'none'; cardWrap.innerHTML = ''; shownCardId = null; clearAnnWatch(); return; }
         if (cardIdx >= visible.length) cardIdx = 0;
         var c = visible[cardIdx];
         // Already showing this exact card → don't re-render (avoids flicker + re-tracking).
@@ -183,7 +192,7 @@
         html += '</div>';
         cardWrap.innerHTML = html;
         cardWrap.style.display = '';
-        if (shownCardId !== c.id) { shownCardId = c.id; track(c.id, 'impression'); }
+        if (shownCardId !== c.id) { shownCardId = c.id; track(c.id, 'impression'); if (c.video_url) startAnnWatch(c.id); else clearAnnWatch(); }
     }
 
     // ── floating ad ───────────────────────────────────────────────────────────
@@ -236,7 +245,7 @@
         floatIdx = Math.max(0, Math.min(visible.length - 1, floatIdx + d)); shownFloatId = null; renderFloat();
     };
     // X: close for now — snoozes for FREQ_MS, then it re-shows automatically.
-    window.ppAnnClose = function (id) { snooze(id); shownCardId = null; shownFloatId = null; renderCards(); renderFloat(); };
+    window.ppAnnClose = function (id) { clearAnnWatch(); snooze(id); shownCardId = null; shownFloatId = null; renderCards(); renderFloat(); };
     // CTA on a floating ad: count the click, open the link, and snooze (re-shows later).
     window.ppAnnCta = function (id) { track(id, 'click', 'cta'); snooze(id); shownFloatId = null; setTimeout(renderFloat, 50); };
     // "Don't show again" checkbox: the ONLY permanent dismiss.

@@ -2125,6 +2125,7 @@ async function showStats(id, title){
       <div style="margin-top:6px;">Clicks by channel: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff · <b>${s.clicks_by_audience.prospect||0}</b> prospect · <b>${s.clicks_by_audience.ghl||0}</b> GHL · <b>${s.clicks_by_audience.website||0}</b> website</div>
       ${s.opted_in?`<div style="margin-top:6px;">✅ <b>${s.opted_in}</b> registered — this announcement is hidden for them (on every device they're identified on).</div>`:''}
     </div>
+    ${watchSection(s.watch)}
     ${phaseSection(s.by_phase)}
     ${abSection(s.ab)}
     ${siteSection(s.by_site)}
@@ -2237,6 +2238,17 @@ async function loadConversions(id, clicks){
 }
 
 // YouTube lifecycle breakdown: views/clicks/CTR per phase (upcoming/live/replay).
+// Video watch milestones (live/replay autoplay).
+function watchSection(w){
+  if(!w || (!w.s10 && !w.m1 && !w.long)) return '';
+  const box=(n,l,color)=>`<div class="statbox"><div class="n" style="color:${color||'#0a1628'}">${n}</div><div class="l">${l}</div></div>`;
+  return `<label class="fld" style="margin-top:16px;">📺 Video watch <span class="muted" style="font-weight:400;">(distinct viewers who watched the live/replay video this long)</span></label>
+    <div class="statgrid" style="grid-template-columns:repeat(3,1fr);">
+      ${box(w.s10||0,'10s+')}
+      ${box(w.m1||0,'1 min+')}
+      ${box(w.long||0,'5 min+ (long)','#7c3aed')}
+    </div>`;
+}
 function phaseSection(bp){
   if (!bp) return '';
   const fmt=function(iso){ if(!iso) return '—'; try{ return new Intl.DateTimeFormat('en-US',{timeZone:COMPANY_TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso)); }catch(e){ return new Date(iso).toLocaleString(); } };

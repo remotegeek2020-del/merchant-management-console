@@ -173,6 +173,8 @@ export async function buildStatsSummary(id) {
     const uImp = new Set(rows.filter(r => r.event_type === 'impression').map(r => r.user_id)).size;
     const uClick = new Set(rows.filter(r => r.event_type === 'click').map(r => r.user_id)).size;
     const ctr = uImp ? Math.round((uClick / uImp) * 1000) / 10 : 0;
+    const watchUsers = t => new Set(rows.filter(r => r.event_type === 'watch' && r.target === t).map(r => r.user_id)).size;
+    const watch = { s10: watchUsers('w10'), m1: watchUsers('w60'), long: watchUsers('wlong') };
 
     // Clicks by channel (partner/staff/prospect/ghl/website).
     const byAudience = { partner: 0, staff: 0, prospect: 0, ghl: 0, website: 0 };
@@ -226,7 +228,7 @@ export async function buildStatsSummary(id) {
     return {
         title: c.title || 'Announcement', is_youtube: !!(c.campaign_kind === 'youtube' || (em && em.enabled)),
         impressions, clicks, dismissals, unique_impressions: uImp, unique_clicks: uClick, ctr,
-        opted_in: optedIn || 0, by_audience: byAudience, by_target: byTarget, by_phase: byPhase,
+        opted_in: optedIn || 0, by_audience: byAudience, by_target: byTarget, by_phase: byPhase, watch,
         window: em ? { opt_in_until: em.opt_in_until || null, live_at: em.live_at || null, live_until: em.live_until || null } : null,
         starts_at: c.starts_at || null, ends_at: c.ends_at || null, conversions: conv
     };
@@ -322,6 +324,11 @@ function statsEmailHtml(s) {
           ${tile(s.dismissals, 'Dismissed')}
         </tr></table>
         <div style="font-size:12px;color:#64748b;margin-top:8px;">${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers · ${s.opted_in} registered (suppressed for them)</div>
+        ${(s.watch && (s.watch.s10 || s.watch.m1 || s.watch.long)) ? h3('📺 Video watch') + `<table style="width:100%;border-collapse:separate;border-spacing:8px;"><tr>
+          ${tile(s.watch.s10, '10s+')}
+          ${tile(s.watch.m1, '1 min+')}
+          ${tile(s.watch.long, '5 min+ (long)', '#7c3aed')}
+        </tr></table>` : ''}
         ${h3('Clicks by channel')}
         ${channelBlock}
         ${targetKeys.length ? h3('Clicks by button / hotspot') + targetBlock : ''}
@@ -355,6 +362,9 @@ function statsMarkdown(s) {
     out += `• ${n(s.unique_impressions)} unique viewers · ${n(s.unique_clicks)} unique clickers · ${n(s.opted_in)} registered\n`;
     const a = s.by_audience || {};
     out += `• Clicks by channel: 🤝 ${n(a.partner)} · 🧑‍💼 ${n(a.staff)} · 🔎 ${n(a.prospect)} · 🌐 ${n(a.ghl)} · 💻 ${n(a.website)}\n`;
+    if (s.watch && (s.watch.s10 || s.watch.m1 || s.watch.long)) {
+        out += `• 📺 Watched video: ${n(s.watch.s10)} for 10s+ · ${n(s.watch.m1)} for 1 min+ · ${n(s.watch.long)} for 5 min+ (long)\n`;
+    }
     if (s.by_phase) {
         const p = s.by_phase;
         out += `\n📺 **YouTube lifecycle**\n`;
@@ -713,6 +723,9 @@ export default async function handler(req, res) {
                 const clicks = rows.filter(r => r.event_type === 'click').length;
                 const dismissals = rows.filter(r => r.event_type === 'dismiss').length;
                 const uImp = uniq('impression'), uClick = uniq('click');
+                // Video watch milestones (live/replay autoplay): distinct viewers who reached each.
+                const watchUsers = t => new Set(rows.filter(r => r.event_type === 'watch' && r.target === t).map(r => r.user_id)).size;
+                const watch = { s10: watchUsers('w10'), m1: watchUsers('w60'), long: watchUsers('wlong') };
                 // clicks broken down by target (hotspot/cta)
                 const byTarget = {};
                 rows.filter(r => r.event_type === 'click').forEach(r => { const k = r.target || 'cta'; byTarget[k] = (byTarget[k] || 0) + 1; });
@@ -867,6 +880,7 @@ export default async function handler(req, res) {
                     dismissers: peopleFor('dismiss'),
                     ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null,
                     by_phase: byPhase,
+                    watch,   // video watch milestones (distinct viewers): {s10, m1, long}
                     opted_in: optedInCount || 0,   // people who registered → announcement suppressed for them
                     by_site: bySite,
                     traffic
@@ -1551,14 +1565,14 @@ export default async function handler(req, res) {
                             if (em.live_url) ctaUrl = em.live_url;
                             if (em.live_headline) headline = em.live_headline;
                             if (em.live_body) bodyText = em.live_body;
-                            videoUrl = ytEmbed(em.live_url || ctaUrl);
+                            videoUrl = ytEmbed(em.live_url || ctaUrl, { autoplay: true, mute: true });
                         } else {
                             eventPhase = 'replay';
                             if (em.replay_label) ctaLabel = em.replay_label;
                             if (em.replay_url) ctaUrl = em.replay_url;
                             if (em.replay_headline) headline = em.replay_headline;
                             if (em.replay_body) bodyText = em.replay_body;
-                            videoUrl = ytEmbed(em.replay_url || ctaUrl);
+                            videoUrl = ytEmbed(em.replay_url || ctaUrl, { autoplay: true, mute: true });
                         }
                     }
                     return {
@@ -1612,12 +1626,19 @@ export default async function handler(req, res) {
 
             if (action === 'track') {
                 const { campaign_id, event_type, target, variant } = req.body;
-                if (!campaign_id || !['impression', 'click', 'dismiss'].includes(event_type)) return bad(res, 'campaign_id and valid event_type required');
-                // De-dupe impressions: one per user per campaign per day
+                if (!campaign_id || !['impression', 'click', 'dismiss', 'watch'].includes(event_type)) return bad(res, 'campaign_id and valid event_type required');
+                // De-dupe impressions (per day) and watch milestones (per day per milestone).
                 if (event_type === 'impression') {
                     const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
                     const { data: recent } = await supabase.from('marketing_events').select('id')
                         .eq('campaign_id', campaign_id).eq('user_id', who.id).eq('event_type', 'impression')
+                        .gte('created_at', since).limit(1);
+                    if (recent && recent.length) return ok(res, { logged: false });
+                }
+                if (event_type === 'watch') {
+                    const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+                    const { data: recent } = await supabase.from('marketing_events').select('id')
+                        .eq('campaign_id', campaign_id).eq('user_id', who.id).eq('event_type', 'watch').eq('target', target || '')
                         .gte('created_at', since).limit(1);
                     if (recent && recent.length) return ok(res, { logged: false });
                 }

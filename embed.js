@@ -222,7 +222,17 @@
         document.head.appendChild(s);
     }
 
-    function close() { if (backdrop) { backdrop.remove(); backdrop = null; } current = null; next(); }
+    // ── Watch-time milestones (fired while the video popup stays open) ──
+    var _watchTimers = [];
+    function clearWatchTimers() { _watchTimers.forEach(clearTimeout); _watchTimers = []; }
+    function startWatchTimers(c) {
+        clearWatchTimers();
+        var v = c.variant;
+        _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'w10', v); }, 10000));      // 10s+
+        _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'w60', v); }, 60000));      // 1 min+
+        _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'wlong', v); }, 300000));   // 5 min+ (long)
+    }
+    function close() { clearWatchTimers(); if (backdrop) { backdrop.remove(); backdrop = null; } current = null; next(); }
     function onClose() { if (current) snooze(current.id); close(); }
     function onForget() { if (current) { permAdd(current.id); track(current.id, 'dismiss', null, current.variant); api({ action: 'dismiss', campaign_id: current.id }); } close(); }
     function onAction(id, target) { permAdd(id); track(id, 'click', target || 'cta', current && current.variant); api({ action: 'dismiss', campaign_id: id }); close(); }
@@ -418,6 +428,8 @@
         backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction) onClose(); });
         document.body.appendChild(backdrop);
         if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
+        // Video (live/replay) autoplays → track how long the popup is watched.
+        if (c.video_url) startWatchTimers(c);
     }
 
     // ── Capture formats: sticky bar / slide-in teaser → open the full modal ──

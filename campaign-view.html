@@ -87,6 +87,7 @@ function render(s){
     </div>
     <div class="muted" style="font-size:12px;margin-top:8px;">${n(s.unique_impressions)} unique viewers · ${n(s.unique_clicks)} unique clickers · ${n(s.opted_in)} registered</div>
     <div class="muted" style="font-size:12px;margin-top:6px;">Clicks by channel: 🤝 ${n(a.partner)} · 🧑‍💼 ${n(a.staff)} · 🔎 ${n(a.prospect)} · 🌐 ${n(a.ghl)} · 💻 ${n(a.website)}</div>
+    ${(s.watch && (s.watch.s10||s.watch.m1||s.watch.long)) ? `<h3>📺 Video watch</h3><div class="tiles">${tile(n(s.watch.s10),'10s+')}${tile(n(s.watch.m1),'1 min+')}${tile(n(s.watch.long),'5 min+ (long)','#7c3aed')}</div>` : ''}
     ${phase}
     <div class="muted" style="font-size:11px;margin-top:26px;border-top:1px solid var(--border);padding-top:12px;">PayProTec · shared campaign view</div>`;
 }

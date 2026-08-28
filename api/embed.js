@@ -203,7 +203,7 @@ export default async function handler(req, res) {
                         if (em.live_headline) headline = em.live_headline;
                         if (em.live_body) bodyText = em.live_body;
                         // Play the video right inside the popup; CTA becomes "watch on YouTube".
-                        videoUrl = ytEmbed(em.live_url || ctaUrl);
+                        videoUrl = ytEmbed(em.live_url || ctaUrl, { autoplay: true, mute: true });
                     } else {
                         eventPhase = 'replay';                    // after event → watch replay, ungated
                         gateActive = false;
@@ -211,7 +211,7 @@ export default async function handler(req, res) {
                         if (em.replay_url) ctaUrl = em.replay_url;
                         if (em.replay_headline) headline = em.replay_headline;
                         if (em.replay_body) bodyText = em.replay_body;
-                        videoUrl = ytEmbed(em.replay_url || ctaUrl);
+                        videoUrl = ytEmbed(em.replay_url || ctaUrl, { autoplay: true, mute: true });
                     }
                 }
                 return {
@@ -246,9 +246,17 @@ export default async function handler(req, res) {
 
         if (action === 'track') {
             const { campaign_id, event_type, target, variant } = body;
-            if (!campaign_id || !['impression', 'click', 'dismiss'].includes(event_type)) return bad(res, 'bad params');
+            if (!campaign_id || !['impression', 'click', 'dismiss', 'watch'].includes(event_type)) return bad(res, 'bad params');
             if (!viewer) return ok(res, { logged: false });
             if (!(await isEmbedCampaign(campaign_id))) return bad(res, 'Unknown campaign', 404);
+            // De-dupe watch milestones: one per viewer per campaign per milestone per day.
+            if (event_type === 'watch') {
+                const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+                const { data: recent } = await supabase.from('marketing_events').select('id')
+                    .eq('campaign_id', campaign_id).eq('user_id', viewer).eq('event_type', 'watch').eq('target', target || '')
+                    .gte('created_at', since).limit(1);
+                if (recent && recent.length) return ok(res, { logged: false });
+            }
             if (event_type === 'impression') {
                 const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
                 const { data: recent } = await supabase.from('marketing_events').select('id')
