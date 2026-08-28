@@ -142,13 +142,28 @@ async function sendMailPostmark(to, subject, htmlBody, textBody) {
     } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// Fetch ALL of a campaign's tracked events, paginating past the PostgREST
+// 1000-row cap (which otherwise truncates stats for busy campaigns).
+async function fetchAllCampaignEvents(id, cols) {
+    const all = []; const size = 1000;
+    for (let page = 0; page < 200; page++) {
+        const { data } = await supabase.from('marketing_events').select(cols)
+            .eq('campaign_id', id).order('created_at', { ascending: true })
+            .range(page * size, page * size + size - 1);
+        if (!data || !data.length) break;
+        all.push(...data);
+        if (data.length < size) break;
+    }
+    return all;
+}
+
 // Build a stats summary (conversions-first) for a campaign, for the manual send.
 export async function buildStatsSummary(id) {
     const { data: c } = await supabase.from('marketing_campaigns')
         .select('title, event_mode, campaign_kind, conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
     if (!c) return null;
-    const [{ data: ev }, { count: optedIn }] = await Promise.all([
-        supabase.from('marketing_events').select('event_type, user_id, user_type, target, created_at, ghl_location, site_id').eq('campaign_id', id).limit(50000),
+    const [ev, { count: optedIn }] = await Promise.all([
+        fetchAllCampaignEvents(id, 'event_type, user_id, user_type, target, created_at, ghl_location, site_id'),
         supabase.from('marketing_optins').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
     ]);
     const rows = ev || [];
@@ -687,9 +702,8 @@ export default async function handler(req, res) {
 
             if (action === 'get_stats') {
                 const { id } = req.body;
-                const [{ data: ev }, { data: campRow }, { count: optedInCount }] = await Promise.all([
-                    supabase.from('marketing_events')
-                        .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id).limit(50000),
+                const [ev, { data: campRow }, { count: optedInCount }] = await Promise.all([
+                    fetchAllCampaignEvents(id, 'event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country'),
                     supabase.from('marketing_campaigns').select('event_mode, campaign_kind').eq('id', id).maybeSingle(),
                     supabase.from('marketing_optins').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
                 ]);
