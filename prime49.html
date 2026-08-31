@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prime 49 — PayProTec</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--green:#16a34a;--purple:#7c3aed;--amber:#b45309;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.wrap{max-width:760px;margin:0 auto;padding:36px 20px 60px;}
+h1{font-size:26px;color:var(--navy);margin:0 0 6px;text-align:center;}
+.sub{text-align:center;color:var(--muted);font-size:14px;margin-bottom:26px;}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:560px){.cards{grid-template-columns:1fr;}}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:24px;text-align:center;cursor:pointer;transition:.15s;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.card:hover{box-shadow:0 10px 28px rgba(0,0,0,.10);transform:translateY(-2px);border-color:#c7d2fe;}
+.card .material-icons{font-size:40px;color:var(--purple);}
+.card h3{margin:12px 0 6px;font-size:17px;color:var(--navy);}
+.card p{margin:0;font-size:13px;color:var(--muted);line-height:1.5;}
+.panel{background:#fff;border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.back{display:inline-flex;align-items:center;gap:5px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:14px;padding:0;}
+.inp{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;text-decoration:none;}
+.btn-brand{background:var(--navy);color:#fff;}
+.btn-purple{background:var(--purple);color:#fff;}
+.frameWrap{position:relative;width:100%;min-height:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:14px;}
+.frameWrap iframe{width:100%;height:640px;border:0;display:block;}
+.hidden{display:none;}
+.result{border-radius:12px;padding:18px;margin-top:16px;}
+.r-good{background:#f0fdf4;border:1px solid #bbf7d0;}
+.r-warn{background:#fffbeb;border:1px solid #fde68a;}
+.r-bad{background:#fef2f2;border:1px solid #fecaca;}
+.muted{color:var(--muted);}
+.center{text-align:center;}
+.foot{text-align:center;color:#94a3b8;font-size:11px;margin-top:30px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="pHeadline">Prime 49</h1>
+  <div class="sub" id="pSub">No-cost hardware, no SaaS fees, and a monthly rebate to your merchants.</div>
+
+  <!-- Step 1: choose path -->
+  <div id="choose" class="cards">
+    <div class="card" onclick="pickPartner()">
+      <span class="material-icons">badge</span>
+      <h3>I'm a PayProTec Partner</h3>
+      <p>Check if your merchants qualify to upgrade to Prime 49, then book a session.</p>
+    </div>
+    <div class="card" onclick="pickNonPartner()">
+      <span class="material-icons">person_add</span>
+      <h3>I'm not a partner yet</h3>
+      <p>Learn how Prime 49 works and get started.</p>
+    </div>
+  </div>
+
+  <!-- Partner path -->
+  <div id="partnerPanel" class="panel hidden">
+    <button class="back" onclick="reset()"><span class="material-icons" style="font-size:16px;">arrow_back</span> Back</button>
+    <div id="partnerStep1">
+      <h3 style="margin:0 0 6px;color:var(--navy);">Enter your Partner ID</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px;">We'll check whether your merchants qualify for a Prime 49 upgrade.</p>
+      <input class="inp" id="pid" placeholder="e.g. 144704" autocomplete="off">
+      <div id="pidErr" style="color:#dc2626;font-size:12px;margin-top:6px;"></div>
+      <button class="btn btn-brand" style="margin-top:14px;width:100%;" id="checkBtn" onclick="doCheck()">Check qualification</button>
+    </div>
+    <div id="partnerResult"></div>
+  </div>
+
+  <!-- Non-partner path -->
+  <div id="nonPartnerPanel" class="panel hidden">
+    <button class="back" onclick="reset()"><span class="material-icons" style="font-size:16px;">arrow_back</span> Back</button>
+    <div id="nonPartnerBody"></div>
+  </div>
+
+  <div class="foot">Powered by PayProTec</div>
+</div>
+
+<script>
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const safeUrl = u => { u=String(u||'').trim(); return /^https?:\/\//i.test(u)?u:''; };
+const money = v => '$'+(Math.round(Number(v)||0)).toLocaleString();
+let CTA = {};
+
+async function loadCfg(){
+  try{
+    const r = await (await fetch('/api/prime49-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'config'})})).json();
+    if(r.success) CTA = r.cta || {};
+  }catch(e){}
+  if(CTA.headline) document.getElementById('pHeadline').textContent = CTA.headline;
+  if(CTA.subtext) document.getElementById('pSub').textContent = CTA.subtext;
+}
+function show(id){ ['choose','partnerPanel','nonPartnerPanel'].forEach(x=>document.getElementById(x).classList.toggle('hidden', x!==id)); }
+function reset(){ show('choose'); document.getElementById('partnerResult').innerHTML=''; document.getElementById('partnerStep1').style.display=''; document.getElementById('pid').value=''; document.getElementById('pidErr').textContent=''; }
+
+function frameOrLink(mode, url, label, cls){
+  const u = safeUrl(url);
+  if(!u) return '<div class="muted" style="font-size:13px;">This option isn\'t set up yet. Please contact PayProTec.</div>';
+  if(mode==='embed'||mode==='calendar'||mode==='form') return `<div class="frameWrap"><iframe src="${esc(u)}" loading="lazy" allow="camera; microphone; autoplay; fullscreen"></iframe></div>`;
+  return `<div class="center" style="margin-top:16px;"><a class="btn ${cls||'btn-brand'}" href="${esc(u)}" target="_blank" rel="noopener">${esc(label||'Continue')} <span class="material-icons" style="font-size:17px;">arrow_forward</span></a></div>`;
+}
+
+function pickNonPartner(){
+  show('nonPartnerPanel');
+  const mode = CTA.nonpartner_mode || 'form';
+  const body = document.getElementById('nonPartnerBody');
+  const head = mode==='calendar' ? 'Book a quick intro call' : (mode==='link' ? 'Get started with Prime 49' : 'Tell us about you');
+  body.innerHTML = `<h3 style="margin:0 0 4px;color:var(--navy);">${esc(head)}</h3>
+    <p class="muted" style="font-size:13px;margin:0 0 4px;">A PayProTec team member will help you get set up.</p>
+    ${frameOrLink(mode==='link'?'link':'embed', CTA.nonpartner_url, CTA.nonpartner_label||'Get started', 'btn-brand')}`;
+}
+
+function pickPartner(){ show('partnerPanel'); setTimeout(()=>document.getElementById('pid').focus(),100); }
+
+async function doCheck(){
+  const id=document.getElementById('pid').value.trim();
+  const err=document.getElementById('pidErr'); err.textContent='';
+  if(!id){ err.textContent='Please enter your Partner ID.'; return; }
+  const btn=document.getElementById('checkBtn'); btn.disabled=true; btn.textContent='Checking…';
+  let r;
+  try{ r = await (await fetch('/api/prime49-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'check', partner_id:id})})).json(); }
+  catch(e){ r={success:false}; }
+  btn.disabled=false; btn.textContent='Check qualification';
+  if(!r.success){ err.textContent=r.message||'Something went wrong. Try again.'; return; }
+  const out=document.getElementById('partnerResult');
+  document.getElementById('partnerStep1').style.display='none';
+
+  if(r.status==='not_found'){
+    out.innerHTML=`<div class="result r-warn">
+      <div style="font-weight:800;color:var(--amber);">We couldn't find that Partner ID</div>
+      <p class="muted" style="font-size:13px;margin:6px 0 0;">Double-check the ID and try again. If you're new, use the "not a partner yet" path.</p>
+      <button class="btn btn-brand" style="margin-top:12px;" onclick="retry()">Try another ID</button>
+    </div>`;
+    return;
+  }
+  if(r.status==='qualified'){
+    out.innerHTML=`<div class="result r-good">
+        <div style="font-weight:800;color:var(--green);font-size:16px;">🎉 You qualify!</div>
+        <p style="font-size:13px;margin:6px 0 0;">You have <b>${r.qualifying}</b> merchant${r.qualifying===1?'':'s'} doing <b>${money(r.total_vol)}</b>/mo that can upgrade to Prime 49.</p>
+      </div>
+      <h3 style="margin:18px 0 4px;color:var(--navy);">${esc(CTA.qualified_headline||'Book your upgrade session')}</h3>
+      ${frameOrLink(CTA.qualified_mode||'embed', CTA.qualified_url, 'Book now', 'btn-purple')}`;
+    return;
+  }
+  // not_qualified
+  out.innerHTML=`<div class="result r-warn">
+      <div style="font-weight:800;color:var(--amber);">Let's talk it through</div>
+      <p style="font-size:13px;margin:6px 0 0;">Based on current volume, your merchants aren't an automatic fit yet — but it's evaluated case-by-case. Request a chat with our coaches for consideration.</p>
+    </div>
+    <h3 style="margin:18px 0 4px;color:var(--navy);">${esc(CTA.notqualified_headline||'Request a coach consultation')}</h3>
+    ${frameOrLink(CTA.notqualified_mode||'embed', CTA.notqualified_url, 'Request a chat', 'btn-brand')}`;
+}
+function retry(){ document.getElementById('partnerResult').innerHTML=''; document.getElementById('partnerStep1').style.display=''; document.getElementById('pid').value=''; document.getElementById('pid').focus(); }
+
+loadCfg();
+</script>
+</body>
+</html>

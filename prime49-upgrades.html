@@ -52,6 +52,11 @@ tr.partner-row{cursor:pointer;} tr.partner-row:hover{background:#f8fafc;}
     <span id="loadMsg" class="muted" style="font-size:12px;"></span>
   </div>
 
+  <details style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:14px;padding:12px 16px;margin-bottom:16px;">
+    <summary style="cursor:pointer;font-size:14px;font-weight:800;color:var(--purple);">🔗 Landing page &amp; two-path CTA setup</summary>
+    <div id="ctaBody" style="margin-top:14px;"><div class="muted" style="font-size:12px;">Loading…</div></div>
+  </details>
+
   <div class="tiles" id="tiles"></div>
 
   <input class="inp" id="pSearch" placeholder="Search partner…" oninput="renderPartners()" style="width:280px;margin-bottom:10px;">
@@ -144,6 +149,60 @@ function exportAll(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='prime49_upgrade_partners.csv';
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
 }
+// ── Two-path CTA setup ──
+async function loadCta(){
+  const r=await api({action:'get_cta'});
+  const c=(r.success&&r.cta)?r.cta:{};
+  const pub=(r.success&&r.public_url)?r.public_url:'/prime49';
+  const opt=(v,val,label)=>`<option value="${v}" ${val===v?'selected':''}>${label}</option>`;
+  document.getElementById('ctaBody').innerHTML=`
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">Public landing: <a href="${esc(pub)}" target="_blank">${esc(pub)}</a> — two paths: <b>Partner</b> (enter ID → qualify → book, else coach form) and <b>Non-partner</b> (form or calendar). Paste booking/calendar or form URLs (your /book link, a HighLevel form/calendar, or any embeddable page).
+      <button class="btn btn-neutral" style="margin-left:8px;padding:4px 10px;font-size:11px;" onclick="navigator.clipboard.writeText('${esc(pub)}')">Copy link</button></div>
+    <div style="display:grid;grid-template-columns:1fr;gap:8px;max-width:640px;">
+      <label class="muted" style="font-size:11px;font-weight:700;">HEADLINE</label>
+      <input class="inp" id="cta_head" value="${esc(c.headline||'')}" placeholder="Prime 49">
+      <input class="inp" id="cta_sub" value="${esc(c.subtext||'')}" placeholder="No-cost hardware, no SaaS fees, monthly rebate…">
+
+      <div style="border-top:1px solid #e9d5ff;margin-top:8px;padding-top:8px;font-weight:800;color:#6b21a8;font-size:12px;">Non-partner path</div>
+      <div style="display:flex;gap:8px;">
+        <select class="inp" id="cta_np_mode" style="max-width:150px;">${opt('form',c.nonpartner_mode,'Form (embed)')}${opt('calendar',c.nonpartner_mode,'Calendar (embed)')}${opt('link',c.nonpartner_mode,'Link (button)')}</select>
+        <input class="inp" id="cta_np_url" value="${esc(c.nonpartner_url||'')}" placeholder="Form / calendar / link URL" style="flex:1;">
+      </div>
+      <input class="inp" id="cta_np_label" value="${esc(c.nonpartner_label||'')}" placeholder="Button label (for link mode) — e.g. Get started">
+
+      <div style="border-top:1px solid #e9d5ff;margin-top:8px;padding-top:8px;font-weight:800;color:#166534;font-size:12px;">Partner → QUALIFIED path</div>
+      <input class="inp" id="cta_q_head" value="${esc(c.qualified_headline||'')}" placeholder="Headline — e.g. Book your upgrade session">
+      <div style="display:flex;gap:8px;">
+        <select class="inp" id="cta_q_mode" style="max-width:150px;">${opt('embed',c.qualified_mode,'Calendar (embed)')}${opt('link',c.qualified_mode,'Link (button)')}</select>
+        <input class="inp" id="cta_q_url" value="${esc(c.qualified_url||'')}" placeholder="Booking calendar / embed website URL" style="flex:1;">
+      </div>
+
+      <div style="border-top:1px solid #e9d5ff;margin-top:8px;padding-top:8px;font-weight:800;color:var(--amber);font-size:12px;">Partner → NOT qualified path (coach consideration)</div>
+      <input class="inp" id="cta_nq_head" value="${esc(c.notqualified_headline||'')}" placeholder="Headline — e.g. Request a coach consultation">
+      <div style="display:flex;gap:8px;">
+        <select class="inp" id="cta_nq_mode" style="max-width:150px;">${opt('embed',c.notqualified_mode,'Form (embed)')}${opt('link',c.notqualified_mode,'Link (button)')}</select>
+        <input class="inp" id="cta_nq_url" value="${esc(c.notqualified_url||'')}" placeholder="Coach request form URL" style="flex:1;">
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+        <button class="btn" style="background:var(--purple);color:#fff;" onclick="saveCta(this)">Save CTA setup</button>
+        <span id="ctaMsg" class="muted" style="font-size:12px;"></span>
+      </div>
+    </div>`;
+}
+async function saveCta(btn){
+  const cta={
+    headline:document.getElementById('cta_head').value, subtext:document.getElementById('cta_sub').value,
+    nonpartner_mode:document.getElementById('cta_np_mode').value, nonpartner_url:document.getElementById('cta_np_url').value, nonpartner_label:document.getElementById('cta_np_label').value,
+    qualified_mode:document.getElementById('cta_q_mode').value, qualified_url:document.getElementById('cta_q_url').value, qualified_headline:document.getElementById('cta_q_head').value,
+    notqualified_mode:document.getElementById('cta_nq_mode').value, notqualified_url:document.getElementById('cta_nq_url').value, notqualified_headline:document.getElementById('cta_nq_head').value
+  };
+  btn.disabled=true; document.getElementById('ctaMsg').textContent='Saving…';
+  const r=await api({action:'set_cta', cta});
+  btn.disabled=false;
+  document.getElementById('ctaMsg').innerHTML = r.success ? '<span style="color:var(--green);">✓ Saved.</span>' : '<span style="color:#dc2626;">Failed.</span>';
+}
+loadCta();
 (async function(){ const r=await api({action:'get_threshold'}); if(r.success&&r.threshold) document.getElementById('thr').value=r.threshold; reload(); })();
 </script>
 </body>

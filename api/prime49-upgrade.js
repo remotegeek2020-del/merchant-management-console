@@ -88,6 +88,36 @@ export default async function handler(req, res) {
             return ok(res, { partner_full_name: name, merchants: rows });
         }
 
+        // ── Two-path CTA / landing config ────────────────────────────────────
+        if (action === 'get_cta') {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'prime49_cta').maybeSingle();
+            let cfg = {}; try { cfg = data && data.value ? JSON.parse(data.value) : {}; } catch { cfg = {}; }
+            const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+            const host = req.headers['x-forwarded-host'] || req.headers.host;
+            return ok(res, { cta: cfg, public_url: `${proto}://${host}/prime49` });
+        }
+        if (action === 'set_cta') {
+            const b = req.body.cta || {};
+            const cfg = {
+                headline: String(b.headline || '').slice(0, 200),
+                subtext: String(b.subtext || '').slice(0, 500),
+                // Non-partner path
+                nonpartner_mode: ['form', 'calendar', 'link'].includes(b.nonpartner_mode) ? b.nonpartner_mode : 'form',
+                nonpartner_url: String(b.nonpartner_url || '').slice(0, 1000),
+                nonpartner_label: String(b.nonpartner_label || '').slice(0, 120),
+                // Partner → qualified path
+                qualified_mode: ['embed', 'link'].includes(b.qualified_mode) ? b.qualified_mode : 'link',
+                qualified_url: String(b.qualified_url || '').slice(0, 1000),
+                qualified_headline: String(b.qualified_headline || '').slice(0, 200),
+                // Partner → not-qualified path (coaches consideration form)
+                notqualified_mode: ['embed', 'link'].includes(b.notqualified_mode) ? b.notqualified_mode : 'embed',
+                notqualified_url: String(b.notqualified_url || '').slice(0, 1000),
+                notqualified_headline: String(b.notqualified_headline || '').slice(0, 200)
+            };
+            await supabase.from('app_settings').upsert({ key: 'prime49_cta', value: JSON.stringify(cfg), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+            return ok(res, { cta: cfg });
+        }
+
         return bad(res, 'Unknown action');
     } catch (err) {
         console.error('Prime49 Upgrade Error:', err.message);
