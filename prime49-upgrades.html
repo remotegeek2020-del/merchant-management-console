@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prime 49 Upgrades — PayProTec</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--green:#16a34a;--amber:#b45309;--purple:#7c3aed;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+.top h1{font-size:22px;margin:0;color:var(--navy);display:flex;align-items:center;gap:10px;}
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn .material-icons{font-size:17px;}
+.btn-neutral{background:#fff;color:#334155;border:1px solid var(--border);}
+.tiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+.tile{background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 18px;flex:1;min-width:150px;}
+.tile .n{font-size:26px;font-weight:800;font-family:'DM Mono',monospace;color:var(--navy);}
+.tile .l{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:3px;}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+.inp{padding:9px 11px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid #f1f5f9;}
+th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+tr.partner-row{cursor:pointer;} tr.partner-row:hover{background:#f8fafc;}
+.num{text-align:right;font-family:'DM Mono',monospace;}
+.chip{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;background:#ede9fe;color:#5b21b6;}
+.muted{color:var(--muted);}
+.detail{background:#f8fafc;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1><span class="material-icons" style="color:var(--purple);">workspace_premium</span> Prime 49 Upgrade Opportunities</h1>
+    <div style="display:flex;gap:8px;">
+      <a class="btn btn-neutral" href="/marketing" style="text-decoration:none;"><span class="material-icons">campaign</span> Marketing</a>
+      <button class="btn btn-neutral" onclick="exportAll()"><span class="material-icons">download</span> Export</button>
+    </div>
+  </div>
+
+  <div class="muted" style="font-size:12px;margin-bottom:12px;">Merchants that are <b>Approved</b>, <b>not already on Prime 49</b>, and doing at least the monthly volume below. $20k+/mo also qualifies for the POS credit. Use this to target partners for upgrade meetings.</div>
+
+  <div class="controls">
+    <label class="muted" style="font-size:12px;font-weight:700;">Min monthly volume $</label>
+    <input class="inp" id="thr" type="number" value="15000" style="width:120px;">
+    <button class="btn btn-neutral" onclick="reload()"><span class="material-icons">refresh</span> Apply</button>
+    <span id="loadMsg" class="muted" style="font-size:12px;"></span>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <input class="inp" id="pSearch" placeholder="Search partner…" oninput="renderPartners()" style="width:280px;margin-bottom:10px;">
+  <div id="partnersWrap"><div class="muted" style="padding:30px;text-align:center;">Loading…</div></div>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('pp_session_token') || '';
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const money = v => '$'+Math.round(Number(v)||0).toLocaleString();
+let _data=null, _openPartner=null, _detailCache={};
+
+async function api(body){
+  const r=await fetch('/api/prime49-upgrade',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
+  return r.json();
+}
+async function reload(){
+  const thr=Number(document.getElementById('thr').value)||15000;
+  document.getElementById('loadMsg').textContent='Scanning…';
+  document.getElementById('partnersWrap').innerHTML='<div class="muted" style="padding:30px;text-align:center;">Scanning merchant portfolio…</div>';
+  const r=await api({action:'scan', threshold:thr});
+  document.getElementById('loadMsg').textContent='';
+  if(!r.success){ document.getElementById('partnersWrap').innerHTML='<div class="muted" style="padding:30px;text-align:center;">'+esc(r.message||'Failed')+'</div>'; return; }
+  _data=r; _detailCache={}; _openPartner=null;
+  renderTiles(); renderPartners();
+  // Persist the threshold as the default.
+  api({action:'set_threshold', threshold:thr});
+}
+function renderTiles(){
+  const t=_data.totals;
+  document.getElementById('tiles').innerHTML=`
+    <div class="tile"><div class="n">${t.partners.toLocaleString()}</div><div class="l">Partners with opportunities</div></div>
+    <div class="tile"><div class="n">${t.merchants.toLocaleString()}</div><div class="l">Qualifying merchants</div></div>
+    <div class="tile"><div class="n" style="color:var(--purple);">${t.pos_eligible.toLocaleString()}</div><div class="l">$20k+ (POS credit)</div></div>
+    <div class="tile"><div class="n">${money(t.total_vol)}</div><div class="l">Total 30-day volume</div></div>
+    <div class="tile"><div class="n" style="color:var(--green);">${money(t.est_monthly_rebate)}</div><div class="l">Est. monthly rebate (~40bps)</div></div>`;
+}
+function renderPartners(){
+  const q=(document.getElementById('pSearch').value||'').toLowerCase();
+  let rows=(_data.partners||[]);
+  if(q) rows=rows.filter(p=>(p.partner_full_name||'').toLowerCase().includes(q));
+  const wrap=document.getElementById('partnersWrap');
+  if(!rows.length){ wrap.innerHTML='<div class="muted" style="padding:30px;text-align:center;">No partners match.</div>'; return; }
+  wrap.innerHTML=`<table><thead><tr>
+      <th>Partner</th><th class="num">Qualifying</th><th class="num">$20k+</th><th class="num">30-day volume</th><th class="num">Est. rebate/mo</th><th></th>
+    </tr></thead><tbody>`+
+    rows.map(p=>{
+      const open=_openPartner===p.partner_full_name;
+      let html=`<tr class="partner-row" onclick="togglePartner('${esc(p.partner_full_name).replace(/'/g,"\\'")}')">
+        <td><b>${esc(p.partner_full_name)}</b></td>
+        <td class="num">${p.count}</td>
+        <td class="num">${p.pos_count?('<span class="chip">'+p.pos_count+'</span>'):'0'}</td>
+        <td class="num">${money(p.vol30)}</td>
+        <td class="num" style="color:var(--green);">${money(p.est_monthly_rebate)}</td>
+        <td style="text-align:right;"><span class="material-icons" style="font-size:18px;color:#94a3b8;">${open?'expand_less':'expand_more'}</span></td>
+      </tr>`;
+      if(open){
+        const d=_detailCache[p.partner_full_name];
+        html+=`<tr class="detail"><td colspan="6" style="padding:0;">`;
+        if(!d){ html+='<div class="muted" style="padding:14px;">Loading merchants…</div>'; }
+        else if(!d.length){ html+='<div class="muted" style="padding:14px;">No merchants.</div>'; }
+        else {
+          html+=`<table style="border:none;border-radius:0;margin:0;"><thead><tr>
+            <th>Merchant</th><th>MID</th><th>State</th><th class="num">30-day vol</th><th class="num">Est. rebate</th><th>POS</th></tr></thead><tbody>`+
+            d.map(m=>`<tr><td>${esc(m.dba_name||'—')}</td><td class="muted">${esc(m.merchant_id||'')}</td><td class="muted">${esc(m.state||'')}</td>
+              <td class="num">${money(m.vol30)}</td><td class="num" style="color:var(--green);">${money(m.est_rebate)}</td>
+              <td>${m.pos_eligible?'<span class="chip">POS</span>':''}</td></tr>`).join('')+`</tbody></table>`;
+        }
+        html+=`</td></tr>`;
+      }
+      return html;
+    }).join('')+`</tbody></table>`;
+}
+async function togglePartner(name){
+  if(_openPartner===name){ _openPartner=null; renderPartners(); return; }
+  _openPartner=name; renderPartners();
+  if(!_detailCache[name]){
+    const thr=Number(document.getElementById('thr').value)||15000;
+    const r=await api({action:'partner_detail', partner_full_name:name, threshold:thr});
+    _detailCache[name]=r.success?(r.merchants||[]):[];
+    if(_openPartner===name) renderPartners();
+  }
+}
+function exportAll(){
+  if(!_data){ return; }
+  const cell=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[['Partner','Qualifying merchants','$20k+ (POS)','30-day volume','Est monthly rebate'].join(',')]
+    .concat((_data.partners||[]).map(p=>[p.partner_full_name,p.count,p.pos_count,Math.round(p.vol30),p.est_monthly_rebate].map(cell).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='prime49_upgrade_partners.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+(async function(){ const r=await api({action:'get_threshold'}); if(r.success&&r.threshold) document.getElementById('thr').value=r.threshold; reload(); })();
+</script>
+</body>
+</html>
