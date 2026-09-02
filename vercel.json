@@ -21,7 +21,9 @@
     "api/cron-youtube-livechat.js": { "maxDuration": 60 },
     "api/youtube-oauth.js": { "maxDuration": 60 },
     "api/ghl-documents.js": { "maxDuration": 30 },
-    "api/cron-award-certificates.js": { "maxDuration": 60 }
+    "api/cron-award-certificates.js": { "maxDuration": 60 },
+    "api/partner-hl-sync.js": { "maxDuration": 60 },
+    "api/cron-hl-sync.js": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -63,6 +65,10 @@
     {
       "path": "/api/cron-youtube-livechat",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron-hl-sync",
+      "schedule": "0 */6 * * *"
     }
   ],
   "routes": [

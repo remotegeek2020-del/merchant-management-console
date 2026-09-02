@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HighLevel Smart Lists — PayProTec</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--green:#16a34a;--red:#dc2626;--purple:#7c3aed;}
+*{box-sizing:border-box;} body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.wrap{max-width:1040px;margin:0 auto;padding:24px 20px 60px;}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.top h1{font-size:22px;margin:0;color:var(--navy);display:flex;align-items:center;gap:10px;}
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn .material-icons{font-size:17px;}
+.btn-brand{background:var(--navy);color:#fff;} .btn-purple{background:var(--purple);color:#fff;}
+.btn-neutral{background:#fff;color:#334155;border:1px solid var(--border);} .btn-danger{background:#fee2e2;color:#991b1b;}
+.btn-sm{padding:6px 11px;font-size:12px;}
+.hint{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;font-size:13px;color:#1e3a8a;line-height:1.6;margin-bottom:18px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.card h3{margin:0 0 2px;font-size:15px;color:var(--navy);}
+.tag{display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:6px;padding:2px 9px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;}
+.meta{font-size:12px;color:var(--muted);margin-top:6px;}
+.inp{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;}
+.fld{display:block;font-size:12px;font-weight:700;color:#475569;margin:10px 0 4px;}
+.modal-back{position:fixed;inset:0;background:rgba(4,10,22,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;}
+.modal{background:#fff;border-radius:16px;max-width:460px;width:100%;padding:22px;max-height:90vh;overflow:auto;}
+.muted{color:var(--muted);}
+.pill{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;}
+.on{background:#dcfce7;color:#166534;} .off{background:#fee2e2;color:#991b1b;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1><span class="material-icons" style="color:var(--purple);">filter_alt</span> HighLevel Smart Lists</h1>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-neutral" onclick="runAll(this)"><span class="material-icons">sync</span> Sync all now</button>
+      <button class="btn btn-brand" onclick="openEditor()"><span class="material-icons">add</span> New list</button>
+    </div>
+  </div>
+
+  <div class="hint">
+    <b>How it works:</b> pick a partner segment (e.g. "has a Prime49 ID") and a HighLevel <b>tag</b>. This portal tags every matching partner's HL contact (and, if enabled, removes the tag from partners who no longer match). Then in HighLevel → Contacts, create a <b>Smart List filtered by that tag</b> — it stays current automatically. Syncs also run on a schedule.
+  </div>
+
+  <div id="list"><div class="muted" style="padding:30px;text-align:center;">Loading…</div></div>
+</div>
+
+<div class="modal-back" id="modalBack"><div class="modal" id="modalBox"></div></div>
+
+<script>
+const TOKEN = localStorage.getItem('pp_session_token') || '';
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let CRITERIA = {}, _syncs = [];
+
+async function api(body){
+  const r = await fetch('/api/partner-hl-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
+  return r.json();
+}
+function openModal(h){ document.getElementById('modalBox').innerHTML=h; document.getElementById('modalBack').style.display='flex'; }
+function closeModal(){ document.getElementById('modalBack').style.display='none'; }
+document.getElementById('modalBack').addEventListener('click',e=>{ if(e.target.id==='modalBack') closeModal(); });
+
+async function load(){
+  const r = await api({action:'list_syncs'});
+  if(!r.success){ document.getElementById('list').innerHTML='<div class="muted" style="padding:30px;text-align:center;">'+esc(r.message||'Failed')+'</div>'; return; }
+  CRITERIA = r.criteria||{}; _syncs = r.syncs||[];
+  render();
+}
+function render(){
+  const box=document.getElementById('list');
+  if(!_syncs.length){ box.innerHTML='<div class="muted" style="padding:30px;text-align:center;">No lists yet. Click <b>New list</b> to create your first (e.g. all partners with a Prime49 ID → tag <code>Prime49 Partner</code>).</div>'; return; }
+  box.innerHTML=_syncs.map(s=>{
+    const last = s.last_run_at ? new Date(s.last_run_at).toLocaleString() : 'never';
+    const stats = s.last_run_at ? `matched ${s.last_matched||0} · tagged ${s.last_tagged||0}${s.remove_stale?(' · removed '+(s.last_untagged||0)):''}` : '';
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <div>
+          <h3>${esc(s.name)} <span class="pill ${s.enabled?'on':'off'}">${s.enabled?'ON':'OFF'}</span></h3>
+          <div class="meta">${esc(CRITERIA[s.criteria]||s.criteria)} → HL tag <span class="tag">${esc(s.tag)}</span>${s.hl_location_id?(' · sub-account '+esc(s.hl_location_id)):''}</div>
+          <div class="meta">${s.remove_stale?'Keeps list accurate (removes tag from non-matches).':'Only adds the tag (never removes).'}</div>
+          <div class="meta">Last run: ${esc(last)}${stats?(' · '+esc(stats)):''}${s.last_error?(' · <span style="color:var(--red);">'+esc(s.last_error)+'</span>'):''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-purple btn-sm" onclick="runOne('${s.id}',this)"><span class="material-icons">sync</span> Sync now</button>
+          <button class="btn btn-neutral btn-sm" onclick="openEditor('${s.id}')"><span class="material-icons">edit</span></button>
+          <button class="btn btn-danger btn-sm" onclick="del('${s.id}')"><span class="material-icons">delete</span></button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function runOne(id,btn){ btn.disabled=true; const t=btn.innerHTML; btn.innerHTML='Syncing…'; const r=await api({action:'run_sync',id}); btn.disabled=false; btn.innerHTML=t; if(!r.success){ alert(r.message||'Failed'); return; } alert('Synced: matched '+r.matched+', tagged '+r.tagged+(r.untagged?(', removed '+r.untagged):'')); load(); }
+async function runAll(btn){ btn.disabled=true; const t=btn.innerHTML; btn.innerHTML='Syncing…'; for(const s of _syncs){ if(s.enabled) await api({action:'run_sync',id:s.id}); } btn.disabled=false; btn.innerHTML=t; load(); }
+async function del(id){ if(!confirm('Delete this list sync? (The HighLevel tag itself is left as-is.)')) return; const r=await api({action:'delete_sync',id}); if(!r.success){ alert(r.message||'Failed'); return; } load(); }
+
+function openEditor(id){
+  const s = id ? _syncs.find(x=>x.id===id) : null;
+  const opts = Object.entries(CRITERIA).map(([k,v])=>`<option value="${k}" ${s&&s.criteria===k?'selected':''}>${esc(v)}</option>`).join('');
+  openModal(`<h2 style="margin:0 0 12px;color:var(--navy);font-size:17px;">${s?'Edit':'New'} smart list</h2>
+    <label class="fld">List name</label><input class="inp" id="f_name" value="${s?esc(s.name):''}" placeholder="e.g. Prime49 Partners">
+    <label class="fld">Partner segment</label><select class="inp" id="f_crit" onchange="previewCount()">${opts}</select>
+    <div id="f_count" class="muted" style="font-size:12px;margin-top:4px;"></div>
+    <label class="fld">HighLevel tag to apply</label><input class="inp" id="f_tag" value="${s?esc(s.tag):''}" placeholder="e.g. Prime49 Partner">
+    <label class="fld">HighLevel sub-account ID <span class="muted">(optional — blank = default)</span></label><input class="inp" id="f_loc" value="${s&&s.hl_location_id?esc(s.hl_location_id):''}" placeholder="location id">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="f_stale" ${!s||s.remove_stale?'checked':''}> Remove the tag from partners who no longer match (keeps the list accurate)</label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="f_en" ${!s||s.enabled?'checked':''}> Enabled (included in scheduled syncs)</label>
+    <div id="f_err" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Cancel</button><button class="btn btn-brand" onclick="save('${id||''}',this)">Save</button></div>`);
+  previewCount();
+}
+async function previewCount(){
+  const c=document.getElementById('f_crit').value;
+  const el=document.getElementById('f_count'); el.textContent='Counting…';
+  const r=await api({action:'criteria_count',criteria:c});
+  el.textContent = r.success ? (r.count+' partners currently match (with a HighLevel contact).') : '';
+}
+async function save(id,btn){
+  const name=document.getElementById('f_name').value.trim();
+  const tag=document.getElementById('f_tag').value.trim();
+  if(!tag){ document.getElementById('f_err').textContent='A HighLevel tag is required.'; return; }
+  btn.disabled=true;
+  const r=await api({action:'save_sync', id:id||undefined, name, criteria:document.getElementById('f_crit').value, tag, hl_location_id:document.getElementById('f_loc').value.trim(), remove_stale:document.getElementById('f_stale').checked, enabled:document.getElementById('f_en').checked});
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('f_err').textContent=r.message||'Failed'; return; }
+  closeModal(); load();
+}
+load();
+</script>
+</body>
+</html>

@@ -199,6 +199,38 @@ export async function ghlContactTags(locationId, contactId) {
     } catch { return []; }
 }
 
+// Add tags to a contact (used to build/maintain HighLevel smart lists by tag).
+export async function ghlAddContactTags(locationId, contactId, tags) {
+    if (!contactId || !Array.isArray(tags) || !tags.length) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}/tags`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ tags })
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// Remove tags from a contact (keeps a tag-based smart list accurate).
+export async function ghlRemoveContactTags(locationId, contactId, tags) {
+    if (!contactId || !Array.isArray(tags) || !tags.length) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}/tags`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ tags })
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
 // Tags + opt-in page (attribution) for a contact, in one call.
 // page = the URL captured when they opted in (last touch, else first touch).
 export async function ghlContactInfo(locationId, contactId) {
