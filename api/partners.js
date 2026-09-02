@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 import { getPartnerTiers } from './partner-portal.js';
+import { applyInstantForPerson, applyInstantForIdentifier } from './partner-hl-sync.js';
 
 async function sendEmail(to, subject, htmlBody, textBody) {
     if (!process.env.POSTMARK_SERVER_TOKEN || !to) return;
@@ -372,6 +373,14 @@ if (action === 'complete_onboarding') {
         user_agent: req.headers['user-agent'],
         ip_address: req.headers['x-forwarded-for'] || 'Internal'
     }]);
+
+    // Instant HighLevel smart-list tagging if the new partner has a Prime49 ID.
+    if (!finalErr && prime49Ids.length) {
+        try {
+            const { data: ag } = await supabase.from('agents').select('parent_agent_id').eq('id', finalAgentId).maybeSingle();
+            if (ag && ag.parent_agent_id) await applyInstantForPerson(ag.parent_agent_id);
+        } catch (_) { /* best-effort — cron backstops */ }
+    }
 
     return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
@@ -1452,6 +1461,11 @@ if (action === 'get_merchant_data') {
                 } catch (e) { console.warn('[prime49-auto] Revert error:', e.message); }
             })();
         }
+    }
+
+    // Instant HighLevel smart-list tagging when this ID is (now) Prime49.
+    if (!error && prime49 === true && oldData && oldData.id) {
+        await applyInstantForIdentifier(oldData.id);
     }
 
     return res.status(200).json({ success: !error, message: error?.message });
@@ -3033,6 +3047,7 @@ if (action === 'get_merchant_data_raw') {
                     new_value: { id_string: id_string.trim(), rev_share: revNum + '%', prime49: !!isPrime, person_id, assigned_by: actorEmail, action: 'reassigned' }
                 }).then(() => {}).catch(() => {});
 
+                if (isPrime) await applyInstantForPerson(person_id);   // instant HL tag
                 return res.status(200).json({ success: true, action_taken: 'reassigned' });
             }
 
@@ -3066,6 +3081,7 @@ if (action === 'get_merchant_data_raw') {
                 new_value: { id_string: id_string.trim(), rev_share: revNum + '%', prime49: !!isPrime, person_id, assigned_by: actorEmail, action: 'created' }
             }).then(() => {}).catch(() => {});
 
+            if (isPrime) await applyInstantForPerson(person_id);   // instant HL tag
             return res.status(200).json({ success: true, action_taken: 'created' });
         }
 

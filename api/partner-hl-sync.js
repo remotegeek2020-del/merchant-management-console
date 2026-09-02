@@ -63,6 +63,32 @@ export async function runOneSync(sync) {
     return { matched: targets.length, tagged, untagged, error: null };
 }
 
+// ── INSTANT tagging ──────────────────────────────────────────────────────────
+// Called right after a partner's Prime49 status changes, so their HL tag is
+// applied immediately (the 6-hour cron is the backstop). Best-effort/non-blocking.
+export async function applyInstantForPerson(personId) {
+    if (!personId) return;
+    try {
+        const { data: syncs } = await supabase.from('partner_hl_syncs').select('*').eq('enabled', true);
+        for (const s of (syncs || [])) {
+            if (!s.tag) continue;
+            const targets = await resolveTargets(s.criteria);
+            const t = targets.find(x => String(x.person_id) === String(personId));
+            if (t && t.hl_contact_id) await ghlAddContactTags(s.hl_location_id || '', t.hl_contact_id, [s.tag]);
+        }
+    } catch (_) { /* best-effort — cron will reconcile */ }
+}
+// Resolve the owning partner from an identifier, then instant-tag them.
+export async function applyInstantForIdentifier(identifierId) {
+    if (!identifierId) return;
+    try {
+        const { data: ai } = await supabase.from('agent_identifiers').select('agent_id').eq('id', identifierId).maybeSingle();
+        if (!ai || !ai.agent_id) return;
+        const { data: ag } = await supabase.from('agents').select('parent_agent_id').eq('id', ai.agent_id).maybeSingle();
+        if (ag && ag.parent_agent_id) await applyInstantForPerson(ag.parent_agent_id);
+    } catch (_) { /* best-effort */ }
+}
+
 // Run every enabled sync (used by the cron).
 export async function runAllSyncs() {
     const { data: syncs } = await supabase.from('partner_hl_syncs').select('*').eq('enabled', true);
