@@ -370,12 +370,15 @@ function buildOpsEmail(data) {
 
 function buildPrime49Email(data) {
     const {
-        date, totalPartners, totalMerchants, totalVolume30d,
+        date, totalMerchants, totalVolume30d,
         totalNetResidual, totalPptResidual, totalAgentResidual,
-        newIdsThisWeek,
         newMerchantsAll = [],
         newMerchantsYesterdayCount = 0, newMerchantsWeekCount = 0, newMerchantsMonthCount = 0,
-        partnerBreakdown, newIdDetails
+        partnerBreakdown, newIdDetails,
+        // Authoritative Prime49 identity
+        totalPrime49Partners = 0, totalPrime49Ids = 0, partnersWithMerchants = 0,
+        newPrime49PartnersWeek = 0, newPrime49IdsOnExistingWeek = 0, newPrime49IdsAllWeek = 0,
+        newPartnerList = [], newIdOnExistingList = []
     } = data;
 
     const fmt2 = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -457,7 +460,7 @@ function buildPrime49Email(data) {
 
     <!-- KPI STRIP -->
     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:0;border-bottom:1px solid #e2e8f0;">
-        ${kpi('Partners', num(totalPartners), null, '#0369a1')}
+        ${kpi('Prime49 Partners', num(totalPrime49Partners), `${num(totalPrime49Ids)} IDs · ${num(partnersWithMerchants)} w/ merchants`, '#0369a1')}
         ${kpi('Merchants', num(totalMerchants), 'approved/collections', '#002d5a')}
         ${kpi('30-Day Volume', fmt(totalVolume30d), null, '#002d5a')}
         ${kpi('Net Residual Pool', fmt(totalNetResidual), null, '#334155')}
@@ -467,11 +470,19 @@ function buildPrime49Email(data) {
 
     <!-- DAILY ACTIVITY BADGES -->
     <div style="padding:16px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
-        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">Since Yesterday</div>
+        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">This Week</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
-                <span style="font-size:18px;font-weight:900;color:#92400e;">${newIdsThisWeek}</span>
-                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 IDs</span>
+                <span style="font-size:18px;font-weight:900;color:#92400e;">${newPrime49PartnersWeek}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 Partners</span>
+            </div>
+            <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#b45309;">${newPrime49IdsOnExistingWeek}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">New IDs on existing partners</span>
+            </div>
+            <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#92400e;">${newPrime49IdsAllWeek}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 IDs (total)</span>
             </div>
             <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
                 <span style="font-size:18px;font-weight:900;color:#059669;">${newMerchantsYesterdayCount}</span>
@@ -519,24 +530,29 @@ function buildPrime49Email(data) {
         </table>
     </div>
 
-    ${newIdsThisWeek > 0 ? `
-    <!-- NEW IDs SINCE YESTERDAY -->
-    <div style="padding:24px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:4px;">💎 New Prime49 IDs Since Yesterday (${newIdsThisWeek})</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Agent identifiers flagged as Prime49 added in the last 24 hours</div>
-        <table style="width:100%;border-collapse:collapse;border:1px solid #fde68a;border-radius:10px;overflow:hidden;">
-            <thead>
-                <tr style="background:#fffbeb;">
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Agent ID</th>
+    ${(() => {
+        const idRow = (r, border) => `<tr style="border-bottom:1px solid ${border};">
+            <td style="padding:7px 12px;font-family:monospace;font-size:12px;color:#92400e;font-weight:700;">${r.id_string}</td>
+            <td style="padding:7px 12px;color:#475569;font-size:12px;">${r.agent_name || '—'}</td>
+            <td style="padding:7px 12px;color:#64748b;font-size:11px;">${r.agent_company || '—'}</td>
+            <td style="padding:7px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.created_at)}</td></tr>`;
+        const tbl = (title, sub, list, border) => (list && list.length) ? `
+        <div style="padding:24px 24px 0;">
+            <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:4px;">${title} (${list.length})</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:10px;">${sub}</div>
+            <table style="width:100%;border-collapse:collapse;border:1px solid ${border};border-radius:10px;overflow:hidden;">
+                <thead><tr style="background:#fffbeb;">
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Prime49 ID</th>
                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Partner</th>
                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Company</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Rev%</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Added</th>
-                </tr>
-            </thead>
-            <tbody>${newIdRows}</tbody>
-        </table>
-    </div>` : ''}
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Became Prime49</th>
+                </tr></thead>
+                <tbody>${list.map(r => idRow(r, border)).join('')}</tbody>
+            </table>
+        </div>` : '';
+        return tbl('🆕 New Prime49 Partners This Week', 'Partners who got their FIRST Prime49 ID this week', newPartnerList, '#fde68a')
+             + tbl('➕ New Prime49 IDs on Existing Partners This Week', 'Additional Prime49 IDs added to partners who were already Prime49', newIdOnExistingList, '#fed7aa');
+    })()}
 
     <!-- CALCULATION METHODOLOGY -->
     <div style="margin:24px 24px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
@@ -866,9 +882,84 @@ async function buildPrime49Data() {
     const totalPptResidual  = partnerBreakdown.reduce((s, p) => s + p.ppt_share, 0);
     const totalNetResidual  = totalAgentResidual + totalPptResidual;
 
+    // 7. AUTHORITATIVE Prime49 identity — a partner is Prime49 because they OWN a
+    //    prime49 identifier (new partner w/ prime49 ID, or an extra prime49 ID on
+    //    an existing partner), NOT because they have an approved prime49 merchant.
+    //    Uses prime49_at (set by DB trigger) so both new IDs AND flips are caught.
+    const identity = {
+        totalPrime49Ids: 0, totalPrime49Partners: 0,
+        newPartnersYesterday: 0, newPartnersWeek: 0, newPartnersMonth: 0,
+        newIdsOnExistingYesterday: 0, newIdsOnExistingWeek: 0, newIdsOnExistingMonth: 0,
+        newIdsAllYesterday: 0, newIdsAllWeek: 0, newIdsAllMonth: 0,
+        newPartnerList: [], newIdOnExistingList: []
+    };
+    try {
+        const { data: p49ids } = await supabase.from('agent_identifiers')
+            .select('id_string, agent_id, prime49_at, created_at, rev_share').eq('prime49', true).limit(20000);
+        const rows = p49ids || [];
+        identity.totalPrime49Ids = rows.length;
+        // Resolve each ID's owner person (+ name/company) via agent → person.
+        const aids = [...new Set(rows.map(r => r.agent_id).filter(Boolean))];
+        const agMap = {};
+        if (aids.length) {
+            const { data: ags } = await supabase.from('agents').select('id, parent_agent_id, agent_name, company_id').in('id', aids);
+            const personIds = [...new Set((ags || []).map(a => a.parent_agent_id).filter(Boolean))];
+            const coIds = [...new Set((ags || []).map(a => a.company_id).filter(Boolean))];
+            let pMap = {}, cMap = {};
+            if (personIds.length) { const { data: ps } = await supabase.from('persons').select('id, full_name').in('id', personIds); (ps || []).forEach(p => { pMap[p.id] = p.full_name; }); }
+            if (coIds.length) { const { data: cs } = await supabase.from('companies').select('id, company_name').in('id', coIds); (cs || []).forEach(c => { cMap[c.id] = c.company_name; }); }
+            (ags || []).forEach(a => { agMap[a.id] = { person_id: a.parent_agent_id, name: pMap[a.parent_agent_id] || a.agent_name || '—', company: cMap[a.company_id] || '' }; });
+        }
+        const ownerKey = r => { const m = agMap[r.agent_id]; return (m && m.person_id) ? ('p:' + m.person_id) : ('a:' + (r.agent_id || r.id_string)); };
+        const at = r => r.prime49_at || r.created_at || null;
+        // Earliest prime49_at per owner → identifies brand-new Prime49 partners.
+        const earliestByOwner = {};
+        rows.forEach(r => { const k = ownerKey(r); const t = at(r); if (t && (!earliestByOwner[k] || t < earliestByOwner[k])) earliestByOwner[k] = t; });
+        identity.totalPrime49Partners = Object.keys(earliestByOwner).length || new Set(rows.map(ownerKey)).size;
+
+        const inWin = (t, since) => t && t >= since;
+        // New partners = owner's FIRST prime49 id lands in the window.
+        Object.entries(earliestByOwner).forEach(([, t]) => {
+            if (inWin(t, sinceIso)) identity.newPartnersYesterday++;
+            if (inWin(t, weekIso)) identity.newPartnersWeek++;
+            if (inWin(t, monthIso)) identity.newPartnersMonth++;
+        });
+        // Per-ID: all new prime49 ids in window; and those on ALREADY-prime49 partners.
+        rows.forEach(r => {
+            const t = at(r); if (!t) return;
+            const ownerFirst = earliestByOwner[ownerKey(r)];
+            const isExisting = ownerFirst && ownerFirst < t; // owner had an earlier prime49 id
+            if (inWin(t, sinceIso)) { identity.newIdsAllYesterday++; if (isExisting) identity.newIdsOnExistingYesterday++; }
+            if (inWin(t, weekIso)) { identity.newIdsAllWeek++; if (isExisting) identity.newIdsOnExistingWeek++; }
+            if (inWin(t, monthIso)) { identity.newIdsAllMonth++; if (isExisting) identity.newIdsOnExistingMonth++; }
+        });
+        // Lists (this week) for the email.
+        rows.forEach(r => {
+            const t = at(r); if (!inWin(t, weekIso)) return;
+            const m = agMap[r.agent_id] || {};
+            const rec = { id_string: r.id_string, agent_name: m.name || '—', agent_company: m.company || '—', created_at: t };
+            const ownerFirst = earliestByOwner[ownerKey(r)];
+            if (ownerFirst && ownerFirst < t) identity.newIdOnExistingList.push(rec);
+            else identity.newPartnerList.push(rec);
+        });
+    } catch (e) { /* non-fatal — fall back to merchant-derived counts */ }
+
     return {
         date: dateStr,
-        totalPartners:       partnerBreakdown.length,
+        // Authoritative Prime49 partner/ID counts (source of truth = prime49 IDs)
+        totalPrime49Partners: identity.totalPrime49Partners,
+        totalPrime49Ids:      identity.totalPrime49Ids,
+        partnersWithMerchants: partnerBreakdown.length,
+        newPrime49PartnersYesterday: identity.newPartnersYesterday,
+        newPrime49PartnersWeek:      identity.newPartnersWeek,
+        newPrime49PartnersMonth:     identity.newPartnersMonth,
+        newPrime49IdsOnExistingWeek: identity.newIdsOnExistingWeek,
+        newPrime49IdsAllWeek:        identity.newIdsAllWeek,
+        newPrime49IdsAllYesterday:   identity.newIdsAllYesterday,
+        newPartnerList:      identity.newPartnerList,
+        newIdOnExistingList: identity.newIdOnExistingList,
+        // Legacy field: now the authoritative partner count (was partnerBreakdown.length)
+        totalPartners:       identity.totalPrime49Partners || partnerBreakdown.length,
         totalMerchants:      (merchants || []).length,
         totalVolume30d,
         totalNetResidual,
@@ -1114,16 +1205,19 @@ function buildReportMarkdown(reportType, d) {
             `${i + 1}. ${p.partner_name || '—'} — ${n(p.merchant_count)} merchants · ${money(p.volume_30d)} vol · payout ${money(p.agent_payout)}`).join('\n');
         const newM = (d.newMerchantsWeek || []).slice(0, 5).map((m, i) =>
             `${i + 1}. ${m.dba_name || '—'} (${m.merchant_id || '—'})${m.partner_name ? ` · ${m.partner_name}` : ''}${m.account_status ? ` · ${m.account_status}` : ''}`).join('\n');
-        const newIds = (d.newIdDetails || []).slice(0, 5).map((x, i) =>
+        const newP = (d.newPartnerList || []).slice(0, 8).map((x, i) =>
+            `${i + 1}. ${x.agent_name || '—'}${x.agent_company && x.agent_company !== '—' ? ` (${x.agent_company})` : ''} · ${x.id_string || '—'}`).join('\n');
+        const newIdsExisting = (d.newIdOnExistingList || []).slice(0, 8).map((x, i) =>
             `${i + 1}. ${x.agent_name || '—'}${x.agent_company && x.agent_company !== '—' ? ` (${x.agent_company})` : ''} · ${x.id_string || '—'}`).join('\n');
         return `💎 **Prime49 Daily Update** — ${d.date}\n`
-            + `• Partners: **${n(d.totalPartners)}** · Merchants: **${n(d.totalMerchants)}**\n`
-            + `• 30-day volume: **${money(d.totalVolume30d)}**\n`
+            + `• Prime49 partners: **${n(d.totalPrime49Partners)}** (${n(d.totalPrime49Ids)} IDs · ${n(d.partnersWithMerchants)} with merchants)\n`
+            + `• Active merchants: **${n(d.totalMerchants)}** · 30-day volume: **${money(d.totalVolume30d)}**\n`
             + `• Net residual: **${money(d.totalNetResidual)}** (PPT ${money(d.totalPptResidual)} · Agents ${money(d.totalAgentResidual)})\n`
-            + `• New merchants — today **${n(d.newMerchantsYesterdayCount)}**, week **${n(d.newMerchantsWeekCount)}**, month **${n(d.newMerchantsMonthCount)}** · New IDs this week **${n(d.newIdsThisWeek)}**\n`
-            + (partners ? `\n**Top partners (by payout):**\n${partners}\n` : '')
-            + (newM ? `\n**New merchants this week:**\n${newM}\n` : '')
-            + (newIds ? `\n**New Prime49 IDs this week:**\n${newIds}` : '');
+            + `• This week — new Prime49 partners **${n(d.newPrime49PartnersWeek)}**, new IDs on existing **${n(d.newPrime49IdsOnExistingWeek)}** · new merchants **${n(d.newMerchantsWeekCount)}**\n`
+            + (partners ? `\n**Top partners by payout (active merchants):**\n${partners}\n` : '')
+            + (newP ? `\n**New Prime49 partners this week:**\n${newP}\n` : '')
+            + (newIdsExisting ? `\n**New Prime49 IDs on existing partners:**\n${newIdsExisting}\n` : '')
+            + (newM ? `\n**New Prime49 merchants this week:**\n${newM}` : '');
     }
     if (reportType === 'activity') {
         const top = (d.topUsers || []).slice(0, 5).map((u, i) => `${i + 1}. ${u.name} — ${n(u.count)}`).join('\n');
