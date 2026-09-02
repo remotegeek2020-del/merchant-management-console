@@ -86,6 +86,7 @@ function render(){
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-purple btn-sm" onclick="runOne('${s.id}',this)"><span class="material-icons">sync</span> Sync now</button>
+          ${s.last_run_at?`<button class="btn btn-neutral btn-sm" onclick="viewResults('${s.id}')"><span class="material-icons">list_alt</span> Results</button>`:''}
           <button class="btn btn-neutral btn-sm" onclick="openEditor('${s.id}')"><span class="material-icons">edit</span></button>
           <button class="btn btn-danger btn-sm" onclick="del('${s.id}')"><span class="material-icons">delete</span></button>
         </div>
@@ -100,6 +101,33 @@ async function runOne(id,btn){ btn.disabled=true; const t=btn.innerHTML; btn.inn
 async function runAll(btn){ btn.disabled=true; const t=btn.innerHTML; btn.innerHTML='Syncing…'; for(const s of _syncs){ if(s.enabled) await api({action:'run_sync',id:s.id}); } btn.disabled=false; btn.innerHTML=t; load(); }
 async function del(id){ if(!confirm('Delete this list sync? (The HighLevel tag itself is left as-is.)')) return; const r=await api({action:'delete_sync',id}); if(!r.success){ alert(r.message||'Failed'); return; } load(); }
 
+async function viewResults(id){
+  openModal('<div class="muted" style="font-size:12px;padding:10px;">Loading…</div>');
+  const r = await api({action:'get_detail', id});
+  if(!r.success){ document.getElementById('modalBox').innerHTML='<div class="muted">'+esc(r.message||'Failed')+'</div>'; return; }
+  const d = r.detail||{tagged:[],failed:[]};
+  const tagged = d.tagged||[], failed = d.failed||[];
+  const rowsT = tagged.length ? tagged.map(x=>`<tr><td style="padding:5px 8px;">${esc(x.name)}</td><td style="padding:5px 8px;font-family:'DM Mono',monospace;color:#64748b;font-size:11px;">${esc(x.contact_id)}</td></tr>`).join('') : '<tr><td colspan="2" class="muted" style="padding:8px;">None</td></tr>';
+  const rowsF = failed.length ? failed.map(x=>`<tr><td style="padding:5px 8px;">${esc(x.name)}</td><td style="padding:5px 8px;font-family:'DM Mono',monospace;color:#64748b;font-size:11px;">${esc(x.contact_id)}</td><td style="padding:5px 8px;color:var(--red);font-size:11px;">${esc(x.error)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted" style="padding:8px;">None 🎉</td></tr>';
+  const cell=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  window._resExport = () => {
+    const lines=[['Status','Name','HL Contact ID','Error'].join(',')]
+      .concat(tagged.map(x=>['tagged',x.name,x.contact_id,''].map(cell).join(',')))
+      .concat(failed.map(x=>['failed',x.name,x.contact_id,x.error].map(cell).join(',')));
+    const b=new Blob([lines.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='hl_sync_results.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  };
+  document.getElementById('modalBox').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <h2 style="margin:0;color:var(--navy);font-size:17px;">${esc(r.name)} — last sync</h2>
+      <button class="btn btn-neutral btn-sm" onclick="_resExport()"><span class="material-icons">download</span> CSV</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin:4px 0 12px;">${r.last_run_at?new Date(r.last_run_at).toLocaleString():''} · ${tagged.length} tagged · ${failed.length} failed</div>
+    ${failed.length?`<div style="font-weight:800;color:var(--red);font-size:13px;margin-bottom:4px;">❌ Failed (${failed.length})</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;"><thead><tr style="background:#fef2f2;"><th style="padding:5px 8px;text-align:left;">Partner</th><th style="padding:5px 8px;text-align:left;">HL Contact ID</th><th style="padding:5px 8px;text-align:left;">Why</th></tr></thead><tbody>${rowsF}</tbody></table>`:''}
+    <div style="font-weight:800;color:var(--green);font-size:13px;margin-bottom:4px;">✅ Tagged (${tagged.length})</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f0fdf4;"><th style="padding:5px 8px;text-align:left;">Partner</th><th style="padding:5px 8px;text-align:left;">HL Contact ID</th></tr></thead><tbody>${rowsT}</tbody></table>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-neutral" onclick="closeModal()">Close</button></div>`;
+}
 function openEditor(id){
   const s = id ? _syncs.find(x=>x.id===id) : null;
   const opts = Object.entries(CRITERIA).map(([k,v])=>`<option value="${k}" ${s&&s.criteria===k?'selected':''}>${esc(v)}</option>`).join('');

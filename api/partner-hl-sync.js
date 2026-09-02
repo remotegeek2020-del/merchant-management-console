@@ -36,10 +36,10 @@ export async function runOneSync(sync) {
     const targetIds = new Set(targets.map(t => String(t.hl_contact_id)));
 
     let tagged = 0;
-    const failures = [];
+    const taggedList = [], failures = [];
     for (const t of targets.slice(0, 3000)) {
         const r = await ghlAddContactTags(loc, t.hl_contact_id, [tag]);
-        if (r.ok) tagged++;
+        if (r.ok) { tagged++; taggedList.push({ name: t.full_name || '—', contact_id: t.hl_contact_id }); }
         else failures.push({ name: t.full_name || '—', contact_id: t.hl_contact_id, error: r.error || 'failed' });
     }
 
@@ -63,12 +63,13 @@ export async function runOneSync(sync) {
         const sample = failures.slice(0, 3).map(f => `${f.name} (${f.error})`).join('; ');
         errSummary = `${failures.length} couldn't be tagged: ${sample}${failures.length > 3 ? ' …' : ''}`;
     }
+    const detail = { at: new Date().toISOString(), tagged: taggedList.slice(0, 1000), failed: failures };
     const patch = {
         last_run_at: new Date().toISOString(), last_matched: targets.length,
-        last_tagged: tagged, last_untagged: untagged, last_error: errSummary
+        last_tagged: tagged, last_untagged: untagged, last_error: errSummary, last_detail: detail
     };
     await supabase.from('partner_hl_syncs').update(patch).eq('id', sync.id);
-    return { matched: targets.length, tagged, untagged, error: errSummary, failures };
+    return { matched: targets.length, tagged, untagged, error: errSummary, failures, tagged_list: taggedList };
 }
 
 // ── INSTANT tagging ──────────────────────────────────────────────────────────
@@ -157,6 +158,11 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('partner_hl_syncs').delete().eq('id', req.body.id);
             if (error) throw error;
             return ok(res);
+        }
+        if (action === 'get_detail') {
+            const { data: s } = await supabase.from('partner_hl_syncs').select('name, last_detail, last_run_at').eq('id', req.body.id).maybeSingle();
+            if (!s) return bad(res, 'Sync not found.');
+            return ok(res, { name: s.name, last_run_at: s.last_run_at, detail: s.last_detail || { tagged: [], failed: [] } });
         }
         if (action === 'run_sync') {
             const { data: sync } = await supabase.from('partner_hl_syncs').select('*').eq('id', req.body.id).maybeSingle();
