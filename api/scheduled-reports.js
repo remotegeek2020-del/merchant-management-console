@@ -377,9 +377,11 @@ function buildPrime49Email(data) {
         partnerBreakdown, newIdDetails,
         // Authoritative Prime49 identity
         totalPrime49Partners = 0, totalPrime49Ids = 0, partnersWithMerchants = 0,
-        newPrime49PartnersWeek = 0, newPrime49IdsOnExistingWeek = 0, newPrime49IdsAllWeek = 0,
+        newPrime49PartnersWeek = 0, newPrime49IdsOnExistingWeek = 0,
+        newPrime49IdsAllYesterday = 0, newPrime49IdsAllWeek = 0, newPrime49IdsAllMonth = 0,
         newPartnerList = [], newIdOnExistingList = [],
-        partnersNoMerchant = [], partnersNoMerchantCount = 0
+        partnersNoMerchant = [], partnersNoMerchantCount = 0,
+        topByMerchants = []
     } = data;
 
     const fmt2 = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -471,19 +473,23 @@ function buildPrime49Email(data) {
 
     <!-- DAILY ACTIVITY BADGES -->
     <div style="padding:16px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
-        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">This Week</div>
+        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">New Prime49 IDs</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
-                <span style="font-size:18px;font-weight:900;color:#92400e;">${newPrime49PartnersWeek}</span>
-                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 Partners</span>
+                <span style="font-size:18px;font-weight:900;color:#92400e;">${newPrime49IdsAllYesterday}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">Yesterday</span>
             </div>
             <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
-                <span style="font-size:18px;font-weight:900;color:#b45309;">${newPrime49IdsOnExistingWeek}</span>
-                <span style="font-size:11px;color:#78350f;margin-left:5px;">New IDs on existing partners</span>
+                <span style="font-size:18px;font-weight:900;color:#b45309;">${newPrime49IdsAllWeek}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">This Week</span>
             </div>
             <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
-                <span style="font-size:18px;font-weight:900;color:#92400e;">${newPrime49IdsAllWeek}</span>
-                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 IDs (total)</span>
+                <span style="font-size:18px;font-weight:900;color:#0369a1;">${newPrime49IdsAllMonth}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">This Month</span>
+            </div>
+            <div style="background:white;border:1px solid #bae6fd;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#0369a1;">${newPrime49PartnersWeek}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Partners (wk)</span>
             </div>
             <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
                 <span style="font-size:18px;font-weight:900;color:#059669;">${newMerchantsYesterdayCount}</span>
@@ -501,6 +507,29 @@ function buildPrime49Email(data) {
     </div>
 
     ${newMerchantsBlock}
+
+    ${topByMerchants.length ? `
+    <!-- TOP PERFORMING PARTNERS (most Prime49 merchants) -->
+    <div style="padding:24px 24px 0;">
+        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:4px;">🏆 Top Performing Partners — Most Prime49 Merchants</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Partners with the most active Prime49 merchants.</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #bbf7d0;border-radius:10px;overflow:hidden;">
+            <thead><tr style="background:#f0fdf4;">
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">#</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Partner</th>
+                <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Prime49 Merchants</th>
+                <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">30D Volume</th>
+                <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Partner Payout</th>
+            </tr></thead>
+            <tbody>${topByMerchants.map((p, i) => `<tr style="border-bottom:1px solid #f0fdf4;">
+                <td style="padding:8px 12px;font-weight:800;color:${i < 3 ? '#059669' : '#94a3b8'};font-size:13px;">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1)}</td>
+                <td style="padding:8px 12px;font-weight:700;color:#002d5a;font-size:13px;">${p.partner_name}</td>
+                <td style="padding:8px 12px;text-align:center;font-weight:800;color:#059669;font-size:14px;">${p.merchant_count}</td>
+                <td style="padding:8px 12px;text-align:right;font-weight:700;color:#002d5a;font-size:12px;">${fmt2(p.volume_30d)}</td>
+                <td style="padding:8px 12px;text-align:right;font-weight:700;color:#059669;font-size:12px;">${fmt2(p.agent_payout)}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+    </div>` : ''}
 
     <!-- PARTNER BREAKDOWN TABLE -->
     <div style="padding:24px 24px 0;">
@@ -991,8 +1020,11 @@ async function buildPrime49Data() {
         newPrime49PartnersWeek:      identity.newPartnersWeek,
         newPrime49PartnersMonth:     identity.newPartnersMonth,
         newPrime49IdsOnExistingWeek: identity.newIdsOnExistingWeek,
-        newPrime49IdsAllWeek:        identity.newIdsAllWeek,
         newPrime49IdsAllYesterday:   identity.newIdsAllYesterday,
+        newPrime49IdsAllWeek:        identity.newIdsAllWeek,
+        newPrime49IdsAllMonth:       identity.newIdsAllMonth,
+        // Top performing partners by # of active Prime49 merchants
+        topByMerchants: (partnerBreakdown || []).slice().sort((a, b) => b.merchant_count - a.merchant_count || b.volume_30d - a.volume_30d).slice(0, 10),
         newPartnerList:      identity.newPartnerList,
         newIdOnExistingList: identity.newIdOnExistingList,
         partnersNoMerchant:      identity.partnersNoMerchant,
@@ -1240,8 +1272,8 @@ function buildReportMarkdown(reportType, d) {
             + `• ${y.label || 'Yesterday'}: **${n(yRets.length)}**${yRetLines ? `\n${yRetLines}` : ''}`;
     }
     if (reportType === 'prime49') {
-        const partners = (d.partnerBreakdown || []).slice(0, 5).map((p, i) =>
-            `${i + 1}. ${p.partner_name || '—'} — ${n(p.merchant_count)} merchants · ${money(p.volume_30d)} vol · payout ${money(p.agent_payout)}`).join('\n');
+        const top = (d.topByMerchants || []).slice(0, 5).map((p, i) =>
+            `${i + 1}. ${p.partner_name || '—'} — ${n(p.merchant_count)} Prime49 merchants · ${money(p.volume_30d)} vol`).join('\n');
         const newM = (d.newMerchantsWeek || []).slice(0, 5).map((m, i) =>
             `${i + 1}. ${m.dba_name || '—'} (${m.merchant_id || '—'})${m.partner_name ? ` · ${m.partner_name}` : ''}${m.account_status ? ` · ${m.account_status}` : ''}`).join('\n');
         const newP = (d.newPartnerList || []).slice(0, 8).map((x, i) =>
@@ -1252,8 +1284,8 @@ function buildReportMarkdown(reportType, d) {
             + `• Prime49 partners: **${n(d.totalPrime49Partners)}** (${n(d.totalPrime49Ids)} IDs · ${n(d.partnersWithMerchants)} with merchants · ${n(d.partnersNoMerchantCount)} none yet)\n`
             + `• Active merchants: **${n(d.totalMerchants)}** · 30-day volume: **${money(d.totalVolume30d)}**\n`
             + `• Net residual: **${money(d.totalNetResidual)}** (PPT ${money(d.totalPptResidual)} · Agents ${money(d.totalAgentResidual)})\n`
-            + `• This week — new Prime49 partners **${n(d.newPrime49PartnersWeek)}**, new IDs on existing **${n(d.newPrime49IdsOnExistingWeek)}** · new merchants **${n(d.newMerchantsWeekCount)}**\n`
-            + (partners ? `\n**Top partners by payout (active merchants):**\n${partners}\n` : '')
+            + `• New Prime49 IDs — yesterday **${n(d.newPrime49IdsAllYesterday)}**, this week **${n(d.newPrime49IdsAllWeek)}**, this month **${n(d.newPrime49IdsAllMonth)}**\n`
+            + (top ? `\n**🏆 Top performing partners (most Prime49 merchants):**\n${top}\n` : '')
             + (newP ? `\n**New Prime49 partners this week:**\n${newP}\n` : '')
             + (newIdsExisting ? `\n**New Prime49 IDs on existing partners:**\n${newIdsExisting}\n` : '')
             + (newM ? `\n**New Prime49 merchants this week:**\n${newM}` : '');
