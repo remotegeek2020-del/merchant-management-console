@@ -93,7 +93,10 @@ function render(){
     </div>`;
   }).join('');
 }
-async function runOne(id,btn){ btn.disabled=true; const t=btn.innerHTML; btn.innerHTML='Syncing…'; const r=await api({action:'run_sync',id}); btn.disabled=false; btn.innerHTML=t; if(!r.success){ alert(r.message||'Failed'); return; } alert('Synced: matched '+r.matched+', tagged '+r.tagged+(r.untagged?(', removed '+r.untagged):'')); load(); }
+async function runOne(id,btn){ btn.disabled=true; const t=btn.innerHTML; btn.innerHTML='Syncing…'; const r=await api({action:'run_sync',id}); btn.disabled=false; btn.innerHTML=t; if(!r.success){ alert(r.message||'Failed'); return; }
+  let msg='Synced: matched '+r.matched+', tagged '+r.tagged+(r.untagged?(', removed '+r.untagged):'');
+  if(r.failures && r.failures.length){ msg+='\n\n'+r.failures.length+" couldn't be tagged (check these HighLevel contacts):\n"+r.failures.slice(0,10).map(f=>'• '+f.name+' — '+f.error).join('\n'); }
+  alert(msg); load(); }
 async function runAll(btn){ btn.disabled=true; const t=btn.innerHTML; btn.innerHTML='Syncing…'; for(const s of _syncs){ if(s.enabled) await api({action:'run_sync',id:s.id}); } btn.disabled=false; btn.innerHTML=t; load(); }
 async function del(id){ if(!confirm('Delete this list sync? (The HighLevel tag itself is left as-is.)')) return; const r=await api({action:'delete_sync',id}); if(!r.success){ alert(r.message||'Failed'); return; } load(); }
 

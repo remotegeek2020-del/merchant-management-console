@@ -36,9 +36,11 @@ export async function runOneSync(sync) {
     const targetIds = new Set(targets.map(t => String(t.hl_contact_id)));
 
     let tagged = 0;
+    const failures = [];
     for (const t of targets.slice(0, 3000)) {
         const r = await ghlAddContactTags(loc, t.hl_contact_id, [tag]);
         if (r.ok) tagged++;
+        else failures.push({ name: t.full_name || '—', contact_id: t.hl_contact_id, error: r.error || 'failed' });
     }
 
     let untagged = 0;
@@ -55,12 +57,18 @@ export async function runOneSync(sync) {
         } catch (_) { /* best-effort */ }
     }
 
+    // Summarize any failures (e.g. stale/invalid HL contact ids) so they're visible.
+    let errSummary = null;
+    if (failures.length) {
+        const sample = failures.slice(0, 3).map(f => `${f.name} (${f.error})`).join('; ');
+        errSummary = `${failures.length} couldn't be tagged: ${sample}${failures.length > 3 ? ' …' : ''}`;
+    }
     const patch = {
         last_run_at: new Date().toISOString(), last_matched: targets.length,
-        last_tagged: tagged, last_untagged: untagged, last_error: null
+        last_tagged: tagged, last_untagged: untagged, last_error: errSummary
     };
     await supabase.from('partner_hl_syncs').update(patch).eq('id', sync.id);
-    return { matched: targets.length, tagged, untagged, error: null };
+    return { matched: targets.length, tagged, untagged, error: errSummary, failures };
 }
 
 // ── INSTANT tagging ──────────────────────────────────────────────────────────
