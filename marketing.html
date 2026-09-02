@@ -668,6 +668,32 @@
   </div>
 </div>
 
+<div class="modal" id="tagConvModal">
+  <div class="modal-box" style="max-width:460px;">
+    <div class="modal-head">
+      <span class="material-icons" style="color:#7c3aed;">sell</span>
+      <h2>Tag converters in HighLevel</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('tagConvModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body">
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">Tags this campaign's converters in HighLevel so you can build a Smart List by tag. Partners vs non-partners are detected automatically (by the "ppt partner" tag).</div>
+      <label class="fld">Who to tag</label>
+      <select class="inp" id="tc_aud" onchange="tcToggle()">
+        <option value="both">Both — partners &amp; non-partners</option>
+        <option value="partner">Partners only</option>
+        <option value="non_partner">Non-partners only</option>
+      </select>
+      <div id="tc_partner_row"><label class="fld">Tag for PARTNERS</label><input class="inp" id="tc_tag_p" placeholder="e.g. Converted — Partner"></div>
+      <div id="tc_nonpartner_row"><label class="fld">Tag for NON-PARTNERS</label><input class="inp" id="tc_tag_n" placeholder="e.g. Converted — Lead"></div>
+      <div id="tc_msg" class="muted" style="font-size:12px;margin-top:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        <button class="btn btn-neutral" onclick="document.getElementById('tagConvModal').style.display='none'">Cancel</button>
+        <button class="btn btn-brand" style="background:#7c3aed;" id="tcBtn" onclick="doTagConverters(this)"><span class="material-icons" style="font-size:16px;">sell</span> Tag in HighLevel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="cuStatsModal">
   <div class="modal-box" style="max-width:460px;">
     <div class="modal-head">
@@ -2113,6 +2139,7 @@ async function showStats(id, title){
       <button class="btn btn-brand" onclick='openSendStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">send</span> Send stats</button>
       <button class="btn btn-neutral" style="background:#faf5ff;color:#7c3aed;border-color:#a78bfa;" onclick='openClickupStats(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">forum</span> Send to ClickUp</button>
       <button class="btn btn-neutral" onclick='openCampaignShare(${JSON.stringify(id)})'><span class="material-icons" style="font-size:16px;">link</span> Share link</button>
+      <button class="btn btn-neutral" style="background:#faf5ff;color:#7c3aed;border-color:#a78bfa;" onclick='openTagConverters(${JSON.stringify(id)})'><span class="material-icons" style="font-size:16px;">sell</span> Tag converters (HL)</button>
       <button class="btn btn-neutral" onclick='exportClicks(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">download</span> Export clickers (CSV)</button>
     </div>
     <div class="statgrid">
@@ -2320,6 +2347,23 @@ function siteSection(bySite){
   return `<label class="fld">External sites (embed)</label>${rows}`;
 }
 
+// ── Tag campaign converters in HighLevel ──
+var _tcId=null;
+function openTagConverters(id){ _tcId=id; document.getElementById('tc_msg').textContent=''; document.getElementById('tc_aud').value='both'; document.getElementById('tc_tag_p').value=''; document.getElementById('tc_tag_n').value=''; tcToggle(); document.getElementById('tagConvModal').style.display='flex'; }
+function tcToggle(){ const a=document.getElementById('tc_aud').value; document.getElementById('tc_partner_row').style.display=(a==='non_partner')?'none':''; document.getElementById('tc_nonpartner_row').style.display=(a==='partner')?'none':''; }
+async function doTagConverters(btn){
+  const aud=document.getElementById('tc_aud').value;
+  const tag_partner=document.getElementById('tc_tag_p').value.trim();
+  const tag_nonpartner=document.getElementById('tc_tag_n').value.trim();
+  btn.disabled=true; document.getElementById('tc_msg').textContent='Tagging in HighLevel…';
+  const r=await api({action:'tag_converters', id:_tcId, audience:aud, tag_partner, tag_nonpartner});
+  btn.disabled=false;
+  if(!r.success){ document.getElementById('tc_msg').innerHTML='<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>'; return; }
+  let m='✓ Tagged '+(r.tagged_partners||0)+' partner(s), '+(r.tagged_nonpartners||0)+' non-partner(s).';
+  if(r.unclassified) m+=' ('+r.unclassified+' beyond the 500 enrich limit — run again to cover more.)';
+  if(r.failures && r.failures.length) m+=' '+r.failures.length+' failed.';
+  document.getElementById('tc_msg').innerHTML='<span style="color:#16a34a;">'+esc(m)+'</span>';
+}
 // ── Campaign public share link ──
 var _shId=null;
 async function openCampaignShare(id){

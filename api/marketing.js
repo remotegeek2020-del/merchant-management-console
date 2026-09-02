@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags } from './_ghl.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
@@ -488,7 +488,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -1179,6 +1179,39 @@ export default async function handler(req, res) {
                 const byType = {};
                 list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
                 return ok(res, { configured: true, count: list.length, partners, non_partners: list.length - partners, by_type: byType, list: list.slice(0, 100) });
+            }
+
+            // Tag this campaign's converters in HighLevel (build a smart list by
+            // tag). Audience: 'partner' | 'non_partner' | 'both'. Separate tags per
+            // audience so partners and non-partners become distinct lists.
+            if (action === 'tag_converters') {
+                const { id, audience, tag_partner, tag_nonpartner } = req.body;
+                const { data: c } = await supabase.from('marketing_campaigns')
+                    .select('conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
+                if (!c || !c.conv_location_id || (!c.conv_form_id && !c.conv_calendar_id)) return bad(res, 'This campaign has no conversion tracking configured.');
+                const aud = ['partner', 'non_partner', 'both'].includes(audience) ? audience : 'both';
+                const tagP = String(tag_partner || '').trim();
+                const tagN = String(tag_nonpartner || '').trim();
+                if ((aud === 'partner' || aud === 'both') && !tagP) return bad(res, 'Enter a tag for partners.');
+                if ((aud === 'non_partner' || aud === 'both') && !tagN) return bad(res, 'Enter a tag for non-partners.');
+
+                const list = await convFetch(c);
+                await convEnrichPartners(list, c.conv_location_id, 500);   // sets is_partner (up to 500)
+                let taggedP = 0, taggedN = 0, unclassified = 0;
+                const failures = [];
+                for (const x of list) {
+                    if (!x.contact_id) continue;
+                    const isP = x.is_partner;
+                    if (isP === undefined) { unclassified++; continue; }   // beyond enrichment cap
+                    if (isP && (aud === 'partner' || aud === 'both')) {
+                        const r = await ghlAddContactTags(c.conv_location_id, x.contact_id, [tagP]);
+                        if (r.ok) taggedP++; else failures.push({ name: x.name || x.email || '—', contact_id: x.contact_id, error: r.error || 'failed' });
+                    } else if (!isP && (aud === 'non_partner' || aud === 'both')) {
+                        const r = await ghlAddContactTags(c.conv_location_id, x.contact_id, [tagN]);
+                        if (r.ok) taggedN++; else failures.push({ name: x.name || x.email || '—', contact_id: x.contact_id, error: r.error || 'failed' });
+                    }
+                }
+                return ok(res, { total: list.length, tagged_partners: taggedP, tagged_nonpartners: taggedN, unclassified, failures });
             }
             // CSV export of a campaign's conversions, incl. a current-partner column.
             if (action === 'export_conversions') {
