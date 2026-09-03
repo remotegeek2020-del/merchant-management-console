@@ -3267,7 +3267,23 @@ window.saveMerchant = async (uuid) => {
     }
 
     let vendorMap = {};
+    // Hide the Prime49 Residuals tab unless the user has access (super_admin/admin
+    // implicitly, or the granular access_prime49_residuals flag).
+    async function applyPrime49Access() {
+        try {
+            const _tok = localStorage.getItem('pp_session_token') || '';
+            const r = await (await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok }, body: JSON.stringify({ action: 'my_prime49_access' }) })).json();
+            if (!r.success || !r.allowed) {
+                const btn = document.getElementById('ptab-prime49'); if (btn) btn.style.display = 'none';
+                const pane = document.getElementById('tab-prime49'); if (pane && pane.style.display !== 'none') { try { switchPageTab('portfolio'); } catch (e) {} }
+            }
+        } catch (e) { /* leave hidden-safe default: hide on error */
+            const btn = document.getElementById('ptab-prime49'); if (btn) btn.style.display = 'none';
+        }
+    }
+
     window.onload = () => {
+        applyPrime49Access();
         const _tok = localStorage.getItem('pp_session_token') || '';
         fetch('/api/terminal-manager', {
             method: 'POST',

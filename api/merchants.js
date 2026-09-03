@@ -1535,7 +1535,18 @@ if (action === 'get_notes') {
             });
         }
 
+        if (action === 'my_prime49_access') {
+            const { data: a } = await supabase.from('app_users').select('role, access_prime49_residuals').eq('userid', session.userid).maybeSingle();
+            const allowed = !!a && (a.role === 'super_admin' || a.role === 'admin' || a.access_prime49_residuals === true);
+            return res.status(200).json({ success: true, allowed });
+        }
+
         if (action === 'get_prime49_residuals') {
+            // Granular access: super_admin/admin implicitly, or access_prime49_residuals.
+            const { data: p49Actor } = await supabase.from('app_users').select('role, access_prime49_residuals').eq('userid', session.userid).maybeSingle();
+            if (!p49Actor || (p49Actor.role !== 'super_admin' && p49Actor.role !== 'admin' && p49Actor.access_prime49_residuals !== true)) {
+                return res.status(403).json({ success: false, message: 'You do not have access to Prime49 Residuals.' });
+            }
             // Include both Approved and Approved - Collections (still actively processing)
             const { data, error } = await supabase
                 .from('merchant_portfolio_view')

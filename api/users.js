@@ -32,7 +32,7 @@ export default async function handler(req, res) {
             }
             // Only return non-sensitive fields
             const { data, error } = await supabase.from('app_users')
-                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type,access_marketing,access_marketing_settings,access_lead_portal,access_prospects,access_delete_leads,access_terminal_types,access_all_tasks,access_task_dashboard,access_pos_express,access_pos_settings,access_grant_agency,access_login_as,ghl_user_id,ghl_user_email,created_at')
+                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type,access_marketing,access_marketing_settings,access_lead_portal,access_prospects,access_delete_leads,access_terminal_types,access_all_tasks,access_task_dashboard,access_pos_express,access_pos_settings,access_grant_agency,access_login_as,access_prime49_residuals,ghl_user_id,ghl_user_email,created_at')
                 .order('first_name');
             if (error) throw error;
             return res.status(200).json({ success: true, data });
@@ -127,7 +127,7 @@ export default async function handler(req, res) {
                     'access_admin_dashboard','access_merchants','access_deployments',
                     'access_returns','access_inventory','access_partners',
                     'access_jarvis','can_delete_tickets','access_sending_reports',
-                    'can_manage_retired_units','can_edit_legacy_terminal_type','access_marketing','access_marketing_settings','access_lead_portal','access_prospects','access_delete_leads','access_terminal_types','access_all_tasks','access_task_dashboard','access_pos_express','access_pos_settings','access_grant_agency','access_login_as'
+                    'can_manage_retired_units','can_edit_legacy_terminal_type','access_marketing','access_marketing_settings','access_lead_portal','access_prospects','access_delete_leads','access_terminal_types','access_all_tasks','access_task_dashboard','access_pos_express','access_pos_settings','access_grant_agency','access_login_as','access_prime49_residuals'
                 ];
                 // Only super_admin can change roles or grant privileged permissions
                 const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets', 'can_manage_retired_units', 'can_edit_legacy_terminal_type'];
@@ -135,7 +135,7 @@ export default async function handler(req, res) {
                 // Fetch current values for all target users in one query (for old_value logging)
                 const targetUids = Object.keys(payload);
                 const { data: targetUsers } = await supabase.from('app_users')
-                    .select('userid,email,first_name,last_name,role,is_active,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type,access_marketing,access_marketing_settings,access_lead_portal,access_prospects,access_delete_leads,access_terminal_types,access_all_tasks,access_task_dashboard,access_pos_express,access_pos_settings,access_grant_agency,access_login_as')
+                    .select('userid,email,first_name,last_name,role,is_active,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type,access_marketing,access_marketing_settings,access_lead_portal,access_prospects,access_delete_leads,access_terminal_types,access_all_tasks,access_task_dashboard,access_pos_express,access_pos_settings,access_grant_agency,access_login_as,access_prime49_residuals')
                     .in('userid', targetUids);
                 const targetMap = Object.fromEntries((targetUsers || []).map(u => [u.userid, u]));
 
