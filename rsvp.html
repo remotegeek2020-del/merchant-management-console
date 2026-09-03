@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Partner RSVP — PayProTec</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--green:#16a34a;--red:#dc2626;--bg:#f1f5f9;}
+*{box-sizing:border-box;} body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.card{max-width:560px;margin:24px auto;background:#fff;border:1px solid var(--border);border-radius:16px;padding:26px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+h1{font-size:22px;color:var(--navy);margin:0 0 6px;}
+.muted{color:var(--muted);font-size:13px;}
+.fld{display:block;font-size:12px;font-weight:700;color:#475569;margin:14px 0 5px;}
+.inp{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;}
+textarea.inp{min-height:80px;resize:vertical;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:10px;padding:12px 22px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;width:100%;margin-top:16px;}
+.btn-brand{background:var(--navy);color:#fff;}
+.pre{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;font-size:13px;color:#0369a1;margin-top:12px;}
+.err{color:var(--red);font-size:12px;margin-top:6px;}
+.center{text-align:center;padding:40px 10px;}
+.frame{position:relative;width:100%;padding-top:120%;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:14px;}
+.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+.hidden{display:none;}
+.foot{text-align:center;color:#94a3b8;font-size:11px;margin-top:18px;}
+</style>
+</head>
+<body>
+<div class="card" id="app"><div class="center muted">Loading…</div></div>
+<script>
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const safeUrl = u => { u=String(u||'').trim(); return /^https?:\/\//i.test(u)?u:''; };
+const KEY = new URLSearchParams(location.search).get('e') || '';
+let CFG=null, PARTNER=null;
+
+async function api(b){ b.event_key=KEY; const r=await fetch('/api/rsvp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}); return r.json(); }
+
+async function boot(){
+  if(!KEY){ document.getElementById('app').innerHTML='<div class="center muted">Invalid link.</div>'; return; }
+  const r=await api({action:'config'});
+  if(!r.success){ document.getElementById('app').innerHTML='<div class="center"><span class="material-icons" style="font-size:40px;color:#cbd5e1;">event_busy</span><h1 style="margin-top:8px;">Not available</h1><div class="muted">'+esc(r.message||'')+'</div></div>'; return; }
+  CFG=r.event; screenId();
+}
+function screenId(){
+  document.getElementById('app').innerHTML=`
+    <h1>${esc(CFG.name)}</h1>
+    <div class="muted">${CFG.intro?esc(CFG.intro):'This RSVP is exclusive to PayProTec partners.'}</div>
+    <label class="fld">What's your most recent PayProTec Partner ID?</label>
+    <input class="inp" id="pid" placeholder="e.g. 144704" autocomplete="off">
+    <div class="err" id="idErr"></div>
+    <button class="btn btn-brand" id="idBtn" onclick="doLookup()">Continue</button>
+    <div class="foot">Partners only · PayProTec</div>`;
+  setTimeout(()=>document.getElementById('pid').focus(),100);
+}
+async function doLookup(){
+  const pid=document.getElementById('pid').value.trim(); const err=document.getElementById('idErr'); err.textContent='';
+  if(!pid){ err.textContent='Please enter your Partner ID.'; return; }
+  const btn=document.getElementById('idBtn'); btn.disabled=true; btn.textContent='Checking…';
+  const r=await api({action:'lookup', partner_id:pid});
+  btn.disabled=false; btn.textContent='Continue';
+  if(!r.success){ err.textContent=r.message||'Error.'; return; }
+  if(r.status==='not_found'){ err.textContent="We couldn't find that Partner ID. Please double-check it."; return; }
+  PARTNER={ id:pid, name:r.name, email:r.email, phone:r.phone };
+  screenForm();
+}
+function fieldInput(f){
+  const id='f_'+f.name.replace(/[^a-z0-9]+/gi,'_');
+  if(f.type==='textarea') return `<textarea class="inp" id="${id}" data-name="${esc(f.name)}"></textarea>`;
+  if(f.type==='dropdown') return `<select class="inp" id="${id}" data-name="${esc(f.name)}"><option value="">— select —</option>${(f.options||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select>`;
+  if(f.type==='checkbox') return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;"><input type="checkbox" id="${id}" data-name="${esc(f.name)}"> Yes</label>`;
+  const t = f.type==='number'?'number':(f.type==='date'?'date':'text');
+  return `<input class="inp" type="${t}" id="${id}" data-name="${esc(f.name)}">`;
+}
+function screenForm(){
+  const questions=(CFG.fields||[]).map(f=>`<label class="fld">${esc(f.label||f.name)}${f.required?' *':''}</label>${fieldInput(f)}`).join('');
+  document.getElementById('app').innerHTML=`
+    <h1>${esc(CFG.name)}</h1>
+    <div class="pre"><b>${esc(PARTNER.name||'Partner')}</b>${PARTNER.email?'<br>'+esc(PARTNER.email):''}${PARTNER.phone?'<br>'+esc(PARTNER.phone):''}<br><span class="muted" style="color:#0369a1;">✓ Verified partner — not you? <a href="#" onclick="screenId();return false;">use another ID</a></span></div>
+    ${questions||'<div class="muted" style="margin-top:12px;">No extra questions — just confirm your RSVP below.</div>'}
+    <div class="err" id="fErr"></div>
+    <button class="btn btn-brand" id="subBtn" onclick="doSubmit()">Confirm RSVP</button>
+    <div class="foot">Partners only · PayProTec</div>`;
+}
+async function doSubmit(){
+  const answers={};
+  document.querySelectorAll('[data-name]').forEach(el=>{ answers[el.dataset.name] = (el.type==='checkbox') ? (el.checked?'Yes':'') : el.value; });
+  const btn=document.getElementById('subBtn'); const err=document.getElementById('fErr'); err.textContent='';
+  btn.disabled=true; btn.textContent='Submitting…';
+  const r=await api({action:'submit', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone, answers});
+  btn.disabled=false; btn.textContent='Confirm RSVP';
+  if(!r.success){ err.textContent=r.message||'Something went wrong.'; return; }
+  screenDone(r);
+}
+function screenDone(r){
+  const embed=safeUrl(r.embed_url);
+  document.getElementById('app').innerHTML=`
+    <div class="center" style="padding:24px 10px 10px;"><span class="material-icons" style="font-size:46px;color:var(--green);">check_circle</span>
+      <h1 style="margin-top:8px;">You're in! 🎉</h1>
+      <div class="muted">${r.thankyou?esc(r.thankyou):"Your RSVP is confirmed. We'll see you there."}</div>
+    </div>
+    ${embed?`<div class="frame"><iframe src="${esc(embed)}" allow="camera; microphone; autoplay; fullscreen"></iframe></div>`:''}
+    <div class="foot">Partners only · PayProTec</div>`;
+}
+boot();
+</script>
+</body>
+</html>

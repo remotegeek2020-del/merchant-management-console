@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Partner RSVP Events — PayProTec</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--navy:#002d5a;--blue:#0369a1;--border:#e2e8f0;--muted:#64748b;--bg:#f1f5f9;--green:#16a34a;--red:#dc2626;--purple:#7c3aed;}
+*{box-sizing:border-box;} body{margin:0;font-family:'Inter',Arial,sans-serif;background:var(--bg);color:#1e293b;}
+.wrap{max-width:1000px;margin:0 auto;padding:24px 20px 60px;}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.top h1{font-size:22px;margin:0;color:var(--navy);display:flex;align-items:center;gap:10px;}
+.btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn .material-icons{font-size:17px;}
+.btn-brand{background:var(--navy);color:#fff;} .btn-neutral{background:#fff;color:#334155;border:1px solid var(--border);} .btn-danger{background:#fee2e2;color:#991b1b;} .btn-sm{padding:6px 11px;font-size:12px;}
+.hint{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:13px 15px;font-size:13px;color:#1e3a8a;line-height:1.6;margin-bottom:16px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.card h3{margin:0 0 3px;font-size:15px;color:var(--navy);}
+.meta{font-size:12px;color:var(--muted);margin-top:4px;}
+.tag{display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;}
+.inp{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;}
+.fld{display:block;font-size:12px;font-weight:700;color:#475569;margin:10px 0 4px;}
+.modal-back{position:fixed;inset:0;background:rgba(4,10,22,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:16px;}
+.modal{background:#fff;border-radius:16px;max-width:560px;width:100%;padding:22px;max-height:92vh;overflow:auto;}
+.muted{color:var(--muted);}
+.fieldrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#fff;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1><span class="material-icons" style="color:var(--purple);">how_to_reg</span> Partner RSVP Events</h1>
+    <div style="display:flex;gap:8px;">
+      <a class="btn btn-neutral" href="/marketing" style="text-decoration:none;"><span class="material-icons">campaign</span> Marketing</a>
+      <button class="btn btn-brand" onclick="openEditor()"><span class="material-icons">add</span> New event</button>
+    </div>
+  </div>
+  <div class="hint"><b>Partner-exclusive RSVP:</b> the partner enters their <b>Partner ID</b> → we fetch their contact → they answer the custom questions you pick from HighLevel → we upsert their HL contact, set those custom fields, and apply your tag (the RSVP). Embed the public link on your event page. Reuse for any future event.</div>
+  <div id="list"><div class="muted" style="padding:30px;text-align:center;">Loading…</div></div>
+</div>
+<div class="modal-back" id="mb"><div class="modal" id="mbox"></div></div>
+<script>
+const TOKEN=localStorage.getItem('pp_session_token')||'';
+const esc=s=>s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let _events=[], _cf=[];
+async function api(b){ const r=await fetch('/api/rsvp-config',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(b)}); return r.json(); }
+function openM(h){ document.getElementById('mbox').innerHTML=h; document.getElementById('mb').style.display='flex'; }
+function closeM(){ document.getElementById('mb').style.display='none'; }
+document.getElementById('mb').addEventListener('click',e=>{ if(e.target.id==='mb') closeM(); });
+
+async function load(){
+  const r=await api({action:'list_events'});
+  if(!r.success){ document.getElementById('list').innerHTML='<div class="muted" style="padding:30px;text-align:center;">'+esc(r.message||'Failed')+'</div>'; return; }
+  _events=r.events||[];
+  const box=document.getElementById('list');
+  if(!_events.length){ box.innerHTML='<div class="muted" style="padding:30px;text-align:center;">No RSVP events yet. Click <b>New event</b>.</div>'; return; }
+  box.innerHTML=_events.map(e=>`<div class="card">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div>
+        <h3>${esc(e.name)} ${e.enabled?'':'<span class="tag" style="background:#fee2e2;color:#991b1b;">OFF</span>'}</h3>
+        <div class="meta">${e.mode==='calendar'?'📅 Calendar':'📝 Form'} · ${(e.fields||[]).length} question(s) · tag <span class="tag">${esc(e.rsvp_tag||'—')}</span> · ${e.submissions} RSVP(s)</div>
+        <div class="meta">Link: <a href="${esc(e.public_url)}" target="_blank">${esc(e.public_url)}</a> <button class="btn btn-neutral btn-sm" style="margin-left:6px;" onclick="navigator.clipboard.writeText('${esc(e.public_url)}')">Copy</button></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
+        <button class="btn btn-neutral btn-sm" onclick="viewSubs('${e.id}')"><span class="material-icons">list_alt</span> RSVPs</button>
+        <button class="btn btn-neutral btn-sm" onclick="openEditor('${e.id}')"><span class="material-icons">edit</span></button>
+        <button class="btn btn-danger btn-sm" onclick="del('${e.id}')"><span class="material-icons">delete</span></button>
+      </div>
+    </div></div>`).join('');
+}
+async function del(id){ if(!confirm('Delete this RSVP event and its submissions?')) return; const r=await api({action:'delete_event',id}); if(!r.success){alert(r.message||'Failed');return;} load(); }
+
+function openEditor(id){
+  const e = id ? _events.find(x=>x.id===id) : null;
+  const modeOpt=m=>`<option value="${m}" ${e&&e.mode===m?'selected':''}>${m==='calendar'?'Calendar':'Form'}</option>`;
+  openM(`<h2 style="margin:0 0 12px;color:var(--navy);font-size:17px;">${e?'Edit':'New'} RSVP event</h2>
+    <label class="fld">Event name</label><input class="inp" id="e_name" value="${e?esc(e.name):''}" placeholder="e.g. WSAA Partner Night — Sep 15">
+    <label class="fld">HighLevel sub-account ID</label><input class="inp" id="e_loc" value="${e&&e.ghl_location_id?esc(e.ghl_location_id):''}" placeholder="e.g. dfg08aPdtlQ1RhIKkCnN">
+    <label class="fld">Mode</label><select class="inp" id="e_mode">${modeOpt('form')}${modeOpt('calendar')}</select>
+    <label class="fld">RSVP tag (applied in HighLevel on submit)</label><input class="inp" id="e_tag" value="${e&&e.rsvp_tag?esc(e.rsvp_tag):''}" placeholder="e.g. RSVP — WSAA Partner Night">
+    <label class="fld">Workflow ID <span class="muted">(optional — enroll on RSVP)</span></label><input class="inp" id="e_wf" value="${e&&e.workflow_id?esc(e.workflow_id):''}">
+    <label class="fld">Embed URL after confirm <span class="muted">(optional — HL calendar/form to show)</span></label><input class="inp" id="e_embed" value="${e&&e.embed_url?esc(e.embed_url):''}" placeholder="https://…">
+    <label class="fld">Intro text</label><textarea class="inp" id="e_intro" rows="2">${e&&e.intro?esc(e.intro):''}</textarea>
+    <label class="fld">Thank-you text</label><textarea class="inp" id="e_ty" rows="2">${e&&e.thankyou?esc(e.thankyou):''}</textarea>
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:800;font-size:13px;color:var(--navy);">Questions (from HighLevel custom fields)</div>
+        <button class="btn btn-neutral btn-sm" onclick="loadFields()">Load fields</button>
+      </div>
+      <div class="muted" style="font-size:11px;margin:4px 0 8px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Set a type &amp; required per field.</div>
+      <div id="fieldList">${e?fieldsHtml(e.fields||[]):'<div class="muted" style="font-size:12px;">Enter the sub-account ID, then click Load fields.</div>'}</div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="e_en" ${!e||e.enabled?'checked':''}> Enabled</label>
+    <div id="e_err" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeM()">Cancel</button><button class="btn btn-brand" onclick="saveEvent('${id||''}',this)">Save</button></div>`);
+  window._editFields = e ? (e.fields||[]) : [];
+}
+function fieldsHtml(selected){
+  // Render selected fields as editable rows.
+  const sel = selected||[];
+  if(!sel.length && !_cf.length) return '<div class="muted" style="font-size:12px;">No fields loaded yet.</div>';
+  const names = new Set(sel.map(f=>f.name));
+  const opts = _cf.length ? _cf : sel.map(f=>({name:f.name,key:''}));
+  const typeSel=(v)=>['text','textarea','number','date','dropdown','checkbox'].map(t=>`<option value="${t}" ${v===t?'selected':''}>${t}</option>`).join('');
+  return opts.map(cf=>{
+    const cur = sel.find(f=>f.name===cf.name) || null;
+    const on = !!cur;
+    return `<div class="fieldrow" data-fname="${esc(cf.name)}">
+      <input type="checkbox" class="f_on" ${on?'checked':''}>
+      <span style="flex:1;font-size:13px;">${esc(cf.name)}</span>
+      <select class="inp f_type" style="width:110px;padding:5px;">${typeSel(cur?cur.type:'text')}</select>
+      <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="f_req" ${cur&&cur.required?'checked':''}> req</label>
+    </div>`;
+  }).join('');
+}
+async function loadFields(){
+  const loc=document.getElementById('e_loc').value.trim();
+  if(!loc){ document.getElementById('e_err').textContent='Enter the sub-account ID first.'; return; }
+  document.getElementById('fieldList').innerHTML='<div class="muted" style="font-size:12px;">Loading fields…</div>';
+  const r=await api({action:'ghl_custom_fields', location_id:loc});
+  _cf = (r.success? r.fields:[])||[];
+  if(!_cf.length){ document.getElementById('fieldList').innerHTML='<div class="muted" style="font-size:12px;">No custom fields found (check the sub-account ID / token).</div>'; return; }
+  document.getElementById('fieldList').innerHTML=fieldsHtml(window._editFields||[]);
+}
+function collectFields(){
+  const rows=document.querySelectorAll('#fieldList .fieldrow'); const out=[];
+  rows.forEach(row=>{
+    const on=row.querySelector('.f_on').checked; if(!on) return;
+    out.push({ name:row.dataset.fname, label:row.dataset.fname, type:row.querySelector('.f_type').value, required:row.querySelector('.f_req').checked });
+  });
+  return out;
+}
+async function saveEvent(id,btn){
+  const name=document.getElementById('e_name').value.trim();
+  if(!name){ document.getElementById('e_err').textContent='Event name required.'; return; }
+  const payload={ action:'save_event', id:id||undefined, name,
+    ghl_location_id:document.getElementById('e_loc').value.trim(),
+    mode:document.getElementById('e_mode').value, rsvp_tag:document.getElementById('e_tag').value.trim(),
+    workflow_id:document.getElementById('e_wf').value.trim(), embed_url:document.getElementById('e_embed').value.trim(),
+    intro:document.getElementById('e_intro').value.trim(), thankyou:document.getElementById('e_ty').value.trim(),
+    fields:collectFields(), enabled:document.getElementById('e_en').checked };
+  btn.disabled=true;
+  const r=await api(payload); btn.disabled=false;
+  if(!r.success){ document.getElementById('e_err').textContent=r.message||'Failed'; return; }
+  closeM(); load();
+}
+async function viewSubs(id){
+  openM('<div class="muted" style="font-size:12px;padding:10px;">Loading…</div>');
+  const r=await api({action:'list_submissions', id});
+  const subs=(r.success?r.submissions:[])||[];
+  const ev=_events.find(x=>x.id===id);
+  const cols=(ev&&ev.fields||[]).map(f=>f.name);
+  const cell=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  window._subExport=()=>{ const lines=[['Name','Email','Partner ID','HL Contact','When'].concat(cols).join(',')].concat(subs.map(s=>[s.name,s.email,s.partner_id_string,s.hl_contact_id,new Date(s.created_at).toLocaleString()].concat(cols.map(c=>(s.answers||{})[c]||'')).map(cell).join(','))); const b=new Blob([lines.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='rsvps.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); };
+  const rows = subs.length ? subs.map(s=>`<tr><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`).join('') : '<tr><td colspan="4" class="muted" style="padding:10px;">No RSVPs yet.</td></tr>';
+  openM(`<div style="display:flex;justify-content:space-between;align-items:center;"><h2 style="margin:0;color:var(--navy);font-size:17px;">RSVPs (${subs.length})</h2><button class="btn btn-neutral btn-sm" onclick="_subExport()"><span class="material-icons">download</span> CSV</button></div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;text-align:left;">Name</th><th style="padding:5px 8px;text-align:left;">Email</th><th style="padding:5px 8px;text-align:left;">Partner ID</th><th style="padding:5px 8px;text-align:left;">When</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-neutral" onclick="closeM()">Close</button></div>`);
+}
+load();
+</script>
+</body>
+</html>
