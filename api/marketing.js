@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags, ghlFindContactByEmail } from './_ghl.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
@@ -1194,24 +1194,38 @@ export default async function handler(req, res) {
                 const tagN = String(tag_nonpartner || '').trim();
                 if ((aud === 'partner' || aud === 'both') && !tagP) return bad(res, 'Enter a tag for partners.');
                 if ((aud === 'non_partner' || aud === 'both') && !tagN) return bad(res, 'Enter a tag for non-partners.');
+                const loc = c.conv_location_id;
 
-                const list = await convFetch(c);
-                await convEnrichPartners(list, c.conv_location_id, 500);   // sets is_partner (up to 500)
-                let taggedP = 0, taggedN = 0, unclassified = 0;
+                // Refresh the converter registry from GHL (best-effort), then use it
+                // as the source of truth — every converter, with contact_id/email.
+                try { const fresh = await convFetch(c); await recordOptins(supabase, id, fresh, 'ghl_sync'); } catch (_) {}
+                const { data: converters } = await supabase.from('marketing_optins')
+                    .select('email, contact_id').eq('campaign_id', id).limit(5000);
+                const rows = converters || [];
+
+                let taggedP = 0, taggedN = 0, unresolved = 0;
                 const failures = [];
-                for (const x of list) {
-                    if (!x.contact_id) continue;
-                    const isP = x.is_partner;
-                    if (isP === undefined) { unclassified++; continue; }   // beyond enrichment cap
+                for (const x of rows.slice(0, 2000)) {
+                    // Resolve the GHL contact id + tags (by stored id, else by email).
+                    let contactId = x.contact_id || '';
+                    let tags = [];
+                    if (contactId) {
+                        tags = await ghlContactTags(loc, contactId);
+                    } else if (x.email) {
+                        const found = await ghlFindContactByEmail(loc, x.email);
+                        if (found && found.id) { contactId = found.id; tags = (found.tags || []).map(t => String(t).toLowerCase()); }
+                    }
+                    if (!contactId) { unresolved++; continue; }
+                    const isP = tags.some(t => t.indexOf(PARTNER_TAG) !== -1);
                     if (isP && (aud === 'partner' || aud === 'both')) {
-                        const r = await ghlAddContactTags(c.conv_location_id, x.contact_id, [tagP]);
-                        if (r.ok) taggedP++; else failures.push({ name: x.name || x.email || '—', contact_id: x.contact_id, error: r.error || 'failed' });
+                        const r = await ghlAddContactTags(loc, contactId, [tagP]);
+                        if (r.ok) taggedP++; else failures.push({ name: x.email || '—', contact_id: contactId, error: r.error || 'failed' });
                     } else if (!isP && (aud === 'non_partner' || aud === 'both')) {
-                        const r = await ghlAddContactTags(c.conv_location_id, x.contact_id, [tagN]);
-                        if (r.ok) taggedN++; else failures.push({ name: x.name || x.email || '—', contact_id: x.contact_id, error: r.error || 'failed' });
+                        const r = await ghlAddContactTags(loc, contactId, [tagN]);
+                        if (r.ok) taggedN++; else failures.push({ name: x.email || '—', contact_id: contactId, error: r.error || 'failed' });
                     }
                 }
-                return ok(res, { total: list.length, tagged_partners: taggedP, tagged_nonpartners: taggedN, unclassified, failures });
+                return ok(res, { total: rows.length, tagged_partners: taggedP, tagged_nonpartners: taggedN, unresolved, failures });
             }
             // CSV export of a campaign's conversions, incl. a current-partner column.
             if (action === 'export_conversions') {

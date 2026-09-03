@@ -2359,8 +2359,8 @@ async function doTagConverters(btn){
   const r=await api({action:'tag_converters', id:_tcId, audience:aud, tag_partner, tag_nonpartner});
   btn.disabled=false;
   if(!r.success){ document.getElementById('tc_msg').innerHTML='<span style="color:var(--red);">'+esc(r.message||'Failed')+'</span>'; return; }
-  let m='✓ Tagged '+(r.tagged_partners||0)+' partner(s), '+(r.tagged_nonpartners||0)+' non-partner(s).';
-  if(r.unclassified) m+=' ('+r.unclassified+' beyond the 500 enrich limit — run again to cover more.)';
+  let m='✓ Tagged '+(r.tagged_partners||0)+' partner(s), '+(r.tagged_nonpartners||0)+' non-partner(s) of '+(r.total||0)+' converter(s).';
+  if(r.unresolved) m+=' ('+r.unresolved+" couldn't be matched to a HighLevel contact.)";
   if(r.failures && r.failures.length) m+=' '+r.failures.length+' failed.';
   document.getElementById('tc_msg').innerHTML='<span style="color:#16a34a;">'+esc(m)+'</span>';
 }
