@@ -78,25 +78,51 @@ function openEditor(id){
   const modeOpt=m=>`<option value="${m}" ${e&&e.mode===m?'selected':''}>${m==='calendar'?'Calendar':'Form'}</option>`;
   openM(`<h2 style="margin:0 0 12px;color:var(--navy);font-size:17px;">${e?'Edit':'New'} RSVP event</h2>
     <label class="fld">Event name</label><input class="inp" id="e_name" value="${e?esc(e.name):''}" placeholder="e.g. WSAA Partner Night — Sep 15">
-    <label class="fld">HighLevel sub-account ID</label><input class="inp" id="e_loc" value="${e&&e.ghl_location_id?esc(e.ghl_location_id):''}" placeholder="e.g. dfg08aPdtlQ1RhIKkCnN">
+    <label class="fld">HighLevel sub-account</label><select class="inp" id="e_loc" onchange="onLocChange()"><option value="">Loading sub-accounts…</option></select>
+    <div class="muted" id="e_loc_hint" style="font-size:11px;margin-top:4px;"></div>
     <label class="fld">Mode</label><select class="inp" id="e_mode">${modeOpt('form')}${modeOpt('calendar')}</select>
     <label class="fld">RSVP tag (applied in HighLevel on submit)</label><input class="inp" id="e_tag" value="${e&&e.rsvp_tag?esc(e.rsvp_tag):''}" placeholder="e.g. RSVP — WSAA Partner Night">
-    <label class="fld">Workflow ID <span class="muted">(optional — enroll on RSVP)</span></label><input class="inp" id="e_wf" value="${e&&e.workflow_id?esc(e.workflow_id):''}">
+    <label class="fld">Workflow <span class="muted">(optional — enroll on RSVP)</span></label><select class="inp" id="e_wf"><option value="">— none —</option></select>
     <label class="fld">Embed URL after confirm <span class="muted">(optional — HL calendar/form to show)</span></label><input class="inp" id="e_embed" value="${e&&e.embed_url?esc(e.embed_url):''}" placeholder="https://…">
     <label class="fld">Intro text</label><textarea class="inp" id="e_intro" rows="2">${e&&e.intro?esc(e.intro):''}</textarea>
     <label class="fld">Thank-you text</label><textarea class="inp" id="e_ty" rows="2">${e&&e.thankyou?esc(e.thankyou):''}</textarea>
     <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="font-weight:800;font-size:13px;color:var(--navy);">Questions (from HighLevel custom fields)</div>
-        <button class="btn btn-neutral btn-sm" onclick="loadFields()">Load fields</button>
+        <button class="btn btn-neutral btn-sm" onclick="loadFields()">Refresh fields</button>
       </div>
       <div class="muted" style="font-size:11px;margin:4px 0 8px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Set a type &amp; required per field.</div>
-      <div id="fieldList">${e?fieldsHtml(e.fields||[]):'<div class="muted" style="font-size:12px;">Enter the sub-account ID, then click Load fields.</div>'}</div>
+      <div id="fieldList">${e&&e.ghl_location_id?fieldsHtml(e.fields||[]):'<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'}</div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="e_en" ${!e||e.enabled?'checked':''}> Enabled</label>
     <div id="e_err" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeM()">Cancel</button><button class="btn btn-brand" onclick="saveEvent('${id||''}',this)">Save</button></div>`);
   window._editFields = e ? (e.fields||[]) : [];
+  window._editWf = e ? (e.workflow_id||'') : '';
+  populateEventLocations(e&&e.ghl_location_id?e.ghl_location_id:'');
+}
+let ghlLocCache=null;
+async function getGhlLocations(){ if(ghlLocCache) return ghlLocCache; const r=await api({action:'ghl_locations'}); ghlLocCache = r.success ? r : {configured:false, locations:[]}; return ghlLocCache; }
+async function populateEventLocations(selectedId){
+  const sel=document.getElementById('e_loc'); const hint=document.getElementById('e_loc_hint');
+  const data=await getGhlLocations();
+  if(!data.configured){ sel.innerHTML='<option value="">— none —</option>'; hint.textContent='⚠️ GHL agency integration not configured — ask an admin to add it in Secret Dungeon.'; return; }
+  const locs=data.locations||[];
+  sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  hint.textContent=locs.length?`${locs.length} sub-account(s) available.`:'No sub-accounts found.';
+  if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent='Sub-account '+selectedId+' (not found — may be stale)'; sel.appendChild(o); } sel.value=selectedId; onLocChange(); }
+}
+async function onLocChange(){
+  const loc=document.getElementById('e_loc').value;
+  const wfSel=document.getElementById('e_wf');
+  if(!loc){ document.getElementById('fieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; wfSel.innerHTML='<option value="">— none —</option>'; return; }
+  await loadFields();
+  wfSel.innerHTML='<option value="">Loading…</option>';
+  const wr=await api({action:'ghl_workflows', location_id:loc});
+  const wfs=(wr.success?wr.workflows:[])||[];
+  wfSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
+  const pre=window._editWf;
+  if(pre){ if(!Array.from(wfSel.options).some(o=>o.value===pre)){ const o=document.createElement('option'); o.value=pre; o.textContent='Workflow '+pre+' (not found)'; wfSel.appendChild(o); } wfSel.value=pre; }
 }
 function fieldsHtml(selected){
   // Render selected fields as editable rows.
@@ -117,12 +143,12 @@ function fieldsHtml(selected){
   }).join('');
 }
 async function loadFields(){
-  const loc=document.getElementById('e_loc').value.trim();
-  if(!loc){ document.getElementById('e_err').textContent='Enter the sub-account ID first.'; return; }
+  const loc=document.getElementById('e_loc').value;
+  if(!loc){ document.getElementById('e_err').textContent='Pick a sub-account first.'; return; }
   document.getElementById('fieldList').innerHTML='<div class="muted" style="font-size:12px;">Loading fields…</div>';
   const r=await api({action:'ghl_custom_fields', location_id:loc});
   _cf = (r.success? r.fields:[])||[];
-  if(!_cf.length){ document.getElementById('fieldList').innerHTML='<div class="muted" style="font-size:12px;">No custom fields found (check the sub-account ID / token).</div>'; return; }
+  if(!_cf.length){ document.getElementById('fieldList').innerHTML='<div class="muted" style="font-size:12px;">No custom fields found in this sub-account.</div>'; return; }
   document.getElementById('fieldList').innerHTML=fieldsHtml(window._editFields||[]);
 }
 function collectFields(){
@@ -137,9 +163,9 @@ async function saveEvent(id,btn){
   const name=document.getElementById('e_name').value.trim();
   if(!name){ document.getElementById('e_err').textContent='Event name required.'; return; }
   const payload={ action:'save_event', id:id||undefined, name,
-    ghl_location_id:document.getElementById('e_loc').value.trim(),
+    ghl_location_id:document.getElementById('e_loc').value,
     mode:document.getElementById('e_mode').value, rsvp_tag:document.getElementById('e_tag').value.trim(),
-    workflow_id:document.getElementById('e_wf').value.trim(), embed_url:document.getElementById('e_embed').value.trim(),
+    workflow_id:document.getElementById('e_wf').value, embed_url:document.getElementById('e_embed').value.trim(),
     intro:document.getElementById('e_intro').value.trim(), thankyou:document.getElementById('e_ty').value.trim(),
     fields:collectFields(), enabled:document.getElementById('e_en').checked };
   btn.disabled=true;

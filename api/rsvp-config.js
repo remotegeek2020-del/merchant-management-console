@@ -5,7 +5,7 @@
 // the chosen questions, then upserts the HL contact + sets fields + tags.
 import { createClient } from '@supabase/supabase-js';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListCustomFields, ghlListForms, ghlListCalendars } from './_ghl.js';
+import { ghlListCustomFields, ghlListForms, ghlListCalendars, ghlListWorkflows, ghlListLocations } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const ok = (res, data = {}) => res.status(200).json({ success: true, ...data });
@@ -35,6 +35,10 @@ export default async function handler(req, res) {
             const host = req.headers['x-forwarded-host'] || req.headers.host;
             return ok(res, { events: (data || []).map(e => ({ ...e, submissions: counts[e.id] || 0, public_url: `${proto}://${host}/rsvp?e=${e.event_key}` })) });
         }
+        if (action === 'ghl_locations') {
+            const r = await ghlListLocations();
+            return ok(res, r);
+        }
         if (action === 'ghl_custom_fields') {
             if (!req.body.location_id) return ok(res, { fields: [] });
             const fields = await ghlListCustomFields(req.body.location_id);
@@ -42,6 +46,7 @@ export default async function handler(req, res) {
         }
         if (action === 'ghl_forms') { return ok(res, { forms: req.body.location_id ? await ghlListForms(req.body.location_id) : [] }); }
         if (action === 'ghl_calendars') { return ok(res, { calendars: req.body.location_id ? await ghlListCalendars(req.body.location_id) : [] }); }
+        if (action === 'ghl_workflows') { return ok(res, { workflows: req.body.location_id ? await ghlListWorkflows(req.body.location_id) : [] }); }
 
         if (action === 'save_event') {
             const b = req.body;
