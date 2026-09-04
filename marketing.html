@@ -295,7 +295,7 @@
       <!-- ── RSVP ANNOUNCEMENT SETUP: Partner ID → confirm/questions → submit ── -->
       <div id="rsvpBlock" style="display:none;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:12px;background:#fafbfc;">
         <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:2px;">🎟️ RSVP setup</div>
-        <div class="muted" style="font-size:11px;margin-bottom:10px;">The partner enters their Partner ID → we fetch their contact → they answer the questions you pick below → we upsert their HighLevel contact, set those fields, and apply your tag. This runs INSIDE the popup — no separate page.</div>
+        <div class="muted" style="font-size:11px;margin-bottom:10px;">The partner enters their Partner ID → we fetch their contact → they answer your questions (native fields, or a real embedded HighLevel form) → we upsert their HighLevel contact and apply your tag. This runs INSIDE the popup — no separate page.</div>
         <div class="row2">
           <div><label class="fld" style="margin-top:0;">HighLevel sub-account</label><select class="inp" id="rsvp_location" onchange="onRsvpLocation()"><option value="">— select —</option></select></div>
           <div><label class="fld" style="margin-top:0;">RSVP tag <span class="muted" style="font-weight:400;">(applied in HighLevel on submit)</span></label><input class="inp" id="rsvp_tag" placeholder="e.g. RSVP — WSAA Partner Night"></div>
@@ -309,12 +309,23 @@
         <label class="fld">Thank-you message</label>
         <textarea class="inp" id="rsvp_thankyou" rows="2" placeholder="Your RSVP is confirmed. We'll see you there."></textarea>
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div style="font-weight:800;font-size:12px;color:var(--navy);">Questions (from HighLevel custom fields)</div>
-            <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:12px;" onclick="rsvpLoadFields()">Refresh fields</button>
+          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Questions</div>
+          <div class="seg" style="margin-bottom:10px;">
+            <button type="button" id="rsvpNativeBtn" class="on" onclick="setRsvpFieldMode('custom_fields')">Native (pick fields)</button>
+            <button type="button" id="rsvpGhlFormBtn" onclick="setRsvpFieldMode('ghl_form')">HighLevel form</button>
           </div>
-          <div class="muted" style="font-size:11px;margin:4px 0 8px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Set a type &amp; required per field.</div>
-          <div id="rsvpFieldList"><div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div></div>
+          <div id="rsvpNativeFields">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div class="muted" style="font-size:11px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Set a type &amp; required per field. <b>Note:</b> dropdown/checkbox fields need their exact HighLevel option values typed in manually — for those, "HighLevel form" below is usually simpler.</div>
+              <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:12px;white-space:nowrap;margin-left:8px;" onclick="rsvpLoadFields()">Refresh fields</button>
+            </div>
+            <div id="rsvpFieldList" style="margin-top:8px;"><div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div></div>
+          </div>
+          <div id="rsvpGhlFormFields" style="display:none;">
+            <div class="muted" style="font-size:11px;margin-bottom:8px;">After the Partner ID is confirmed, the real HighLevel form displays right in the popup — HighLevel renders every field type itself (dropdowns, checkboxes, etc.), so there's nothing to reproduce here. We still apply your tag/workflow and record the RSVP once they submit it.</div>
+            <label class="fld" style="margin-top:0;">Form</label>
+            <select class="inp" id="rsvp_ghl_form"><option value="">Choose a sub-account first…</option></select>
+          </div>
         </div>
       </div>
 
@@ -1269,7 +1280,9 @@ function openEditor(type){
   document.getElementById('rsvp_tag').value=''; document.getElementById('rsvp_eligibility').value='all';
   document.getElementById('rsvp_embed_url').value=''; document.getElementById('rsvp_thankyou').value='';
   document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>';
+  document.getElementById('rsvp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
   window._rsvpEditFields=[]; _rsvpCf=[];
+  setRsvpFieldMode('custom_fields');
   // RSVP kind: the CTA IS the RSVP button (no manual link, no gate, no separate enable toggle).
   document.getElementById('ctaUrlWrap').style.display = _isRSVP ? 'none' : '';
   document.getElementById('ctaUrlRsvpNote').style.display = _isRSVP ? '' : 'none';
@@ -1355,7 +1368,8 @@ async function editCampaign(id){
       document.getElementById('rsvp_embed_url').value=rev.embed_url||'';
       document.getElementById('rsvp_thankyou').value=rev.thankyou||'';
       window._rsvpEditFields=Array.isArray(rev.fields)?rev.fields:[];
-      populateRsvpLocations(rev.ghl_location_id||'').then(function(){ if(rev.ghl_location_id) return onRsvpLocation(rev.workflow_id||''); else document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; });
+      setRsvpFieldMode(rev.field_source==='ghl_form'?'ghl_form':'custom_fields');
+      populateRsvpLocations(rev.ghl_location_id||'').then(function(){ if(rev.ghl_location_id) return onRsvpLocation(rev.workflow_id||'', rev.ghl_form_id||''); else document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1618,6 +1632,9 @@ async function saveCampaign(){
   if (window._campaignKind==='rsvp' && !document.getElementById('rsvp_location').value){
     Swal.fire('Pick a sub-account','Choose the HighLevel sub-account for this RSVP under RSVP setup.','warning'); return;
   }
+  if (window._campaignKind==='rsvp' && window._rsvpFieldMode==='ghl_form' && !document.getElementById('rsvp_ghl_form').value){
+    Swal.fire('Pick a form','Choose the HighLevel form to embed, or switch Questions to Native.','warning'); return;
+  }
   const payload={
     action: editing&&editing.id ? 'update_campaign':'create_campaign',
     id: editing&&editing.id ? editing.id : undefined,
@@ -1682,7 +1699,10 @@ async function saveCampaign(){
       workflow_id: document.getElementById('rsvp_workflow').value||null,
       embed_url: document.getElementById('rsvp_embed_url').value.trim()||null,
       thankyou: document.getElementById('rsvp_thankyou').value.trim()||null,
-      fields: rsvpCollectFields()
+      field_source: window._rsvpFieldMode==='ghl_form' ? 'ghl_form' : 'custom_fields',
+      ghl_form_id: window._rsvpFieldMode==='ghl_form' ? (document.getElementById('rsvp_ghl_form').value||null) : null,
+      ghl_form_name: window._rsvpFieldMode==='ghl_form' ? ((document.getElementById('rsvp_ghl_form').options[document.getElementById('rsvp_ghl_form').selectedIndex]||{}).text||null) : null,
+      fields: window._rsvpFieldMode==='ghl_form' ? [] : rsvpCollectFields()
     } : undefined
   };
   if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
@@ -2252,10 +2272,28 @@ async function populateRsvpLocations(selectedId){
   sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
   if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent=selectedId; sel.appendChild(o);} sel.value=selectedId; }
 }
-async function onRsvpLocation(preWfId){
+function setRsvpFieldMode(m){
+  window._rsvpFieldMode = m==='ghl_form' ? 'ghl_form' : 'custom_fields';
+  document.getElementById('rsvpNativeBtn').classList.toggle('on', window._rsvpFieldMode==='custom_fields');
+  document.getElementById('rsvpGhlFormBtn').classList.toggle('on', window._rsvpFieldMode==='ghl_form');
+  document.getElementById('rsvpNativeFields').style.display = window._rsvpFieldMode==='custom_fields' ? 'block' : 'none';
+  document.getElementById('rsvpGhlFormFields').style.display = window._rsvpFieldMode==='ghl_form' ? 'block' : 'none';
+}
+async function loadRsvpForms(preFormId){
+  const loc=document.getElementById('rsvp_location').value;
+  const sel=document.getElementById('rsvp_ghl_form');
+  if(!loc){ sel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
+  sel.innerHTML='<option value="">Loading…</option>';
+  const r=await api({action:'ghl_forms',location_id:loc});
+  const forms=(r.success?r.data:[])||[];
+  sel.innerHTML='<option value="">— select a form —</option>'+forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name||f.id)}</option>`).join('');
+  if(!forms.length) sel.innerHTML='<option value="">No forms found in this sub-account</option>';
+  if(preFormId){ if(!Array.from(sel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; sel.appendChild(o);} sel.value=preFormId; }
+}
+async function onRsvpLocation(preWfId, preFormId){
   const loc=document.getElementById('rsvp_location').value;
   const wSel=document.getElementById('rsvp_workflow');
-  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; return; }
+  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; document.getElementById('rsvp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
   wSel.innerHTML='<option value="">Loading…</option>';
   const r=await api({action:'ghl_workflows',location_id:loc});
   const wfs=(r.success?r.data:[])||[];
@@ -2263,6 +2301,7 @@ async function onRsvpLocation(preWfId){
   if(!wfs.length) wSel.innerHTML='<option value="">No workflows found (check this sub-account’s token)</option>';
   if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
   await rsvpLoadFields();
+  await loadRsvpForms(preFormId);
 }
 let _rsvpCf=[];
 function rsvpFieldsHtml(selected){

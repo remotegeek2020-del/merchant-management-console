@@ -729,11 +729,15 @@ export default async function handler(req, res) {
                         required: !!f.required,
                         options: Array.isArray(f.options) ? f.options.map(o => String(o).slice(0, 120)).slice(0, 30) : []
                     })).filter(f => f.name) : [];
+                    const isGhlForm = rb.field_source === 'ghl_form' && rb.ghl_form_id;
                     const eventRow = {
                         name: row.title || 'Untitled event',
                         ghl_location_id: rb.location_id ? String(rb.location_id).trim() : null,
                         mode: rb.mode === 'calendar' ? 'calendar' : 'form',
-                        fields: rsvpFields,
+                        fields: isGhlForm ? [] : rsvpFields,
+                        field_source: isGhlForm ? 'ghl_form' : 'custom_fields',
+                        ghl_form_id: isGhlForm ? String(rb.ghl_form_id).trim() : null,
+                        ghl_form_name: isGhlForm && rb.ghl_form_name ? String(rb.ghl_form_name).slice(0, 200) : null,
                         rsvp_tag: rb.tag ? String(rb.tag).trim() : null,
                         workflow_id: rb.workflow_id ? String(rb.workflow_id).trim() : null,
                         embed_url: rb.embed_url ? String(rb.embed_url).trim() : null,

@@ -63,7 +63,34 @@ async function doLookup(){
   if(r.status==='not_found'){ err.textContent="We couldn't find that Partner ID. Please double-check it."; return; }
   if(r.status==='not_eligible'){ err.textContent="This RSVP is exclusive to Prime49 partners."; return; }
   PARTNER={ id:pid, name:r.name, email:r.email, phone:r.phone };
-  screenForm();
+  if(CFG.field_source==='ghl_form' && CFG.ghl_form_id) screenGhlForm();
+  else screenForm();
+}
+let _ghlFormDone=false;
+function screenGhlForm(){
+  _ghlFormDone=false;
+  const qp=[];
+  if(PARTNER.name){ const parts=String(PARTNER.name).trim().split(/\s+/); const fn=parts.shift(); if(fn) qp.push('first_name='+encodeURIComponent(fn)); if(parts.length) qp.push('last_name='+encodeURIComponent(parts.join(' '))); }
+  if(PARTNER.email) qp.push('email='+encodeURIComponent(PARTNER.email));
+  if(PARTNER.phone) qp.push('phone='+encodeURIComponent(PARTNER.phone));
+  const src='https://api.leadconnectorhq.com/widget/form/'+encodeURIComponent(CFG.ghl_form_id)+(qp.length?'?'+qp.join('&'):'');
+  document.getElementById('app').innerHTML=`
+    <h1>${esc(CFG.name)}</h1>
+    <div class="pre"><b>${esc(PARTNER.name||'Partner')}</b>${PARTNER.email?'<br>'+esc(PARTNER.email):''}${PARTNER.phone?'<br>'+esc(PARTNER.phone):''}<br><span class="muted" style="color:#0369a1;">✓ Verified partner — not you? <a href="#" onclick="screenId();return false;">use another ID</a></span></div>
+    <iframe src="${esc(src)}" style="width:100%;min-height:520px;border:none;margin-top:14px;" scrolling="yes"></iframe>
+    <div class="foot">Partners only · PayProTec</div>`;
+}
+window.addEventListener('message', function(ev){
+  if(_ghlFormDone || !CFG || CFG.field_source!=='ghl_form') return;
+  const o=String(ev.origin||'');
+  if(o.indexOf('leadconnectorhq.com')===-1 && o.indexOf('leadconnector')===-1) return;
+  let str=''; try{ str = typeof ev.data==='string'?ev.data:JSON.stringify(ev.data||''); }catch(e){ str=''; }
+  if(/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) ghlFormSubmitted();
+});
+async function ghlFormSubmitted(){
+  if(_ghlFormDone) return; _ghlFormDone=true;
+  const r=await api({action:'submit_ghl_form', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone});
+  screenDone(r.success?r:{thankyou:CFG.thankyou, embed_url:CFG.embed_url});
 }
 function fieldInput(f){
   const id='f_'+f.name.replace(/[^a-z0-9]+/gi,'_');

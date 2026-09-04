@@ -35,11 +35,14 @@ export default async function handler(req, res) {
         if (action === 'config') {
             const ev = await loadEvent(body.event_key);
             if (!ev || !ev.enabled) return bad(res, 'This RSVP is not available.');
+            const isGhlForm = ev.field_source === 'ghl_form' && ev.ghl_form_id;
             // Only expose what the public page needs (no location id / workflow ids).
             return ok(res, { event: {
                 name: ev.name, intro: ev.intro, thankyou: ev.thankyou, mode: ev.mode,
                 embed_url: ev.embed_url, prime49_only: !!ev.prime49_only,
-                fields: (ev.fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] }))
+                field_source: isGhlForm ? 'ghl_form' : 'custom_fields',
+                ghl_form_id: isGhlForm ? ev.ghl_form_id : null,
+                fields: isGhlForm ? [] : (ev.fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] }))
             } });
         }
 
@@ -102,6 +105,45 @@ export default async function handler(req, res) {
             await supabase.from('rsvp_submissions').upsert({
                 event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId,
                 email, name, is_partner: true, answers
+            }, { onConflict: 'event_id,partner_id_string' });
+
+            return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
+        }
+
+        // HighLevel-form mode: the embedded HL form itself collects the answers
+        // and writes them straight into the contact (HighLevel handles its own
+        // field types — dropdowns, checkboxes, etc. — so we don't reproduce
+        // them). Called once the form's submission is detected; we still own
+        // applying the RSVP tag/workflow and recording the conversion.
+        if (action === 'submit_ghl_form') {
+            const ev = await loadEvent(body.event_key);
+            if (!ev || !ev.enabled) return bad(res, 'This RSVP is not available.');
+            const pid = String(body.partner_id || '').trim();
+            if (!pid) return bad(res, 'Missing Partner ID.');
+            const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
+            const p = Array.isArray(data) && data[0] ? data[0] : null;
+            if (!p) return bad(res, 'Partner ID not found.');
+            if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
+            const loc = ev.ghl_location_id;
+            if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
+
+            const email = String(body.email || p.email || '').trim();
+            const phone = String(body.phone || p.phone || '').trim();
+            const name = String(p.full_name || '').trim();
+
+            // Upsert the HL contact + apply the RSVP tag (the embedded form's own
+            // submission separately writes whatever fields it collected into the
+            // same contact — HighLevel dedupes by email/phone).
+            const tags = ev.rsvp_tag ? [ev.rsvp_tag] : [];
+            const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, tags);
+            let contactId = (up && up.id) || p.hl_contact_id || '';
+            if (contactId && ev.rsvp_tag) await ghlAddContactTags(loc, contactId, [ev.rsvp_tag]);
+            if (contactId && ev.workflow_id) await ghlAddContactToWorkflow(loc, contactId, ev.workflow_id);
+
+            // Record the RSVP conversion (dedupe per event + partner ID).
+            await supabase.from('rsvp_submissions').upsert({
+                event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId || null,
+                email, name, is_partner: true, answers: {}
             }, { onConflict: 'event_id,partner_id_string' });
 
             return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
