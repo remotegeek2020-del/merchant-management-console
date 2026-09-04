@@ -21,6 +21,7 @@ const NIGHT_EVENT_THEME = {
     radius: 6, width: 'wide', align: 'left', btnStyle: 'solid', btnSize: 'lg', btnAlign: 'left',
     imgPos: 'top', overlay: 'dark'
 };
+const HERO_TXT = (v, n) => String(v == null ? '' : v).trim().slice(0, n) || null;
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
@@ -150,7 +151,18 @@ export default async function handler(req, res) {
                 starts_at: b.starts_at || null,
                 ends_at: b.ends_at || null,
                 campaign_kind: 'classic',
-                theme: b.theme_preset === 'night_event' ? NIGHT_EVENT_THEME : null,
+                theme: b.design === 'event_hero' ? {
+                    layout: 'event_hero', bg: '#0b1220', title: '#ffffff', text: '#cbd5e1', accent: '#f97316', btnText: '#ffffff',
+                    hero: {
+                        eyebrow: HERO_TXT(b.hero_eyebrow, 120),
+                        headline1: HERO_TXT(b.hero_h1, 120),
+                        headline2: HERO_TXT(b.hero_h2, 120),
+                        event_date: b.hero_date || null,   // 'YYYY-MM-DD' — drives the date chip + floating badge
+                        event_time: HERO_TXT(b.hero_time, 60),
+                        location: HERO_TXT(b.hero_location, 160),
+                        helper: HERO_TXT(b.hero_helper, 200)
+                    }
+                } : (b.design === 'night_event' ? NIGHT_EVENT_THEME : null),
                 updated_at: new Date().toISOString()
             };
             let row;

@@ -217,7 +217,32 @@
             '.ppx-slide{position:fixed;right:18px;bottom:18px;z-index:2147483000;width:320px;max-width:calc(100vw - 24px);background:#fff;border-radius:14px;box-shadow:0 16px 50px rgba(0,0,0,.28);padding:18px;animation:ppxUp .3s ease;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}',
             '.ppx-slide-x{position:absolute;top:8px;right:10px;background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;}',
             // Phones: dock to the bottom as a sheet, nearly full width.
-            '@media (max-width:520px){.ppx-back{padding:10px;align-items:flex-end;}.ppx-modal{max-height:88vh;max-height:88dvh;}.ppx-bar-in{flex-wrap:wrap;}.ppx-slide{left:12px;right:12px;width:auto;}}'
+            '@media (max-width:520px){.ppx-back{padding:10px;align-items:flex-end;}.ppx-modal{max-height:88vh;max-height:88dvh;}.ppx-bar-in{flex-wrap:wrap;}.ppx-slide{left:12px;right:12px;width:auto;}}',
+            // ── Event Hero — split-screen layout (WSAA Partner Night style) ──
+            '.ppx-hero-modal{background:#0b1220;border-radius:10px;width:min(720px,94vw);}',
+            '.ppx-hero-grid{display:grid;grid-template-columns:1.15fr 0.85fr;min-height:340px;}',
+            '.ppx-hero-left{padding:clamp(20px,4vw,30px);color:#fff;display:flex;flex-direction:column;justify-content:center;min-width:0;}',
+            '.ppx-hero-eyebrow{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.08em;color:#f97316;text-transform:uppercase;margin-bottom:10px;}',
+            '.ppx-hero-eyebrow span{width:7px;height:7px;background:#f97316;flex:none;}',
+            '.ppx-hero-h1,.ppx-hero-h2{font-weight:900;font-size:clamp(26px,4vw,40px);line-height:0.98;text-transform:uppercase;overflow-wrap:anywhere;}',
+            '.ppx-hero-h1{color:#fff;}.ppx-hero-h2{color:#f97316;}',
+            '.ppx-hero-body{font-size:14px;color:#cbd5e1;line-height:1.6;margin-top:14px;}',
+            '.ppx-hero-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}',
+            '.ppx-hero-chip{display:flex;align-items:center;gap:6px;background:#111a2e;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;color:#e2e8f0;white-space:nowrap;}',
+            '.ppx-hero-ctarow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:20px;}',
+            '.ppx-hero-cta{display:inline-block;background:#f97316;color:#fff;border:none;border-radius:8px;padding:14px 22px;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;font-family:inherit;}',
+            '.ppx-hero-cta:hover{filter:brightness(1.07);}',
+            '.ppx-hero-helper{font-size:12px;color:#94a3b8;}',
+            '.ppx-hero-right{position:relative;background:#1e293b;min-height:220px;}',
+            '.ppx-hero-right img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}',
+            '.ppx-hero-badge{position:absolute;right:18px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;padding:12px 16px;border-radius:5px;box-shadow:0 10px 26px rgba(0,0,0,.4);}',
+            '.ppx-hero-badge-dow,.ppx-hero-badge-mon{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}',
+            '.ppx-hero-badge-day{font-size:34px;font-weight:900;line-height:1;margin:2px 0;}',
+            '.ppx-hero-badge-sub{font-size:10px;font-weight:700;margin-top:6px;border-top:1px solid rgba(255,255,255,.4);padding-top:6px;}',
+            // Once the RSVP steps swap into the hero's left panel, restyle them for the dark bg.
+            '.ppx-hero-left .ppx-title{color:#fff;}.ppx-hero-left .ppx-text{color:#cbd5e1;}',
+            '.ppx-hero-left .ppx-cta{background:#f97316;}.ppx-hero-left .ppx-forget{color:#94a3b8;}',
+            '@media (max-width:640px){.ppx-hero-grid{grid-template-columns:1fr;}.ppx-hero-right{min-height:180px;order:-1;}}'
         ].join('');
         document.head.appendChild(s);
     }
@@ -456,7 +481,55 @@
         };
     }
 
+    // 'YYYY-MM-DD' → { dow, day, month, full } for the Event Hero date chip + badge.
+    function heroBadgeParts(dateStr) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || ''); if (!m) return null;
+        var d = new Date(+m[1], +m[2] - 1, +m[3]);
+        var DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        var MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        return { dow: DOW[d.getDay()], day: d.getDate(), month: MON[d.getMonth()], full: DOW[d.getDay()] + ', ' + MON[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() };
+    }
+    // Event Hero — split-screen layout (dark text panel + full-bleed photo +
+    // floating date badge), modeled after the nightgolf.ppt.partners page.
+    function renderHero(c) {
+        current = c;
+        var untilAction = c.behavior === 'until_action';
+        var hero = (c.theme && c.theme.hero) || {};
+        var badge = heroBadgeParts(hero.event_date);
+        var cid = jsArg(c.id);
+        var chip = function (icon, label) { return label ? ('<div class="ppx-hero-chip"><span aria-hidden="true">' + icon + '</span>' + esc(label) + '</div>') : ''; };
+        var chips = [chip('📅', badge ? badge.full : hero.event_date), chip('🕒', hero.event_time), chip('📍', hero.location)].filter(Boolean).join('');
+        var ctaBtn = '';
+        if (c.rsvp) ctaBtn = '<button type="button" class="ppx-hero-cta" onclick="__ppxRsvpStart(\'' + cid + '\')">' + esc(c.cta_label || 'RSVP Now') + '</button>';
+        else if (c.cta_enabled && c.cta_url) {
+            var fn = untilAction ? '__ppxAction' : '__ppxClick';
+            ctaBtn = '<a class="ppx-hero-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + fn + '(\'' + cid + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + '</a>';
+        }
+        var left = '<div class="ppx-hero-left ppx-body">'
+            + (hero.eyebrow ? '<div class="ppx-hero-eyebrow"><span></span>' + esc(hero.eyebrow) + '</div>' : '')
+            + '<div class="ppx-hero-h1">' + esc(hero.headline1 || c.title || 'RSVP') + '</div>'
+            + (hero.headline2 ? '<div class="ppx-hero-h2">' + esc(hero.headline2) + '</div>' : '')
+            + (c.body_text ? '<div class="ppx-hero-body">' + bodyHtml(c.body_text) + '</div>' : '')
+            + (chips ? '<div class="ppx-hero-chips">' + chips + '</div>' : '')
+            + ((ctaBtn || hero.helper) ? ('<div class="ppx-hero-ctarow">' + ctaBtn + (hero.helper ? '<span class="ppx-hero-helper">' + esc(hero.helper) + '</span>' : '') + '</div>') : '')
+            + '</div>';
+        var right = '<div class="ppx-hero-right">'
+            + (c.image_url ? '<img src="' + esc(safeUrl(c.image_url)) + '" alt="">' : '')
+            + (badge ? ('<div class="ppx-hero-badge"><div class="ppx-hero-badge-dow">' + esc(badge.dow) + '</div><div class="ppx-hero-badge-day">' + badge.day + '</div><div class="ppx-hero-badge-mon">' + esc(badge.month) + '</div>'
+                + ((hero.event_time || hero.location) ? ('<div class="ppx-hero-badge-sub">' + esc([hero.event_time, hero.location].filter(Boolean).join(' · ')) + '</div>') : '')
+                + '</div>') : '')
+            + '</div>';
+        var html = '<div class="ppx-modal ppx-hero-modal"><button class="ppx-x" onclick="__ppxClose()">×</button><div class="ppx-hero-grid">' + left + right + '</div></div>';
+        backdrop = document.createElement('div'); backdrop.className = 'ppx-back';
+        backdrop.style.background = 'rgba(4,10,22,.7)';
+        backdrop.innerHTML = html;
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction) onClose(); });
+        document.body.appendChild(backdrop);
+        if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
+    }
+
     function render(c) {
+        if (c.theme && c.theme.layout === 'event_hero') { injectCss(); renderHero(c); return; }
         current = c;
         var untilAction = c.behavior === 'until_action';
         var persistent = c.behavior === 'persistent';

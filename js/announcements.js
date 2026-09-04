@@ -112,7 +112,31 @@
             '.ppa-float .ppa-fforget{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;color:#94a3b8;cursor:pointer;}',
             '.ppa-float .ppa-fx{position:absolute;top:8px;right:8px;z-index:3;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;}',
             '.ppa-float .ppa-fnav{display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;color:#94a3b8;font-weight:700;padding:0 0 10px;}',
-            '.ppa-float .ppa-fnav button{background:#fff;border:1px solid #e2e8f0;border-radius:7px;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1;color:#475569;}'
+            '.ppa-float .ppa-fnav button{background:#fff;border:1px solid #e2e8f0;border-radius:7px;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1;color:#475569;}',
+            /* Event Hero — split-screen card (WSAA Partner Night style) */
+            '.ppa-hero-card{background:#0b1220;border-color:#0b1220;}',
+            '.ppa-hero-grid{display:grid;grid-template-columns:1.15fr 0.85fr;min-height:280px;}',
+            '.ppa-hero-left{padding:clamp(18px,4vw,26px);color:#fff;display:flex;flex-direction:column;justify-content:center;min-width:0;}',
+            '.ppa-hero-eyebrow{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#f97316;text-transform:uppercase;margin-bottom:9px;}',
+            '.ppa-hero-eyebrow span{width:6px;height:6px;background:#f97316;flex:none;}',
+            '.ppa-hero-h1,.ppa-hero-h2{font-weight:900;font-size:clamp(22px,3.4vw,32px);line-height:1;text-transform:uppercase;overflow-wrap:anywhere;}',
+            '.ppa-hero-h1{color:#fff;}.ppa-hero-h2{color:#f97316;}',
+            '.ppa-hero-body{font-size:13px;color:#cbd5e1;line-height:1.6;margin-top:12px;}',
+            '.ppa-hero-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;}',
+            '.ppa-hero-chip{display:flex;align-items:center;gap:6px;background:#111a2e;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:700;color:#e2e8f0;white-space:nowrap;}',
+            '.ppa-hero-ctarow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;}',
+            '.ppa-hero-cta{display:inline-block;background:#f97316;color:#fff;border:none;border-radius:8px;padding:12px 20px;font-size:13px;font-weight:800;cursor:pointer;text-decoration:none;font-family:inherit;}',
+            '.ppa-hero-helper{font-size:11.5px;color:#94a3b8;}',
+            '.ppa-hero-right{position:relative;background:#1e293b;min-height:200px;}',
+            '.ppa-hero-right img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}',
+            '.ppa-hero-badge{position:absolute;right:16px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;padding:10px 14px;border-radius:5px;box-shadow:0 10px 26px rgba(0,0,0,.4);}',
+            '.ppa-hero-badge-dow,.ppa-hero-badge-mon{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}',
+            '.ppa-hero-badge-day{font-size:30px;font-weight:900;line-height:1;margin:2px 0;}',
+            '.ppa-hero-badge-sub{font-size:9.5px;font-weight:700;margin-top:5px;border-top:1px solid rgba(255,255,255,.4);padding-top:5px;}',
+            // Once the RSVP steps swap into the hero's left panel, restyle for the dark bg.
+            '.ppa-hero-left .ppa-title{color:#fff;}.ppa-hero-left .ppa-text{color:#cbd5e1;}',
+            '.ppa-hero-left .ppa-cta{background:#f97316;}',
+            '@media (max-width:640px){.ppa-hero-grid{grid-template-columns:1fr;}.ppa-hero-right{min-height:160px;order:-1;}}'
         ].join('');
         document.head.appendChild(s);
     }
@@ -157,6 +181,7 @@
         var c = visible[cardIdx];
         // Already showing this exact card → don't re-render (avoids flicker + re-tracking).
         if (shownCardId === c.id && cardWrap.firstChild) return;
+        if (c.theme && c.theme.layout === 'event_hero') { renderHeroCard(c); return; }
         // During live/replay the video takes the place of the static graphic.
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url && !c.video_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
@@ -194,6 +219,44 @@
         cardWrap.innerHTML = html;
         cardWrap.style.display = '';
         if (shownCardId !== c.id) { shownCardId = c.id; track(c.id, 'impression'); if (c.video_url) startAnnWatch(c.id); else clearAnnWatch(); }
+    }
+
+    // 'YYYY-MM-DD' → { dow, day, month, full } for the Event Hero date chip + badge.
+    function heroBadgeParts(dateStr) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || ''); if (!m) return null;
+        var d = new Date(+m[1], +m[2] - 1, +m[3]);
+        var DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        var MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        return { dow: DOW[d.getDay()], day: d.getDate(), month: MON[d.getMonth()], full: DOW[d.getDay()] + ', ' + MON[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() };
+    }
+    // Event Hero — split-screen homepage card (dark text panel + full-bleed
+    // photo + floating date badge), modeled after the nightgolf.ppt.partners page.
+    function renderHeroCard(c) {
+        var hero = c.theme.hero || {};
+        var badge = heroBadgeParts(hero.event_date);
+        var cid = jsArg(c.id);
+        var chip = function (icon, label) { return label ? ('<div class="ppa-hero-chip"><span aria-hidden="true">' + icon + '</span>' + esc(label) + '</div>') : ''; };
+        var chips = [chip('📅', badge ? badge.full : hero.event_date), chip('🕒', hero.event_time), chip('📍', hero.location)].filter(Boolean).join('');
+        var ctaBtn = c.rsvp
+            ? ('<button type="button" class="ppa-hero-cta" onclick="ppAnnRsvpStart(\'' + cid + '\',\'card\')">' + esc(c.cta_label || 'RSVP Now') + '</button>')
+            : ((c.cta_enabled && c.cta_url) ? ('<a class="ppa-hero-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="ppAnnClick(\'' + cid + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + '</a>') : '');
+        var left = '<div class="ppa-hero-left ppa-body">'
+            + (hero.eyebrow ? '<div class="ppa-hero-eyebrow"><span></span>' + esc(hero.eyebrow) + '</div>' : '')
+            + '<div class="ppa-hero-h1">' + esc(hero.headline1 || c.title || 'RSVP') + '</div>'
+            + (hero.headline2 ? '<div class="ppa-hero-h2">' + esc(hero.headline2) + '</div>' : '')
+            + (c.body_text ? '<div class="ppa-hero-body">' + bodyHtml(c.body_text) + '</div>' : '')
+            + (chips ? '<div class="ppa-hero-chips">' + chips + '</div>' : '')
+            + ((ctaBtn || hero.helper) ? ('<div class="ppa-hero-ctarow">' + ctaBtn + (hero.helper ? '<span class="ppa-hero-helper">' + esc(hero.helper) + '</span>' : '') + '</div>') : '')
+            + '</div>';
+        var right = '<div class="ppa-hero-right">'
+            + (c.image_url ? '<img src="' + esc(safeUrl(c.image_url)) + '" alt="">' : '')
+            + (badge ? ('<div class="ppa-hero-badge"><div class="ppa-hero-badge-dow">' + esc(badge.dow) + '</div><div class="ppa-hero-badge-day">' + badge.day + '</div><div class="ppa-hero-badge-mon">' + esc(badge.month) + '</div>'
+                + ((hero.event_time || hero.location) ? ('<div class="ppa-hero-badge-sub">' + esc([hero.event_time, hero.location].filter(Boolean).join(' · ')) + '</div>') : '')
+                + '</div>') : '')
+            + '</div>';
+        cardWrap.innerHTML = '<div class="ppa-card ppa-hero-card"><button class="ppa-x" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:18px;">close</span></button><div class="ppa-hero-grid">' + left + right + '</div></div>';
+        cardWrap.style.display = '';
+        if (shownCardId !== c.id) { shownCardId = c.id; track(c.id, 'impression'); }
     }
 
     // ── floating ad ───────────────────────────────────────────────────────────
