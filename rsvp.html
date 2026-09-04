@@ -62,9 +62,18 @@ async function doLookup(){
   if(!r.success){ err.textContent=r.message||'Error.'; return; }
   if(r.status==='not_found'){ err.textContent="We couldn't find that Partner ID. Please double-check it."; return; }
   if(r.status==='not_eligible'){ err.textContent="This RSVP is exclusive to Prime49 partners."; return; }
+  if(r.status==='already_registered'){ screenAlreadyDone(r.name); return; }
   PARTNER={ id:pid, name:r.name, email:r.email, phone:r.phone };
   if(CFG.field_source==='ghl_form' && CFG.ghl_form_id) screenGhlForm();
   else screenForm();
+}
+function screenAlreadyDone(name){
+  document.getElementById('app').innerHTML=`
+    <div class="center" style="padding:24px 10px 10px;"><span class="material-icons" style="font-size:46px;color:var(--green);">check_circle</span>
+      <h1 style="margin-top:8px;">Already registered! 🎉</h1>
+      <div class="muted">${esc(name||'You')}${name?'’ve':' have'} already RSVP'd for this event — see you there!</div>
+    </div>
+    <div class="foot">Partners only · PayProTec</div>`;
 }
 let _ghlFormDone=false;
 function screenGhlForm(){
@@ -78,7 +87,6 @@ function screenGhlForm(){
     <h1>${esc(CFG.name)}</h1>
     <div class="pre"><b>${esc(PARTNER.name||'Partner')}</b>${PARTNER.email?'<br>'+esc(PARTNER.email):''}${PARTNER.phone?'<br>'+esc(PARTNER.phone):''}<br><span class="muted" style="color:#0369a1;">✓ Verified partner — not you? <a href="#" onclick="screenId();return false;">use another ID</a></span></div>
     <iframe src="${esc(src)}" style="width:100%;min-height:520px;border:none;margin-top:14px;" scrolling="yes"></iframe>
-    <button class="btn btn-brand" onclick="ghlFormSubmitted()">✓ I submitted the form — Continue</button>
     <div class="foot">Partners only · PayProTec</div>`;
 }
 window.addEventListener('message', function(ev){

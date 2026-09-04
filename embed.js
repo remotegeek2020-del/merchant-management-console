@@ -427,13 +427,23 @@
             if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
             if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
             if (r.status === 'not_eligible') { if (err) err.textContent = "This RSVP is exclusive to Prime49 partners."; return; }
+            if (r.status === 'already_registered') { __ppxRsvpAlreadyDone(id, r.name); return; }
             _rsvpPartner = { id: pid, name: r.name, email: r.email, phone: r.phone };
             if (_rsvpCfg.field_source === 'ghl_form' && _rsvpCfg.ghl_form_id) __ppxRsvpGhlForm(id);
             else __ppxRsvpForm(id);
         });
     };
+    function __ppxRsvpAlreadyDone(id, name) {
+        var c = current; if (!c || c.id !== id) return;
+        var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
+        var th = theme(c);
+        body.innerHTML = '<div style="text-align:center;"><div style="font-size:34px;">✅</div><div class="ppx-title" style="margin-top:6px;color:' + th.title + ';">You\'re already registered!</div>'
+            + '<div class="ppx-text" style="color:' + th.text + ';">' + esc(name || 'You') + (name ? '’ve' : ' have') + ' already RSVP\'d for this event — see you there!</div></div>';
+    }
     // HighLevel-form mode: embed the real form (HighLevel renders every field
     // type itself — dropdowns, checkboxes, etc.) instead of reproducing it.
+    // The form's own submit button is the only action shown — its submission is
+    // detected via postMessage, so we don't add a second, confusing button.
     function __ppxRsvpGhlForm(id) {
         var c = current; if (!c || c.id !== id) return;
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
@@ -446,11 +456,7 @@
         var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
         body.innerHTML = '<div class="ppx-title" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
             + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:11px 13px;font-size:13px;color:#0369a1;margin:8px 0 12px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:480px;border:none;" scrolling="yes"></iframe>'
-            // Not every GHL form fires a cross-origin "submitted" signal we can
-            // detect automatically, so a manual confirm is the reliable path —
-            // the auto-detect below (if it fires) just skips straight past this.
-            + '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + 'margin-top:14px;" onclick="__ppxRsvpFormSubmitted()">✓ I submitted the form — Continue</button>';
+            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:480px;border:none;" scrolling="yes"></iframe>';
     }
     window.__ppxRsvpFormSubmitted = function () {
         if (!_rsvpFormId || _rsvpFormDone) return;

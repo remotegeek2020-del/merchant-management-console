@@ -54,6 +54,13 @@ async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
     return { contactId, tagApplied, error };
 }
 
+// Already RSVP'd under any of their partner IDs for this event?
+async function alreadyRegistered(eventId, personId) {
+    if (!personId) return false;
+    const { data } = await supabase.from('rsvp_submissions').select('id').eq('event_id', eventId).eq('person_id', personId).limit(1);
+    return !!(data && data.length);
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -85,6 +92,9 @@ export default async function handler(req, res) {
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return ok(res, { status: 'not_found' });
             if (ev.prime49_only && !p.prime49) return ok(res, { status: 'not_eligible' });
+            // Already RSVP'd under ANY of their partner IDs (same person) →
+            // block re-entry instead of letting them submit a second time.
+            if (await alreadyRegistered(ev.id, p.person_id)) return ok(res, { status: 'already_registered', name: p.full_name || '' });
             return ok(res, {
                 status: 'found',
                 name: p.full_name || '',
@@ -103,6 +113,7 @@ export default async function handler(req, res) {
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return bad(res, 'Partner ID not found.');
             if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
+            if (await alreadyRegistered(ev.id, p.person_id)) return bad(res, "You're already registered for this event.");
             const loc = ev.ghl_location_id;
             if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
 
@@ -130,7 +141,7 @@ export default async function handler(req, res) {
             // Record the RSVP (dedupe per event + partner ID) — recorded even if
             // the HighLevel side had trouble, so the RSVP itself is never lost.
             await supabase.from('rsvp_submissions').upsert({
-                event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId || null,
+                event_id: ev.id, partner_id_string: pid, person_id: p.person_id || null, hl_contact_id: contactId || null,
                 email, name, is_partner: true, answers, tag_applied: tagApplied, hl_error: error || null
             }, { onConflict: 'event_id,partner_id_string' });
 
@@ -151,6 +162,7 @@ export default async function handler(req, res) {
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return bad(res, 'Partner ID not found.');
             if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
+            if (await alreadyRegistered(ev.id, p.person_id)) return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
             const loc = ev.ghl_location_id;
             if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
 
@@ -168,7 +180,7 @@ export default async function handler(req, res) {
             // recorded regardless of the HighLevel side, so the conversion is
             // never lost even if tagging failed.
             await supabase.from('rsvp_submissions').upsert({
-                event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId || null,
+                event_id: ev.id, partner_id_string: pid, person_id: p.person_id || null, hl_contact_id: contactId || null,
                 email, name, is_partner: true, answers: {}, tag_applied: tagApplied, hl_error: error || null
             }, { onConflict: 'event_id,partner_id_string' });
 
