@@ -911,10 +911,6 @@ let calCursor = null;        // Date at first-of-month being viewed
   }
   loadList();
   loadMktFlags();
-  // Deep link from RSVP Events ("Announce" button) → open that campaign
-  // straight in the full editor, same as clicking its Edit icon here.
-  const openId = new URLSearchParams(location.search).get('campaign');
-  if (openId) editCampaign(openId);
 })();
 
 // ── Feature flags (Secret Dungeon → Feature Flags → Marketing) ──

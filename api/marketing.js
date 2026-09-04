@@ -1567,6 +1567,17 @@ export default async function handler(req, res) {
                         opted.forEach(id => dismissed.add(id));
                     }
                 }
+                // Partner-exclusive RSVP events run their whole sign-up flow (Partner
+                // ID → confirm → questions → submit) INSIDE the popup — batch-fetch
+                // the linked event's key/mode so the renderer can drive that flow
+                // without a second round trip.
+                const rsvpIds = [...new Set(live.map(c => c.rsvp_event_id).filter(Boolean))];
+                let rsvpMap = {};
+                if (rsvpIds.length) {
+                    const { data: revs } = await supabase.from('rsvp_events')
+                        .select('id, event_key, mode').eq('enabled', true).in('id', rsvpIds);
+                    (revs || []).forEach(r => { rsvpMap[r.id] = { event_key: r.event_key, mode: r.mode }; });
+                }
                 const out = live.filter(c => !dismissed.has(c.id)).map(c => {
                     // ── A/B: deterministically show variant A or B per user ──────
                     let variant = null, v = c;
@@ -1631,6 +1642,7 @@ export default async function handler(req, res) {
                         survey: c.survey || null,
                         theme: c.theme || null,
                         event_phase: eventPhase,
+                        rsvp: c.rsvp_event_id ? (rsvpMap[c.rsvp_event_id] || null) : null,
                         variant
                     };
                 });

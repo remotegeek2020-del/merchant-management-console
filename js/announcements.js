@@ -177,7 +177,8 @@
             if (showText && c.body_text) html += '<div class="ppa-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
             // Live/replay: play the YouTube video inside the card; CTA still links out.
             if (c.video_url) html += '<div style="position:relative;width:100%;padding-top:56.25%;margin-top:14px;border-radius:10px;overflow:hidden;background:#000;"><iframe src="' + esc(safeUrl(c.video_url)) + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="' + esc(c.title || 'Video') + '"></iframe></div>';
-            if (c.cta_enabled && c.cta_url) html += '<div style="margin-top:14px;' + th.btnRow + '"><a class="ppa-cta" style="' + th.btn + th.btnWrap + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a></div>';
+            if (c.rsvp) html += '<div style="margin-top:14px;' + th.btnRow + '"><button type="button" class="ppa-cta" style="' + th.btn + th.btnWrap + 'border:none;" onclick="ppAnnRsvpStart(\'' + jsArg(c.id) + '\',\'card\')">' + esc(c.cta_label || 'RSVP Now') + '</button></div>';
+            else if (c.cta_enabled && c.cta_url) html += '<div style="margin-top:14px;' + th.btnRow + '"><a class="ppa-cta" style="' + th.btn + th.btnWrap + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a></div>';
             html += surveyHtml(c);
             html += '</div>';
         }
@@ -222,7 +223,9 @@
         if (showText && c.body_text) html += '<div class="ppa-ftext">' + bodyHtml(c.body_text) + '</div>';
         // until_action: CTA click is the action → permanent dismiss. Others: click
         // just opens the link + counts, then snoozes (re-shows later).
-        if (c.cta_enabled && c.cta_url) {
+        if (c.rsvp) {
+            html += '<button type="button" class="ppa-fcta" style="border:none;" onclick="ppAnnRsvpStart(\'' + fcid + '\',\'float\')">' + esc(c.cta_label || 'RSVP Now') + '</button>';
+        } else if (c.cta_enabled && c.cta_url) {
             var onCta = untilAction ? 'ppAnnAction(\'' + fcid + '\',\'cta\')' : 'ppAnnCta(\'' + fcid + '\')';
             html += '<a class="ppa-fcta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + onCta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
         }
@@ -330,6 +333,87 @@
         permAdd(c.id); dismissServer(c.id);
         box.innerHTML = '<div style="text-align:center;padding:12px 6px;"><div style="font-size:30px;">✅</div><div style="font-weight:700;font-size:14px;margin-top:6px;">' + esc(s.thanks || 'Thanks for your response!') + '</div></div>';
         setTimeout(function () { removeEverywhere(c.id); }, 1600);
+    };
+
+    // ── Partner-exclusive RSVP flow — runs entirely inside this card/ad, no
+    // navigation off the portal (Partner ID → confirm/questions → submit). Talks
+    // straight to the public RSVP API (same one rsvp.html and embed.js use).
+    var RSVP_API = '/api/rsvp';
+    function rsvpApi(body) {
+        return fetch(RSVP_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            .then(function (r) { return r.json(); }).catch(function () { return { success: false, message: 'Network error.' }; });
+    }
+    var _rsvpCfg = null, _rsvpPartner = null;
+    function rsvpFind(id) { return cardList.concat(floatList).filter(function (x) { return x.id === id; })[0]; }
+    function rsvpContainer(kind) { return kind === 'float' ? (floatEl && floatEl.querySelector('.ppa-fbody')) : (cardWrap && cardWrap.querySelector('.ppa-body')); }
+    function rsvpFieldInput(f) {
+        var id = 'ppa-rf-' + jsArg(f.name);
+        if (f.type === 'textarea') return '<textarea style="' + SVINP + 'min-height:70px;" id="' + id + '" data-name="' + esc(f.name) + '"></textarea>';
+        if (f.type === 'dropdown') return '<select style="' + SVINP + '" id="' + id + '" data-name="' + esc(f.name) + '"><option value="">— select —</option>' + (f.options || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
+        if (f.type === 'checkbox') return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="' + id + '" data-name="' + esc(f.name) + '"> Yes</label>';
+        var t = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+        return '<input type="' + t + '" style="' + SVINP + '" id="' + id + '" data-name="' + esc(f.name) + '">';
+    }
+    window.ppAnnRsvpStart = function (id, kind) {
+        var c = rsvpFind(id); if (!c || !c.rsvp) return;
+        track(id, 'click', 'rsvp_open');
+        var body = rsvpContainer(kind); if (!body) return;
+        body.innerHTML = '<div class="' + (kind === 'float' ? 'ppa-ftext' : 'ppa-text') + '">Loading…</div>';
+        rsvpApi({ action: 'config', event_key: c.rsvp.event_key }).then(function (r) {
+            if (!r.success) { body.innerHTML = '<div class="' + (kind === 'float' ? 'ppa-ftext' : 'ppa-text') + '">This RSVP isn\'t available right now.</div>'; return; }
+            _rsvpCfg = r.event;
+            var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+            body.innerHTML = '<div class="' + titleCls + '">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+                + (_rsvpCfg.intro ? ('<div class="' + textCls + '" style="margin-bottom:10px;">' + bodyHtml(_rsvpCfg.intro) + '</div>') : '')
+                + '<div style="font-size:12px;font-weight:700;color:#0a1628;margin:6px 0 5px;">What\'s your most recent PayProTec Partner ID?</div>'
+                + '<input id="ppa-rsvp-id" style="' + SVINP + '" placeholder="e.g. 144704" autocomplete="off">'
+                + '<div id="ppa-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
+                + '<button type="button" class="ppa-cta" style="border:none;margin-top:10px;" onclick="ppAnnRsvpLookup(\'' + jsArg(id) + '\',\'' + kind + '\')">Continue</button>';
+            setTimeout(function () { var el = document.getElementById('ppa-rsvp-id'); if (el) el.focus(); }, 30);
+        });
+    };
+    window.ppAnnRsvpLookup = function (id, kind) {
+        var c = rsvpFind(id); if (!c) return;
+        var input = document.getElementById('ppa-rsvp-id'), err = document.getElementById('ppa-rsvp-err');
+        var pid = input ? input.value.trim() : '';
+        if (!pid) { if (err) err.textContent = 'Please enter your Partner ID.'; return; }
+        if (err) err.textContent = '';
+        rsvpApi({ action: 'lookup', event_key: c.rsvp.event_key, partner_id: pid }).then(function (r) {
+            if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
+            if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
+            _rsvpPartner = { id: pid, name: r.name, email: r.email, phone: r.phone };
+            ppAnnRsvpForm(id, kind);
+        });
+    };
+    function ppAnnRsvpForm(id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        var qs = (_rsvpCfg.fields || []).map(function (f) {
+            return '<div style="margin-top:10px;"><label style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + rsvpFieldInput(f) + '</div>';
+        }).join('');
+        body.innerHTML = '<div class="' + titleCls + '">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+            + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:9px 11px;font-size:12px;color:#0369a1;margin-top:6px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
+            + (qs || '<div class="' + textCls + '" style="margin-top:8px;">No extra questions — just confirm your RSVP below.</div>')
+            + '<div id="ppa-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:8px;min-height:14px;"></div>'
+            + '<button type="button" class="ppa-cta" style="border:none;margin-top:10px;" onclick="ppAnnRsvpSubmit(\'' + jsArg(id) + '\',\'' + kind + '\')">Confirm RSVP</button>';
+    }
+    window.ppAnnRsvpSubmit = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body || !_rsvpPartner) return;
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        var answers = {};
+        var els = body.querySelectorAll('[data-name]');
+        for (var i = 0; i < els.length; i++) { var el = els[i]; answers[el.getAttribute('data-name')] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value; }
+        rsvpApi({ action: 'submit', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone, answers: answers }).then(function (r) {
+            var err = document.getElementById('ppa-rsvp-err');
+            if (!r.success) { if (err) err.textContent = r.message || 'Something went wrong.'; return; }
+            track(id, 'click', 'rsvp_submit');
+            permAdd(id); dismissServer(id);
+            var embed = r.embed_url && /^https?:\/\//i.test(r.embed_url) ? r.embed_url : '';
+            body.innerHTML = '<div style="text-align:center;"><div style="font-size:32px;">🎉</div><div class="' + titleCls + '" style="margin-top:6px;">You\'re in!</div>'
+                + '<div class="' + textCls + '">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
+                + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:12px;border-radius:9px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
+            if (!embed) setTimeout(function () { removeEverywhere(id); }, 2600);
+        });
     };
 
     var REFRESH_MS = 3 * 60 * 1000;    // re-poll get_active so mid-day campaigns appear without a reload

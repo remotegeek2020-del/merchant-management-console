@@ -354,6 +354,83 @@
         setTimeout(close, 1600);
     };
 
+    // ── Partner-exclusive RSVP flow — runs entirely INSIDE this popup ──────────
+    // (Partner ID → confirm/questions → submit), no navigation off the host
+    // site. Talks straight to the public RSVP API (same one rsvp.html uses).
+    var RSVP_API = base + '/api/rsvp';
+    function rsvpApi(body) {
+        return fetch(RSVP_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            .then(function (r) { return r.json(); }).catch(function () { return { success: false, message: 'Network error.' }; });
+    }
+    var _rsvpCfg = null, _rsvpPartner = null;
+    function rsvpFieldInput(f) {
+        var id = 'ppx-rf-' + jsArg(f.name);
+        if (f.type === 'textarea') return '<textarea style="' + INP + 'min-height:70px;" id="' + id + '" data-name="' + esc(f.name) + '"></textarea>';
+        if (f.type === 'dropdown') return '<select style="' + INP + '" id="' + id + '" data-name="' + esc(f.name) + '"><option value="">— select —</option>' + (f.options || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
+        if (f.type === 'checkbox') return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="' + id + '" data-name="' + esc(f.name) + '"> Yes</label>';
+        var t = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+        return '<input type="' + t + '" style="' + INP + '" id="' + id + '" data-name="' + esc(f.name) + '">';
+    }
+    window.__ppxRsvpStart = function (id) {
+        var c = current; if (!c || c.id !== id || !c.rsvp) return;
+        track(id, 'click', 'rsvp_open', c.variant);
+        var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
+        body.innerHTML = '<div class="ppx-text">Loading…</div>';
+        rsvpApi({ action: 'config', event_key: c.rsvp.event_key }).then(function (r) {
+            if (!r.success) { body.innerHTML = '<div class="ppx-text">This RSVP isn\'t available right now.</div>'; return; }
+            _rsvpCfg = r.event;
+            body.innerHTML = '<div class="ppx-title">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+                + (_rsvpCfg.intro ? ('<div class="ppx-text" style="margin-bottom:12px;">' + bodyHtml(_rsvpCfg.intro) + '</div>') : '<div style="margin-bottom:6px;"></div>')
+                + '<div style="font-size:13px;font-weight:700;color:#0a1628;margin-bottom:6px;">What\'s your most recent PayProTec Partner ID?</div>'
+                + '<input id="ppx-rsvp-id" style="' + INP + '" placeholder="e.g. 144704" autocomplete="off">'
+                + '<div id="ppx-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
+                + '<button type="button" class="ppx-cta" onclick="__ppxRsvpLookup(\'' + jsArg(id) + '\')">Continue</button>';
+            setTimeout(function () { var el = document.getElementById('ppx-rsvp-id'); if (el) el.focus(); }, 30);
+        });
+    };
+    window.__ppxRsvpLookup = function (id) {
+        var c = current; if (!c || c.id !== id || !c.rsvp) return;
+        var input = document.getElementById('ppx-rsvp-id'), err = document.getElementById('ppx-rsvp-err');
+        var pid = input ? input.value.trim() : '';
+        if (!pid) { if (err) err.textContent = 'Please enter your Partner ID.'; return; }
+        if (err) err.textContent = '';
+        rsvpApi({ action: 'lookup', event_key: c.rsvp.event_key, partner_id: pid }).then(function (r) {
+            if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
+            if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
+            _rsvpPartner = { id: pid, name: r.name, email: r.email, phone: r.phone };
+            __ppxRsvpForm(id);
+        });
+    };
+    function __ppxRsvpForm(id) {
+        var c = current; if (!c || c.id !== id) return;
+        var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
+        var qs = (_rsvpCfg.fields || []).map(function (f) {
+            return '<div style="margin-top:12px;"><label style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + rsvpFieldInput(f) + '</div>';
+        }).join('');
+        body.innerHTML = '<div class="ppx-title">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+            + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:11px 13px;font-size:13px;color:#0369a1;margin-top:8px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
+            + (qs || '<div class="ppx-text" style="margin-top:10px;">No extra questions — just confirm your RSVP below.</div>')
+            + '<div id="ppx-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:8px;min-height:14px;"></div>'
+            + '<button type="button" class="ppx-cta" onclick="__ppxRsvpSubmit(\'' + jsArg(id) + '\')">Confirm RSVP</button>';
+    }
+    window.__ppxRsvpSubmit = function (id) {
+        var c = current; if (!c || c.id !== id || !_rsvpPartner) return;
+        var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
+        var answers = {};
+        var els = body.querySelectorAll('[data-name]');
+        for (var i = 0; i < els.length; i++) { var el = els[i]; answers[el.getAttribute('data-name')] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value; }
+        rsvpApi({ action: 'submit', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone, answers: answers }).then(function (r) {
+            var err = document.getElementById('ppx-rsvp-err');
+            if (!r.success) { if (err) err.textContent = r.message || 'Something went wrong.'; return; }
+            track(id, 'click', 'rsvp_submit', c.variant);
+            permAdd(id); api({ action: 'dismiss', campaign_id: id });
+            var embed = r.embed_url && /^https?:\/\//i.test(r.embed_url) ? r.embed_url : '';
+            body.innerHTML = '<div style="text-align:center;"><div style="font-size:38px;">🎉</div><div class="ppx-title" style="margin-top:6px;">You\'re in!</div>'
+                + '<div class="ppx-text">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
+                + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
+        });
+    };
+
     // Resolve a campaign's visual theme into ready-to-use inline styles.
     function theme(c) {
         var t = c.theme || {};
@@ -405,7 +482,9 @@
         if (c.video_url) inner += '<div style="position:relative;width:100%;padding-top:56.25%;margin-top:14px;border-radius:10px;overflow:hidden;background:#000;"><iframe src="' + esc(safeUrl(c.video_url)) + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="' + esc(c.title || 'Video') + '"></iframe></div>';
         if (c.cta_enabled && c.cta_url) {
             var btnInner;
-            if (c.cta_gate && c.cta_gate.form_id) {
+            if (c.rsvp) {
+                btnInner = '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + '" onclick="__ppxRsvpStart(\'' + cid + '\')">' + esc(c.cta_label || 'RSVP Now') + '</button>';
+            } else if (c.cta_gate && c.cta_gate.form_id) {
                 btnInner = '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + '" onclick="__ppxGate(\'' + cid + '\')">' + esc(c.cta_label || 'Learn more') + '</button>';
             } else {
                 var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';

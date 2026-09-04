@@ -154,6 +154,17 @@ export default async function handler(req, res) {
                 }
             }
 
+            // Partner-exclusive RSVP events run their whole sign-up flow (Partner
+            // ID → confirm → questions → submit) INSIDE the popup — batch-fetch the
+            // linked event's key/mode so embed.js can drive that flow with no
+            // navigation off the host site.
+            const rsvpIds = [...new Set(live.map(c => c.rsvp_event_id).filter(Boolean))];
+            let rsvpMap = {};
+            if (rsvpIds.length) {
+                const { data: revs } = await supabase.from('rsvp_events')
+                    .select('id, event_key, mode').eq('enabled', true).in('id', rsvpIds);
+                (revs || []).forEach(r => { rsvpMap[r.id] = { event_key: r.event_key, mode: r.mode }; });
+            }
             const out = live.filter(c => !dismissed.has(c.id)).map(c => {
                 let variant = null, v = c;
                 if (c.ab_enabled) {
@@ -223,6 +234,7 @@ export default async function handler(req, res) {
                     event_phase: eventPhase,
                     // Gate is dropped during live/replay (and once expired) → CTA becomes a plain link.
                     cta_gate: gateActive ? { form_id: c.cta_gate.form_id, location_id: c.cta_gate.location_id || null } : null,
+                    rsvp: c.rsvp_event_id ? (rsvpMap[c.rsvp_event_id] || null) : null,
                     variant
                 };
             });
