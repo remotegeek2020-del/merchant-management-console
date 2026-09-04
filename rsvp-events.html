@@ -178,62 +178,15 @@ async function saveEvent(id,btn){
 function audienceLabel(a){
   return {partner:'Partner portal', staff:'Staff portal', both:'Partner + Staff portals', prospect:'Lead portal', all:'All portals'}[a] || 'Partner portal';
 }
-let _sitesCache=null;
-async function getSites(){ if(_sitesCache) return _sitesCache; const r=await api({action:'list_sites'}); _sitesCache=(r.success?r.sites:[])||[]; return _sitesCache; }
+// "Announce" hands off to the full Marketing campaign editor — same UI used
+// for every other campaign (external website/Webflow picker, HighLevel scope,
+// portal audience, image, theme designer, everything) — instead of a
+// second, thinner copy of it here. We just get-or-create the linked
+// campaign, then open it there.
 async function openAnnounce(eventId){
-  const ev=_events.find(x=>x.id===eventId);
-  openM('<div class="muted" style="padding:10px;">Loading…</div>');
-  const [ar,sites,locData]=await Promise.all([api({action:'get_announcement', event_id:eventId}), getSites(), getGhlLocations()]);
-  const c=(ar.success?ar.campaign:null)||null;
-  const locs=locData.locations||[];
-  const selSites=new Set((c&&c.embed_site_ids)||[]);
-  const selLocs=new Set((c&&c.ghl_location_ids)||[]);
-  const audOpt=(v,label)=>`<option value="${v}" ${c&&c.audience===v?'selected':(!c&&v==='partner'?'selected':'')}>${label}</option>`;
-  openM(`<h2 style="margin:0 0 4px;color:var(--navy);font-size:17px;"><span class="material-icons" style="vertical-align:middle;color:var(--purple);">campaign</span> Announce "${esc(ev.name)}"</h2>
-    <div class="muted" style="font-size:12px;margin-bottom:10px;">Displays like a marketing campaign — on the external website(s) you pick, in HighLevel, and on the portals you choose. Clicking it opens this event's RSVP link.</div>
-    <label class="fld" style="margin-top:0;">Headline</label><input class="inp" id="an_title" value="${esc((c&&c.title)||ev.name)}">
-    <label class="fld">Body text</label><textarea class="inp" id="an_body" rows="2">${esc((c&&c.body_text)||'')}</textarea>
-    <label class="fld">Image URL <span class="muted">(optional)</span></label><input class="inp" id="an_img" value="${esc((c&&c.image_url)||'')}" placeholder="https://…">
-    <label class="fld">Button text</label><input class="inp" id="an_cta" value="${esc((c&&c.cta_label)||'RSVP Now')}">
-    <label class="fld">Design</label>
-    <select class="inp" id="an_theme">
-      <option value="default" ${!(c&&c.theme&&c.theme.bg==='#0b1220')?'selected':''}>Default (light card)</option>
-      <option value="night_event" ${(c&&c.theme&&c.theme.bg==='#0b1220')?'selected':''}>🌙 Night Event — dark + orange</option>
-    </select>
-    <div class="muted" style="font-size:11px;margin-top:4px;display:flex;align-items:center;gap:8px;">
-      <span>Base design for partner-exclusive event nights (dark navy card, orange CTA), styled after the WSAA Partner Night page.</span>
-      <span style="display:inline-flex;gap:3px;flex:none;"><span style="width:14px;height:14px;border-radius:3px;background:#0b1220;border:1px solid #334155;"></span><span style="width:14px;height:14px;border-radius:3px;background:#f97316;"></span></span>
-    </div>
-    <label class="fld">Show on portals</label>
-    <select class="inp" id="an_aud">
-      ${audOpt('partner','Partner portal only')}${audOpt('staff','Staff portal only')}${audOpt('both','Partner + Staff portals')}${audOpt('prospect','Lead portal only')}${audOpt('all','Every portal (partner + staff + lead)')}
-    </select>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="an_embed" ${c&&c.show_on_embed?'checked':''} onchange="document.getElementById('an_sitesWrap').style.display=this.checked?'block':'none';"> Also show on external website(s) (Webflow, etc.)</label>
-    <div id="an_sitesWrap" style="display:${c&&c.show_on_embed?'block':'none'};border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:6px;max-height:120px;overflow:auto;">
-      ${sites.length?sites.map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="an-site" value="${esc(s.id)}" ${selSites.has(String(s.id))?'checked':''}> ${esc(s.name||s.site_key)}</label>`).join(''):'<div class="muted" style="font-size:12px;">No embed sites configured yet (Marketing → Websites).</div>'}
-    </div>
-    <label class="fld">HighLevel sub-accounts <span class="muted">(leave none checked = all)</span></label>
-    <div style="border:1px solid var(--border);border-radius:8px;padding:8px;max-height:120px;overflow:auto;">
-      ${locData.configured===false?'<div class="muted" style="font-size:12px;">GHL agency integration not configured.</div>':(locs.length?locs.map(l=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="an-loc" value="${esc(l.id)}" ${selLocs.has(String(l.id))?'checked':''}> ${esc(l.name||l.id)}</label>`).join(''):'<div class="muted" style="font-size:12px;">No sub-accounts found.</div>')}
-    </div>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="an_active" ${!c||c.is_active?'checked':''}> Live now</label>
-    <div id="an_err" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeM()">Cancel</button><button class="btn btn-brand" onclick="saveAnnounce('${eventId}',this)">Save</button></div>`);
-}
-async function saveAnnounce(eventId,btn){
-  const payload={ action:'save_announcement', event_id:eventId,
-    title:document.getElementById('an_title').value.trim(), body_text:document.getElementById('an_body').value.trim(),
-    image_url:document.getElementById('an_img').value.trim(), cta_label:document.getElementById('an_cta').value.trim(),
-    theme_preset:document.getElementById('an_theme').value,
-    audience:document.getElementById('an_aud').value,
-    show_on_embed:document.getElementById('an_embed').checked,
-    embed_site_ids:Array.from(document.querySelectorAll('.an-site:checked')).map(el=>el.value),
-    ghl_location_ids:Array.from(document.querySelectorAll('.an-loc:checked')).map(el=>el.value),
-    is_active:document.getElementById('an_active').checked };
-  btn.disabled=true;
-  const r=await api(payload); btn.disabled=false;
-  if(!r.success){ document.getElementById('an_err').textContent=r.message||'Failed'; return; }
-  closeM(); load();
+  const r=await api({action:'ensure_announcement', event_id:eventId});
+  if(!r.success){ alert(r.message||'Failed'); return; }
+  window.open('/marketing?campaign='+encodeURIComponent(r.campaign_id), '_blank');
 }
 async function viewSubs(id){
   openM('<div class="muted" style="font-size:12px;padding:10px;">Loading…</div>');

@@ -12,27 +12,10 @@ const ok = (res, data = {}) => res.status(200).json({ success: true, ...data });
 const bad = (res, message, status = 400) => res.status(status).json({ success: false, message });
 function slug(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60); }
 
-// Popup visual theme (mirrors api/marketing.js normalizeTheme — kept local so
-// this file has no cross-import dependency on the campaign editor).
-function normalizeTheme(t) {
-    if (!t || typeof t !== 'object') return null;
-    const col = (v, d) => (/^#[0-9a-fA-F]{3,8}$/.test(String(v || '')) ? String(v) : d);
-    const pick = (v, allowed, d) => (allowed.includes(v) ? v : d);
-    return {
-        bg: col(t.bg, '#ffffff'), text: col(t.text, '#475569'), title: col(t.title, '#0f172a'),
-        accent: col(t.accent, '#004990'), btnText: col(t.btnText, '#ffffff'),
-        radius: Math.max(0, Math.min(40, parseInt(t.radius, 10) || 16)),
-        width: pick(t.width, ['narrow', 'normal', 'wide', 'xwide'], 'normal'),
-        align: pick(t.align, ['left', 'center'], 'left'),
-        btnStyle: pick(t.btnStyle, ['solid', 'outline', 'pill'], 'solid'),
-        btnSize: pick(t.btnSize, ['sm', 'md', 'lg'], 'md'),
-        btnAlign: pick(t.btnAlign, ['left', 'center', 'right', 'full'], 'full'),
-        imgPos: pick(t.imgPos, ['top', 'bottom'], 'top'),
-        overlay: pick(t.overlay, ['dark', 'light'], 'dark')
-    };
-}
 // "Night Event" preset — dark/orange base design (bold hero photo + dark card +
 // orange CTA), modeled after the nightgolf.ppt.partners partner-event page.
+// Seeded on a freshly-created RSVP announcement; from then on it's edited like
+// any other campaign's theme in the full Marketing editor.
 const NIGHT_EVENT_THEME = {
     bg: '#0b1220', text: '#cbd5e1', title: '#ffffff', accent: '#f97316', btnText: '#ffffff',
     radius: 6, width: 'wide', align: 'left', btnStyle: 'solid', btnSize: 'lg', btnAlign: 'left',
@@ -76,10 +59,6 @@ export default async function handler(req, res) {
                     announcement: e.campaign_id ? (campaigns[e.campaign_id] || null) : null
                 }))
             });
-        }
-        if (action === 'list_sites') {
-            const { data } = await supabase.from('marketing_sites').select('id, name, site_key, is_active').order('created_at', { ascending: false });
-            return ok(res, { sites: data || [] });
         }
         if (action === 'ghl_locations') {
             const r = await ghlListLocations();
@@ -128,56 +107,32 @@ export default async function handler(req, res) {
             if (error) throw error;
             return ok(res, { id: data.id, event: data });
         }
-        if (action === 'get_announcement') {
-            const { data: ev } = await supabase.from('rsvp_events').select('campaign_id').eq('id', req.body.event_id).maybeSingle();
-            if (!ev || !ev.campaign_id) return ok(res, { campaign: null });
-            const { data } = await supabase.from('marketing_campaigns').select('*').eq('id', ev.campaign_id).maybeSingle();
-            return ok(res, { campaign: data || null });
-        }
-        if (action === 'save_announcement') {
-            // Broadcast an RSVP event the same way a marketing campaign broadcasts:
-            // external websites (Webflow, via show_on_embed + embed_site_ids),
-            // HighLevel (ghl_location_ids), and the partner/staff/lead portals
-            // (audience). The CTA always points at this event's public RSVP link.
-            const b = req.body;
-            if (!b.event_id) return bad(res, 'event_id required');
-            const { data: ev } = await supabase.from('rsvp_events').select('*').eq('id', b.event_id).maybeSingle();
+        if (action === 'ensure_announcement') {
+            // Get-or-create the marketing campaign that announces this RSVP event,
+            // then hand back its id so staff can edit it in the full Marketing
+            // campaign editor — same UI, same external-site/HighLevel/portal
+            // targeting as every other campaign. The CTA always points at this
+            // event's public RSVP link.
+            const { event_id } = req.body;
+            if (!event_id) return bad(res, 'event_id required');
+            const { data: ev } = await supabase.from('rsvp_events').select('*').eq('id', event_id).maybeSingle();
             if (!ev) return bad(res, 'RSVP event not found', 404);
+            if (ev.campaign_id) return ok(res, { campaign_id: ev.campaign_id });
             const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
             const host = req.headers['x-forwarded-host'] || req.headers.host;
-            const publicUrl = `${proto}://${host}/rsvp?e=${ev.event_key}`;
             const rec = {
-                title: String(b.title || ev.name || '').trim().slice(0, 200) || ev.name,
-                body_text: String(b.body_text || '').slice(0, 4000) || null,
-                image_url: b.image_url ? String(b.image_url).trim().slice(0, 1000) : null,
-                content_type: b.image_url ? 'both' : 'text',
-                cta_enabled: true,
-                cta_label: String(b.cta_label || '').trim().slice(0, 60) || 'RSVP Now',
-                cta_url: publicUrl,
-                audience: ['partner', 'staff', 'both', 'prospect', 'all'].includes(b.audience) ? b.audience : 'partner',
-                show_on_embed: !!b.show_on_embed,
-                embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
-                ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
-                is_active: !!b.is_active,
-                starts_at: b.starts_at || null,
-                ends_at: b.ends_at || null,
-                campaign_kind: 'classic',
-                theme: b.theme_preset === 'night_event' ? NIGHT_EVENT_THEME : normalizeTheme(b.theme),
-                updated_at: new Date().toISOString()
+                title: ev.name || 'Untitled event',
+                body_text: ev.intro || null,
+                cta_enabled: true, cta_label: 'RSVP Now',
+                cta_url: `${proto}://${host}/rsvp?e=${ev.event_key}`,
+                audience: 'partner', is_active: false, campaign_kind: 'classic',
+                theme: NIGHT_EVENT_THEME,
+                created_by: `${caller.first_name || ''} ${caller.last_name || ''}`.trim() || String(session.userid)
             };
-            let row;
-            if (ev.campaign_id) {
-                const { data, error } = await supabase.from('marketing_campaigns').update(rec).eq('id', ev.campaign_id).select().single();
-                if (error) return bad(res, error.message);
-                row = data;
-            } else {
-                rec.created_by = `${caller.first_name || ''} ${caller.last_name || ''}`.trim() || String(session.userid);
-                const { data, error } = await supabase.from('marketing_campaigns').insert(rec).select().single();
-                if (error) return bad(res, error.message);
-                row = data;
-                await supabase.from('rsvp_events').update({ campaign_id: row.id }).eq('id', ev.id);
-            }
-            return ok(res, { campaign: row });
+            const { data, error } = await supabase.from('marketing_campaigns').insert(rec).select('id').single();
+            if (error) return bad(res, error.message);
+            await supabase.from('rsvp_events').update({ campaign_id: data.id }).eq('id', ev.id);
+            return ok(res, { campaign_id: data.id });
         }
 
         if (action === 'delete_event') {
