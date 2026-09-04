@@ -737,6 +737,7 @@ export default async function handler(req, res) {
                         rsvp_tag: rb.tag ? String(rb.tag).trim() : null,
                         workflow_id: rb.workflow_id ? String(rb.workflow_id).trim() : null,
                         embed_url: rb.embed_url ? String(rb.embed_url).trim() : null,
+                        prime49_only: !!rb.prime49_only,
                         intro: row.body_text || null,
                         thankyou: rb.thankyou ? String(rb.thankyou).slice(0, 1000) : null,
                         enabled: !!row.is_active,

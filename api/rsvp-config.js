@@ -96,6 +96,7 @@ export default async function handler(req, res) {
                 embed_url: String(b.embed_url || '').trim() || null,
                 intro: String(b.intro || '').slice(0, 1000) || null,
                 thankyou: String(b.thankyou || '').slice(0, 1000) || null,
+                prime49_only: !!b.prime49_only,
                 enabled: b.enabled !== false, updated_at: new Date().toISOString()
             };
             if (b.id) {

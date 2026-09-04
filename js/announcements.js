@@ -444,6 +444,7 @@
         rsvpApi({ action: 'lookup', event_key: c.rsvp.event_key, partner_id: pid }).then(function (r) {
             if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
             if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
+            if (r.status === 'not_eligible') { if (err) err.textContent = "This RSVP is exclusive to Prime49 partners."; return; }
             _rsvpPartner = { id: pid, name: r.name, email: r.email, phone: r.phone };
             ppAnnRsvpForm(id, kind);
         });

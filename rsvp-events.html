@@ -86,6 +86,7 @@ function openEditor(id){
     <label class="fld">Mode</label><select class="inp" id="e_mode">${modeOpt('form')}${modeOpt('calendar')}</select>
     <label class="fld">RSVP tag (applied in HighLevel on submit)</label><input class="inp" id="e_tag" value="${e&&e.rsvp_tag?esc(e.rsvp_tag):''}" placeholder="e.g. RSVP — WSAA Partner Night">
     <label class="fld">Workflow <span class="muted">(optional — enroll on RSVP)</span></label><select class="inp" id="e_wf"><option value="">— none —</option></select>
+    <label class="fld">Who can RSVP</label><select class="inp" id="e_elig"><option value="all" ${!(e&&e.prime49_only)?'selected':''}>All partners — any agent ID (Prime49 and normal)</option><option value="prime49" ${(e&&e.prime49_only)?'selected':''}>Prime49 agent IDs only</option></select>
     <label class="fld">Embed URL after confirm <span class="muted">(optional — HL calendar/form to show)</span></label><input class="inp" id="e_embed" value="${e&&e.embed_url?esc(e.embed_url):''}" placeholder="https://…">
     <label class="fld">Intro text</label><textarea class="inp" id="e_intro" rows="2">${e&&e.intro?esc(e.intro):''}</textarea>
     <label class="fld">Thank-you text</label><textarea class="inp" id="e_ty" rows="2">${e&&e.thankyou?esc(e.thankyou):''}</textarea>
@@ -170,6 +171,7 @@ async function saveEvent(id,btn){
     mode:document.getElementById('e_mode').value, rsvp_tag:document.getElementById('e_tag').value.trim(),
     workflow_id:document.getElementById('e_wf').value, embed_url:document.getElementById('e_embed').value.trim(),
     intro:document.getElementById('e_intro').value.trim(), thankyou:document.getElementById('e_ty').value.trim(),
+    prime49_only:document.getElementById('e_elig').value==='prime49',
     fields:collectFields(), enabled:document.getElementById('e_en').checked };
   btn.disabled=true;
   const r=await api(payload); btn.disabled=false;

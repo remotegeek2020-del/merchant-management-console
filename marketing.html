@@ -302,7 +302,7 @@
         </div>
         <div class="row2">
           <div><label class="fld" style="margin-top:0;">Workflow <span class="muted" style="font-weight:400;">(optional — enroll on RSVP)</span></label><select class="inp" id="rsvp_workflow"><option value="">— none —</option></select></div>
-          <div></div>
+          <div><label class="fld" style="margin-top:0;">Who can RSVP</label><select class="inp" id="rsvp_eligibility"><option value="all">All partners — any agent ID (Prime49 and normal)</option><option value="prime49">Prime49 agent IDs only</option></select></div>
         </div>
         <label class="fld">Embed URL after confirm <span class="muted">(optional — HighLevel calendar/form to show)</span></label>
         <input class="inp" id="rsvp_embed_url" placeholder="https://…">
@@ -1266,7 +1266,7 @@ function openEditor(type){
   document.getElementById('rsvpBlock').style.display = _isRSVP ? 'block' : 'none';
   document.getElementById('rsvp_location').innerHTML='<option value="">— select —</option>';
   document.getElementById('rsvp_workflow').innerHTML='<option value="">— none —</option>';
-  document.getElementById('rsvp_tag').value='';
+  document.getElementById('rsvp_tag').value=''; document.getElementById('rsvp_eligibility').value='all';
   document.getElementById('rsvp_embed_url').value=''; document.getElementById('rsvp_thankyou').value='';
   document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>';
   window._rsvpEditFields=[]; _rsvpCf=[];
@@ -1351,6 +1351,7 @@ async function editCampaign(id){
     if(isRSVP){
       var rev=c.rsvp_event||{};
       document.getElementById('rsvp_tag').value=rev.rsvp_tag||'';
+      document.getElementById('rsvp_eligibility').value=rev.prime49_only?'prime49':'all';
       document.getElementById('rsvp_embed_url').value=rev.embed_url||'';
       document.getElementById('rsvp_thankyou').value=rev.thankyou||'';
       window._rsvpEditFields=Array.isArray(rev.fields)?rev.fields:[];
@@ -1676,6 +1677,7 @@ async function saveCampaign(){
     priority: parseInt(document.getElementById('f_priority').value)||0,
     rsvp: window._campaignKind==='rsvp' ? {
       location_id: document.getElementById('rsvp_location').value,
+      prime49_only: document.getElementById('rsvp_eligibility').value==='prime49',
       tag: document.getElementById('rsvp_tag').value.trim()||null,
       workflow_id: document.getElementById('rsvp_workflow').value||null,
       embed_url: document.getElementById('rsvp_embed_url').value.trim()||null,

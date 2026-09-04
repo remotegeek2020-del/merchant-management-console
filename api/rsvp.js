@@ -38,7 +38,7 @@ export default async function handler(req, res) {
             // Only expose what the public page needs (no location id / workflow ids).
             return ok(res, { event: {
                 name: ev.name, intro: ev.intro, thankyou: ev.thankyou, mode: ev.mode,
-                embed_url: ev.embed_url,
+                embed_url: ev.embed_url, prime49_only: !!ev.prime49_only,
                 fields: (ev.fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] }))
             } });
         }
@@ -51,6 +51,7 @@ export default async function handler(req, res) {
             const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return ok(res, { status: 'not_found' });
+            if (ev.prime49_only && !p.prime49) return ok(res, { status: 'not_eligible' });
             return ok(res, {
                 status: 'found',
                 name: p.full_name || '',
@@ -68,6 +69,7 @@ export default async function handler(req, res) {
             const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return bad(res, 'Partner ID not found.');
+            if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
             const loc = ev.ghl_location_id;
             if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
 

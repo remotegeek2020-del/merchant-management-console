@@ -61,6 +61,7 @@ async function doLookup(){
   btn.disabled=false; btn.textContent='Continue';
   if(!r.success){ err.textContent=r.message||'Error.'; return; }
   if(r.status==='not_found'){ err.textContent="We couldn't find that Partner ID. Please double-check it."; return; }
+  if(r.status==='not_eligible'){ err.textContent="This RSVP is exclusive to Prime49 partners."; return; }
   PARTNER={ id:pid, name:r.name, email:r.email, phone:r.phone };
   screenForm();
 }
