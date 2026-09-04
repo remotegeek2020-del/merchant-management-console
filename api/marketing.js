@@ -502,7 +502,7 @@ const ADMIN_ACTIONS = new Set([
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
-    'set_location_token', 'test_location', 'rsvp_submissions'
+    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
 
@@ -1228,6 +1228,24 @@ export default async function handler(req, res) {
                 if (!camp || !camp.rsvp_event_id) return ok(res, []);
                 const { data } = await supabase.from('rsvp_submissions').select('*').eq('event_id', camp.rsvp_event_id).order('created_at', { ascending: false }).limit(5000);
                 return ok(res, data || []);
+            }
+            // Full RSVP report as CSV — for management, includes the HighLevel
+            // tag/contact status so a failed tag doesn't get lost silently.
+            if (action === 'export_rsvp') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'campaign id required');
+                const { data: camp } = await supabase.from('marketing_campaigns').select('rsvp_event_id, title').eq('id', id).maybeSingle();
+                if (!camp || !camp.rsvp_event_id) return ok(res, { csv: 'name,email,partner_id,tag_applied,hl_error,submitted_at\n' });
+                const { data: ev } = await supabase.from('rsvp_events').select('fields').eq('id', camp.rsvp_event_id).maybeSingle();
+                const { data: rows } = await supabase.from('rsvp_submissions').select('*')
+                    .eq('event_id', camp.rsvp_event_id).order('created_at', { ascending: false }).limit(20000);
+                const csvEsc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+                const qCols = (ev && ev.fields || []).map(f => f.name);
+                const header = ['name', 'email', 'partner_id', 'tag_applied', 'hl_error', 'submitted_at'].concat(qCols).join(',');
+                const csv = [header].concat((rows || []).map(r => [
+                    r.name, r.email, r.partner_id_string, r.tag_applied ? 'yes' : 'no', r.hl_error || '', r.created_at
+                ].concat(qCols.map(c => (r.answers || {})[c] || '')).map(csvEsc).join(','))).join('\n');
+                return ok(res, { csv });
             }
 
             // Scan a CTA landing page for an embedded GHL form / calendar and

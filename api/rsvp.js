@@ -6,7 +6,7 @@
 //               fields + apply the RSVP tag / workflow. This IS the RSVP (HL has
 //               no submit-a-form API; the tag/field fires the same automation).
 import { createClient } from '@supabase/supabase-js';
-import { ghlUpsertContact, ghlSetContactCustomFieldsByName, ghlAddContactTags, ghlAddContactToWorkflow } from './_ghl.js';
+import { ghlUpsertContact, ghlSetContactCustomFieldsByName, ghlAddContactTags, ghlAddContactToWorkflow, ghlFindContactByEmail } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 function cors(res) {
@@ -22,6 +22,36 @@ async function loadEvent(key) {
     if (!key) return null;
     const { data } = await supabase.from('rsvp_events').select('*').eq('event_key', key).maybeSingle();
     return data;
+}
+
+// Resolve the partner's HighLevel contact in THIS sub-account and apply the
+// RSVP tag + workflow. Upsert can fail to return an id (e.g. no email/phone
+// on file for this partner) — fall back to the person's stored hl_contact_id,
+// then to a live email search, before giving up. Returns
+// { contactId, tagApplied, error } so the caller can record what happened
+// instead of silently pretending it worked.
+async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
+    const tags = ev.rsvp_tag ? [ev.rsvp_tag] : [];
+    const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, tags);
+    let contactId = (up && up.id) || '';
+    let error = up && !up.ok ? (up.error || null) : null;
+    if (!contactId && p.hl_contact_id) contactId = p.hl_contact_id;
+    if (!contactId && email) {
+        const found = await ghlFindContactByEmail(loc, email);
+        if (found && found.id) { contactId = found.id; error = null; }
+    }
+    if (!contactId) return { contactId: '', tagApplied: false, error: error || 'Could not create/find the HighLevel contact (no email/phone on file for this partner).' };
+    let tagApplied = !ev.rsvp_tag;   // no tag configured = nothing to fail
+    if (ev.rsvp_tag) {
+        const tagRes = await ghlAddContactTags(loc, contactId, [ev.rsvp_tag]);
+        tagApplied = !!tagRes.ok;
+        if (!tagRes.ok) error = tagRes.error || 'Failed to apply the RSVP tag.';
+    }
+    if (ev.workflow_id) {
+        const wfRes = await ghlAddContactToWorkflow(loc, contactId, ev.workflow_id);
+        if (!wfRes.ok && !error) error = wfRes.error || 'Failed to enroll in the workflow.';
+    }
+    return { contactId, tagApplied, error };
 }
 
 export default async function handler(req, res) {
@@ -87,24 +117,21 @@ export default async function handler(req, res) {
             const phone = String(body.phone || p.phone || '').trim();
             const name = String(p.full_name || '').trim();
 
-            // Upsert the HL contact + apply the RSVP tag.
-            const tags = ev.rsvp_tag ? [ev.rsvp_tag] : [];
-            const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, tags);
-            let contactId = (up && up.id) || p.hl_contact_id || '';
-            if (!contactId) return bad(res, 'Could not create/find your HighLevel contact.');
-            // Belt & suspenders: ensure the tag is applied even if upsert merged.
-            if (ev.rsvp_tag) await ghlAddContactTags(loc, contactId, [ev.rsvp_tag]);
-            // Set the chosen custom fields (by field name → answer).
-            const cfMap = {};
-            (ev.fields || []).forEach(f => { const v = answers[f.name]; if (v != null && String(v).trim() !== '') cfMap[f.name] = v; });
-            if (Object.keys(cfMap).length) await ghlSetContactCustomFieldsByName(loc, contactId, cfMap);
-            // Optional workflow enrollment.
-            if (ev.workflow_id) await ghlAddContactToWorkflow(loc, contactId, ev.workflow_id);
+            const { contactId, tagApplied, error } = await applyRsvpTagWorkflow(loc, p, name, email, phone, ev);
+            if (contactId) {
+                // Set the chosen custom fields (by field name → answer).
+                const cfMap = {};
+                (ev.fields || []).forEach(f => { const v = answers[f.name]; if (v != null && String(v).trim() !== '') cfMap[f.name] = v; });
+                if (Object.keys(cfMap).length) await ghlSetContactCustomFieldsByName(loc, contactId, cfMap);
+            } else {
+                console.error('[rsvp] contact resolution failed for', pid, error);
+            }
 
-            // Record the RSVP (dedupe per event + partner ID).
+            // Record the RSVP (dedupe per event + partner ID) — recorded even if
+            // the HighLevel side had trouble, so the RSVP itself is never lost.
             await supabase.from('rsvp_submissions').upsert({
-                event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId,
-                email, name, is_partner: true, answers
+                event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId || null,
+                email, name, is_partner: true, answers, tag_applied: tagApplied, hl_error: error || null
             }, { onConflict: 'event_id,partner_id_string' });
 
             return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
@@ -131,19 +158,18 @@ export default async function handler(req, res) {
             const phone = String(body.phone || p.phone || '').trim();
             const name = String(p.full_name || '').trim();
 
-            // Upsert the HL contact + apply the RSVP tag (the embedded form's own
-            // submission separately writes whatever fields it collected into the
-            // same contact — HighLevel dedupes by email/phone).
-            const tags = ev.rsvp_tag ? [ev.rsvp_tag] : [];
-            const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, tags);
-            let contactId = (up && up.id) || p.hl_contact_id || '';
-            if (contactId && ev.rsvp_tag) await ghlAddContactTags(loc, contactId, [ev.rsvp_tag]);
-            if (contactId && ev.workflow_id) await ghlAddContactToWorkflow(loc, contactId, ev.workflow_id);
+            // Apply the RSVP tag/workflow (the embedded form's own submission
+            // separately writes whatever fields it collected into the same
+            // contact — HighLevel dedupes by email/phone).
+            const { contactId, tagApplied, error } = await applyRsvpTagWorkflow(loc, p, name, email, phone, ev);
+            if (!contactId) console.error('[rsvp] contact resolution failed for', pid, error);
 
-            // Record the RSVP conversion (dedupe per event + partner ID).
+            // Record the RSVP conversion (dedupe per event + partner ID) —
+            // recorded regardless of the HighLevel side, so the conversion is
+            // never lost even if tagging failed.
             await supabase.from('rsvp_submissions').upsert({
                 event_id: ev.id, partner_id_string: pid, hl_contact_id: contactId || null,
-                email, name, is_partner: true, answers: {}
+                email, name, is_partner: true, answers: {}, tag_applied: tagApplied, hl_error: error || null
             }, { onConflict: 'event_id,partner_id_string' });
 
             return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });

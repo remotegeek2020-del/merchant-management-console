@@ -1150,9 +1150,22 @@ async function viewRsvps(id, title){
   Swal.fire({title:'Loading…', didOpen:()=>Swal.showLoading()});
   const r = await api({action:'rsvp_submissions', id});
   const subs = (r.success?r.data:[])||[];
-  const rows = subs.length ? subs.map(s=>`<tr><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`).join('') : '<tr><td colspan="4" class="muted" style="padding:10px;">No RSVPs yet.</td></tr>';
-  Swal.fire({title:'RSVPs — '+esc(title), width:600, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
-    html:`<table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table>`});
+  const tagCell = s => s.tag_applied
+    ? '<span title="Tag applied" style="color:#16a34a;">✓</span>'
+    : `<span title="${esc(s.hl_error||'Tag not applied')}" style="color:#dc2626;cursor:help;">⚠️</span>`;
+  const rows = subs.length ? subs.map(s=>`<tr><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;text-align:center;">${tagCell(s)}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`).join('') : '<tr><td colspan="5" class="muted" style="padding:10px;">No RSVPs yet.</td></tr>';
+  Swal.fire({title:'RSVPs — '+esc(title), width:640, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
+    html:`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="muted" style="font-size:11px;">⚠️ = the HighLevel tag/contact step failed for that RSVP (hover for why) — the RSVP itself was still recorded.</div>
+        <button class="btn btn-neutral btn-sm" onclick='exportRsvps(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:15px;">download</span> Export CSV</button>
+      </div>
+      <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
+}
+async function exportRsvps(id, title){
+  const r = await api({action:'export_rsvp', id});
+  if(!r.success || !r.data || !r.data.csv){ Swal.fire('No data','Nothing to export.','info'); return; }
+  const blob=new Blob([r.data.csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=('rsvps-'+(title||'event')).replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 
 function audienceLabel(a){ return ({partner:'Partner',staff:'Staff',prospect:'Prospect',both:'Partners + Staff',all:'Everyone'})[a]||a||'—'; }
