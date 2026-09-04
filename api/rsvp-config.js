@@ -31,9 +31,28 @@ export default async function handler(req, res) {
                 const { data: subs } = await supabase.from('rsvp_submissions').select('event_id').in('event_id', ids).limit(100000);
                 (subs || []).forEach(s => { counts[s.event_id] = (counts[s.event_id] || 0) + 1; });
             }
+            // Pull in each event's linked announcement campaign (if any) so the
+            // list can show its reach/status without a second round trip.
+            const campIds = [...new Set((data || []).map(e => e.campaign_id).filter(Boolean))];
+            let campaigns = {};
+            if (campIds.length) {
+                const { data: camps } = await supabase.from('marketing_campaigns')
+                    .select('id, title, is_active, audience, show_on_embed, embed_site_ids, ghl_location_ids, starts_at, ends_at')
+                    .in('id', campIds);
+                (camps || []).forEach(c => { campaigns[c.id] = c; });
+            }
             const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
             const host = req.headers['x-forwarded-host'] || req.headers.host;
-            return ok(res, { events: (data || []).map(e => ({ ...e, submissions: counts[e.id] || 0, public_url: `${proto}://${host}/rsvp?e=${e.event_key}` })) });
+            return ok(res, {
+                events: (data || []).map(e => ({
+                    ...e, submissions: counts[e.id] || 0, public_url: `${proto}://${host}/rsvp?e=${e.event_key}`,
+                    announcement: e.campaign_id ? (campaigns[e.campaign_id] || null) : null
+                }))
+            });
+        }
+        if (action === 'list_sites') {
+            const { data } = await supabase.from('marketing_sites').select('id, name, site_key, is_active').order('created_at', { ascending: false });
+            return ok(res, { sites: data || [] });
         }
         if (action === 'ghl_locations') {
             const r = await ghlListLocations();
@@ -82,6 +101,57 @@ export default async function handler(req, res) {
             if (error) throw error;
             return ok(res, { id: data.id, event: data });
         }
+        if (action === 'get_announcement') {
+            const { data: ev } = await supabase.from('rsvp_events').select('campaign_id').eq('id', req.body.event_id).maybeSingle();
+            if (!ev || !ev.campaign_id) return ok(res, { campaign: null });
+            const { data } = await supabase.from('marketing_campaigns').select('*').eq('id', ev.campaign_id).maybeSingle();
+            return ok(res, { campaign: data || null });
+        }
+        if (action === 'save_announcement') {
+            // Broadcast an RSVP event the same way a marketing campaign broadcasts:
+            // external websites (Webflow, via show_on_embed + embed_site_ids),
+            // HighLevel (ghl_location_ids), and the partner/staff/lead portals
+            // (audience). The CTA always points at this event's public RSVP link.
+            const b = req.body;
+            if (!b.event_id) return bad(res, 'event_id required');
+            const { data: ev } = await supabase.from('rsvp_events').select('*').eq('id', b.event_id).maybeSingle();
+            if (!ev) return bad(res, 'RSVP event not found', 404);
+            const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+            const host = req.headers['x-forwarded-host'] || req.headers.host;
+            const publicUrl = `${proto}://${host}/rsvp?e=${ev.event_key}`;
+            const rec = {
+                title: String(b.title || ev.name || '').trim().slice(0, 200) || ev.name,
+                body_text: String(b.body_text || '').slice(0, 4000) || null,
+                image_url: b.image_url ? String(b.image_url).trim().slice(0, 1000) : null,
+                content_type: b.image_url ? 'both' : 'text',
+                cta_enabled: true,
+                cta_label: String(b.cta_label || '').trim().slice(0, 60) || 'RSVP Now',
+                cta_url: publicUrl,
+                audience: ['partner', 'staff', 'both', 'prospect', 'all'].includes(b.audience) ? b.audience : 'partner',
+                show_on_embed: !!b.show_on_embed,
+                embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
+                ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
+                is_active: !!b.is_active,
+                starts_at: b.starts_at || null,
+                ends_at: b.ends_at || null,
+                campaign_kind: 'classic',
+                updated_at: new Date().toISOString()
+            };
+            let row;
+            if (ev.campaign_id) {
+                const { data, error } = await supabase.from('marketing_campaigns').update(rec).eq('id', ev.campaign_id).select().single();
+                if (error) return bad(res, error.message);
+                row = data;
+            } else {
+                rec.created_by = `${caller.first_name || ''} ${caller.last_name || ''}`.trim() || String(session.userid);
+                const { data, error } = await supabase.from('marketing_campaigns').insert(rec).select().single();
+                if (error) return bad(res, error.message);
+                row = data;
+                await supabase.from('rsvp_events').update({ campaign_id: row.id }).eq('id', ev.id);
+            }
+            return ok(res, { campaign: row });
+        }
+
         if (action === 'delete_event') {
             if (!req.body.id) return bad(res, 'id required');
             const { error } = await supabase.from('rsvp_events').delete().eq('id', req.body.id);

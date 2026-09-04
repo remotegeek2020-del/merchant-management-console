@@ -63,8 +63,10 @@ async function load(){
         <h3>${esc(e.name)} ${e.enabled?'':'<span class="tag" style="background:#fee2e2;color:#991b1b;">OFF</span>'}</h3>
         <div class="meta">${e.mode==='calendar'?'📅 Calendar':'📝 Form'} · ${(e.fields||[]).length} question(s) · tag <span class="tag">${esc(e.rsvp_tag||'—')}</span> · ${e.submissions} RSVP(s)</div>
         <div class="meta">Link: <a href="${esc(e.public_url)}" target="_blank">${esc(e.public_url)}</a> <button class="btn btn-neutral btn-sm" style="margin-left:6px;" onclick="navigator.clipboard.writeText('${esc(e.public_url)}')">Copy</button></div>
+        <div class="meta">${e.announcement?`📣 Announcement: <span class="tag" style="background:${e.announcement.is_active?'#dcfce7':'#f1f5f9'};color:${e.announcement.is_active?'#166534':'#64748b'};">${e.announcement.is_active?'LIVE':'OFF'}</span> · ${esc(audienceLabel(e.announcement.audience))}${e.announcement.show_on_embed?' · 🌐 Webflow':''}${(e.announcement.ghl_location_ids||[]).length?' · HighLevel':''}`:'<span class="muted">No announcement yet — not shown on any site/portal.</span>'}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
+        <button class="btn btn-neutral btn-sm" onclick="openAnnounce('${e.id}')"><span class="material-icons">campaign</span> Announce</button>
         <button class="btn btn-neutral btn-sm" onclick="viewSubs('${e.id}')"><span class="material-icons">list_alt</span> RSVPs</button>
         <button class="btn btn-neutral btn-sm" onclick="openEditor('${e.id}')"><span class="material-icons">edit</span></button>
         <button class="btn btn-danger btn-sm" onclick="del('${e.id}')"><span class="material-icons">delete</span></button>
@@ -171,6 +173,56 @@ async function saveEvent(id,btn){
   btn.disabled=true;
   const r=await api(payload); btn.disabled=false;
   if(!r.success){ document.getElementById('e_err').textContent=r.message||'Failed'; return; }
+  closeM(); load();
+}
+function audienceLabel(a){
+  return {partner:'Partner portal', staff:'Staff portal', both:'Partner + Staff portals', prospect:'Lead portal', all:'All portals'}[a] || 'Partner portal';
+}
+let _sitesCache=null;
+async function getSites(){ if(_sitesCache) return _sitesCache; const r=await api({action:'list_sites'}); _sitesCache=(r.success?r.sites:[])||[]; return _sitesCache; }
+async function openAnnounce(eventId){
+  const ev=_events.find(x=>x.id===eventId);
+  openM('<div class="muted" style="padding:10px;">Loading…</div>');
+  const [ar,sites,locData]=await Promise.all([api({action:'get_announcement', event_id:eventId}), getSites(), getGhlLocations()]);
+  const c=(ar.success?ar.campaign:null)||null;
+  const locs=locData.locations||[];
+  const selSites=new Set((c&&c.embed_site_ids)||[]);
+  const selLocs=new Set((c&&c.ghl_location_ids)||[]);
+  const audOpt=(v,label)=>`<option value="${v}" ${c&&c.audience===v?'selected':(!c&&v==='partner'?'selected':'')}>${label}</option>`;
+  openM(`<h2 style="margin:0 0 4px;color:var(--navy);font-size:17px;"><span class="material-icons" style="vertical-align:middle;color:var(--purple);">campaign</span> Announce "${esc(ev.name)}"</h2>
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">Displays like a marketing campaign — on the external website(s) you pick, in HighLevel, and on the portals you choose. Clicking it opens this event's RSVP link.</div>
+    <label class="fld" style="margin-top:0;">Headline</label><input class="inp" id="an_title" value="${esc((c&&c.title)||ev.name)}">
+    <label class="fld">Body text</label><textarea class="inp" id="an_body" rows="2">${esc((c&&c.body_text)||'')}</textarea>
+    <label class="fld">Image URL <span class="muted">(optional)</span></label><input class="inp" id="an_img" value="${esc((c&&c.image_url)||'')}" placeholder="https://…">
+    <label class="fld">Button text</label><input class="inp" id="an_cta" value="${esc((c&&c.cta_label)||'RSVP Now')}">
+    <label class="fld">Show on portals</label>
+    <select class="inp" id="an_aud">
+      ${audOpt('partner','Partner portal only')}${audOpt('staff','Staff portal only')}${audOpt('both','Partner + Staff portals')}${audOpt('prospect','Lead portal only')}${audOpt('all','Every portal (partner + staff + lead)')}
+    </select>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="an_embed" ${c&&c.show_on_embed?'checked':''} onchange="document.getElementById('an_sitesWrap').style.display=this.checked?'block':'none';"> Also show on external website(s) (Webflow, etc.)</label>
+    <div id="an_sitesWrap" style="display:${c&&c.show_on_embed?'block':'none'};border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:6px;max-height:120px;overflow:auto;">
+      ${sites.length?sites.map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="an-site" value="${esc(s.id)}" ${selSites.has(String(s.id))?'checked':''}> ${esc(s.name||s.site_key)}</label>`).join(''):'<div class="muted" style="font-size:12px;">No embed sites configured yet (Marketing → Websites).</div>'}
+    </div>
+    <label class="fld">HighLevel sub-accounts <span class="muted">(leave none checked = all)</span></label>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:8px;max-height:120px;overflow:auto;">
+      ${locData.configured===false?'<div class="muted" style="font-size:12px;">GHL agency integration not configured.</div>':(locs.length?locs.map(l=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="an-loc" value="${esc(l.id)}" ${selLocs.has(String(l.id))?'checked':''}> ${esc(l.name||l.id)}</label>`).join(''):'<div class="muted" style="font-size:12px;">No sub-accounts found.</div>')}
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;"><input type="checkbox" id="an_active" ${!c||c.is_active?'checked':''}> Live now</label>
+    <div id="an_err" style="color:var(--red);font-size:12px;margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-neutral" onclick="closeM()">Cancel</button><button class="btn btn-brand" onclick="saveAnnounce('${eventId}',this)">Save</button></div>`);
+}
+async function saveAnnounce(eventId,btn){
+  const payload={ action:'save_announcement', event_id:eventId,
+    title:document.getElementById('an_title').value.trim(), body_text:document.getElementById('an_body').value.trim(),
+    image_url:document.getElementById('an_img').value.trim(), cta_label:document.getElementById('an_cta').value.trim(),
+    audience:document.getElementById('an_aud').value,
+    show_on_embed:document.getElementById('an_embed').checked,
+    embed_site_ids:Array.from(document.querySelectorAll('.an-site:checked')).map(el=>el.value),
+    ghl_location_ids:Array.from(document.querySelectorAll('.an-loc:checked')).map(el=>el.value),
+    is_active:document.getElementById('an_active').checked };
+  btn.disabled=true;
+  const r=await api(payload); btn.disabled=false;
+  if(!r.success){ document.getElementById('an_err').textContent=r.message||'Failed'; return; }
   closeM(); load();
 }
 async function viewSubs(id){
