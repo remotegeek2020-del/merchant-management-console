@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags, ghlFindContactByEmail } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags, ghlFindContactByEmail, ghlListCustomFields } from './_ghl.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
@@ -477,6 +477,19 @@ function normalizeTheme(t) {
         imgPos: pick(t.imgPos, ['top', 'bottom'], 'top'),
         overlay: pick(t.overlay, ['dark', 'light'], 'dark')
     };
+    // Event Hero — split-screen layout (dark panel + photo + floating date
+    // badge). Only carried through when explicitly set; the extra hero content
+    // fields are free text/date, capped defensively.
+    if (t.layout === 'event_hero') {
+        const h = t.hero || {};
+        const htxt = (v, n) => { const s = String(v == null ? '' : v).trim().slice(0, n); return s || null; };
+        out.layout = 'event_hero';
+        out.hero = {
+            eyebrow: htxt(h.eyebrow, 120), headline1: htxt(h.headline1, 120), headline2: htxt(h.headline2, 120),
+            event_date: /^\d{4}-\d{2}-\d{2}$/.test(String(h.event_date || '')) ? h.event_date : null,
+            event_time: htxt(h.event_time, 60), location: htxt(h.location, 160), helper: htxt(h.helper, 200)
+        };
+    }
     return out;
 }
 
@@ -488,8 +501,8 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
-    'set_location_token', 'test_location'
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
+    'set_location_token', 'test_location', 'rsvp_submissions'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
 
@@ -561,13 +574,26 @@ export default async function handler(req, res) {
                     const { data: rows } = await supabase.rpc('marketing_list_counts', { camp_ids: ids });
                     (rows || []).forEach(r => { stats[r.campaign_id] = { impression: Number(r.impressions) || 0, click: Number(r.clicks) || 0, dismiss: Number(r.dismissals) || 0 }; });
                 }
-                return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 } })));
+                // RSVP-kind campaigns show a submission count instead of/alongside clicks.
+                const rsvpEventIds = (data || []).map(c => c.rsvp_event_id).filter(Boolean);
+                let rsvpCounts = {};
+                if (rsvpEventIds.length) {
+                    const { data: subs } = await supabase.from('rsvp_submissions').select('event_id').in('event_id', rsvpEventIds).limit(100000);
+                    (subs || []).forEach(s => { rsvpCounts[s.event_id] = (rsvpCounts[s.event_id] || 0) + 1; });
+                }
+                return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 }, rsvp_count: c.rsvp_event_id ? (rsvpCounts[c.rsvp_event_id] || 0) : null })));
             }
 
             if (action === 'get_campaign') {
                 const { id } = req.body;
                 const { data } = await supabase.from('marketing_campaigns').select('*').eq('id', id).maybeSingle();
                 if (!data) return bad(res, 'Campaign not found', 404);
+                // RSVP-kind campaigns carry their linked rsvp_events config (questions,
+                // tag, workflow, sub-account) so the editor can pre-fill the RSVP setup.
+                if (data.rsvp_event_id) {
+                    const { data: rev } = await supabase.from('rsvp_events').select('*').eq('id', data.rsvp_event_id).maybeSingle();
+                    data.rsvp_event = rev || null;
+                }
                 return ok(res, data);
             }
 
@@ -653,7 +679,7 @@ export default async function handler(req, res) {
                         : null,
                     is_active: !!b.is_active,
                     // 3-phase event mode (gated → live → replay), driven by dates.
-                    campaign_kind: b.campaign_kind === 'youtube' ? 'youtube' : 'classic',
+                    campaign_kind: ['youtube', 'rsvp'].includes(b.campaign_kind) ? b.campaign_kind : 'classic',
                     event_mode: (b.event_mode && b.event_mode.enabled && (b.event_mode.live_at || b.event_mode.live_until)) ? {
                         enabled: true,
                         opt_in_until: b.event_mode.opt_in_until || null,
@@ -688,6 +714,53 @@ export default async function handler(req, res) {
                     if (error) return bad(res, error.message);
                     row = data;
                     log({ action: `${actorName} created campaign "${row.title || ''}"`, target_type: 'marketing_campaign', target_id: row.id });
+                }
+                // RSVP-kind campaigns own exactly one rsvp_events row (the partner
+                // ID → questions → submit config). Upsert it here so the whole
+                // announcement — content, design, AND the RSVP setup — saves from
+                // this one editor, then point the campaign at it (+ a fallback link
+                // for the rare viewer whose script can't run the inline flow).
+                if (rec.campaign_kind === 'rsvp' && b.rsvp) {
+                    const rb = b.rsvp;
+                    const rsvpFields = Array.isArray(rb.fields) ? rb.fields.map(f => ({
+                        name: String(f.name || '').slice(0, 120),
+                        label: String(f.label || f.name || '').slice(0, 160),
+                        type: ['text', 'textarea', 'number', 'date', 'dropdown', 'checkbox'].includes(f.type) ? f.type : 'text',
+                        required: !!f.required,
+                        options: Array.isArray(f.options) ? f.options.map(o => String(o).slice(0, 120)).slice(0, 30) : []
+                    })).filter(f => f.name) : [];
+                    const eventRow = {
+                        name: row.title || 'Untitled event',
+                        ghl_location_id: rb.location_id ? String(rb.location_id).trim() : null,
+                        mode: rb.mode === 'calendar' ? 'calendar' : 'form',
+                        fields: rsvpFields,
+                        rsvp_tag: rb.tag ? String(rb.tag).trim() : null,
+                        workflow_id: rb.workflow_id ? String(rb.workflow_id).trim() : null,
+                        embed_url: rb.embed_url ? String(rb.embed_url).trim() : null,
+                        intro: row.body_text || null,
+                        thankyou: rb.thankyou ? String(rb.thankyou).slice(0, 1000) : null,
+                        enabled: !!row.is_active,
+                        updated_at: new Date().toISOString()
+                    };
+                    let eventId = row.rsvp_event_id;
+                    if (eventId) {
+                        await supabase.from('rsvp_events').update(eventRow).eq('id', eventId);
+                    } else {
+                        let key = String(row.title || 'event').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'event';
+                        const { data: ex } = await supabase.from('rsvp_events').select('id').eq('event_key', key).maybeSingle();
+                        if (ex) key = key + '-' + Math.random().toString(36).slice(2, 6);
+                        eventRow.event_key = key;
+                        eventRow.created_by = actorName;
+                        const { data: newEv, error: evErr } = await supabase.from('rsvp_events').insert(eventRow).select('id, event_key').single();
+                        if (evErr) return bad(res, 'Campaign saved, but the RSVP setup failed: ' + evErr.message);
+                        eventId = newEv.id;
+                        const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+                        const host = req.headers['x-forwarded-host'] || req.headers.host;
+                        const { data: patched, error: patchErr } = await supabase.from('marketing_campaigns')
+                            .update({ rsvp_event_id: eventId, cta_url: `${proto}://${host}/rsvp?e=${newEv.event_key}`, cta_enabled: true })
+                            .eq('id', row.id).select().single();
+                        if (!patchErr) row = patched;
+                    }
                 }
                 return ok(res, row);
             }
@@ -1138,6 +1211,18 @@ export default async function handler(req, res) {
             if (action === 'ghl_workflows') {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListWorkflows(req.body.location_id));
+            }
+            // Custom field definitions in a sub-account (RSVP announcement question picker).
+            if (action === 'ghl_custom_fields') {
+                if (!req.body.location_id) return ok(res, []);
+                return ok(res, await ghlListCustomFields(req.body.location_id));
+            }
+            // RSVP submissions for an RSVP-kind campaign's linked event.
+            if (action === 'rsvp_submissions') {
+                const { data: camp } = await supabase.from('marketing_campaigns').select('rsvp_event_id').eq('id', req.body.id).maybeSingle();
+                if (!camp || !camp.rsvp_event_id) return ok(res, []);
+                const { data } = await supabase.from('rsvp_submissions').select('*').eq('event_id', camp.rsvp_event_id).order('created_at', { ascending: false }).limit(5000);
+                return ok(res, data || []);
             }
 
             // Scan a CTA landing page for an embedded GHL form / calendar and

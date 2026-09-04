@@ -93,7 +93,6 @@
   <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="topbar-logo" alt="PayProTec">
   <h1>📣 Marketing &amp; Portals</h1>
   <div class="sp"></div>
-  <a class="btn btn-white" href="/rsvp-events" style="text-decoration:none;"><span class="material-icons" style="font-size:17px;">how_to_reg</span> Partner RSVP</a>
   <a class="btn btn-white" href="/prime49-upgrades" style="text-decoration:none;"><span class="material-icons" style="font-size:17px;">workspace_premium</span> Prime 49 Upgrades</a>
   <a class="btn btn-white" href="/events-dashboard" style="text-decoration:none;"><span class="material-icons" style="font-size:17px;">theaters</span> Events &amp; Shows</a>
   <button class="btn btn-white" onclick="location.href='/'"><span class="material-icons" style="font-size:17px;">home</span> Home</button>
@@ -230,7 +229,8 @@
       </label>
       <div class="row2" id="ctaFields" style="display:none;margin-top:8px;">
         <div><label class="fld" style="margin-top:0;">Button label</label><input class="inp" id="f_cta_label" placeholder="Learn more"></div>
-        <div><label class="fld" style="margin-top:0;">Button link (URL)</label><input class="inp" id="f_cta_url" placeholder="https://… (e.g. YouTube live)"></div>
+        <div id="ctaUrlWrap"><label class="fld" style="margin-top:0;">Button link (URL)</label><input class="inp" id="f_cta_url" placeholder="https://… (e.g. YouTube live)"></div>
+        <div id="ctaUrlRsvpNote" class="muted" style="display:none;font-size:11px;align-self:end;padding-bottom:8px;">The button opens the RSVP steps right inside this popup — no link needed.</div>
         <div style="grid-column:1 / -1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#f8fafc;">
           <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;cursor:pointer;">
             <input type="checkbox" id="f_gate_enabled" onchange="toggleGate(this)"> Gate this CTA behind an opt-in form <span class="muted" style="font-weight:400;">(external websites only)</span>
@@ -287,6 +287,32 @@
             <textarea class="inp" id="f_replay_body" rows="2" placeholder="e.g. Couldn’t make it live? Catch the full replay below." style="margin-top:2px;resize:vertical;"></textarea>
           </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ── RSVP ANNOUNCEMENT SETUP: Partner ID → confirm/questions → submit ── -->
+      <div id="rsvpBlock" style="display:none;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:12px;background:#fafbfc;">
+        <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:2px;">🎟️ RSVP setup</div>
+        <div class="muted" style="font-size:11px;margin-bottom:10px;">The partner enters their Partner ID → we fetch their contact → they answer the questions you pick below → we upsert their HighLevel contact, set those fields, and apply your tag. This runs INSIDE the popup — no separate page.</div>
+        <div class="row2">
+          <div><label class="fld" style="margin-top:0;">HighLevel sub-account</label><select class="inp" id="rsvp_location" onchange="onRsvpLocation()"><option value="">— select —</option></select></div>
+          <div><label class="fld" style="margin-top:0;">Mode</label><select class="inp" id="rsvp_mode"><option value="form">Form</option><option value="calendar">Calendar</option></select></div>
+        </div>
+        <div class="row2">
+          <div><label class="fld" style="margin-top:0;">RSVP tag <span class="muted" style="font-weight:400;">(applied in HighLevel on submit)</span></label><input class="inp" id="rsvp_tag" placeholder="e.g. RSVP — WSAA Partner Night"></div>
+          <div><label class="fld" style="margin-top:0;">Workflow <span class="muted" style="font-weight:400;">(optional — enroll on RSVP)</span></label><select class="inp" id="rsvp_workflow"><option value="">— none —</option></select></div>
+        </div>
+        <label class="fld">Embed URL after confirm <span class="muted">(optional — HighLevel calendar/form to show)</span></label>
+        <input class="inp" id="rsvp_embed_url" placeholder="https://…">
+        <label class="fld">Thank-you message</label>
+        <textarea class="inp" id="rsvp_thankyou" rows="2" placeholder="Your RSVP is confirmed. We'll see you there."></textarea>
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-weight:800;font-size:12px;color:var(--navy);">Questions (from HighLevel custom fields)</div>
+            <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:12px;" onclick="rsvpLoadFields()">Refresh fields</button>
+          </div>
+          <div class="muted" style="font-size:11px;margin:4px 0 8px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Set a type &amp; required per field.</div>
+          <div id="rsvpFieldList"><div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div></div>
         </div>
       </div>
 
@@ -351,6 +377,24 @@
       <!-- ── DESIGN ── -->
       <label class="fld">Design</label>
       <div style="border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <div style="margin-bottom:12px;">
+          <label class="dlbl">Layout</label>
+          <select class="inp" id="t_layout" onchange="onLayoutChange()"><option value="card" selected>Card (standard)</option><option value="event_hero">🏌️ Event Hero — split-screen</option></select>
+        </div>
+        <div id="heroFieldsBlock" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:10px;padding:12px;background:#fafbfc;">
+          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Event Hero details <span class="muted" style="font-weight:400;">(uses the Message Text above as the body, and the Graphic as the right-side photo)</span></div>
+          <label class="fld" style="margin-top:0;">Eyebrow label</label><input class="inp" id="hero_eyebrow" placeholder="e.g. A celebration for PPT partners" oninput="renderPreview()">
+          <div class="row2">
+            <div><label class="fld">Headline (white)</label><input class="inp" id="hero_h1" placeholder="Swing into" oninput="renderPreview()"></div>
+            <div><label class="fld">Headline highlight (orange)</label><input class="inp" id="hero_h2" placeholder="The night." oninput="renderPreview()"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+            <div><label class="fld">Event date</label><input type="date" class="inp" id="hero_date" oninput="renderPreview()"></div>
+            <div><label class="fld">Time</label><input class="inp" id="hero_time" placeholder="6:00 PM PT" oninput="renderPreview()"></div>
+            <div><label class="fld">Location</label><input class="inp" id="hero_location" placeholder="The Lights at Indio" oninput="renderPreview()"></div>
+          </div>
+          <label class="fld">Helper text next to the button</label><input class="inp" id="hero_helper" placeholder="Come for one. Stay for all." oninput="renderPreview()">
+        </div>
         <div style="margin-bottom:12px;">
           <div class="dlbl">Presets — one click, then tweak</div>
           <div id="presetRow" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
@@ -766,8 +810,13 @@ const THEME_PRESETS = {
   'Dark':    { swatch:'#0f172a', bg:'#0f172a', title:'#ffffff', text:'#cbd5e1', accent:'#38bdf8', btnText:'#0f172a', radius:16, width:'normal', align:'left',   btnStyle:'solid',   imgPos:'top', overlay:'dark' },
   'Minimal': { swatch:'#111827', bg:'#ffffff', title:'#111827', text:'#6b7280', accent:'#111827', btnText:'#ffffff', radius:8,  width:'narrow', align:'left',   btnStyle:'outline', imgPos:'top', overlay:'light' },
   'Vibrant': { swatch:'#7c3aed', bg:'#faf5ff', title:'#4c1d95', text:'#6d28d9', accent:'#7c3aed', btnText:'#ffffff', radius:22, width:'normal', align:'center', btnStyle:'pill',    imgPos:'top', overlay:'dark' },
-  'Gold':    { swatch:'#d97706', bg:'#ffffff', title:'#0a1628', text:'#475569', accent:'#d97706', btnText:'#ffffff', radius:14, width:'normal', align:'center', btnStyle:'solid',   imgPos:'top', overlay:'dark' }
+  'Gold':    { swatch:'#d97706', bg:'#ffffff', title:'#0a1628', text:'#475569', accent:'#d97706', btnText:'#ffffff', radius:14, width:'normal', align:'center', btnStyle:'solid',   imgPos:'top', overlay:'dark' },
+  'Night Event': { swatch:'#f97316', bg:'#0b1220', title:'#ffffff', text:'#cbd5e1', accent:'#f97316', btnText:'#ffffff', radius:6, width:'wide', align:'left', btnStyle:'solid', imgPos:'top', overlay:'dark' }
 };
+function onLayoutChange(){
+  document.getElementById('heroFieldsBlock').style.display = document.getElementById('t_layout').value==='event_hero' ? 'block' : 'none';
+  renderPreview();
+}
 function renderPresetRow(){
   const row=document.getElementById('presetRow'); if(!row) return;
   row.innerHTML=Object.keys(THEME_PRESETS).map(name=>{
@@ -778,14 +827,21 @@ function renderPresetRow(){
 }
 function applyPreset(name){
   const p=THEME_PRESETS[name]; if(!p) return;
-  loadTheme(p); renderPreview();
+  const cur=buildTheme();   // preset only retints colors — keep the current layout/hero content
+  loadTheme(Object.assign({}, p, cur.layout==='event_hero'?{layout:cur.layout, hero:cur.hero}:{}));
+  renderPreview();
 }
 
 // ── Design theme + live preview ──
 function buildTheme(){
   const g=id=>document.getElementById(id).value;
-  return { bg:g('t_bg'), title:g('t_title'), text:g('t_text'), accent:g('t_accent'), btnText:g('t_btnText'),
+  const th={ bg:g('t_bg'), title:g('t_title'), text:g('t_text'), accent:g('t_accent'), btnText:g('t_btnText'),
     radius:parseInt(g('t_radius'))||16, width:g('t_width'), align:g('t_align'), btnStyle:g('t_btnStyle'), btnSize:g('t_btnSize'), btnAlign:g('t_btnAlign'), imgPos:g('t_imgPos'), overlay:g('t_overlay') };
+  if(g('t_layout')==='event_hero'){
+    th.layout='event_hero';
+    th.hero={ eyebrow:g('hero_eyebrow'), headline1:g('hero_h1'), headline2:g('hero_h2'), event_date:g('hero_date'), event_time:g('hero_time'), location:g('hero_location'), helper:g('hero_helper') };
+  }
+  return th;
 }
 function loadTheme(t){
   t=t||{}; const s=(id,v)=>{document.getElementById(id).value=v;};
@@ -793,6 +849,11 @@ function loadTheme(t){
   s('t_accent',t.accent||'#004990'); s('t_btnText',t.btnText||'#ffffff');
   s('t_radius',t.radius!=null?t.radius:16); s('t_width',t.width||'normal'); s('t_align',t.align||'left');
   s('t_btnStyle',t.btnStyle||'solid'); s('t_btnSize',t.btnSize||'md'); s('t_btnAlign',t.btnAlign||'full'); s('t_imgPos',t.imgPos||'top'); s('t_overlay',t.overlay||'dark');
+  const hero=(t.layout==='event_hero')?(t.hero||{}):{};
+  s('t_layout', t.layout==='event_hero'?'event_hero':'card');
+  s('hero_eyebrow',hero.eyebrow||''); s('hero_h1',hero.headline1||''); s('hero_h2',hero.headline2||'');
+  s('hero_date',hero.event_date||''); s('hero_time',hero.event_time||''); s('hero_location',hero.location||''); s('hero_helper',hero.helper||'');
+  document.getElementById('heroFieldsBlock').style.display = t.layout==='event_hero' ? 'block' : 'none';
 }
 function themeBtnCss(th){
   var size = th.btnSize==='sm'?'padding:8px 14px;font-size:12px;':th.btnSize==='lg'?'padding:14px 24px;font-size:15px;':'padding:11px 18px;font-size:13.5px;';
@@ -839,9 +900,52 @@ function renderPreview(){
 }
 var PREVIEW_CTX='web';
 function setPreviewCtx(v){ PREVIEW_CTX=v; ['pvWeb','pvGhl','pvPortal'].forEach(function(id){ document.getElementById(id).classList.toggle('on', id.toLowerCase().indexOf(v)!==-1); }); _renderPreviewNow(); }
+function heroBadgeParts(dateStr){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr||''); if(!m) return null;
+  const d=new Date(+m[1], +m[2]-1, +m[3]);
+  const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return { dow:DOW[d.getDay()], day:d.getDate(), month:MON[d.getMonth()], full:`${DOW[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` };
+}
+function renderHeroPreview(){
+  const stage=document.getElementById('previewStage');
+  const note=document.getElementById('previewNote'); if(note) note.textContent='Split-screen layout — same on external sites, HighLevel, and portals (stacks to one column on phones).';
+  const title=document.getElementById('f_title').value||'Your headline';
+  const body=getBody().replace(/<[^>]+>/g,' ').trim();
+  const cta=document.getElementById('f_cta_label').value.trim()||(currentType==='rsvp'?'RSVP Now':'Learn more');
+  const g=id=>document.getElementById(id).value.trim();
+  const eyebrow=g('hero_eyebrow'), h1=g('hero_h1')||title, h2=g('hero_h2'), time=g('hero_time'), loc=g('hero_location'), helper=g('hero_helper');
+  const badge=heroBadgeParts(g('hero_date'));
+  const chip=(icon,label)=>label?`<div style="display:flex;align-items:center;gap:6px;background:#111a2e;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;color:#e2e8f0;white-space:nowrap;">${icon}${esc(label)}</div>`:'';
+  const chips=[chip('📅',badge?badge.full:g('hero_date')),chip('🕒',time),chip('📍',loc)].filter(Boolean).join('');
+  stage.style.background='#e9eef5'; stage.style.backgroundImage='radial-gradient(#cbd5e1 1px,transparent 1px)'; stage.style.backgroundSize='14px 14px';
+  stage.innerHTML=`<div style="width:560px;max-width:100%;display:flex;background:#0b1220;border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.28);overflow:hidden;">
+    <div style="flex:1.15;padding:22px;color:#fff;min-width:0;">
+      ${eyebrow?`<div style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.06em;color:#f97316;text-transform:uppercase;margin-bottom:8px;"><span style="width:6px;height:6px;background:#f97316;"></span>${esc(eyebrow)}</div>`:''}
+      <div style="font-weight:900;font-size:28px;line-height:1.02;text-transform:uppercase;color:#fff;">${esc(h1)}</div>
+      ${h2?`<div style="font-weight:900;font-size:28px;line-height:1.02;text-transform:uppercase;color:#f97316;">${esc(h2)}</div>`:''}
+      ${body?`<div style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-top:10px;">${esc(body)}</div>`:''}
+      ${chips?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;">${chips}</div>`:''}
+      <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="background:#f97316;color:#fff;font-weight:800;font-size:12px;border-radius:6px;padding:9px 16px;">${esc(cta)}</div>
+        ${helper?`<div style="font-size:11px;color:#94a3b8;">${esc(helper)}</div>`:''}
+      </div>
+    </div>
+    <div style="flex:0.85;position:relative;min-width:0;background:#1e293b;">
+      ${currentImageUrl?`<img src="${esc(currentImageUrl)}" style="width:100%;height:100%;object-fit:cover;display:block;">`:''}
+      ${badge?`<div style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:#f97316;color:#fff;padding:10px 14px;border-radius:4px;box-shadow:0 8px 20px rgba(0,0,0,.35);">
+        <div style="font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">${esc(badge.dow)}</div>
+        <div style="font-size:28px;font-weight:900;line-height:1;">${badge.day}</div>
+        <div style="font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">${esc(badge.month)}</div>
+        ${(time||loc)?`<div style="font-size:9px;font-weight:700;margin-top:4px;border-top:1px solid rgba(255,255,255,.4);padding-top:4px;">${esc([time,loc].filter(Boolean).join(' · '))}</div>`:''}
+      </div>`:''}
+    </div>
+  </div>`;
+}
 function _renderPreviewNow(){
   const stage=document.getElementById('previewStage'); if(!stage) return;
   const th=buildTheme();
+  if(th.layout==='event_hero'){ renderHeroPreview(); return; }
   const ct=contentType;
   const showG=(ct==='graphic'||ct==='both')&&currentImageUrl;
   const showT=(ct==='text'||ct==='both');
@@ -1005,7 +1109,7 @@ async function loadList(){
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           ${c.image_url?`<img src="${esc(c.image_url)}" style="width:44px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`:`<div style="width:44px;height:32px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:16px;color:#94a3b8;">${c.content_type==='text'?'notes':'image'}</span></div>`}
-          <div><div style="font-weight:700;">${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
+          <div><div style="font-weight:700;">${kindBadge(c)} ${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${c.rsvp_event_id?(c.rsvp_count||0)+' RSVP(s)':esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
         </div>
       </td>
       <td><span class="pill ${c.audience}">${audienceLabel(c.audience)}</span></td>
@@ -1015,12 +1119,22 @@ async function loadList(){
       <td class="num">${ctr}</td>
       <td><span class="switch"><input type="checkbox" ${c.is_active?'checked':''} onchange="toggleActive('${c.id}',this.checked)"><span class="slider"></span></span></td>
       <td style="text-align:right;white-space:nowrap;">
+        ${c.rsvp_event_id?`<button class="btn btn-neutral" style="padding:6px 9px;" title="RSVPs" onclick='viewRsvps(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">how_to_reg</span></button>`:''}
         <button class="btn btn-neutral" style="padding:6px 9px;" title="Stats" onclick='showStats(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">insights</span></button>
         <button class="btn btn-neutral" style="padding:6px 9px;" title="Edit" onclick='editCampaign(${JSON.stringify(c.id)})'><span class="material-icons" style="font-size:16px;">edit</span></button>
         <button class="btn btn-danger" style="padding:6px 9px;" title="Delete" onclick='delCampaign(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">delete</span></button>
       </td>
     </tr>`;
   }).join('');
+}
+function kindBadge(c){ return c.campaign_kind==='youtube'?'▶️':(c.campaign_kind==='rsvp'||c.rsvp_event_id)?'🎟️':'📢'; }
+async function viewRsvps(id, title){
+  Swal.fire({title:'Loading…', didOpen:()=>Swal.showLoading()});
+  const r = await api({action:'rsvp_submissions', id});
+  const subs = (r.success?r.data:[])||[];
+  const rows = subs.length ? subs.map(s=>`<tr><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`).join('') : '<tr><td colspan="4" class="muted" style="padding:10px;">No RSVPs yet.</td></tr>';
+  Swal.fire({title:'RSVPs — '+esc(title), width:600, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
+    html:`<table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table>`});
 }
 
 function audienceLabel(a){ return ({partner:'Partner',staff:'Staff',prospect:'Prospect',both:'Partners + Staff',all:'Everyone'})[a]||a||'—'; }
@@ -1091,7 +1205,8 @@ async function pickAnnouncementKind(){
   var chosen=null;
   var OPTS=[
     ['youtube','▶️','YouTube Video Announcement','Opt-in → LIVE (with badge) → Replay, auto-switching by date'],
-    ['classic','📢','Classic Announcement','A message / image with an optional button (the standard one)']
+    ['classic','📢','Classic Announcement','A message / image with an optional button (the standard one)'],
+    ['rsvp','🎟️','RSVP Announcement','Partner-exclusive — Partner ID → confirm/questions → submit, right inside the popup']
   ];
   await Swal.fire({ title:'Announcement type', width:520, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Back',
     html:`<div style="display:grid;gap:10px;text-align:left;">${OPTS.map(function(t){return '<button type="button" class="pp-annkind" data-k="'+t[0]+'" style="display:flex;gap:13px;align-items:center;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;cursor:pointer;font-family:inherit;"><div style="font-size:26px;line-height:1;">'+t[1]+'</div><div><div style="font-weight:800;font-size:14px;color:#0f172a;">'+t[2]+'</div><div style="font-size:12px;color:#64748b;margin-top:2px;">'+t[3]+'</div></div></button>';}).join('')}</div>`,
@@ -1115,8 +1230,9 @@ function applyCampaignType(type){
   g('svPoll').style.display=currentType==='poll'?'block':'none';
   g('svRating').style.display=currentType==='rating'?'block':'none';
   g('svContact').style.display=currentType==='lead'?'block':'none';
-  // Reflect the type in the editor title.
-  g('editorTitle').innerText=(editing?'Edit ':'New ')+(TYPE_LABEL[currentType]||'Campaign');
+  // Reflect the type (and announcement sub-kind) in the editor title.
+  var kindLabel = isAnn ? (window._campaignKind==='youtube'?'YouTube Video Announcement':window._campaignKind==='rsvp'?'RSVP Announcement':'Classic Announcement') : (TYPE_LABEL[currentType]||'Campaign');
+  g('editorTitle').innerText=(editing?'Edit ':'New ')+kindLabel;
   try{ renderPreview(); }catch(e){}
 }
 
@@ -1138,6 +1254,18 @@ function openEditor(type){
   document.getElementById('eventFields').style.display = _isYT ? 'block' : 'none';
   document.getElementById('gateExpiresRow').style.display = _isYT ? 'none' : '';
   document.getElementById('gateYtNote').style.display = _isYT ? 'block' : 'none';
+  // RSVP kind → show the RSVP setup block, default to the Event Hero design.
+  var _isRSVP = (type==='announcement' && _kind==='rsvp');
+  document.getElementById('rsvpBlock').style.display = _isRSVP ? 'block' : 'none';
+  document.getElementById('rsvp_location').innerHTML='<option value="">— select —</option>';
+  document.getElementById('rsvp_workflow').innerHTML='<option value="">— none —</option>';
+  document.getElementById('rsvp_tag').value=''; document.getElementById('rsvp_mode').value='form';
+  document.getElementById('rsvp_embed_url').value=''; document.getElementById('rsvp_thankyou').value='';
+  document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>';
+  window._rsvpEditFields=[]; _rsvpCf=[];
+  document.getElementById('ctaUrlWrap').style.display = _isRSVP ? 'none' : '';
+  document.getElementById('ctaUrlRsvpNote').style.display = _isRSVP ? '' : 'none';
+  if(_isRSVP){ document.getElementById('f_cta_enabled').checked=true; document.getElementById('ctaFields').style.display='grid'; document.getElementById('f_cta_label').value='RSVP Now'; }
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_sv_scale').value='5';
@@ -1148,7 +1276,9 @@ function openEditor(type){
   document.getElementById('f_sv_ghl_loc').innerHTML='<option value="">— none —</option>';
   document.getElementById('f_sv_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
   setContactMode('native');
-  loadTheme(null);
+  // RSVP announcements default to the Event Hero design (dark + orange split-screen).
+  loadTheme(_isRSVP ? Object.assign({}, THEME_PRESETS['Night Event'], {layout:'event_hero', hero:{}}) : null);
+  if(_isRSVP) document.getElementById('rsvp_thankyou').value="Your RSVP is confirmed. We'll see you there.";
   applyCampaignType(type||'announcement');
   if((type||'announcement')==='lead') populateSvLocations('');
   document.getElementById('f_audience').value='partner';
@@ -1197,7 +1327,20 @@ async function editCampaign(id){
   { var cw=c.click_workflow||{}; document.getElementById('f_cw_enabled').checked=!!cw.enabled; document.getElementById('clickWfFields').style.display=cw.enabled?'block':'none';
     document.getElementById('cw_tags').value=Array.isArray(cw.tags)?cw.tags.join(', '):'';
     if(cw.enabled){ populateClickWfLocations(cw.location_id||'').then(function(){ if(cw.location_id) return loadClickWf(cw.workflow_id||''); }); } }
-  { var em=c.event_mode||{}; var isYT=(c.campaign_kind==='youtube')||!!em.enabled; window._campaignKind=isYT?'youtube':'classic';
+  { var em=c.event_mode||{}; var isYT=(c.campaign_kind==='youtube')||!!em.enabled; var isRSVP=(c.campaign_kind==='rsvp')||!!c.rsvp_event_id;
+    window._campaignKind=isYT?'youtube':(isRSVP?'rsvp':'classic');
+    document.getElementById('rsvpBlock').style.display=isRSVP?'block':'none';
+    document.getElementById('ctaUrlWrap').style.display=isRSVP?'none':'';
+    document.getElementById('ctaUrlRsvpNote').style.display=isRSVP?'':'none';
+    if(isRSVP){
+      var rev=c.rsvp_event||{};
+      document.getElementById('rsvp_mode').value=rev.mode==='calendar'?'calendar':'form';
+      document.getElementById('rsvp_tag').value=rev.rsvp_tag||'';
+      document.getElementById('rsvp_embed_url').value=rev.embed_url||'';
+      document.getElementById('rsvp_thankyou').value=rev.thankyou||'';
+      window._rsvpEditFields=Array.isArray(rev.fields)?rev.fields:[];
+      populateRsvpLocations(rev.ghl_location_id||'').then(function(){ if(rev.ghl_location_id) return onRsvpLocation(rev.workflow_id||''); else document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; });
+    }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
     document.getElementById('gateYtNote').style.display=isYT?'block':'none';
@@ -1456,6 +1599,9 @@ async function saveCampaign(){
     if (mode==='ghl_form' && !document.getElementById('f_sv_ghl_form').value){ Swal.fire('Pick a form','Choose a HighLevel sub-account and form, or switch to a native form.','warning'); return; }
     if (mode==='native' && !document.getElementById('f_sv_c_name').checked && !document.getElementById('f_sv_c_email').checked && !document.getElementById('f_sv_c_phone').checked){ Swal.fire('Pick at least one field','Enable Name, Email, and/or Phone to collect.','warning'); return; }
   }
+  if (window._campaignKind==='rsvp' && !document.getElementById('rsvp_location').value){
+    Swal.fire('Pick a sub-account','Choose the HighLevel sub-account for this RSVP under RSVP setup.','warning'); return;
+  }
   const payload={
     action: editing&&editing.id ? 'update_campaign':'create_campaign',
     id: editing&&editing.id ? editing.id : undefined,
@@ -1512,7 +1658,16 @@ async function saveCampaign(){
     is_active: document.getElementById('f_active').checked,
     starts_at: fromLocalInput(document.getElementById('f_starts').value),
     ends_at: fromLocalInput(document.getElementById('f_ends').value),
-    priority: parseInt(document.getElementById('f_priority').value)||0
+    priority: parseInt(document.getElementById('f_priority').value)||0,
+    rsvp: window._campaignKind==='rsvp' ? {
+      location_id: document.getElementById('rsvp_location').value,
+      mode: document.getElementById('rsvp_mode').value,
+      tag: document.getElementById('rsvp_tag').value.trim()||null,
+      workflow_id: document.getElementById('rsvp_workflow').value||null,
+      embed_url: document.getElementById('rsvp_embed_url').value.trim()||null,
+      thankyou: document.getElementById('rsvp_thankyou').value.trim()||null,
+      fields: rsvpCollectFields()
+    } : undefined
   };
   if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
   if (document.getElementById('f_show_embed').checked && document.querySelector('input[name=embedScope]:checked')?.value==='specific' && !payload.embed_site_ids.length){ Swal.fire('Pick sites','Select at least one site for “Specific sites only”, or switch to “All registered sites”.','warning'); return; }
@@ -2072,6 +2227,60 @@ async function loadClickWf(preWfId){
   if(!wfs.length) wSel.innerHTML='<option value="">No workflows found (check this sub-account’s token)</option>';
   if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
 }
+
+// ── RSVP setup (HighLevel sub-account, questions, tag, workflow) ──
+async function populateRsvpLocations(selectedId){
+  const sel=document.getElementById('rsvp_location');
+  const data=await getGhlLocations();
+  const locs=(data.locations||[]);
+  sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent=selectedId; sel.appendChild(o);} sel.value=selectedId; }
+}
+async function onRsvpLocation(preWfId){
+  const loc=document.getElementById('rsvp_location').value;
+  const wSel=document.getElementById('rsvp_workflow');
+  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; return; }
+  wSel.innerHTML='<option value="">Loading…</option>';
+  const r=await api({action:'ghl_workflows',location_id:loc});
+  const wfs=(r.success?r.data:[])||[];
+  wSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
+  if(!wfs.length) wSel.innerHTML='<option value="">No workflows found (check this sub-account’s token)</option>';
+  if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
+  await rsvpLoadFields();
+}
+let _rsvpCf=[];
+function rsvpFieldsHtml(selected){
+  const sel=selected||[];
+  if(!sel.length && !_rsvpCf.length) return '<div class="muted" style="font-size:12px;">No fields loaded yet.</div>';
+  const opts=_rsvpCf.length?_rsvpCf:sel.map(f=>({name:f.name}));
+  const typeSel=(v)=>['text','textarea','number','date','dropdown','checkbox'].map(t=>`<option value="${t}" ${v===t?'selected':''}>${t}</option>`).join('');
+  return opts.map(cf=>{
+    const cur=sel.find(f=>f.name===cf.name)||null; const on=!!cur;
+    return `<div class="rsvp-fieldrow" data-fname="${esc(cf.name)}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#fff;">
+      <input type="checkbox" class="rf_on" ${on?'checked':''}>
+      <span style="flex:1;font-size:13px;">${esc(cf.name)}</span>
+      <select class="inp rf_type" style="width:110px;padding:5px;">${typeSel(cur?cur.type:'text')}</select>
+      <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="rf_req" ${cur&&cur.required?'checked':''}> req</label>
+    </div>`;
+  }).join('');
+}
+async function rsvpLoadFields(){
+  const loc=document.getElementById('rsvp_location').value;
+  const box=document.getElementById('rsvpFieldList');
+  if(!loc){ box.innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; return; }
+  box.innerHTML='<div class="muted" style="font-size:12px;">Loading fields…</div>';
+  const r=await api({action:'ghl_custom_fields', location_id:loc});
+  _rsvpCf=(r.success?r.data:[])||[];
+  if(!_rsvpCf.length){ box.innerHTML='<div class="muted" style="font-size:12px;">No custom fields found in this sub-account.</div>'; return; }
+  box.innerHTML=rsvpFieldsHtml(window._rsvpEditFields||[]);
+}
+function rsvpCollectFields(){
+  const rows=document.querySelectorAll('#rsvpFieldList .rsvp-fieldrow'); const out=[];
+  rows.forEach(row=>{ const on=row.querySelector('.rf_on').checked; if(!on) return;
+    out.push({ name:row.dataset.fname, label:row.dataset.fname, type:row.querySelector('.rf_type').value, required:row.querySelector('.rf_req').checked }); });
+  return out;
+}
+
 async function scanCta(btn){
   const url=(document.getElementById('f_cta_url').value||'').trim();
   const res=document.getElementById('convScanResult');
