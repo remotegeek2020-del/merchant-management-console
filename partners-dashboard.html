@@ -599,6 +599,16 @@ input[type=number] {
 <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
 <script src="js/tour.js" defer></script>
 <script>
+    // Escape a value for safe use inside an inline on* handler that lives in a
+    // double-quoted HTML attribute and passes it as a single-quoted JS string.
+    // Handles names like  Alana De'Osuna  and  Robert "bob".
+    function attrJs(s){
+        return String(s == null ? '' : s)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+    }
     // --- GLOBAL STATE ---
     let allPartners = [];
     let identifiersRaw = [];
@@ -1641,7 +1651,7 @@ async function submitOnboarding() {
                             ${_brandedBadge}
                         </div>
                     </div>
-                    <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
+                    <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${attrJs(p.name)}')"
                             style="background:none;border:1px solid #e2e8f0;border-radius:6px;color:var(--pp-blue);cursor:pointer;display:flex;align-items:center;gap:3px;padding:3px 7px;font-size:10px;font-weight:800;flex-shrink:0;">
                         <span class="material-icons" style="font-size:13px;">add</span> ID
                     </button>
@@ -2381,17 +2391,17 @@ async function submitOnboarding() {
         <div style="display:flex; flex-direction:column; gap:8px;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <h1 style="font-size:24px; font-weight:900; color:#002d5a; margin:0;">${p.name}</h1>
-                <span class="material-icons" style="font-size:16px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'full_name', '${p.name}')">edit</span>
+                <span class="material-icons" style="font-size:16px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'full_name', '${attrJs(p.name)}')">edit</span>
             </div>
             <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
                 <span class="material-icons" style="font-size:16px;">email</span>
                 ${p.email}
-                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'email', '${p.email}')">edit</span>
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'email', '${attrJs(p.email)}')">edit</span>
             </div>
             <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
                 <span class="material-icons" style="font-size:16px;">phone</span>
                 ${p.phone}
-                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'phone_number', '${p.phone}')">edit</span>
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'phone_number', '${attrJs(p.phone)}')">edit</span>
             </div>
             <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
                 <span class="material-icons" style="font-size:16px;">calendar_today</span>
