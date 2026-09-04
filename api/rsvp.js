@@ -54,11 +54,19 @@ async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
     return { contactId, tagApplied, error };
 }
 
-// Already RSVP'd under any of their partner IDs for this event?
-async function alreadyRegistered(eventId, personId) {
-    if (!personId) return false;
-    const { data } = await supabase.from('rsvp_submissions').select('id').eq('event_id', eventId).eq('person_id', personId).limit(1);
-    return !!(data && data.length);
+// Already RSVP'd under any of their partner IDs for this event? Matches by
+// person_id (catches a different ID for the same person) OR the exact partner
+// ID string (catches rows recorded before person_id existed on this table).
+// Two plain equality queries (rather than building a raw .or() filter string)
+// so arbitrary characters in the user-typed partner_id can't affect the query.
+async function alreadyRegistered(eventId, personId, pid) {
+    const byId = await supabase.from('rsvp_submissions').select('id').eq('event_id', eventId).eq('partner_id_string', pid).limit(1);
+    if (byId.data && byId.data.length) return true;
+    if (personId) {
+        const byPerson = await supabase.from('rsvp_submissions').select('id').eq('event_id', eventId).eq('person_id', personId).limit(1);
+        if (byPerson.data && byPerson.data.length) return true;
+    }
+    return false;
 }
 
 export default async function handler(req, res) {
@@ -94,7 +102,7 @@ export default async function handler(req, res) {
             if (ev.prime49_only && !p.prime49) return ok(res, { status: 'not_eligible' });
             // Already RSVP'd under ANY of their partner IDs (same person) →
             // block re-entry instead of letting them submit a second time.
-            if (await alreadyRegistered(ev.id, p.person_id)) return ok(res, { status: 'already_registered', name: p.full_name || '' });
+            if (await alreadyRegistered(ev.id, p.person_id, pid)) return ok(res, { status: 'already_registered', name: p.full_name || '' });
             return ok(res, {
                 status: 'found',
                 name: p.full_name || '',
@@ -113,7 +121,7 @@ export default async function handler(req, res) {
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return bad(res, 'Partner ID not found.');
             if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
-            if (await alreadyRegistered(ev.id, p.person_id)) return bad(res, "You're already registered for this event.");
+            if (await alreadyRegistered(ev.id, p.person_id, pid)) return bad(res, "You're already registered for this event.");
             const loc = ev.ghl_location_id;
             if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
 
@@ -162,7 +170,7 @@ export default async function handler(req, res) {
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return bad(res, 'Partner ID not found.');
             if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
-            if (await alreadyRegistered(ev.id, p.person_id)) return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
+            if (await alreadyRegistered(ev.id, p.person_id, pid)) return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
             const loc = ev.ghl_location_id;
             if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
 
