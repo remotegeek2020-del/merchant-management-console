@@ -12,6 +12,33 @@ const ok = (res, data = {}) => res.status(200).json({ success: true, ...data });
 const bad = (res, message, status = 400) => res.status(status).json({ success: false, message });
 function slug(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60); }
 
+// Popup visual theme (mirrors api/marketing.js normalizeTheme — kept local so
+// this file has no cross-import dependency on the campaign editor).
+function normalizeTheme(t) {
+    if (!t || typeof t !== 'object') return null;
+    const col = (v, d) => (/^#[0-9a-fA-F]{3,8}$/.test(String(v || '')) ? String(v) : d);
+    const pick = (v, allowed, d) => (allowed.includes(v) ? v : d);
+    return {
+        bg: col(t.bg, '#ffffff'), text: col(t.text, '#475569'), title: col(t.title, '#0f172a'),
+        accent: col(t.accent, '#004990'), btnText: col(t.btnText, '#ffffff'),
+        radius: Math.max(0, Math.min(40, parseInt(t.radius, 10) || 16)),
+        width: pick(t.width, ['narrow', 'normal', 'wide', 'xwide'], 'normal'),
+        align: pick(t.align, ['left', 'center'], 'left'),
+        btnStyle: pick(t.btnStyle, ['solid', 'outline', 'pill'], 'solid'),
+        btnSize: pick(t.btnSize, ['sm', 'md', 'lg'], 'md'),
+        btnAlign: pick(t.btnAlign, ['left', 'center', 'right', 'full'], 'full'),
+        imgPos: pick(t.imgPos, ['top', 'bottom'], 'top'),
+        overlay: pick(t.overlay, ['dark', 'light'], 'dark')
+    };
+}
+// "Night Event" preset — dark/orange base design (bold hero photo + dark card +
+// orange CTA), modeled after the nightgolf.ppt.partners partner-event page.
+const NIGHT_EVENT_THEME = {
+    bg: '#0b1220', text: '#cbd5e1', title: '#ffffff', accent: '#f97316', btnText: '#ffffff',
+    radius: 6, width: 'wide', align: 'left', btnStyle: 'solid', btnSize: 'lg', btnAlign: 'left',
+    imgPos: 'top', overlay: 'dark'
+};
+
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'POST') return bad(res, 'Method not allowed', 405);
@@ -135,6 +162,7 @@ export default async function handler(req, res) {
                 starts_at: b.starts_at || null,
                 ends_at: b.ends_at || null,
                 campaign_kind: 'classic',
+                theme: b.theme_preset === 'night_event' ? NIGHT_EVENT_THEME : normalizeTheme(b.theme),
                 updated_at: new Date().toISOString()
             };
             let row;
