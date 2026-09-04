@@ -497,10 +497,15 @@
                 + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:12px;border-radius:9px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
         });
     };
-    // Best-effort auto-advance if the form DOES post a detectable message —
-    // harmless no-op (guarded by _rsvpFormDone) if the manual button already fired.
+    // Detect the RSVP form's submission. Two signals:
+    // 1. Our own /rsvp-thanks page (set as the HighLevel form's "redirect URL
+    //    after submit") — reliable, since it's a page we control that posts a
+    //    plain, unambiguous message once the iframe navigates there.
+    // 2. Best-effort: whatever HighLevel's own widget posts natively, if
+    //    anything — not guaranteed, so it's a bonus, not the primary path.
     window.addEventListener('message', function (ev) {
         if (!_rsvpFormId || _rsvpFormDone) return;
+        if (ev.data && typeof ev.data === 'object' && ev.data.type === 'ppxRsvpFormDone' && ev.origin === location.origin) { ppAnnRsvpFormSubmitted(); return; }
         var o = String(ev.origin || '');
         if (o.indexOf('leadconnector') === -1 && o.indexOf('msgsndr') === -1) return;
         if (ev.data && typeof ev.data === 'object' && ev.data.type === 'formSubmitted') { ppAnnRsvpFormSubmitted(); return; }

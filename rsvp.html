@@ -91,6 +91,7 @@ function screenGhlForm(){
 }
 window.addEventListener('message', function(ev){
   if(_ghlFormDone || !CFG || CFG.field_source!=='ghl_form') return;
+  if(ev.data && typeof ev.data==='object' && ev.data.type==='ppxRsvpFormDone' && ev.origin===location.origin){ ghlFormSubmitted(); return; }
   const o=String(ev.origin||'');
   if(o.indexOf('leadconnector')===-1 && o.indexOf('msgsndr')===-1) return;
   if(ev.data && typeof ev.data==='object' && ev.data.type==='formSubmitted'){ ghlFormSubmitted(); return; }
