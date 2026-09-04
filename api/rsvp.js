@@ -6,7 +6,7 @@
 //               fields + apply the RSVP tag / workflow. This IS the RSVP (HL has
 //               no submit-a-form API; the tag/field fires the same automation).
 import { createClient } from '@supabase/supabase-js';
-import { ghlUpsertContact, ghlSetContactCustomFieldsByName, ghlAddContactTags, ghlAddContactToWorkflow, ghlFindContactByEmail } from './_ghl.js';
+import { ghlUpsertContact, ghlSetContactCustomFieldsByName, ghlAddContactTags, ghlAddContactToWorkflow, ghlFindContactByEmail, ghlContactTags } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 function cors(res) {
@@ -103,6 +103,19 @@ export default async function handler(req, res) {
             // Already RSVP'd under ANY of their partner IDs (same person) →
             // block re-entry instead of letting them submit a second time.
             if (await alreadyRegistered(ev.id, p.person_id, pid)) return ok(res, { status: 'already_registered', name: p.full_name || '' });
+            // Belt & suspenders: our own record of the RSVP could be missing
+            // (e.g. an old row from before this table existed) even though
+            // HighLevel already has the tag on file — check that too.
+            if (ev.rsvp_tag && ev.ghl_location_id && p.hl_contact_id) {
+                const tags = await ghlContactTags(ev.ghl_location_id, p.hl_contact_id);
+                if (tags.indexOf(String(ev.rsvp_tag).toLowerCase()) !== -1) {
+                    await supabase.from('rsvp_submissions').upsert({
+                        event_id: ev.id, partner_id_string: pid, person_id: p.person_id || null, hl_contact_id: p.hl_contact_id,
+                        email: p.email || '', name: p.full_name || '', is_partner: true, answers: {}, tag_applied: true, hl_error: null
+                    }, { onConflict: 'event_id,partner_id_string' });
+                    return ok(res, { status: 'already_registered', name: p.full_name || '' });
+                }
+            }
             return ok(res, {
                 status: 'found',
                 name: p.full_name || '',
@@ -193,6 +206,65 @@ export default async function handler(req, res) {
             }, { onConflict: 'event_id,partner_id_string' });
 
             return ok(res, { submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
+        }
+
+        // Before showing the embedded HighLevel form: make sure a contact
+        // already exists for this partner (creating one if needed) so the
+        // form's own submission — prefilled with this same email/phone —
+        // merges into a contact we can watch, instead of possibly creating an
+        // unrelated one HighLevel can't tell us about.
+        if (action === 'prep_ghl_form') {
+            const ev = await loadEvent(body.event_key);
+            if (!ev || !ev.enabled) return bad(res, 'This RSVP is not available.');
+            const pid = String(body.partner_id || '').trim();
+            if (!pid) return bad(res, 'Missing Partner ID.');
+            const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
+            const p = Array.isArray(data) && data[0] ? data[0] : null;
+            if (!p) return bad(res, 'Partner ID not found.');
+            if (ev.prime49_only && !p.prime49) return bad(res, 'This RSVP is exclusive to Prime49 partners.');
+            const loc = ev.ghl_location_id;
+            if (!loc) return bad(res, 'This event is not fully configured (no sub-account).');
+            let contactId = p.hl_contact_id || '';
+            if (!contactId) {
+                const email = String(body.email || p.email || '').trim();
+                const phone = String(body.phone || p.phone || '').trim();
+                const name = String(p.full_name || '').trim();
+                const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, []);
+                contactId = (up && up.id) || '';
+                if (!contactId && email) { const found = await ghlFindContactByEmail(loc, email); if (found) contactId = found.id; }
+            }
+            return ok(res, { contact_id: contactId || null });
+        }
+
+        // Poll: has HighLevel itself (the form's own automation, or the tag we
+        // apply below) put the RSVP tag on this contact yet? No cross-origin
+        // signal from the embedded form needed — we just ask HighLevel
+        // directly, on a timer, from the browser. Once it's there, finalize:
+        // record the conversion (idempotent) and enroll the workflow.
+        if (action === 'check_ghl_tag') {
+            const ev = await loadEvent(body.event_key);
+            if (!ev || !ev.enabled) return bad(res, 'This RSVP is not available.');
+            const pid = String(body.partner_id || '').trim();
+            const contactId = String(body.contact_id || '').trim();
+            if (!pid || !contactId) return ok(res, { found: false });
+            const loc = ev.ghl_location_id;
+            if (!loc || !ev.rsvp_tag) return ok(res, { found: false });
+            const tags = await ghlContactTags(loc, contactId);
+            const found = tags.indexOf(String(ev.rsvp_tag).toLowerCase()) !== -1;
+            if (!found) return ok(res, { found: false });
+
+            const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
+            const p = Array.isArray(data) && data[0] ? data[0] : null;
+            const email = String(body.email || (p && p.email) || '').trim();
+            const phone = String(body.phone || (p && p.phone) || '').trim();
+            const name = String((p && p.full_name) || '').trim();
+            if (ev.workflow_id) await ghlAddContactToWorkflow(loc, contactId, ev.workflow_id).catch(() => {});
+            await supabase.from('rsvp_submissions').upsert({
+                event_id: ev.id, partner_id_string: pid, person_id: p ? p.person_id : null, hl_contact_id: contactId,
+                email, name, is_partner: true, answers: {}, tag_applied: true, hl_error: null
+            }, { onConflict: 'event_id,partner_id_string' });
+
+            return ok(res, { found: true, submitted: true, thankyou: ev.thankyou || null, embed_url: ev.embed_url || null });
         }
 
         return bad(res, 'Unknown action');

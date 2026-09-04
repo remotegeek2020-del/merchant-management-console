@@ -326,8 +326,7 @@
             <label class="fld" style="margin-top:0;">Form</label>
             <select class="inp" id="rsvp_ghl_form"><option value="">Choose a sub-account first…</option></select>
             <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:11px;color:#92400e;">
-              <b>⚠️ One-time setup required in HighLevel:</b> open this form's settings → <b>Actions</b> (or "After submission") → set <b>Redirect to URL</b> to the address below. Without this, we can't reliably tell when someone submits the form, so their RSVP won't be recorded.
-              <div style="display:flex;gap:6px;margin-top:6px;"><input class="inp" id="rsvp_redirect_url" readonly style="font-family:monospace;font-size:11px;background:#fff;" onclick="this.select();"><button type="button" class="btn btn-neutral btn-sm" style="padding:5px 9px;font-size:11px;" onclick="copyRsvpRedirectUrl(this)">Copy</button></div>
+              <b>⚠️ One-time setup required in HighLevel:</b> add a workflow/automation on this form so it applies the <b>RSVP tag</b> (set above) to the contact when submitted. We watch HighLevel for that tag to appear — that's how we know someone submitted, and it's also what "already registered" checks against. Without that automation, we can't tell submissions apart from an empty form, so RSVPs won't be recorded.
             </div>
           </div>
         </div>
@@ -2295,11 +2294,6 @@ function setRsvpFieldMode(m){
   document.getElementById('rsvpGhlFormBtn').classList.toggle('on', window._rsvpFieldMode==='ghl_form');
   document.getElementById('rsvpNativeFields').style.display = window._rsvpFieldMode==='custom_fields' ? 'block' : 'none';
   document.getElementById('rsvpGhlFormFields').style.display = window._rsvpFieldMode==='ghl_form' ? 'block' : 'none';
-  document.getElementById('rsvp_redirect_url').value = location.origin + '/rsvp-thanks';
-}
-function copyRsvpRedirectUrl(btn){
-  const inp=document.getElementById('rsvp_redirect_url'); inp.select();
-  navigator.clipboard.writeText(inp.value).then(()=>{ const t=btn.textContent; btn.textContent='Copied!'; setTimeout(()=>btn.textContent=t, 1500); });
 }
 async function loadRsvpForms(preFormId){
   const loc=document.getElementById('rsvp_location').value;
