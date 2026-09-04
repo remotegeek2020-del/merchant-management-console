@@ -197,11 +197,13 @@
       <label class="fld">Campaign Title *</label>
       <input class="inp" id="f_title" placeholder="e.g. Summer Prime49 Push">
 
-      <label class="fld">Content Type</label>
-      <div class="seg" id="segContent">
-        <button data-v="both" class="on" onclick="setContentType('both')">Text + Graphic</button>
-        <button data-v="text" onclick="setContentType('text')">Text only</button>
-        <button data-v="graphic" onclick="setContentType('graphic')">Graphic only</button>
+      <div id="contentTypeBlock">
+        <label class="fld">Content Type</label>
+        <div class="seg" id="segContent">
+          <button data-v="both" class="on" onclick="setContentType('both')">Text + Graphic</button>
+          <button data-v="text" onclick="setContentType('text')">Text only</button>
+          <button data-v="graphic" onclick="setContentType('graphic')">Graphic only</button>
+        </div>
       </div>
 
       <div id="textSection">
@@ -222,16 +224,16 @@
         </div>
       </div>
 
-      <label class="fld">Call-to-action button (optional)</label>
-      <div class="muted" style="font-size:11px;margin:-2px 0 4px;">A secondary link button (e.g. "Learn more"). For Poll / Rating / Capture Contact the Submit button is the main action — the CTA is just an extra link, usually not needed.</div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
+      <label class="fld" id="ctaSectionLabel">Call-to-action button (optional)</label>
+      <div class="muted" id="ctaSectionHint" style="font-size:11px;margin:-2px 0 4px;">A secondary link button (e.g. "Learn more"). For Poll / Rating / Capture Contact the Submit button is the main action — the CTA is just an extra link, usually not needed.</div>
+      <label id="ctaEnableRow" style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
         <input type="checkbox" id="f_cta_enabled" onchange="document.getElementById('ctaFields').style.display=this.checked?'grid':'none';"> Show a CTA button on the card
       </label>
       <div class="row2" id="ctaFields" style="display:none;margin-top:8px;">
         <div><label class="fld" style="margin-top:0;">Button label</label><input class="inp" id="f_cta_label" placeholder="Learn more"></div>
         <div id="ctaUrlWrap"><label class="fld" style="margin-top:0;">Button link (URL)</label><input class="inp" id="f_cta_url" placeholder="https://… (e.g. YouTube live)"></div>
         <div id="ctaUrlRsvpNote" class="muted" style="display:none;font-size:11px;align-self:end;padding-bottom:8px;">The button opens the RSVP steps right inside this popup — no link needed.</div>
-        <div style="grid-column:1 / -1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#f8fafc;">
+        <div id="ctaGateBox" style="grid-column:1 / -1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#f8fafc;">
           <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;cursor:pointer;">
             <input type="checkbox" id="f_gate_enabled" onchange="toggleGate(this)"> Gate this CTA behind an opt-in form <span class="muted" style="font-weight:400;">(external websites only)</span>
           </label>
@@ -296,11 +298,11 @@
         <div class="muted" style="font-size:11px;margin-bottom:10px;">The partner enters their Partner ID → we fetch their contact → they answer the questions you pick below → we upsert their HighLevel contact, set those fields, and apply your tag. This runs INSIDE the popup — no separate page.</div>
         <div class="row2">
           <div><label class="fld" style="margin-top:0;">HighLevel sub-account</label><select class="inp" id="rsvp_location" onchange="onRsvpLocation()"><option value="">— select —</option></select></div>
-          <div><label class="fld" style="margin-top:0;">Mode</label><select class="inp" id="rsvp_mode"><option value="form">Form</option><option value="calendar">Calendar</option></select></div>
+          <div><label class="fld" style="margin-top:0;">RSVP tag <span class="muted" style="font-weight:400;">(applied in HighLevel on submit)</span></label><input class="inp" id="rsvp_tag" placeholder="e.g. RSVP — WSAA Partner Night"></div>
         </div>
         <div class="row2">
-          <div><label class="fld" style="margin-top:0;">RSVP tag <span class="muted" style="font-weight:400;">(applied in HighLevel on submit)</span></label><input class="inp" id="rsvp_tag" placeholder="e.g. RSVP — WSAA Partner Night"></div>
           <div><label class="fld" style="margin-top:0;">Workflow <span class="muted" style="font-weight:400;">(optional — enroll on RSVP)</span></label><select class="inp" id="rsvp_workflow"><option value="">— none —</option></select></div>
+          <div></div>
         </div>
         <label class="fld">Embed URL after confirm <span class="muted">(optional — HighLevel calendar/form to show)</span></label>
         <input class="inp" id="rsvp_embed_url" placeholder="https://…">
@@ -814,8 +816,12 @@ const THEME_PRESETS = {
   'Night Event': { swatch:'#f97316', bg:'#0b1220', title:'#ffffff', text:'#cbd5e1', accent:'#f97316', btnText:'#ffffff', radius:6, width:'wide', align:'left', btnStyle:'solid', imgPos:'top', overlay:'dark' }
 };
 function onLayoutChange(){
-  document.getElementById('heroFieldsBlock').style.display = document.getElementById('t_layout').value==='event_hero' ? 'block' : 'none';
-  renderPreview();
+  const isHero = document.getElementById('t_layout').value==='event_hero';
+  document.getElementById('heroFieldsBlock').style.display = isHero ? 'block' : 'none';
+  // Event Hero always shows both the message and the photo — the Text/Graphic
+  // toggle below has no effect on it, so hide it to avoid a confusing no-op setting.
+  document.getElementById('contentTypeBlock').style.display = isHero ? 'none' : '';
+  if(isHero) setContentType('both'); else renderPreview();
 }
 function renderPresetRow(){
   const row=document.getElementById('presetRow'); if(!row) return;
@@ -854,6 +860,7 @@ function loadTheme(t){
   s('hero_eyebrow',hero.eyebrow||''); s('hero_h1',hero.headline1||''); s('hero_h2',hero.headline2||'');
   s('hero_date',hero.event_date||''); s('hero_time',hero.event_time||''); s('hero_location',hero.location||''); s('hero_helper',hero.helper||'');
   document.getElementById('heroFieldsBlock').style.display = t.layout==='event_hero' ? 'block' : 'none';
+  document.getElementById('contentTypeBlock').style.display = t.layout==='event_hero' ? 'none' : '';
 }
 function themeBtnCss(th){
   var size = th.btnSize==='sm'?'padding:8px 14px;font-size:12px;':th.btnSize==='lg'?'padding:14px 24px;font-size:15px;':'padding:11px 18px;font-size:13.5px;';
@@ -1259,12 +1266,17 @@ function openEditor(type){
   document.getElementById('rsvpBlock').style.display = _isRSVP ? 'block' : 'none';
   document.getElementById('rsvp_location').innerHTML='<option value="">— select —</option>';
   document.getElementById('rsvp_workflow').innerHTML='<option value="">— none —</option>';
-  document.getElementById('rsvp_tag').value=''; document.getElementById('rsvp_mode').value='form';
+  document.getElementById('rsvp_tag').value='';
   document.getElementById('rsvp_embed_url').value=''; document.getElementById('rsvp_thankyou').value='';
   document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>';
   window._rsvpEditFields=[]; _rsvpCf=[];
+  // RSVP kind: the CTA IS the RSVP button (no manual link, no gate, no separate enable toggle).
   document.getElementById('ctaUrlWrap').style.display = _isRSVP ? 'none' : '';
   document.getElementById('ctaUrlRsvpNote').style.display = _isRSVP ? '' : 'none';
+  document.getElementById('ctaGateBox').style.display = _isRSVP ? 'none' : '';
+  document.getElementById('ctaEnableRow').style.display = _isRSVP ? 'none' : '';
+  document.getElementById('ctaSectionLabel').textContent = _isRSVP ? 'RSVP button' : 'Call-to-action button (optional)';
+  document.getElementById('ctaSectionHint').style.display = _isRSVP ? 'none' : '';
   if(_isRSVP){ document.getElementById('f_cta_enabled').checked=true; document.getElementById('ctaFields').style.display='grid'; document.getElementById('f_cta_label').value='RSVP Now'; }
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
@@ -1332,9 +1344,12 @@ async function editCampaign(id){
     document.getElementById('rsvpBlock').style.display=isRSVP?'block':'none';
     document.getElementById('ctaUrlWrap').style.display=isRSVP?'none':'';
     document.getElementById('ctaUrlRsvpNote').style.display=isRSVP?'':'none';
+    document.getElementById('ctaGateBox').style.display=isRSVP?'none':'';
+    document.getElementById('ctaEnableRow').style.display=isRSVP?'none':'';
+    document.getElementById('ctaSectionLabel').textContent=isRSVP?'RSVP button':'Call-to-action button (optional)';
+    document.getElementById('ctaSectionHint').style.display=isRSVP?'none':'';
     if(isRSVP){
       var rev=c.rsvp_event||{};
-      document.getElementById('rsvp_mode').value=rev.mode==='calendar'?'calendar':'form';
       document.getElementById('rsvp_tag').value=rev.rsvp_tag||'';
       document.getElementById('rsvp_embed_url').value=rev.embed_url||'';
       document.getElementById('rsvp_thankyou').value=rev.thankyou||'';
@@ -1661,7 +1676,6 @@ async function saveCampaign(){
     priority: parseInt(document.getElementById('f_priority').value)||0,
     rsvp: window._campaignKind==='rsvp' ? {
       location_id: document.getElementById('rsvp_location').value,
-      mode: document.getElementById('rsvp_mode').value,
       tag: document.getElementById('rsvp_tag').value.trim()||null,
       workflow_id: document.getElementById('rsvp_workflow').value||null,
       embed_url: document.getElementById('rsvp_embed_url').value.trim()||null,
