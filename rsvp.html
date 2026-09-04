@@ -78,12 +78,14 @@ function screenGhlForm(){
     <h1>${esc(CFG.name)}</h1>
     <div class="pre"><b>${esc(PARTNER.name||'Partner')}</b>${PARTNER.email?'<br>'+esc(PARTNER.email):''}${PARTNER.phone?'<br>'+esc(PARTNER.phone):''}<br><span class="muted" style="color:#0369a1;">✓ Verified partner — not you? <a href="#" onclick="screenId();return false;">use another ID</a></span></div>
     <iframe src="${esc(src)}" style="width:100%;min-height:520px;border:none;margin-top:14px;" scrolling="yes"></iframe>
+    <button class="btn btn-brand" onclick="ghlFormSubmitted()">✓ I submitted the form — Continue</button>
     <div class="foot">Partners only · PayProTec</div>`;
 }
 window.addEventListener('message', function(ev){
   if(_ghlFormDone || !CFG || CFG.field_source!=='ghl_form') return;
   const o=String(ev.origin||'');
-  if(o.indexOf('leadconnectorhq.com')===-1 && o.indexOf('leadconnector')===-1) return;
+  if(o.indexOf('leadconnector')===-1 && o.indexOf('msgsndr')===-1) return;
+  if(ev.data && typeof ev.data==='object' && ev.data.type==='formSubmitted'){ ghlFormSubmitted(); return; }
   let str=''; try{ str = typeof ev.data==='string'?ev.data:JSON.stringify(ev.data||''); }catch(e){ str=''; }
   if(/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) ghlFormSubmitted();
 });

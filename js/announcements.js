@@ -469,9 +469,13 @@
         var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
         body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
             + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:9px 11px;font-size:12px;color:#0369a1;margin:6px 0 10px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe>';
+            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe>'
+            // Not every GHL form fires a cross-origin "submitted" signal we can
+            // detect automatically, so a manual confirm is the reliable path —
+            // the auto-detect below (if it fires) just skips straight past this.
+            + '<button type="button" class="ppa-cta" style="' + th.btn + 'margin-top:12px;" onclick="ppAnnRsvpFormSubmitted()">✓ I submitted the form — Continue</button>';
     }
-    function ppAnnRsvpFormSubmitted() {
+    window.ppAnnRsvpFormSubmitted = function () {
         if (!_rsvpFormId || _rsvpFormDone) return;
         _rsvpFormDone = true;
         var id = _rsvpFormId, kind = _rsvpFormKind;
@@ -486,12 +490,14 @@
                 + '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(_rsvpCfg.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
                 + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:12px;border-radius:9px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
         });
-    }
-    // Detect the HighLevel RSVP form's submission (cross-origin postMessage).
+    };
+    // Best-effort auto-advance if the form DOES post a detectable message —
+    // harmless no-op (guarded by _rsvpFormDone) if the manual button already fired.
     window.addEventListener('message', function (ev) {
         if (!_rsvpFormId || _rsvpFormDone) return;
         var o = String(ev.origin || '');
-        if (o.indexOf('leadconnectorhq.com') === -1 && o.indexOf('leadconnector') === -1) return;
+        if (o.indexOf('leadconnector') === -1 && o.indexOf('msgsndr') === -1) return;
+        if (ev.data && typeof ev.data === 'object' && ev.data.type === 'formSubmitted') { ppAnnRsvpFormSubmitted(); return; }
         var str = ''; try { str = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data || ''); } catch (e) { str = ''; }
         if (/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) ppAnnRsvpFormSubmitted();
     });
