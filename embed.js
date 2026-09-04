@@ -306,7 +306,10 @@
     });
 
     // ── Interactive survey (poll / rating / contact capture) ──────────────────
-    var INP = 'width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;';
+    // Explicit bg/color so inputs stay legible even on dark themes (Night Event,
+    // Event Hero) — form controls don't inherit an ancestor's text color the
+    // way a <div> would, so without this the text can render invisible.
+    var INP = 'width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;background:#fff;color:#0a1628;';
     function req(s, f) { return s.contact && s.contact.required && s.contact.required.indexOf(f) !== -1; }
     function surveyHtml(c) {
         var s = c.survey; if (!s || !s.enabled) return '';
@@ -400,16 +403,17 @@
         var c = current; if (!c || c.id !== id || !c.rsvp) return;
         track(id, 'click', 'rsvp_open', c.variant);
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
-        body.innerHTML = '<div class="ppx-text">Loading…</div>';
+        var th = theme(c);
+        body.innerHTML = '<div class="ppx-text" style="color:' + th.text + ';">Loading…</div>';
         rsvpApi({ action: 'config', event_key: c.rsvp.event_key }).then(function (r) {
-            if (!r.success) { body.innerHTML = '<div class="ppx-text">This RSVP isn\'t available right now.</div>'; return; }
+            if (!r.success) { body.innerHTML = '<div class="ppx-text" style="color:' + th.text + ';">This RSVP isn\'t available right now.</div>'; return; }
             _rsvpCfg = r.event;
-            body.innerHTML = '<div class="ppx-title">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
-                + (_rsvpCfg.intro ? ('<div class="ppx-text" style="margin-bottom:12px;">' + bodyHtml(_rsvpCfg.intro) + '</div>') : '<div style="margin-bottom:6px;"></div>')
-                + '<div style="font-size:13px;font-weight:700;color:#0a1628;margin-bottom:6px;">What\'s your most recent PayProTec Partner ID?</div>'
+            body.innerHTML = '<div class="ppx-title" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+                + (_rsvpCfg.intro ? ('<div class="ppx-text" style="color:' + th.text + ';margin-bottom:12px;">' + bodyHtml(_rsvpCfg.intro) + '</div>') : '<div style="margin-bottom:6px;"></div>')
+                + '<div style="font-size:13px;font-weight:700;color:' + th.title + ';margin-bottom:6px;">What\'s your most recent PayProTec Partner ID?</div>'
                 + '<input id="ppx-rsvp-id" style="' + INP + '" placeholder="e.g. 144704" autocomplete="off">'
                 + '<div id="ppx-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
-                + '<button type="button" class="ppx-cta" onclick="__ppxRsvpLookup(\'' + jsArg(id) + '\')">Continue</button>';
+                + '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + '" onclick="__ppxRsvpLookup(\'' + jsArg(id) + '\')">Continue</button>';
             setTimeout(function () { var el = document.getElementById('ppx-rsvp-id'); if (el) el.focus(); }, 30);
         });
     };
@@ -430,18 +434,20 @@
     function __ppxRsvpForm(id) {
         var c = current; if (!c || c.id !== id) return;
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
+        var th = theme(c);
         var qs = (_rsvpCfg.fields || []).map(function (f) {
-            return '<div style="margin-top:12px;"><label style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + rsvpFieldInput(f) + '</div>';
+            return '<div style="margin-top:12px;"><label style="display:block;font-size:12px;font-weight:700;color:' + th.text + ';margin-bottom:5px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + rsvpFieldInput(f) + '</div>';
         }).join('');
-        body.innerHTML = '<div class="ppx-title">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+        body.innerHTML = '<div class="ppx-title" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
             + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:11px 13px;font-size:13px;color:#0369a1;margin-top:8px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-            + (qs || '<div class="ppx-text" style="margin-top:10px;">No extra questions — just confirm your RSVP below.</div>')
+            + (qs || '<div class="ppx-text" style="color:' + th.text + ';margin-top:10px;">No extra questions — just confirm your RSVP below.</div>')
             + '<div id="ppx-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:8px;min-height:14px;"></div>'
-            + '<button type="button" class="ppx-cta" onclick="__ppxRsvpSubmit(\'' + jsArg(id) + '\')">Confirm RSVP</button>';
+            + '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + '" onclick="__ppxRsvpSubmit(\'' + jsArg(id) + '\')">Confirm RSVP</button>';
     }
     window.__ppxRsvpSubmit = function (id) {
         var c = current; if (!c || c.id !== id || !_rsvpPartner) return;
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
+        var th = theme(c);
         var answers = {};
         var els = body.querySelectorAll('[data-name]');
         for (var i = 0; i < els.length; i++) { var el = els[i]; answers[el.getAttribute('data-name')] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value; }
@@ -451,8 +457,8 @@
             track(id, 'click', 'rsvp_submit', c.variant);
             permAdd(id); api({ action: 'dismiss', campaign_id: id });
             var embed = r.embed_url && /^https?:\/\//i.test(r.embed_url) ? r.embed_url : '';
-            body.innerHTML = '<div style="text-align:center;"><div style="font-size:38px;">🎉</div><div class="ppx-title" style="margin-top:6px;">You\'re in!</div>'
-                + '<div class="ppx-text">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
+            body.innerHTML = '<div style="text-align:center;"><div style="font-size:38px;">🎉</div><div class="ppx-title" style="margin-top:6px;color:' + th.title + ';">You\'re in!</div>'
+                + '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
                 + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
         });
     };
@@ -524,7 +530,9 @@
         backdrop = document.createElement('div'); backdrop.className = 'ppx-back';
         backdrop.style.background = 'rgba(4,10,22,.7)';
         backdrop.innerHTML = html;
-        backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction) onClose(); });
+        // RSVP popups never auto-close on a backdrop click — an accidental
+        // click shouldn't discard a Partner ID / answers already typed in.
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction && !c.rsvp) onClose(); });
         document.body.appendChild(backdrop);
         if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
     }
@@ -578,7 +586,9 @@
         backdrop.style.background = th.overlay === 'light' ? 'rgba(15,23,42,.3)' : 'rgba(4,10,22,.6)';
         backdrop.innerHTML = html;
         // Clicking the dark backdrop closes (snoozes) — but not for until_action.
-        backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction) onClose(); });
+        // RSVP popups never auto-close on a backdrop click — an accidental
+        // click shouldn't discard a Partner ID / answers already typed in.
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction && !c.rsvp) onClose(); });
         document.body.appendChild(backdrop);
         if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
         // Video (live/replay) autoplays → track how long the popup is watched.

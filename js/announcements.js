@@ -328,7 +328,11 @@
     }
 
     // ── Interactive survey (poll / rating / contact capture) ──────────────────
-    var SVINP = 'width:100%;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+    // Explicit bg/color so inputs stay legible even on dark themes (Night Event,
+    // Event Hero) — the background doesn't inherit from a dark ancestor the way
+    // text color does, so without this white-on-dark text can land on a
+    // default white input background and become invisible.
+    var SVINP = 'width:100%;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;background:#fff;color:#0a1628;';
     function svReq(s, f) { return s.contact && s.contact.required && s.contact.required.indexOf(f) !== -1; }
     function surveyHtml(c) {
         var s = c.survey; if (!s || !s.enabled) return '';
@@ -421,17 +425,18 @@
         var c = rsvpFind(id); if (!c || !c.rsvp) return;
         track(id, 'click', 'rsvp_open');
         var body = rsvpContainer(kind); if (!body) return;
-        body.innerHTML = '<div class="' + (kind === 'float' ? 'ppa-ftext' : 'ppa-text') + '">Loading…</div>';
+        var th = annTheme(c);
+        body.innerHTML = '<div class="' + (kind === 'float' ? 'ppa-ftext' : 'ppa-text') + '" style="color:' + th.text + ';">Loading…</div>';
         rsvpApi({ action: 'config', event_key: c.rsvp.event_key }).then(function (r) {
-            if (!r.success) { body.innerHTML = '<div class="' + (kind === 'float' ? 'ppa-ftext' : 'ppa-text') + '">This RSVP isn\'t available right now.</div>'; return; }
+            if (!r.success) { body.innerHTML = '<div class="' + (kind === 'float' ? 'ppa-ftext' : 'ppa-text') + '" style="color:' + th.text + ';">This RSVP isn\'t available right now.</div>'; return; }
             _rsvpCfg = r.event;
             var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
-            body.innerHTML = '<div class="' + titleCls + '">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
-                + (_rsvpCfg.intro ? ('<div class="' + textCls + '" style="margin-bottom:10px;">' + bodyHtml(_rsvpCfg.intro) + '</div>') : '')
-                + '<div style="font-size:12px;font-weight:700;color:#0a1628;margin:6px 0 5px;">What\'s your most recent PayProTec Partner ID?</div>'
+            body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+                + (_rsvpCfg.intro ? ('<div class="' + textCls + '" style="color:' + th.text + ';margin-bottom:10px;">' + bodyHtml(_rsvpCfg.intro) + '</div>') : '')
+                + '<div style="font-size:12px;font-weight:700;color:' + th.title + ';margin:6px 0 5px;">What\'s your most recent PayProTec Partner ID?</div>'
                 + '<input id="ppa-rsvp-id" style="' + SVINP + '" placeholder="e.g. 144704" autocomplete="off">'
                 + '<div id="ppa-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
-                + '<button type="button" class="ppa-cta" style="border:none;margin-top:10px;" onclick="ppAnnRsvpLookup(\'' + jsArg(id) + '\',\'' + kind + '\')">Continue</button>';
+                + '<button type="button" class="ppa-cta" style="' + th.btn + 'margin-top:10px;" onclick="ppAnnRsvpLookup(\'' + jsArg(id) + '\',\'' + kind + '\')">Continue</button>';
             setTimeout(function () { var el = document.getElementById('ppa-rsvp-id'); if (el) el.focus(); }, 30);
         });
     };
@@ -451,18 +456,20 @@
     };
     function ppAnnRsvpForm(id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var th = annTheme(c);
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
         var qs = (_rsvpCfg.fields || []).map(function (f) {
-            return '<div style="margin-top:10px;"><label style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + rsvpFieldInput(f) + '</div>';
+            return '<div style="margin-top:10px;"><label style="display:block;font-size:12px;font-weight:700;color:' + th.text + ';margin-bottom:4px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + rsvpFieldInput(f) + '</div>';
         }).join('');
-        body.innerHTML = '<div class="' + titleCls + '">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
             + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:9px 11px;font-size:12px;color:#0369a1;margin-top:6px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-            + (qs || '<div class="' + textCls + '" style="margin-top:8px;">No extra questions — just confirm your RSVP below.</div>')
+            + (qs || '<div class="' + textCls + '" style="color:' + th.text + ';margin-top:8px;">No extra questions — just confirm your RSVP below.</div>')
             + '<div id="ppa-rsvp-err" style="color:#dc2626;font-size:12px;margin-top:8px;min-height:14px;"></div>'
-            + '<button type="button" class="ppa-cta" style="border:none;margin-top:10px;" onclick="ppAnnRsvpSubmit(\'' + jsArg(id) + '\',\'' + kind + '\')">Confirm RSVP</button>';
+            + '<button type="button" class="ppa-cta" style="' + th.btn + 'margin-top:10px;" onclick="ppAnnRsvpSubmit(\'' + jsArg(id) + '\',\'' + kind + '\')">Confirm RSVP</button>';
     }
     window.ppAnnRsvpSubmit = function (id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body || !_rsvpPartner) return;
+        var th = annTheme(c);
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
         var answers = {};
         var els = body.querySelectorAll('[data-name]');
@@ -473,8 +480,8 @@
             track(id, 'click', 'rsvp_submit');
             permAdd(id); dismissServer(id);
             var embed = r.embed_url && /^https?:\/\//i.test(r.embed_url) ? r.embed_url : '';
-            body.innerHTML = '<div style="text-align:center;"><div style="font-size:32px;">🎉</div><div class="' + titleCls + '" style="margin-top:6px;">You\'re in!</div>'
-                + '<div class="' + textCls + '">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
+            body.innerHTML = '<div style="text-align:center;"><div style="font-size:32px;">🎉</div><div class="' + titleCls + '" style="margin-top:6px;color:' + th.title + ';">You\'re in!</div>'
+                + '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
                 + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:12px;border-radius:9px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
             if (!embed) setTimeout(function () { removeEverywhere(id); }, 2600);
         });
