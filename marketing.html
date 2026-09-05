@@ -312,7 +312,7 @@
           <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Questions</div>
           <div id="rsvpNativeFields">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div class="muted" style="font-size:11px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Set a type (text/dropdown/checkbox/etc.) &amp; required per field — each one maps straight to a HighLevel custom field of the same name. That mapping is the entire setup; nothing to configure in HighLevel itself.</div>
+              <div class="muted" style="font-size:11px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Each field maps straight to the HighLevel custom field of the same name — that mapping is the entire setup, nothing to configure in HighLevel itself. The type dropdown defaults to match that field's real HighLevel type (e.g. a HighLevel checkbox field defaults to "checkbox" here); for dropdown-type fields the exact option values are pulled straight from HighLevel too, so nothing needs retyping. You can still override the type if you want it collected differently.</div>
               <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:12px;white-space:nowrap;margin-left:8px;" onclick="rsvpLoadFields()">Refresh fields</button>
             </div>
             <div id="rsvpFieldList" style="margin-top:8px;"><div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div></div>
@@ -2280,17 +2280,38 @@ async function onRsvpLocation(preWfId){
   await rsvpLoadFields();
 }
 let _rsvpCf=[];
+// Recommend a rendering type from HighLevel's actual field dataType, so the
+// dropdown defaults to something whose value format actually matches what
+// HighLevel expects (a checkbox-type field needs an array, single/multi
+// option fields need one of their exact picklist values, etc.) — this is
+// also why the picklist ones auto-carry their real HighLevel options below
+// instead of anyone having to type them in by hand.
+function ghlTypeToLocal(dt){
+  switch(String(dt||'').toUpperCase()){
+    case 'CHECKBOX': return 'checkbox';
+    case 'SINGLE_OPTIONS': case 'RADIO': case 'MULTIPLE_OPTIONS': return 'dropdown';
+    case 'DATE': return 'date';
+    case 'NUMERICAL': case 'MONETORY': return 'number';
+    case 'LARGE_TEXT': return 'textarea';
+    default: return 'text';
+  }
+}
 function rsvpFieldsHtml(selected){
   const sel=selected||[];
   if(!sel.length && !_rsvpCf.length) return '<div class="muted" style="font-size:12px;">No fields loaded yet.</div>';
-  const opts=_rsvpCf.length?_rsvpCf:sel.map(f=>({name:f.name}));
+  const opts=_rsvpCf.length?_rsvpCf:sel.map(f=>({name:f.name, options:f.options||[]}));
   const typeSel=(v)=>['text','textarea','number','date','dropdown','checkbox'].map(t=>`<option value="${t}" ${v===t?'selected':''}>${t}</option>`).join('');
   return opts.map(cf=>{
     const cur=sel.find(f=>f.name===cf.name)||null; const on=!!cur;
-    return `<div class="rsvp-fieldrow" data-fname="${esc(cf.name)}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#fff;">
+    const optionsJson=esc(JSON.stringify(cf.options||(cur&&cur.options)||[]));
+    const hint=cf.dataType?('HighLevel: '+cf.dataType.toLowerCase().replace(/_/g,' ')+((cf.options||[]).length?' · exact options auto-loaded, no typing needed':'')):'';
+    return `<div class="rsvp-fieldrow" data-fname="${esc(cf.name)}" data-options="${optionsJson}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#fff;">
       <input type="checkbox" class="rf_on" ${on?'checked':''}>
-      <span style="flex:1;font-size:13px;">${esc(cf.name)}</span>
-      <select class="inp rf_type" style="width:110px;padding:5px;">${typeSel(cur?cur.type:'text')}</select>
+      <div style="flex:1;">
+        <div style="font-size:13px;">${esc(cf.name)}</div>
+        ${hint?`<div class="muted" style="font-size:10px;">${esc(hint)}</div>`:''}
+      </div>
+      <select class="inp rf_type" style="width:110px;padding:5px;">${typeSel(cur?cur.type:ghlTypeToLocal(cf.dataType))}</select>
       <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="rf_req" ${cur&&cur.required?'checked':''}> req</label>
     </div>`;
   }).join('');
@@ -2308,7 +2329,10 @@ async function rsvpLoadFields(){
 function rsvpCollectFields(){
   const rows=document.querySelectorAll('#rsvpFieldList .rsvp-fieldrow'); const out=[];
   rows.forEach(row=>{ const on=row.querySelector('.rf_on').checked; if(!on) return;
-    out.push({ name:row.dataset.fname, label:row.dataset.fname, type:row.querySelector('.rf_type').value, required:row.querySelector('.rf_req').checked }); });
+    const type=row.querySelector('.rf_type').value;
+    let options=[];
+    if(type==='dropdown'){ try{ options=JSON.parse(row.dataset.options||'[]'); }catch(e){ options=[]; } }
+    out.push({ name:row.dataset.fname, label:row.dataset.fname, type, required:row.querySelector('.rf_req').checked, options }); });
   return out;
 }
 

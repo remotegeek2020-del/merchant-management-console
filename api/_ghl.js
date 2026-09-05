@@ -438,9 +438,20 @@ export async function ghlListCustomFields(locationId) {
         });
         if (!r.ok) return [];
         const d = await r.json().catch(() => ({}));
-        return (d?.customFields || []).map(f => ({ id: f.id, name: f.name || '', key: f.fieldKey || f.key || '' }));
+        return (d?.customFields || []).map(f => ({
+            id: f.id, name: f.name || '', key: f.fieldKey || f.key || '',
+            dataType: f.dataType || '',
+            options: Array.isArray(f.picklistOptions) ? f.picklistOptions : []
+        }));
     } catch { return []; }
 }
+
+// HighLevel custom field types whose value must be POSTed as an array, not a
+// plain string — CHECKBOX and MULTIPLE_OPTIONS store one or more picklist
+// values. Sending a bare string for these silently fails to save (this is
+// why a checkbox question could look "ticked" on our side but never show up
+// as checked in HighLevel).
+const GHL_ARRAY_FIELD_TYPES = ['CHECKBOX', 'MULTIPLE_OPTIONS'];
 
 // Set a contact's custom fields by field NAME (resolves names → ids). Best-effort.
 export async function ghlSetContactCustomFieldsByName(locationId, contactId, nameValueMap) {
@@ -455,8 +466,13 @@ export async function ghlSetContactCustomFieldsByName(locationId, contactId, nam
         const val = nameValueMap[nm];
         if (val == null || val === '') return;
         const def = byName[String(nm).toLowerCase().trim()];
-        if (def) customFields.push({ id: def.id, value: String(val) });
-        else missing.push(nm);
+        if (!def) { missing.push(nm); return; }
+        if (GHL_ARRAY_FIELD_TYPES.includes(def.dataType)) {
+            const arr = Array.isArray(val) ? val : String(val).split(',').map(s => s.trim()).filter(Boolean);
+            customFields.push({ id: def.id, value: arr });
+        } else {
+            customFields.push({ id: def.id, value: String(val) });
+        }
     });
     if (!customFields.length) return { ok: false, error: 'no matching custom fields', missing };
     try {
