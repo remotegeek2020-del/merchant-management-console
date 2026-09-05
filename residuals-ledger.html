@@ -88,7 +88,10 @@
       </div>
     </details>
     <div id="rl-kpis" class="rl-kpis"></div>
-    <input id="rl-search" class="rl-search" placeholder="Search partner name, company, or agent ID…" oninput="renderTable()">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <input id="rl-search" class="rl-search" style="margin-bottom:0;" placeholder="Search partner name, company, or agent ID…" onkeydown="if(event.key==='Enter')renderTable();">
+        <button class="pp-btn pp-btn-secondary" onclick="renderTable()"><span class="material-icons" style="font-size:16px;">search</span> Search</button>
+    </div>
     <table class="rl">
         <thead><tr>
             <th>Partner</th><th style="text-align:right;">Cos / IDs</th><th style="text-align:right;">Merchants</th>
@@ -262,6 +265,7 @@
                 const head = `<tr class="prow" onclick="toggleP(${i})" id="prow-${i}">
                     <td style="font-weight:700;color:#002d5a;"><span class="material-icons caret">chevron_right</span>${esc(p.partner_name)}
                         <button type="button" class="rl-calc-btn" title="Computation for ${esc(p.partner_name)}" onclick="event.stopPropagation();showRlPartnerCalc(${i});"><span class="material-icons" style="font-size:14px;">calculate</span></button>
+                        <button type="button" class="rl-calc-btn" title="Export ${esc(p.partner_name)} to Excel" onclick="event.stopPropagation();exportRlPartner(${i});"><span class="material-icons" style="font-size:14px;">grid_on</span></button>
                     </td>
                     <td class="num">${p.company_count} co · ${p.id_count} id</td>
                     <td class="num">${(p.merchant_count || 0).toLocaleString()}</td>
@@ -360,6 +364,7 @@
         Swal.fire({
             title: `<div style="text-align:left;font-size:16px;font-weight:800;color:#002d5a;">🧮 ${esc(p.partner_name)}</div>`,
             width: 480, showConfirmButton: false, showCloseButton: true,
+            showDenyButton: true, denyButtonText: '📊 Export this partner to Excel', denyButtonColor: '#166534',
             html: `<div style="text-align:left;font-family:'DM Sans',sans-serif;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:4px;">
                 ${_calcDivider(`Rollup — ${p.company_count} compan${p.company_count === 1 ? 'y' : 'ies'} · ${p.id_count} agent ID${p.id_count === 1 ? '' : 's'}`)}
                 ${_calcRow('30-Day Volume', fmt(p.volume_30d), '#002d5a', true)}
@@ -373,7 +378,7 @@
                     <span style="color:white;font-size:20px;font-weight:900;">${fmt(p.agent_residual)}</span>
                 </div>
             </div>`
-        });
+        }).then(result => { if (result.isDenied) exportRlPartner(i); });
     }
 
     function exportLedger() {
@@ -390,10 +395,10 @@
     }
 
     // ── Fancy grouped Excel export (one block per partner → companies → IDs) ──
-    async function exportExcel(btn) {
-        if (!_data || !(_data.partners || []).length) return;
-        if (typeof ExcelJS === 'undefined') { alert('Excel library still loading — try again in a moment.'); return; }
-        if (btn) { btn.disabled = true; }
+    // Shared builder — used for both the full ledger export and a single
+    // partner's export (same layout, just a shorter partner list + a
+    // recomputed total for whichever partners are actually included).
+    async function buildLedgerWorkbook(partnersList, titleText) {
         const money = '$#,##0.00';
         const wb = new ExcelJS.Workbook();
         wb.creator = 'PayProTec'; wb.created = new Date();
@@ -401,7 +406,7 @@
         // Sheet 1: How it's computed
         const notes = wb.addWorksheet('How it’s computed', { properties: { tabColor: { argb: 'FFD97706' } } });
         notes.getColumn(1).width = 110;
-        const nTitle = notes.addRow(['PayProTec — Residuals Ledger']); nTitle.font = { bold: true, size: 16, color: { argb: 'FF002D5A' } }; notes.addRow(['As of ' + (_data.date || '')]).font = { italic: true, color: { argb: 'FF64748B' } };
+        const nTitle = notes.addRow(['PayProTec — ' + titleText]); nTitle.font = { bold: true, size: 16, color: { argb: 'FF002D5A' } }; notes.addRow(['As of ' + (_data.date || '')]).font = { italic: true, color: { argb: 'FF64748B' } };
         notes.addRow([]);
         [
             'HOW EACH AGENT ID IS COMPUTED',
@@ -416,8 +421,9 @@
         // Sheet 2: Residuals (grouped)
         const ws = wb.addWorksheet('Residuals', { properties: { tabColor: { argb: 'FF002D5A' } }, views: [{ state: 'frozen', ySplit: 4 }] });
         const widths = [46, 10, 12, 18, 18, 18, 18]; widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
-        const t = _data.totals || {};
-        const title = ws.addRow(['Residuals Ledger']); ws.mergeCells('A1:G1'); title.font = { bold: true, size: 16, color: { argb: 'FF002D5A' } };
+        const t = { merchant_count: 0, volume_30d: 0, net_residual: 0, ppt_residual: 0, agent_residual: 0 };
+        partnersList.forEach(p => { t.merchant_count += p.merchant_count || 0; t.volume_30d += p.volume_30d || 0; t.net_residual += p.net_residual || 0; t.ppt_residual += p.ppt_residual || 0; t.agent_residual += p.agent_residual || 0; });
+        const title = ws.addRow([titleText]); ws.mergeCells('A1:G1'); title.font = { bold: true, size: 16, color: { argb: 'FF002D5A' } };
         const sub = ws.addRow(['As of ' + (_data.date || '') + '  ·  Net = Volume × 3%  ·  Agent = Net × Rev-Share%  ·  PPT = remainder']); ws.mergeCells('A2:G2'); sub.font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
         ws.addRow([]);
         const head = ws.addRow(['Partner / Company / ID', 'Rev %', 'Merchants', '30D Volume', 'Net Residual', 'PPT Residual', 'Agent Payout']);
@@ -426,7 +432,7 @@
 
         const setMoney = (row) => { [4, 5, 6, 7].forEach(i => row.getCell(i).numFmt = money); row.getCell(3).numFmt = '#,##0'; };
 
-        (_data.partners || []).forEach(p => {
+        partnersList.forEach(p => {
             // Partner header block
             const pr = ws.addRow([p.partner_name, '', p.merchant_count, p.volume_30d, p.net_residual, p.ppt_residual, p.agent_residual]);
             pr.eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF002D5A' } }; });
@@ -446,11 +452,29 @@
         const gt = ws.addRow(['GRAND TOTAL', '', t.merchant_count, t.volume_30d, t.net_residual, t.ppt_residual, t.agent_residual]);
         gt.eachCell(c => { c.font = { bold: true, size: 12 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }; });
         setMoney(gt);
+        return wb;
+    }
 
+    async function exportExcel(btn) {
+        if (!_data || !(_data.partners || []).length) return;
+        if (typeof ExcelJS === 'undefined') { alert('Excel library still loading — try again in a moment.'); return; }
+        if (btn) { btn.disabled = true; }
+        const wb = await buildLedgerWorkbook(_data.partners, 'Residuals Ledger');
         const buf = await wb.xlsx.writeBuffer();
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'residuals-ledger.xlsx'; a.click();
         if (btn) btn.disabled = false;
+    }
+
+    async function exportRlPartner(i) {
+        const p = _renderedPartners[i]; if (!p) return;
+        if (typeof ExcelJS === 'undefined') { alert('Excel library still loading — try again in a moment.'); return; }
+        const wb = await buildLedgerWorkbook([p], p.partner_name);
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = 'residuals-' + p.partner_name.replace(/[^a-z0-9]+/gi, '-').replace(/-+/g, '-').toLowerCase() + '.xlsx';
+        a.click();
     }
 
     // ── Tab switcher: All Partners ↔ Prime49 Residuals ─────────────────────────
