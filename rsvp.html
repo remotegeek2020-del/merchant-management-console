@@ -98,7 +98,7 @@ function screenForm(){
 async function doSubmit(){
   const answers={};
   document.querySelectorAll('[data-name]').forEach(el=>{
-    if(el.dataset.multi==='1'){ answers[el.dataset.name] = Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(c=>c.value).join(', '); }
+    if(el.dataset.multi==='1'){ answers[el.dataset.name] = Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(c=>c.value); }
     else{ answers[el.dataset.name] = (el.type==='checkbox') ? (el.checked?'Yes':'') : el.value; }
   });
   const btn=document.getElementById('subBtn'); const err=document.getElementById('fErr'); err.textContent='';

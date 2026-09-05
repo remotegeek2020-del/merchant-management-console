@@ -312,7 +312,7 @@
           <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Questions</div>
           <div id="rsvpNativeFields">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div class="muted" style="font-size:11px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Each field maps straight to the HighLevel custom field of the same name — that mapping is the entire setup, nothing to configure in HighLevel itself. The type dropdown defaults to match that field's real HighLevel type (e.g. a HighLevel checkbox field defaults to "checkbox" here); for dropdown-type fields the exact option values are pulled straight from HighLevel too, so nothing needs retyping. You can still override the type if you want it collected differently.</div>
+              <div class="muted" style="font-size:11px;">Tick the fields to ask. Email &amp; phone are auto-filled from the partner. Each field maps straight to the HighLevel custom field of the same name — that mapping is the entire setup, nothing to configure in HighLevel itself. Pick a type (dropdown/checkbox show an <b>Options</b> box — comma-separated, must match HighLevel's exact values). We try to pre-fill that box from HighLevel automatically, but not every field type reports its options the same way, so <b>always check/edit the Options box yourself</b> before saving — that's the reliable way to guarantee it matches.</div>
               <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:12px;white-space:nowrap;margin-left:8px;" onclick="rsvpLoadFields()">Refresh fields</button>
             </div>
             <div id="rsvpFieldList" style="margin-top:8px;"><div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div></div>
@@ -2296,6 +2296,11 @@ function ghlTypeToLocal(dt){
     default: return 'text';
   }
 }
+function toggleRsvpOptions(sel){
+  const row=sel.closest('.rsvp-fieldrow');
+  const wrap=row.querySelector('.rf_opts_wrap');
+  if(wrap) wrap.style.display=(sel.value==='dropdown'||sel.value==='checkbox')?'block':'none';
+}
 function rsvpFieldsHtml(selected){
   const sel=selected||[];
   if(!sel.length && !_rsvpCf.length) return '<div class="muted" style="font-size:12px;">No fields loaded yet.</div>';
@@ -2303,16 +2308,24 @@ function rsvpFieldsHtml(selected){
   const typeSel=(v)=>['text','textarea','number','date','dropdown','checkbox'].map(t=>`<option value="${t}" ${v===t?'selected':''}>${t}</option>`).join('');
   return opts.map(cf=>{
     const cur=sel.find(f=>f.name===cf.name)||null; const on=!!cur;
-    const optionsJson=esc(JSON.stringify(cf.options||(cur&&cur.options)||[]));
-    const hint=cf.dataType?('HighLevel: '+cf.dataType.toLowerCase().replace(/_/g,' ')+((cf.options||[]).length?' · exact options auto-loaded, no typing needed':'')):'';
-    return `<div class="rsvp-fieldrow" data-fname="${esc(cf.name)}" data-options="${optionsJson}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#fff;">
-      <input type="checkbox" class="rf_on" ${on?'checked':''}>
-      <div style="flex:1;">
-        <div style="font-size:13px;">${esc(cf.name)}</div>
-        ${hint?`<div class="muted" style="font-size:10px;">${esc(hint)}</div>`:''}
+    const initType=cur?cur.type:ghlTypeToLocal(cf.dataType);
+    const initOptions=(cur&&cur.options&&cur.options.length)?cur.options:(cf.options||[]);
+    const showOpts=(initType==='dropdown'||initType==='checkbox');
+    const hint=cf.dataType?('HighLevel: '+cf.dataType.toLowerCase().replace(/_/g,' ')+((cf.options||[]).length?' · options pre-filled below — edit if wrong':'')):'';
+    return `<div class="rsvp-fieldrow" data-fname="${esc(cf.name)}" style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;background:#fff;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" class="rf_on" ${on?'checked':''}>
+        <div style="flex:1;">
+          <div style="font-size:13px;">${esc(cf.name)}</div>
+          ${hint?`<div class="muted" style="font-size:10px;">${esc(hint)}</div>`:''}
+        </div>
+        <select class="inp rf_type" style="width:110px;padding:5px;" onchange="toggleRsvpOptions(this)">${typeSel(initType)}</select>
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="rf_req" ${cur&&cur.required?'checked':''}> req</label>
       </div>
-      <select class="inp rf_type" style="width:110px;padding:5px;">${typeSel(cur?cur.type:ghlTypeToLocal(cf.dataType))}</select>
-      <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="rf_req" ${cur&&cur.required?'checked':''}> req</label>
+      <div class="rf_opts_wrap" style="display:${showOpts?'block':'none'};margin-top:6px;padding-left:26px;">
+        <div class="muted" style="font-size:10px;margin-bottom:3px;">One exact HighLevel option value per line:</div>
+        <textarea class="inp rf_opts" rows="2" style="font-size:12px;padding:6px 8px;" placeholder="Yes, I'm playing. Include me in the golf plans.&#10;No, social only. I'm coming for networking, drinks and food.">${esc(initOptions.join('\n'))}</textarea>
+      </div>
     </div>`;
   }).join('');
 }
@@ -2331,7 +2344,10 @@ function rsvpCollectFields(){
   rows.forEach(row=>{ const on=row.querySelector('.rf_on').checked; if(!on) return;
     const type=row.querySelector('.rf_type').value;
     let options=[];
-    if(type==='dropdown'||type==='checkbox'){ try{ options=JSON.parse(row.dataset.options||'[]'); }catch(e){ options=[]; } }
+    if(type==='dropdown'||type==='checkbox'){
+      const raw=(row.querySelector('.rf_opts')||{}).value||'';
+      options=raw.split('\n').map(s=>s.trim()).filter(Boolean);
+    }
     out.push({ name:row.dataset.fname, label:row.dataset.fname, type, required:row.querySelector('.rf_req').checked, options }); });
   return out;
 }

@@ -493,7 +493,7 @@
             if (el.getAttribute('data-multi') === '1') {
                 var checked = el.querySelectorAll('input[type=checkbox]:checked');
                 var vals = []; for (var j = 0; j < checked.length; j++) vals.push(checked[j].value);
-                answers[nm] = vals.join(', ');
+                answers[nm] = vals;
             } else {
                 answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
             }
