@@ -17,6 +17,7 @@
 // name/email/phone) on the embedded form's iframe src.
 import { createClient } from '@supabase/supabase-js';
 import { ghlAddContactToWorkflow } from './_ghl.js';
+import { alreadyRegistered } from './rsvp.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -105,6 +106,13 @@ export default async function handler(req, res) {
         }
         if (ev.prime49_only && !p.prime49) {
             return res.status(200).json({ success: true, ignored: 'not Prime49 eligible' });
+        }
+
+        // A partner can have several Partner IDs on file. If they already RSVP'd
+        // under a DIFFERENT one of their IDs, don't record a second attendee row
+        // for the same person — one attendee, however many IDs they try.
+        if (await alreadyRegistered(ev.id, p.person_id, pid)) {
+            return res.status(200).json({ success: true, ignored: 'already registered (same person, different Partner ID)' });
         }
 
         // The workflow firing this webhook is itself the completion signal

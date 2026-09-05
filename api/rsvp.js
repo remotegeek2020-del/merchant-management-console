@@ -59,7 +59,7 @@ async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
 // ID string (catches rows recorded before person_id existed on this table).
 // Two plain equality queries (rather than building a raw .or() filter string)
 // so arbitrary characters in the user-typed partner_id can't affect the query.
-async function alreadyRegistered(eventId, personId, pid) {
+export async function alreadyRegistered(eventId, personId, pid) {
     const byId = await supabase.from('rsvp_submissions').select('id').eq('event_id', eventId).eq('partner_id_string', pid).limit(1);
     if (byId.data && byId.data.length) return true;
     if (personId) {
