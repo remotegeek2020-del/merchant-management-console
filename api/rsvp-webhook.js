@@ -9,13 +9,11 @@
 //
 // URL to register in HighLevel: https://<host>/api/rsvp-webhook?secret=<RSVP_WEBHOOK_SECRET>&event_key=<event_key>
 //
-// The webhook body should include (via HighLevel merge fields in the Webhook
-// action's custom payload): the contact's id/email/phone/name, and — required
-// to know WHICH partner RSVP'd — the Partner ID. That means the RSVP form
-// needs a hidden field called "ppid" configured in HighLevel to prefill from
-// a URL parameter (named "ppid" — not "partner_id", which is already used by
-// another field on this account), since we already pass `?ppid=...` (along
-// with name/email/phone) on the embedded form's iframe src.
+// No custom field setup needed — the webhook body just needs the contact's
+// standard email/phone (native HighLevel fields, e.g. {{contact.email}} /
+// {{contact.phone}}), same on every event, so this is copy-paste reproducible.
+// We look the partner up by that email/phone (whichever is on file) rather
+// than requiring a Partner ID field on the form.
 import { createClient } from '@supabase/supabase-js';
 import { ghlAddContactToWorkflow } from './_ghl.js';
 import { alreadyRegistered } from './rsvp.js';
@@ -90,20 +88,30 @@ export default async function handler(req, res) {
         const phone = pick(body, ['phone']) || pick(contact, ['phone']);
         const nameParts = [pick(contact, ['first_name', 'firstName']), pick(contact, ['last_name', 'lastName'])].filter(Boolean);
         const name = pick(body, ['full_name', 'name']) || pick(contact, ['full_name', 'name']) || nameParts.join(' ');
-        const pid = pick(body, ['ppid', 'partner_id', 'partnerId', 'partner_id_string'])
+        // Optional override, only if some event still has a dedicated Partner ID
+        // field wired up — otherwise we resolve purely from email/phone below.
+        const pidOverride = pick(body, ['ppid', 'partner_id', 'partnerId', 'partner_id_string'])
             || pick(contact, ['ppid', 'partner_id', 'partnerId'])
             || findCustomField(body, ['ppid', 'partner']);
 
-        if (!pid) {
-            console.warn('[rsvp-webhook] no partner id in payload for event', eventKey);
-            return res.status(200).json({ success: false, message: 'No Partner ID in the webhook payload.' });
+        let p = null, pid = '';
+        if (pidOverride) {
+            const { data: pRows } = await supabase.rpc('partner_contact_by_id', { p_id: pidOverride });
+            p = Array.isArray(pRows) && pRows[0] ? pRows[0] : null;
+            pid = pidOverride;
         }
-
-        const { data: pRows } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
-        const p = Array.isArray(pRows) && pRows[0] ? pRows[0] : null;
         if (!p) {
-            console.warn('[rsvp-webhook] partner id not found:', pid);
-            return res.status(200).json({ success: false, message: 'Partner ID not found.' });
+            if (!email && !phone) {
+                console.warn('[rsvp-webhook] no email/phone in payload for event', eventKey);
+                return res.status(200).json({ success: false, message: 'No contact email/phone in the webhook payload.' });
+            }
+            const { data: pRows } = await supabase.rpc('partner_contact_by_email_or_phone', { p_email: email || null, p_phone: phone || null });
+            p = Array.isArray(pRows) && pRows[0] ? pRows[0] : null;
+            pid = p ? (p.id_string || email || phone) : '';
+        }
+        if (!p) {
+            console.warn('[rsvp-webhook] no partner matched for event', eventKey, email, phone);
+            return res.status(200).json({ success: false, message: 'No partner matched this contact.' });
         }
         if (ev.prime49_only && !p.prime49) {
             return res.status(200).json({ success: true, ignored: 'not Prime49 eligible' });
@@ -113,7 +121,7 @@ export default async function handler(req, res) {
         // under a DIFFERENT one of their IDs, don't record a second attendee row
         // for the same person — one attendee, however many IDs they try.
         if (await alreadyRegistered(ev.id, p.person_id, pid)) {
-            return res.status(200).json({ success: true, ignored: 'already registered (same person, different Partner ID)' });
+            return res.status(200).json({ success: true, ignored: 'already registered (same person)' });
         }
 
         // The workflow firing this webhook is itself the completion signal
