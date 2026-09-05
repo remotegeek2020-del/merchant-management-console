@@ -37,6 +37,8 @@
         .rl-tabs{display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid #e2e8f0;}
         .rl-tab{padding:10px 16px;border:none;background:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px;}
         .rl-tab.on{color:#002d5a;border-bottom-color:#004990;}
+        .rl-calc-btn{border:none;background:#eff6ff;color:#004990;border-radius:6px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-left:6px;vertical-align:-6px;}
+        .rl-calc-btn:hover{background:#dbeafe;}
     </style>
 </head>
 <body>
@@ -86,7 +88,7 @@
       </div>
     </details>
     <div id="rl-kpis" class="rl-kpis"></div>
-    <input id="rl-search" class="rl-search" placeholder="Search partner or company…" oninput="renderTable()">
+    <input id="rl-search" class="rl-search" placeholder="Search partner name, company, or agent ID…" oninput="renderTable()">
     <table class="rl">
         <thead><tr>
             <th>Partner</th><th style="text-align:right;">Cos / IDs</th><th style="text-align:right;">Merchants</th>
@@ -243,17 +245,24 @@
             `<div class="rl-kpi"><div class="v">${typeof k[1] === 'number' ? k[1].toLocaleString() : k[1]}</div><div class="l">${k[0]}</div></div>`).join('');
     }
 
+    let _renderedPartners = [];
     function renderTable() {
         if (!_data) return;
         const q = (document.getElementById('rl-search').value || '').trim().toLowerCase();
         let partners = _data.partners || [];
-        if (q) partners = partners.filter(p => (p.partner_name || '').toLowerCase().includes(q) || (p.company || '').toLowerCase().includes(q));
+        if (q) partners = partners.filter(p => {
+            if ((p.partner_name || '').toLowerCase().includes(q)) return true;
+            return (p.companies || []).some(c => (c.company || '').toLowerCase().includes(q) || (c.ids || []).some(id => (id.id_string || '').toLowerCase().includes(q)));
+        });
+        _renderedPartners = partners;
         const body = document.getElementById('rl-body');
         if (!partners.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">No matching partners.</td></tr>'; }
         else {
             body.innerHTML = partners.map((p, i) => {
                 const head = `<tr class="prow" onclick="toggleP(${i})" id="prow-${i}">
-                    <td style="font-weight:700;color:#002d5a;"><span class="material-icons caret">chevron_right</span>${esc(p.partner_name)}</td>
+                    <td style="font-weight:700;color:#002d5a;"><span class="material-icons caret">chevron_right</span>${esc(p.partner_name)}
+                        <button type="button" class="rl-calc-btn" title="Computation for ${esc(p.partner_name)}" onclick="event.stopPropagation();showRlPartnerCalc(${i});"><span class="material-icons" style="font-size:14px;">calculate</span></button>
+                    </td>
                     <td class="num">${p.company_count} co · ${p.id_count} id</td>
                     <td class="num">${(p.merchant_count || 0).toLocaleString()}</td>
                     <td class="num">${fmt(p.volume_30d)}</td>
@@ -261,7 +270,7 @@
                     <td class="num" style="color:#004990;">${fmt(p.ppt_residual)}</td>
                     <td class="num" style="color:#059669;font-weight:700;">${fmt(p.agent_residual)}</td>
                 </tr>`;
-                const sub = (p.companies || []).map(c => {
+                const sub = (p.companies || []).map((c, ci) => {
                     const crow = `<tr class="idrow corow" data-p="${i}" style="display:none;">
                         <td style="padding-left:30px;font-weight:700;color:#334155;">🏢 ${esc(c.company)}</td>
                         <td class="num" style="color:#64748b;">${c.ids.length} id</td>
@@ -271,8 +280,8 @@
                         <td class="num" style="color:#004990;">${fmt(c.ppt_residual)}</td>
                         <td class="num" style="color:#059669;">${fmt(c.agent_residual)}</td>
                     </tr>`;
-                    const idRows = c.ids.map(id => `<tr class="idrow" data-p="${i}" style="display:none;">
-                        <td style="padding-left:52px;"><span class="idstr">${esc(id.id_string)}</span>${id.prime49 ? '<span class="p49-badge">P49</span>' : ''} <span style="color:#94a3b8;">· ${id.rev_share}%</span></td>
+                    const idRows = c.ids.map((id, idi) => `<tr class="idrow" data-p="${i}" style="display:none;cursor:pointer;" onclick="showRlCalc(${i},${ci},${idi})">
+                        <td style="padding-left:52px;"><span class="idstr">${esc(id.id_string)}</span>${id.prime49 ? '<span class="p49-badge">P49</span>' : ''} <span style="color:#94a3b8;">· ${id.rev_share}%</span> <span class="material-icons" style="font-size:12px;color:#94a3b8;vertical-align:-2px;">calculate</span></td>
                         <td></td>
                         <td class="num">${(id.merchant_count || 0).toLocaleString()}</td>
                         <td class="num">${fmt(id.volume_30d)}</td>
@@ -302,6 +311,69 @@
         const row = document.getElementById('prow-' + i);
         const open = row.classList.toggle('open');
         document.querySelectorAll('tr.idrow[data-p="' + i + '"]').forEach(r => { r.style.display = open ? '' : 'none'; });
+    }
+
+    // ── Computation modals (per agent ID, and rolled up per partner) ───────────
+    const _calcRow = (label, val, color, bold) =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid #f1f5f9;">
+            <span style="font-size:12px;color:#64748b;">${label}</span>
+            <span style="font-size:13px;font-weight:${bold ? '800' : '600'};color:${color || '#002d5a'};">${val}</span>
+        </div>`;
+    const _calcDivider = (label) =>
+        `<div style="padding:6px 14px;background:#f8fafc;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">${label}</div>`;
+
+    function showRlCalc(i, ci, idi) {
+        const p = _renderedPartners[i]; if (!p) return;
+        const c = (p.companies || [])[ci]; if (!c) return;
+        const id = (c.ids || [])[idi]; if (!id) return;
+        const rev = id.rev_share || 0;
+        Swal.fire({
+            title: `<div style="text-align:left;font-size:16px;font-weight:800;color:#002d5a;">💰 ${esc(p.partner_name)}</div>`,
+            width: 460, showConfirmButton: false, showCloseButton: true,
+            html: `<div style="text-align:left;font-family:'DM Sans',sans-serif;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:4px;">
+                ${_calcDivider('Agent ID')}
+                ${_calcRow('ID', `<span style="font-family:monospace;">${esc(id.id_string)}</span>${id.prime49 ? ' <span class="p49-badge">P49</span>' : ''}`)}
+                ${_calcRow('Company', esc(c.company))}
+                ${_calcRow('Rev Share', rev + '%')}
+                ${_calcDivider('Calculation')}
+                ${_calcRow('30-Day Volume', fmt(id.volume_30d), '#002d5a', true)}
+                ${_calcRow('× 3%  = Net Residual', fmt(id.net_residual), '#475569')}
+                ${_calcDivider('Split')}
+                ${_calcRow(`PPT (${(100 - rev).toFixed(0)}%)`, fmt(id.ppt_residual), '#004990', true)}
+                ${_calcRow(`Agent Payout (${rev.toFixed ? rev.toFixed(0) : rev}%)`, fmt(id.agent_residual), '#059669', true)}
+                <div style="background:linear-gradient(135deg,#004990,#0369a1);padding:14px;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="color:rgba(255,255,255,.75);font-size:11px;font-weight:700;text-transform:uppercase;">Agent Payout</span>
+                    <span style="color:white;font-size:20px;font-weight:900;">${fmt(id.agent_residual)}</span>
+                </div>
+            </div>`
+        });
+    }
+
+    function showRlPartnerCalc(i) {
+        const p = _renderedPartners[i]; if (!p) return;
+        const idRows = (p.companies || []).flatMap(c => (c.ids || []).map(id =>
+            `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;">
+                <span><span style="font-family:monospace;">${esc(id.id_string)}</span>${id.prime49 ? ' <span class="p49-badge">P49</span>' : ''} <span style="color:#94a3b8;">${esc(c.company)} · ${id.rev_share}%</span></span>
+                <span style="font-weight:700;color:#059669;">${fmt(id.agent_residual)}</span>
+            </div>`
+        )).join('');
+        Swal.fire({
+            title: `<div style="text-align:left;font-size:16px;font-weight:800;color:#002d5a;">🧮 ${esc(p.partner_name)}</div>`,
+            width: 480, showConfirmButton: false, showCloseButton: true,
+            html: `<div style="text-align:left;font-family:'DM Sans',sans-serif;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-top:4px;">
+                ${_calcDivider(`Rollup — ${p.company_count} compan${p.company_count === 1 ? 'y' : 'ies'} · ${p.id_count} agent ID${p.id_count === 1 ? '' : 's'}`)}
+                ${_calcRow('30-Day Volume', fmt(p.volume_30d), '#002d5a', true)}
+                ${_calcRow('Net Residual (× 3%)', fmt(p.net_residual), '#475569')}
+                ${_calcRow('PPT Residual', fmt(p.ppt_residual), '#004990', true)}
+                ${_calcRow('Agent Payout (total)', fmt(p.agent_residual), '#059669', true)}
+                ${_calcDivider('By Agent ID')}
+                <div style="max-height:220px;overflow:auto;">${idRows}</div>
+                <div style="background:linear-gradient(135deg,#004990,#0369a1);padding:14px;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="color:rgba(255,255,255,.75);font-size:11px;font-weight:700;text-transform:uppercase;">Total Agent Payout</span>
+                    <span style="color:white;font-size:20px;font-weight:900;">${fmt(p.agent_residual)}</span>
+                </div>
+            </div>`
+        });
     }
 
     function exportLedger() {
