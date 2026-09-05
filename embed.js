@@ -257,7 +257,7 @@
         _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'w60', v); }, 60000));      // 1 min+
         _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'wlong', v); }, 300000));   // 5 min+ (long)
     }
-    function close() { clearWatchTimers(); _rsvpGhlId = null; if (backdrop) { backdrop.remove(); backdrop = null; } current = null; next(); }
+    function close() { clearWatchTimers(); if (backdrop) { backdrop.remove(); backdrop = null; } current = null; next(); }
     function onClose() { if (current) snooze(current.id); close(); }
     function onForget() { if (current) { permAdd(current.id); track(current.id, 'dismiss', null, current.variant); api({ action: 'dismiss', campaign_id: current.id }); } close(); }
     function onAction(id, target) { permAdd(id); track(id, 'click', target || 'cta', current && current.variant); api({ action: 'dismiss', campaign_id: id }); close(); }
@@ -401,7 +401,6 @@
     }
     window.__ppxRsvpStart = function (id) {
         var c = current; if (!c || c.id !== id || !c.rsvp) return;
-        _rsvpGhlId = null;
         track(id, 'click', 'rsvp_open', c.variant);
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
         var th = theme(c);
@@ -430,8 +429,7 @@
             if (r.status === 'not_eligible') { if (err) err.textContent = "This RSVP is exclusive to Prime49 partners."; return; }
             if (r.status === 'already_registered') { __ppxRsvpAlreadyDone(id, r.name); return; }
             _rsvpPartner = { id: pid, name: r.name, email: r.email, phone: r.phone };
-            if (_rsvpCfg.field_source === 'ghl_form' && _rsvpCfg.ghl_form_id) __ppxRsvpGhlForm(id);
-            else __ppxRsvpForm(id);
+            __ppxRsvpForm(id);
         });
     };
     function __ppxRsvpAlreadyDone(id, name) {
@@ -440,56 +438,6 @@
         var th = theme(c);
         body.innerHTML = '<div style="text-align:center;"><div style="font-size:34px;">✅</div><div class="ppx-title" style="margin-top:6px;color:' + th.title + ';">You\'re already registered!</div>'
             + '<div class="ppx-text" style="color:' + th.text + ';">' + esc(name || 'You') + (name ? '’ve' : ' have') + ' already RSVP\'d for this event — see you there!</div></div>';
-    }
-    // HighLevel-form mode: embed the real form (HighLevel renders every field
-    // type itself — dropdowns, checkboxes, etc.) instead of reproducing it. The
-    // form's own submit button is the only action shown — no second button.
-    // Completion is detected the same way the CTA gate above detects its form
-    // submit: a cross-origin postMessage from the leadconnectorhq iframe. Once
-    // seen, we call our own API to apply the tag + record the RSVP — that does
-    // not depend on any HighLevel workflow existing.
-    var _rsvpGhlId = null, _rsvpDone = false;
-    function __ppxRsvpGhlForm(id) {
-        var c = current; if (!c || c.id !== id) return;
-        var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
-        var th = theme(c);
-        var qp = [];
-        if (_rsvpPartner.name) { var parts = String(_rsvpPartner.name).trim().split(/\s+/); var fn = parts.shift(); if (fn) qp.push('first_name=' + encodeURIComponent(fn)); if (parts.length) qp.push('last_name=' + encodeURIComponent(parts.join(' '))); }
-        if (_rsvpPartner.email) qp.push('email=' + encodeURIComponent(_rsvpPartner.email));
-        if (_rsvpPartner.phone) qp.push('phone=' + encodeURIComponent(_rsvpPartner.phone));
-        var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
-        body.innerHTML = '<div class="ppx-title" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
-            + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:11px 13px;font-size:13px;color:#0369a1;margin:8px 0 12px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:480px;border:none;" scrolling="yes"></iframe>';
-        _rsvpGhlId = id; _rsvpDone = false;
-    }
-    // Detect the HighLevel form submission (cross-origin postMessage from the iframe).
-    window.addEventListener('message', function (ev) {
-        if (!_rsvpGhlId || _rsvpDone) return;
-        var o = String(ev.origin || '');
-        if (o.indexOf('leadconnectorhq.com') === -1 && o.indexOf('leadconnector') === -1) return;
-        var str = ''; try { str = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data || ''); } catch (e) { str = ''; }
-        if (/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) __ppxRsvpGhlSubmitted();
-    });
-    function __ppxRsvpGhlSubmitted() {
-        if (!_rsvpGhlId || _rsvpDone) return;
-        var id = _rsvpGhlId; var c = current; if (!c || c.id !== id) return;
-        rsvpApi({ action: 'submit_ghl_form', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone }).then(function (r) {
-            if (!r.success) return;
-            __ppxRsvpGhlFormDone(id, r);
-        });
-    }
-    function __ppxRsvpGhlFormDone(id, r) {
-        if (_rsvpDone) return; _rsvpDone = true;
-        var c = current; if (!c || c.id !== id) return;
-        var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
-        var th = theme(c);
-        track(id, 'click', 'rsvp_submit', c.variant);
-        permAdd(id); api({ action: 'dismiss', campaign_id: id });
-        var embed = r.embed_url && /^https?:\/\//i.test(r.embed_url) ? r.embed_url : '';
-        body.innerHTML = '<div style="text-align:center;"><div style="font-size:38px;">🎉</div><div class="ppx-title" style="margin-top:6px;color:' + th.title + ';">You\'re in!</div>'
-            + '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
-            + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
     }
     function __ppxRsvpForm(id) {
         var c = current; if (!c || c.id !== id) return;

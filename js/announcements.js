@@ -423,7 +423,6 @@
     }
     window.ppAnnRsvpStart = function (id, kind) {
         var c = rsvpFind(id); if (!c || !c.rsvp) return;
-        _rsvpGhlId = null;
         track(id, 'click', 'rsvp_open');
         var body = rsvpContainer(kind); if (!body) return;
         var th = annTheme(c);
@@ -453,8 +452,7 @@
             if (r.status === 'not_eligible') { if (err) err.textContent = "This RSVP is exclusive to Prime49 partners."; return; }
             if (r.status === 'already_registered') { ppAnnRsvpAlreadyDone(id, kind, r.name); return; }
             _rsvpPartner = { id: pid, name: r.name, email: r.email, phone: r.phone };
-            if (_rsvpCfg.field_source === 'ghl_form' && _rsvpCfg.ghl_form_id) ppAnnRsvpGhlForm(id, kind);
-            else ppAnnRsvpForm(id, kind);
+            ppAnnRsvpForm(id, kind);
         });
     };
     function ppAnnRsvpAlreadyDone(id, kind, name) {
@@ -463,55 +461,6 @@
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
         body.innerHTML = '<div style="text-align:center;"><div style="font-size:30px;">✅</div><div class="' + titleCls + '" style="margin-top:6px;color:' + th.title + ';">You\'re already registered!</div>'
             + '<div class="' + textCls + '" style="color:' + th.text + ';">' + esc(name || 'You') + (name ? '’ve' : ' have') + ' already RSVP\'d for this event — see you there!</div></div>';
-    }
-    // HighLevel-form mode: embed the real form (HighLevel renders every field
-    // type itself — dropdowns, checkboxes, etc.) instead of reproducing it. The
-    // form's own submit button is the only action shown — no second button.
-    // Completion is detected the same way the CTA gate on external sites does:
-    // a cross-origin postMessage from the leadconnectorhq iframe. Once seen, we
-    // call our own API to apply the tag + record the RSVP.
-    var _rsvpGhlId = null, _rsvpGhlKind = null, _rsvpDone = false;
-    function ppAnnRsvpGhlForm(id, kind) {
-        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
-        var th = annTheme(c);
-        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
-        var qp = [];
-        if (_rsvpPartner.name) { var parts = String(_rsvpPartner.name).trim().split(/\s+/); var fn = parts.shift(); if (fn) qp.push('first_name=' + encodeURIComponent(fn)); if (parts.length) qp.push('last_name=' + encodeURIComponent(parts.join(' '))); }
-        if (_rsvpPartner.email) qp.push('email=' + encodeURIComponent(_rsvpPartner.email));
-        if (_rsvpPartner.phone) qp.push('phone=' + encodeURIComponent(_rsvpPartner.phone));
-        var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
-        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
-            + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:9px 11px;font-size:12px;color:#0369a1;margin:6px 0 10px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe>';
-        _rsvpGhlId = id; _rsvpGhlKind = kind; _rsvpDone = false;
-    }
-    window.addEventListener('message', function (ev) {
-        if (!_rsvpGhlId || _rsvpDone) return;
-        var o = String(ev.origin || '');
-        if (o.indexOf('leadconnectorhq.com') === -1 && o.indexOf('leadconnector') === -1) return;
-        var str = ''; try { str = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data || ''); } catch (e) { str = ''; }
-        if (/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) ppAnnRsvpGhlSubmitted();
-    });
-    function ppAnnRsvpGhlSubmitted() {
-        if (!_rsvpGhlId || _rsvpDone) return;
-        var id = _rsvpGhlId, kind = _rsvpGhlKind;
-        var c = rsvpFind(id); if (!c) return;
-        rsvpApi({ action: 'submit_ghl_form', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone }).then(function (r) {
-            if (!r.success) return;
-            ppAnnRsvpGhlFormDone(id, kind, r);
-        });
-    }
-    function ppAnnRsvpGhlFormDone(id, kind, r) {
-        if (_rsvpDone) return; _rsvpDone = true;
-        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
-        var th = annTheme(c);
-        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
-        track(id, 'click', 'rsvp_submit');
-        permAdd(id); dismissServer(id);
-        var embed = r.embed_url && /^https?:\/\//i.test(r.embed_url) ? r.embed_url : '';
-        body.innerHTML = '<div style="text-align:center;"><div style="font-size:32px;">🎉</div><div class="' + titleCls + '" style="margin-top:6px;color:' + th.title + ';">You\'re in!</div>'
-            + '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
-            + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:12px;border-radius:9px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
     }
     function ppAnnRsvpForm(id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;

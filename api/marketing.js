@@ -729,15 +729,11 @@ export default async function handler(req, res) {
                         required: !!f.required,
                         options: Array.isArray(f.options) ? f.options.map(o => String(o).slice(0, 120)).slice(0, 30) : []
                     })).filter(f => f.name) : [];
-                    const isGhlForm = rb.field_source === 'ghl_form' && rb.ghl_form_id;
                     const eventRow = {
                         name: row.title || 'Untitled event',
                         ghl_location_id: rb.location_id ? String(rb.location_id).trim() : null,
                         mode: rb.mode === 'calendar' ? 'calendar' : 'form',
-                        fields: isGhlForm ? [] : rsvpFields,
-                        field_source: isGhlForm ? 'ghl_form' : 'custom_fields',
-                        ghl_form_id: isGhlForm ? String(rb.ghl_form_id).trim() : null,
-                        ghl_form_name: isGhlForm && rb.ghl_form_name ? String(rb.ghl_form_name).slice(0, 200) : null,
+                        fields: rsvpFields,
                         rsvp_tag: rb.tag ? String(rb.tag).trim() : null,
                         workflow_id: rb.workflow_id ? String(rb.workflow_id).trim() : null,
                         embed_url: rb.embed_url ? String(rb.embed_url).trim() : null,
@@ -755,9 +751,8 @@ export default async function handler(req, res) {
                         const { data: ex } = await supabase.from('rsvp_events').select('id').eq('event_key', key).maybeSingle();
                         if (ex) key = key + '-' + Math.random().toString(36).slice(2, 6);
                         eventRow.event_key = key;
-                        eventRow.webhook_token = randomBytes(16).toString('hex');
                         eventRow.created_by = actorName;
-                        const { data: newEv, error: evErr } = await supabase.from('rsvp_events').insert(eventRow).select('id, event_key, webhook_token').single();
+                        const { data: newEv, error: evErr } = await supabase.from('rsvp_events').insert(eventRow).select('id, event_key').single();
                         if (evErr) return bad(res, 'Campaign saved, but the RSVP setup failed: ' + evErr.message);
                         eventId = newEv.id;
                         const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
