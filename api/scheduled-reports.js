@@ -1537,19 +1537,19 @@ export default async function handler(req, res) {
     const { action, email, name, id, report_type = 'partners_merchants', schedule } = req.body;
 
     // Verify access — never trust client. Most of this file (scheduling,
-    // recipients, ClickUp config, etc.) needs Sending Reports access, but the
-    // Residuals Ledger has its own narrower grant (access_prime49_residuals —
-    // the same flag that already gates the Merchant Portfolio's Prime49 tab)
-    // so a staff member can see residuals without also getting report-sending
-    // capability.
+    // recipients, ClickUp config, etc.) needs Sending Reports access. The
+    // Residuals Ledger's "All Partners" tab has its own narrower, independent
+    // grant (access_residuals_ledger) — separate from access_prime49_residuals,
+    // which only gates the Prime49-only tab — so either can be granted alone.
     const { data: caller } = await supabase.from('app_users')
-        .select('role, access_sending_reports, access_prime49_residuals').eq('userid', session.userid).maybeSingle();
-    const isLedgerAction = action === 'residuals_ledger' || action === 'residuals_ledger_all';
+        .select('role, access_sending_reports, access_residuals_ledger').eq('userid', session.userid).maybeSingle();
+    const isLedgerAction = action === 'residuals_ledger' || action === 'residuals_ledger_all' || action === 'my_residuals_access';
     const hasAccess = caller?.role === 'super_admin' || caller?.access_sending_reports
-        || (isLedgerAction && (caller?.role === 'admin' || caller?.access_prime49_residuals));
+        || (isLedgerAction && (caller?.role === 'admin' || caller?.access_residuals_ledger));
     if (!hasAccess) {
         return res.status(403).json({ success: false, message: 'Access denied.' });
     }
+    if (action === 'my_residuals_access') return res.status(200).json({ success: true, allowed: true });
 
     try {
         // Residuals ledger — same computation as the Prime49 report, for on-screen review/export

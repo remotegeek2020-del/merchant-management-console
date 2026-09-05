@@ -185,7 +185,8 @@ const ACCESS_FLAGS = [
     { key: 'can_edit_legacy_terminal_type', label: 'Edit Legacy Term. Type', short: 'LTT', group: 'Elevated', icon: 'edit_note',      privileged: true, desc: 'Change terminal type on legacy (Salesforce) records' },
     { key: 'access_grant_agency',           label: 'Grant Agency Access',    short: 'AGY', group: 'Elevated', icon: 'workspaces',      privileged: true, desc: 'Grant/revoke a partner\'s white-label agency + manage company ownership' },
     { key: 'access_login_as',               label: 'Login As Partner',       short: 'LGN', group: 'Elevated', icon: 'key',            privileged: true, desc: 'Impersonate a partner (“Login As” / god mode)' },
-    { key: 'access_prime49_residuals',      label: 'Prime49 Residuals',      short: 'P49', group: 'Elevated', icon: 'paid',           privileged: true, desc: 'View Prime49 Residuals (Merchant Portfolio tab + ledger)' },
+    { key: 'access_prime49_residuals',      label: 'Prime49 Residuals',      short: 'P49', group: 'Elevated', icon: 'paid',           privileged: true, desc: 'View the Prime49 Residuals tab (Merchant Portfolio + Residuals Ledger)' },
+    { key: 'access_residuals_ledger',       label: 'Residuals Ledger',       short: 'RL',  group: 'Elevated', icon: 'account_balance', privileged: true, desc: 'View the Residuals Ledger — All Partners tab (independent of Prime49 Residuals access)' },
 ];
 const ACCESS_GROUPS = ['Modules', 'Tools & AI', 'Elevated'];
 const PRIVILEGED_KEYS = ACCESS_FLAGS.filter(f => f.privileged).map(f => f.key);

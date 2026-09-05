@@ -931,7 +931,34 @@
         XLSX.writeFile(wb, `prime49-residuals${safeName}-${runDate || 'export'}.xlsx`);
     }
 
-    loadLedger();
+    // ── Granular access: All Partners and Prime49 are independent grants ──────
+    async function applyResidualsAccess() {
+        let canAll = false, canP49 = false;
+        try {
+            const r1 = await fetch('/api/scheduled-reports', { method: 'POST', headers: AUTH(), body: JSON.stringify({ action: 'my_residuals_access' }) });
+            const j1 = await r1.json();
+            canAll = !!(j1.success && j1.allowed);
+        } catch (e) {}
+        try {
+            const r2 = await fetch('/api/merchants', { method: 'POST', headers: AUTH(), body: JSON.stringify({ action: 'my_prime49_access' }) });
+            const j2 = await r2.json();
+            canP49 = !!(j2.success && j2.allowed);
+        } catch (e) {}
+
+        document.getElementById('rltab-all').style.display = canAll ? '' : 'none';
+        document.getElementById('rltab-prime49').style.display = canP49 ? '' : 'none';
+
+        if (canAll) { switchRlTab('all'); loadLedger(); }
+        else if (canP49) { switchRlTab('prime49'); }
+        else {
+            document.querySelector('.rl-tabs').style.display = 'none';
+            document.getElementById('rl-header-actions-all').style.display = 'none';
+            document.getElementById('rl-tab-prime49').style.display = 'none';
+            document.getElementById('rl-tab-all').style.display = '';
+            document.getElementById('rl-tab-all').innerHTML = '<div style="text-align:center;color:#dc2626;padding:60px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;">Access denied. Ask an admin to grant "Residuals Ledger" or "Prime49 Residuals" access in User Management.</div>';
+        }
+    }
+    applyResidualsAccess();
 </script>
 </body>
 </html>
