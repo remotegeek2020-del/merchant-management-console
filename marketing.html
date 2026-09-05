@@ -329,7 +329,7 @@
               <b>⚠️ One-time setup required in HighLevel</b> (the form's own submit is otherwise invisible to us — a workflow has to tell us). No custom/hidden fields needed — same 2 steps every time:
               <ol style="margin:6px 0 4px 16px;padding:0;">
                 <li>Create a workflow triggered by <b>Form Submitted</b> for this form (or by the <b>RSVP tag</b> being applied, if you'd rather trigger off that). Add a <b>Webhook</b> action to it.</li>
-                <li>Webhook URL (copy exactly, same shape every event): <code id="rsvpWebhookUrl" style="word-break:break-all;">save this campaign first to get your URL</code> <button type="button" class="btn btn-neutral" style="padding:2px 8px;font-size:10px;" onclick="copyText(document.getElementById('rsvpWebhookUrl').textContent)">Copy</button> — body (JSON): <code>{"email":"{{contact.email}}","phone":"{{contact.phone}}","name":"{{contact.full_name}}"}</code>. We match the contact back to the partner by that email/phone.</li>
+                <li>Webhook URL — unique to this event, ready to paste, no Vercel/dev access needed: <code id="rsvpWebhookUrl" style="word-break:break-all;">save this campaign first to get your URL</code> <button type="button" class="btn btn-neutral" style="padding:2px 8px;font-size:10px;" onclick="copyText(document.getElementById('rsvpWebhookUrl').textContent)">Copy</button> — body (JSON), same every time: <code>{"email":"{{contact.email}}","phone":"{{contact.phone}}","name":"{{contact.full_name}}"}</code>. We match the contact back to the partner by that email/phone.</li>
               </ol>
               Once that's wired up, the workflow — not the browser — tells us a submission happened, so it's recorded even if the visitor closes the popup right after submitting. A partner's OTHER Partner IDs are detected automatically (same person), so they can't register twice.
             </div>
@@ -1393,7 +1393,7 @@ async function editCampaign(id){
       setRsvpFieldMode(rev.field_source==='ghl_form'?'ghl_form':'custom_fields');
       populateRsvpLocations(rev.ghl_location_id||'').then(function(){ if(rev.ghl_location_id) return onRsvpLocation(rev.workflow_id||'', rev.ghl_form_id||''); else document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; });
       var wEl=document.getElementById('rsvpWebhookUrl');
-      if(wEl) wEl.textContent = rev.event_key ? (location.origin+'/api/rsvp-webhook?secret=<RSVP_WEBHOOK_SECRET>&event_key='+rev.event_key) : 'save this campaign first to get your URL';
+      if(wEl) wEl.textContent = (rev.event_key && rev.webhook_token) ? (location.origin+'/api/rsvp-webhook?event_key='+rev.event_key+'&secret='+rev.webhook_token) : 'save this campaign first to get your URL';
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';

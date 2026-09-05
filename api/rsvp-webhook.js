@@ -7,13 +7,18 @@
 // owns the truth about whether the form was actually submitted — we just
 // record it.
 //
-// URL to register in HighLevel: https://<host>/api/rsvp-webhook?secret=<RSVP_WEBHOOK_SECRET>&event_key=<event_key>
+// URL to register in HighLevel — copy it straight from the campaign editor
+// (Marketing → RSVP setup), no Vercel/dev access needed:
+//   https://<host>/api/rsvp-webhook?event_key=<event_key>&secret=<per-event webhook_token>
+// The token is generated and stored per RSVP event (rsvp_events.webhook_token)
+// specifically so any staff member can self-serve the full URL — it never
+// depends on an env var only a developer can see.
 //
 // No custom field setup needed — the webhook body just needs the contact's
 // standard email/phone (native HighLevel fields, e.g. {{contact.email}} /
-// {{contact.phone}}), same on every event, so this is copy-paste reproducible.
-// We look the partner up by that email/phone (whichever is on file) rather
-// than requiring a Partner ID field on the form.
+// {{contact.phone}}), same shape on every event, so this is copy-paste
+// reproducible. We look the partner up by that email/phone (whichever is on
+// file) rather than requiring a Partner ID field on the form.
 import { createClient } from '@supabase/supabase-js';
 import { ghlAddContactToWorkflow } from './_ghl.js';
 import { alreadyRegistered } from './rsvp.js';
@@ -52,12 +57,6 @@ function findCustomField(body, hints) {
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
-    const expected = process.env.RSVP_WEBHOOK_SECRET;
-    const provided = req.query?.secret || req.headers['x-webhook-secret'];
-    if (expected && provided !== expected) {
-        return res.status(401).json({ success: false, message: 'Invalid webhook secret.' });
-    }
-
     try {
         let body = req.body || {};
         if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -65,6 +64,9 @@ export default async function handler(req, res) {
 
         // Identify the event: primarily the ?event_key= this URL was registered
         // with; fall back to matching the HighLevel form id if it's in the payload.
+        // event_key itself isn't secret (it's part of the public RSVP page URL),
+        // so the actual auth check below is against that event's own random
+        // webhook_token — not a shared/global secret.
         const eventKey = req.query?.event_key || body.event_key || '';
         let ev = null;
         if (eventKey) {
@@ -81,6 +83,11 @@ export default async function handler(req, res) {
         if (!ev || !ev.enabled) {
             console.warn('[rsvp-webhook] no matching enabled event for', eventKey);
             return res.status(200).json({ success: false, message: 'No matching RSVP event.' });
+        }
+
+        const provided = req.query?.secret || req.headers['x-webhook-secret'];
+        if (!ev.webhook_token || provided !== ev.webhook_token) {
+            return res.status(401).json({ success: false, message: 'Invalid webhook secret.' });
         }
 
         const contactId = pick(body, ['contact_id', 'contactId']) || pick(contact, ['id', 'contact_id']);

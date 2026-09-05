@@ -755,8 +755,9 @@ export default async function handler(req, res) {
                         const { data: ex } = await supabase.from('rsvp_events').select('id').eq('event_key', key).maybeSingle();
                         if (ex) key = key + '-' + Math.random().toString(36).slice(2, 6);
                         eventRow.event_key = key;
+                        eventRow.webhook_token = randomBytes(16).toString('hex');
                         eventRow.created_by = actorName;
-                        const { data: newEv, error: evErr } = await supabase.from('rsvp_events').insert(eventRow).select('id, event_key').single();
+                        const { data: newEv, error: evErr } = await supabase.from('rsvp_events').insert(eventRow).select('id, event_key, webhook_token').single();
                         if (evErr) return bad(res, 'Campaign saved, but the RSVP setup failed: ' + evErr.message);
                         eventId = newEv.id;
                         const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
