@@ -28,20 +28,24 @@ async function loadEvent(key) {
 }
 
 // Resolve the partner's HighLevel contact in THIS sub-account and apply the
-// RSVP tag + workflow. Upsert can fail to return an id (e.g. no email/phone
-// on file for this partner) — fall back to the person's stored hl_contact_id,
-// then to a live email search, before giving up. Returns
-// { contactId, tagApplied, error } so the caller can record what happened
-// instead of silently pretending it worked.
+// RSVP tag + workflow. Prefer the person's already-known hl_contact_id — it's
+// the exact contact, no ambiguity — over an upsert-by-email/phone search,
+// which could match (or worse, silently create a duplicate) the wrong
+// contact if the email/phone on file here doesn't exactly match what's in
+// HighLevel. Only fall back to upsert/search when we don't have an id yet.
+// Returns { contactId, tagApplied, error } so the caller can record what
+// happened instead of silently pretending it worked.
 export async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
-    const tags = ev.rsvp_tag ? [ev.rsvp_tag] : [];
-    const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, tags);
-    let contactId = (up && up.id) || '';
-    let error = up && !up.ok ? (up.error || null) : null;
-    if (!contactId && p.hl_contact_id) contactId = p.hl_contact_id;
-    if (!contactId && email) {
-        const found = await ghlFindContactByEmail(loc, email);
-        if (found && found.id) { contactId = found.id; error = null; }
+    let contactId = p.hl_contact_id || '';
+    let error = null;
+    if (!contactId) {
+        const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, []);
+        contactId = (up && up.id) || '';
+        error = up && !up.ok ? (up.error || null) : null;
+        if (!contactId && email) {
+            const found = await ghlFindContactByEmail(loc, email);
+            if (found && found.id) { contactId = found.id; error = null; }
+        }
     }
     if (!contactId) return { contactId: '', tagApplied: false, error: error || 'Could not create/find the HighLevel contact (no email/phone on file for this partner).' };
     let tagApplied = !ev.rsvp_tag;   // no tag configured = nothing to fail
