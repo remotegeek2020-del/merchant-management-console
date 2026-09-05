@@ -257,7 +257,7 @@
         _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'w60', v); }, 60000));      // 1 min+
         _watchTimers.push(setTimeout(function () { track(c.id, 'watch', 'wlong', v); }, 300000));   // 5 min+ (long)
     }
-    function close() { clearWatchTimers(); if (_rsvpPollTimer) clearTimeout(_rsvpPollTimer); if (backdrop) { backdrop.remove(); backdrop = null; } current = null; next(); }
+    function close() { clearWatchTimers(); _rsvpGhlId = null; if (backdrop) { backdrop.remove(); backdrop = null; } current = null; next(); }
     function onClose() { if (current) snooze(current.id); close(); }
     function onForget() { if (current) { permAdd(current.id); track(current.id, 'dismiss', null, current.variant); api({ action: 'dismiss', campaign_id: current.id }); } close(); }
     function onAction(id, target) { permAdd(id); track(id, 'click', target || 'cta', current && current.variant); api({ action: 'dismiss', campaign_id: id }); close(); }
@@ -401,6 +401,7 @@
     }
     window.__ppxRsvpStart = function (id) {
         var c = current; if (!c || c.id !== id || !c.rsvp) return;
+        _rsvpGhlId = null;
         track(id, 'click', 'rsvp_open', c.variant);
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
         var th = theme(c);
@@ -441,72 +442,45 @@
             + '<div class="ppx-text" style="color:' + th.text + ';">' + esc(name || 'You') + (name ? '’ve' : ' have') + ' already RSVP\'d for this event — see you there!</div></div>';
     }
     // HighLevel-form mode: embed the real form (HighLevel renders every field
-    // type itself — dropdowns, checkboxes, etc.) instead of reproducing it.
-    // Primary completion signal: polling HighLevel for the RSVP tag to appear
-    // on the contact (cross-origin postMessage from the form isn't reliable).
-    // That only works once a workflow in HighLevel actually applies the tag on
-    // submit — if that's not set up (or the visitor used a different email
-    // than what's on file), the tag never appears, so a fallback "Confirm my
-    // RSVP" button shows up after a few seconds. That fallback applies the tag
-    // itself (via our own API call) and always records the RSVP either way —
-    // an RSVP submitted through this form must never go unrecorded.
-    var _rsvpPollTimer = null, _rsvpPollTries = 0, _rsvpFallbackTimer = null, _rsvpDone = false;
+    // type itself — dropdowns, checkboxes, etc.) instead of reproducing it. The
+    // form's own submit button is the only action shown — no second button.
+    // Completion is detected the same way the CTA gate above detects its form
+    // submit: a cross-origin postMessage from the leadconnectorhq iframe. Once
+    // seen, we call our own API to apply the tag + record the RSVP — that does
+    // not depend on any HighLevel workflow existing.
+    var _rsvpGhlId = null, _rsvpDone = false;
     function __ppxRsvpGhlForm(id) {
         var c = current; if (!c || c.id !== id) return;
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
         var th = theme(c);
-        body.innerHTML = '<div class="ppx-text" style="color:' + th.text + ';">Loading…</div>';
-        rsvpApi({ action: 'prep_ghl_form', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone }).then(function (pr) {
-            if (!current || current.id !== id) return;
-            _rsvpPartner.contactId = pr.success ? pr.contact_id : null;
-            var qp = [];
-            if (_rsvpPartner.name) { var parts = String(_rsvpPartner.name).trim().split(/\s+/); var fn = parts.shift(); if (fn) qp.push('first_name=' + encodeURIComponent(fn)); if (parts.length) qp.push('last_name=' + encodeURIComponent(parts.join(' '))); }
-            if (_rsvpPartner.email) qp.push('email=' + encodeURIComponent(_rsvpPartner.email));
-            if (_rsvpPartner.phone) qp.push('phone=' + encodeURIComponent(_rsvpPartner.phone));
-            var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
-            body.innerHTML = '<div class="ppx-title" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
-                + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:11px 13px;font-size:13px;color:#0369a1;margin:8px 0 12px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-                + '<iframe src="' + esc(src) + '" style="width:100%;min-height:480px;border:none;" scrolling="yes"></iframe>'
-                + '<div id="ppx-rsvp-fallback" style="display:none;margin-top:14px;text-align:center;">'
-                +   '<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Already finished the form above?</div>'
-                +   '<button type="button" class="ppx-cta" style="' + th.btn + th.btnWrap + '" onclick="__ppxRsvpConfirm(\'' + jsArg(id) + '\')">✓ Confirm my RSVP</button>'
-                + '</div>';
-            _rsvpDone = false;
-            __ppxRsvpPollStart(id);
-            clearTimeout(_rsvpFallbackTimer);
-            _rsvpFallbackTimer = setTimeout(function () {
-                if (_rsvpDone) return;
-                var el = document.getElementById('ppx-rsvp-fallback'); if (el) el.style.display = 'block';
-            }, 8000);
-        });
+        var qp = [];
+        if (_rsvpPartner.name) { var parts = String(_rsvpPartner.name).trim().split(/\s+/); var fn = parts.shift(); if (fn) qp.push('first_name=' + encodeURIComponent(fn)); if (parts.length) qp.push('last_name=' + encodeURIComponent(parts.join(' '))); }
+        if (_rsvpPartner.email) qp.push('email=' + encodeURIComponent(_rsvpPartner.email));
+        if (_rsvpPartner.phone) qp.push('phone=' + encodeURIComponent(_rsvpPartner.phone));
+        var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
+        body.innerHTML = '<div class="ppx-title" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
+            + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:11px 13px;font-size:13px;color:#0369a1;margin:8px 0 12px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
+            + '<iframe src="' + esc(src) + '" style="width:100%;min-height:480px;border:none;" scrolling="yes"></iframe>';
+        _rsvpGhlId = id; _rsvpDone = false;
     }
-    function __ppxRsvpPollStart(id) {
-        clearTimeout(_rsvpPollTimer); _rsvpPollTries = 0;
-        if (!_rsvpPartner.contactId) return;   // nothing to watch — the fallback button is still the way through
-        (function tick() {
-            var c = current; if (!c || c.id !== id) return;
-            _rsvpPollTries++;
-            rsvpApi({ action: 'check_ghl_tag', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, contact_id: _rsvpPartner.contactId, email: _rsvpPartner.email, phone: _rsvpPartner.phone }).then(function (r) {
-                if (!current || current.id !== id) return;
-                if (r.success && r.found) { __ppxRsvpGhlFormDone(id, r); return; }
-                if (_rsvpPollTries < 150) _rsvpPollTimer = setTimeout(tick, 4000);   // ~10 minutes
-            });
-        })();
-    }
-    // Fallback: apply the RSVP tag ourselves (doesn't depend on a HighLevel
-    // workflow existing) and record the RSVP regardless of the tag outcome.
-    window.__ppxRsvpConfirm = function (id) {
-        if (_rsvpDone) return;
-        var c = current; if (!c || c.id !== id) return;
-        var btn = document.querySelector('#ppx-rsvp-fallback .ppx-cta'); if (btn) { btn.disabled = true; btn.textContent = 'Confirming…'; }
+    // Detect the HighLevel form submission (cross-origin postMessage from the iframe).
+    window.addEventListener('message', function (ev) {
+        if (!_rsvpGhlId || _rsvpDone) return;
+        var o = String(ev.origin || '');
+        if (o.indexOf('leadconnectorhq.com') === -1 && o.indexOf('leadconnector') === -1) return;
+        var str = ''; try { str = typeof ev.data === 'string' ? ev.data : JSON.stringify(ev.data || ''); } catch (e) { str = ''; }
+        if (/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) __ppxRsvpGhlSubmitted();
+    });
+    function __ppxRsvpGhlSubmitted() {
+        if (!_rsvpGhlId || _rsvpDone) return;
+        var id = _rsvpGhlId; var c = current; if (!c || c.id !== id) return;
         rsvpApi({ action: 'submit_ghl_form', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone }).then(function (r) {
-            if (!r.success) { if (btn) { btn.disabled = false; btn.textContent = '✓ Confirm my RSVP'; } return; }
+            if (!r.success) return;
             __ppxRsvpGhlFormDone(id, r);
         });
-    };
+    }
     function __ppxRsvpGhlFormDone(id, r) {
         if (_rsvpDone) return; _rsvpDone = true;
-        clearTimeout(_rsvpPollTimer); clearTimeout(_rsvpFallbackTimer);
         var c = current; if (!c || c.id !== id) return;
         var modal = backdrop && backdrop.querySelector('.ppx-modal'); var body = modal && modal.querySelector('.ppx-body'); if (!body) return;
         var th = theme(c);

@@ -43,6 +43,7 @@ async function boot(){
   CFG=r.event; screenId();
 }
 function screenId(){
+  _rsvpGhlActive=false;
   document.getElementById('app').innerHTML=`
     <h1>${esc(CFG.name)}</h1>
     <div class="muted">${CFG.intro?esc(CFG.intro):'This RSVP is exclusive to PayProTec partners.'}</div>
@@ -77,17 +78,14 @@ function screenAlreadyDone(name){
 }
 // HighLevel-form mode: embed the real form (HighLevel renders every field type
 // itself — dropdowns, checkboxes, etc.). The form's own submit button is the
-// only action shown — no second button. Completion is detected by polling
-// HighLevel for the RSVP tag to appear on the contact (cross-origin
-// postMessage from the form isn't reliable).
-let _rsvpPollTimer=null, _rsvpPollTries=0, _rsvpScreen=0, _rsvpFallbackTimer=null, _rsvpDone=false;
+// only action shown — no second button. Completion is detected the same way
+// the campaign CTA gate detects its form submit: a cross-origin postMessage
+// from the leadconnectorhq iframe. Once seen, we call our own API to apply
+// the tag + record the RSVP.
+let _rsvpScreen=0, _rsvpGhlActive=false, _rsvpDone=false;
 async function screenGhlForm(){
   const myScreen = ++_rsvpScreen;
   _rsvpDone=false;
-  document.getElementById('app').innerHTML='<div class="center muted">Loading…</div>';
-  const pr = await api({action:'prep_ghl_form', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone});
-  if(myScreen!==_rsvpScreen) return;
-  PARTNER.contactId = pr.success ? pr.contact_id : null;
   const qp=[];
   if(PARTNER.name){ const parts=String(PARTNER.name).trim().split(/\s+/); const fn=parts.shift(); if(fn) qp.push('first_name='+encodeURIComponent(fn)); if(parts.length) qp.push('last_name='+encodeURIComponent(parts.join(' '))); }
   if(PARTNER.email) qp.push('email='+encodeURIComponent(PARTNER.email));
@@ -97,36 +95,22 @@ async function screenGhlForm(){
     <h1>${esc(CFG.name)}</h1>
     <div class="pre"><b>${esc(PARTNER.name||'Partner')}</b>${PARTNER.email?'<br>'+esc(PARTNER.email):''}${PARTNER.phone?'<br>'+esc(PARTNER.phone):''}<br><span class="muted" style="color:#0369a1;">✓ Verified partner — not you? <a href="#" onclick="screenId();return false;">use another ID</a></span></div>
     <iframe src="${esc(src)}" style="width:100%;min-height:520px;border:none;margin-top:14px;" scrolling="yes"></iframe>
-    <div id="rsvpFallback" style="display:none;margin-top:14px;text-align:center;">
-      <div class="muted" style="font-size:12px;margin-bottom:6px;">Already finished the form above?</div>
-      <button class="btn btn-brand" id="rsvpConfirmBtn" onclick="confirmGhlForm()">✓ Confirm my RSVP</button>
-    </div>
     <div class="foot">Partners only · PayProTec</div>`;
-  rsvpPollStart(myScreen);
-  clearTimeout(_rsvpFallbackTimer);
-  _rsvpFallbackTimer=setTimeout(()=>{
-    if(_rsvpDone || myScreen!==_rsvpScreen) return;
-    const el=document.getElementById('rsvpFallback'); if(el) el.style.display='block';
-  }, 8000);
+  _rsvpGhlActive = true;
+  window._rsvpGhlScreen = myScreen;
 }
-function rsvpPollStart(myScreen){
-  clearTimeout(_rsvpPollTimer); _rsvpPollTries=0;
-  if(!PARTNER.contactId) return;   // nothing to watch — the fallback button still lets them finish
-  (function tick(){
-    if(myScreen!==_rsvpScreen) return;
-    _rsvpPollTries++;
-    api({action:'check_ghl_tag', partner_id:PARTNER.id, contact_id:PARTNER.contactId, email:PARTNER.email, phone:PARTNER.phone}).then(r=>{
-      if(myScreen!==_rsvpScreen) return;
-      if(r.success && r.found){ screenDone(r); return; }
-      if(_rsvpPollTries<150) _rsvpPollTimer=setTimeout(tick, 4000);   // ~10 minutes
-    });
-  })();
-}
-async function confirmGhlForm(){
-  if(_rsvpDone) return;
-  const btn=document.getElementById('rsvpConfirmBtn'); if(btn){ btn.disabled=true; btn.textContent='Confirming…'; }
-  const r=await api({action:'submit_ghl_form', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone});
-  if(!r.success){ if(btn){ btn.disabled=false; btn.textContent='✓ Confirm my RSVP'; } return; }
+window.addEventListener('message', function(ev){
+  if(!_rsvpGhlActive || _rsvpDone) return;
+  if(window._rsvpGhlScreen !== _rsvpScreen) return;
+  const o = String(ev.origin||'');
+  if(o.indexOf('leadconnectorhq.com')===-1 && o.indexOf('leadconnector')===-1) return;
+  let str=''; try{ str = typeof ev.data==='string' ? ev.data : JSON.stringify(ev.data||''); }catch(e){ str=''; }
+  if(/submit|success|thank|complete/i.test(str) && !/resize|height|scroll|ready|load/i.test(str)) rsvpGhlSubmitted();
+});
+async function rsvpGhlSubmitted(){
+  if(!_rsvpGhlActive || _rsvpDone) return;
+  const r = await api({action:'submit_ghl_form', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone});
+  if(!r.success) return;
   screenDone(r);
 }
 function fieldInput(f){
@@ -158,8 +142,7 @@ async function doSubmit(){
   screenDone(r);
 }
 function screenDone(r){
-  if(_rsvpDone) return; _rsvpDone=true;
-  clearTimeout(_rsvpPollTimer); clearTimeout(_rsvpFallbackTimer);
+  if(_rsvpDone) return; _rsvpDone=true; _rsvpGhlActive=false;
   const embed=safeUrl(r.embed_url);
   document.getElementById('app').innerHTML=`
     <div class="center" style="padding:24px 10px 10px;"><span class="material-icons" style="font-size:46px;color:var(--green);">check_circle</span>
