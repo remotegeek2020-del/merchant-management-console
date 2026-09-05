@@ -4647,7 +4647,7 @@ async function loadPrime49Residuals() {
         const userid = localStorage.getItem('pp_user_id') || '';
         const res  = await fetch('/api/merchants', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') },
             body: JSON.stringify({ action: 'get_prime49_residuals', userid })
         });
         const json = await res.json();
