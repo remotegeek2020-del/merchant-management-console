@@ -1547,28 +1547,24 @@ if (action === 'get_notes') {
             if (!p49Actor || (p49Actor.role !== 'super_admin' && p49Actor.role !== 'admin' && p49Actor.access_prime49_residuals !== true)) {
                 return res.status(403).json({ success: false, message: 'You do not have access to Prime49 Residuals.' });
             }
-            // Include both Approved and Approved - Collections (still actively processing)
-            const { data, error } = await supabase
-                .from('merchant_portfolio_view')
-                .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name, account_status')
-                .eq('is_prime49', true)
-                .in('account_status', ['Approved', 'Approved - Collections'])
-                .order('dba_name', { ascending: true })
-                .limit(10000);
-
+            // Merchant rows + ALL prime49 identifiers run in parallel (independent
+            // queries — no reason to wait for one before starting the other). The
+            // identifiers result also covers the rev_share lookup below: every
+            // merchant here is is_prime49=true, so its agent_id is necessarily
+            // already in this same set — no separate rev_share query needed.
+            const [{ data, error }, { data: allP49Ids }] = await Promise.all([
+                supabase.from('merchant_portfolio_view')
+                    .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name, account_status')
+                    .eq('is_prime49', true)
+                    .in('account_status', ['Approved', 'Approved - Collections'])
+                    .order('dba_name', { ascending: true })
+                    .limit(10000),
+                supabase.from('agent_identifiers').select('id_string, rev_share, agent_id').eq('prime49', true).limit(10000)
+            ]);
             if (error) throw error;
 
-            // Enrich with rev_share from agent_identifiers (explicit limit to avoid default 1000 cap)
-            const agentIds = [...new Set((data || []).map(m => m.agent_id).filter(Boolean))];
-            let revShareMap = {};
-            if (agentIds.length) {
-                const { data: aiData } = await supabase
-                    .from('agent_identifiers')
-                    .select('id_string, rev_share')
-                    .in('id_string', agentIds)
-                    .limit(10000);
-                (aiData || []).forEach(ai => { revShareMap[ai.id_string] = ai.rev_share; });
-            }
+            const revShareMap = {};
+            (allP49Ids || []).forEach(ai => { revShareMap[ai.id_string] = ai.rev_share; });
 
             const rows = (data || []).map(m => {
                 const vol = parseFloat(m.volume_30_day) || 0;
@@ -1608,13 +1604,8 @@ if (action === 'get_notes') {
                 }]);
             });
 
-            // Fetch ALL prime49 identifiers (including those with no approved merchants)
-            const { data: allP49Ids } = await supabase
-                .from('agent_identifiers')
-                .select('id_string, rev_share, agent_id')
-                .eq('prime49', true)
-                .limit(10000);
-
+            // allP49Ids already fetched above (in parallel with the merchant query) —
+            // covers partners with no approved merchants yet too.
             const allAgentIdSet = [...new Set((allP49Ids || []).map(r => r.agent_id).filter(Boolean))];
             let agentInfoMap = {};
             if (allAgentIdSet.length) {
