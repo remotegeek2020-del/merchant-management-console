@@ -2,10 +2,11 @@
 // The client-side postMessage detection for the embedded HighLevel form proved
 // unreliable (no consistent cross-origin message from the form widget), so the
 // RSVP recording is now driven server-to-server instead: a HighLevel workflow
-// (triggered on "Form Submitted" for the RSVP form, or on the RSVP tag being
-// applied) fires a Webhook action straight to this endpoint. That workflow
-// owns the truth about whether the form was actually submitted — we just
-// record it.
+// triggered on "Form Submitted" for the RSVP form fires a Webhook action
+// straight to this endpoint. That workflow only tells us a submission
+// happened — it doesn't tag the contact itself, so THIS endpoint is what
+// applies the RSVP tag + enrolls the workflow (via applyRsvpTagWorkflow),
+// same as the rest of the RSVP flow, before recording the submission.
 //
 // URL to register in HighLevel — copy it straight from the campaign editor
 // (Marketing → RSVP setup), no Vercel/dev access needed:
@@ -20,8 +21,7 @@
 // reproducible. We look the partner up by that email/phone (whichever is on
 // file) rather than requiring a Partner ID field on the form.
 import { createClient } from '@supabase/supabase-js';
-import { ghlAddContactToWorkflow } from './_ghl.js';
-import { alreadyRegistered } from './rsvp.js';
+import { alreadyRegistered, applyRsvpTagWorkflow } from './rsvp.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -131,21 +131,23 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, ignored: 'already registered (same person)' });
         }
 
-        // The workflow firing this webhook is itself the completion signal
-        // (form submitted, or the tag got applied) — no need to re-apply the
-        // tag ourselves. Just enroll the workflow (if configured, idempotent
-        // in HighLevel) and record the RSVP (idempotent here too — repeated
-        // submissions with the same Partner ID just upsert the same row).
-        const resolvedContactId = contactId || p.hl_contact_id || null;
-        if (ev.workflow_id && resolvedContactId) {
-            await ghlAddContactToWorkflow(ev.ghl_location_id, resolvedContactId, ev.workflow_id).catch(() => {});
-        }
+        // The workflow firing this webhook (Form Submitted → Webhook action) is
+        // just telling us a submission happened — it does NOT tag the contact
+        // itself, so we own applying the RSVP tag + enrolling the workflow here,
+        // same as the rest of the RSVP flow.
+        const finalEmail = email || p.email || '';
+        const finalPhone = phone || p.phone || '';
+        const finalName = name || p.full_name || '';
+        const { contactId: resolvedContactId, tagApplied, error } = await applyRsvpTagWorkflow(
+            ev.ghl_location_id, p, finalName, finalEmail, finalPhone, ev
+        );
+        if (!resolvedContactId) console.error('[rsvp-webhook] contact resolution failed for', pid, error);
 
         await supabase.from('rsvp_submissions').upsert({
             event_id: ev.id, partner_id_string: pid, person_id: p.person_id || null,
-            hl_contact_id: resolvedContactId,
-            email: email || p.email || '', name: name || p.full_name || '',
-            is_partner: true, answers: {}, tag_applied: true, hl_error: null
+            hl_contact_id: resolvedContactId || contactId || p.hl_contact_id || null,
+            email: finalEmail, name: finalName,
+            is_partner: true, answers: {}, tag_applied: tagApplied, hl_error: error || null
         }, { onConflict: 'event_id,partner_id_string' });
 
         return res.status(200).json({ success: true, recorded: true });

@@ -30,7 +30,7 @@ async function loadEvent(key) {
 // then to a live email search, before giving up. Returns
 // { contactId, tagApplied, error } so the caller can record what happened
 // instead of silently pretending it worked.
-async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
+export async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
     const tags = ev.rsvp_tag ? [ev.rsvp_tag] : [];
     const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, tags);
     let contactId = (up && up.id) || '';
