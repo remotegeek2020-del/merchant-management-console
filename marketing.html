@@ -326,7 +326,14 @@
             <label class="fld" style="margin-top:0;">Form</label>
             <select class="inp" id="rsvp_ghl_form"><option value="">Choose a sub-account first…</option></select>
             <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:11px;color:#92400e;">
-              <b>⚠️ One-time setup required in HighLevel:</b> add a workflow/automation on this form so it applies the <b>RSVP tag</b> (set above) to the contact when submitted. We watch HighLevel for that tag to appear — that's how we know someone submitted, and it's also what "already registered" checks against. Without that automation, we can't tell submissions apart from an empty form, so RSVPs won't be recorded.
+              <b>⚠️ One-time setup required in HighLevel</b> (the form's own submit is otherwise invisible to us — a workflow has to tell us):
+              <ol style="margin:6px 0 4px 16px;padding:0;">
+                <li>On this form, add a hidden field called <b>Partner ID</b> and set it to prefill from the URL parameter <code>partner_id</code> — we already pass <code>?partner_id=…</code> (with name/email/phone) when the form loads.</li>
+                <li>Create a workflow triggered by <b>Form Submitted</b> for this form (or by the <b>RSVP tag</b> being applied, if you'd rather trigger off that). Add a <b>Webhook</b> action to it.</li>
+                <li>Webhook URL: <code id="rsvpWebhookUrl" style="word-break:break-all;">save this campaign first to get your URL</code> <button type="button" class="btn btn-neutral" style="padding:2px 8px;font-size:10px;" onclick="copyText(document.getElementById('rsvpWebhookUrl').textContent)">Copy</button></li>
+                <li>Webhook body (JSON) should include the contact's email/phone/name and the <b>Partner ID</b> field, e.g. merge tags like <code>{{contact.email}}</code>, <code>{{contact.phone}}</code>, <code>{{contact.partner_id}}</code> — key names must be <code>email</code>, <code>phone</code>, <code>partner_id</code> (and optionally <code>name</code>/<code>contact_id</code>).</li>
+              </ol>
+              Once that's wired up, the workflow — not the browser — tells us a submission happened, so it's recorded even if the visitor closes the popup right after submitting.
             </div>
           </div>
         </div>
@@ -1294,6 +1301,7 @@ function openEditor(type){
   document.getElementById('rsvp_location').innerHTML='<option value="">— select —</option>';
   document.getElementById('rsvp_workflow').innerHTML='<option value="">— none —</option>';
   document.getElementById('rsvp_tag').value=''; document.getElementById('rsvp_eligibility').value='all';
+  var _wEl=document.getElementById('rsvpWebhookUrl'); if(_wEl) _wEl.textContent='save this campaign first to get your URL';
   document.getElementById('rsvp_embed_url').value=''; document.getElementById('rsvp_thankyou').value='';
   document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>';
   document.getElementById('rsvp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
@@ -1386,6 +1394,8 @@ async function editCampaign(id){
       window._rsvpEditFields=Array.isArray(rev.fields)?rev.fields:[];
       setRsvpFieldMode(rev.field_source==='ghl_form'?'ghl_form':'custom_fields');
       populateRsvpLocations(rev.ghl_location_id||'').then(function(){ if(rev.ghl_location_id) return onRsvpLocation(rev.workflow_id||'', rev.ghl_form_id||''); else document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; });
+      var wEl=document.getElementById('rsvpWebhookUrl');
+      if(wEl) wEl.textContent = rev.event_key ? (location.origin+'/api/rsvp-webhook?secret=<RSVP_WEBHOOK_SECRET>&event_key='+rev.event_key) : 'save this campaign first to get your URL';
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
