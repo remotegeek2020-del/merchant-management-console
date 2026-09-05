@@ -80,9 +80,10 @@ function screenAlreadyDone(name){
 // only action shown — no second button. Completion is detected by polling
 // HighLevel for the RSVP tag to appear on the contact (cross-origin
 // postMessage from the form isn't reliable).
-let _rsvpPollTimer=null, _rsvpPollTries=0, _rsvpScreen=0;
+let _rsvpPollTimer=null, _rsvpPollTries=0, _rsvpScreen=0, _rsvpFallbackTimer=null, _rsvpDone=false;
 async function screenGhlForm(){
   const myScreen = ++_rsvpScreen;
+  _rsvpDone=false;
   document.getElementById('app').innerHTML='<div class="center muted">Loading…</div>';
   const pr = await api({action:'prep_ghl_form', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone});
   if(myScreen!==_rsvpScreen) return;
@@ -96,12 +97,21 @@ async function screenGhlForm(){
     <h1>${esc(CFG.name)}</h1>
     <div class="pre"><b>${esc(PARTNER.name||'Partner')}</b>${PARTNER.email?'<br>'+esc(PARTNER.email):''}${PARTNER.phone?'<br>'+esc(PARTNER.phone):''}<br><span class="muted" style="color:#0369a1;">✓ Verified partner — not you? <a href="#" onclick="screenId();return false;">use another ID</a></span></div>
     <iframe src="${esc(src)}" style="width:100%;min-height:520px;border:none;margin-top:14px;" scrolling="yes"></iframe>
+    <div id="rsvpFallback" style="display:none;margin-top:14px;text-align:center;">
+      <div class="muted" style="font-size:12px;margin-bottom:6px;">Already finished the form above?</div>
+      <button class="btn btn-brand" id="rsvpConfirmBtn" onclick="confirmGhlForm()">✓ Confirm my RSVP</button>
+    </div>
     <div class="foot">Partners only · PayProTec</div>`;
   rsvpPollStart(myScreen);
+  clearTimeout(_rsvpFallbackTimer);
+  _rsvpFallbackTimer=setTimeout(()=>{
+    if(_rsvpDone || myScreen!==_rsvpScreen) return;
+    const el=document.getElementById('rsvpFallback'); if(el) el.style.display='block';
+  }, 8000);
 }
 function rsvpPollStart(myScreen){
   clearTimeout(_rsvpPollTimer); _rsvpPollTries=0;
-  if(!PARTNER.contactId) return;   // nothing to watch — the form still works, just no auto-advance
+  if(!PARTNER.contactId) return;   // nothing to watch — the fallback button still lets them finish
   (function tick(){
     if(myScreen!==_rsvpScreen) return;
     _rsvpPollTries++;
@@ -111,6 +121,13 @@ function rsvpPollStart(myScreen){
       if(_rsvpPollTries<150) _rsvpPollTimer=setTimeout(tick, 4000);   // ~10 minutes
     });
   })();
+}
+async function confirmGhlForm(){
+  if(_rsvpDone) return;
+  const btn=document.getElementById('rsvpConfirmBtn'); if(btn){ btn.disabled=true; btn.textContent='Confirming…'; }
+  const r=await api({action:'submit_ghl_form', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone});
+  if(!r.success){ if(btn){ btn.disabled=false; btn.textContent='✓ Confirm my RSVP'; } return; }
+  screenDone(r);
 }
 function fieldInput(f){
   const id='f_'+f.name.replace(/[^a-z0-9]+/gi,'_');
@@ -141,6 +158,8 @@ async function doSubmit(){
   screenDone(r);
 }
 function screenDone(r){
+  if(_rsvpDone) return; _rsvpDone=true;
+  clearTimeout(_rsvpPollTimer); clearTimeout(_rsvpFallbackTimer);
   const embed=safeUrl(r.embed_url);
   document.getElementById('app').innerHTML=`
     <div class="center" style="padding:24px 10px 10px;"><span class="material-icons" style="font-size:46px;color:var(--green);">check_circle</span>

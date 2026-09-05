@@ -468,7 +468,7 @@
     // The form's own submit button is the only action shown — no second button.
     // Completion is detected by polling HighLevel for the RSVP tag to appear on
     // the contact (cross-origin postMessage from the form isn't reliable).
-    var _rsvpPollTimer = null, _rsvpPollTries = 0;
+    var _rsvpPollTimer = null, _rsvpPollTries = 0, _rsvpFallbackTimer = null, _rsvpDone = false;
     function ppAnnRsvpGhlForm(id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
         var th = annTheme(c);
@@ -484,13 +484,23 @@
             var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
             body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
                 + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:9px 11px;font-size:12px;color:#0369a1;margin:6px 0 10px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
-                + '<iframe src="' + esc(src) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe>';
+                + '<iframe src="' + esc(src) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe>'
+                + '<div id="ppa-rsvp-fallback" style="display:none;margin-top:12px;text-align:center;">'
+                +   '<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Already finished the form above?</div>'
+                +   '<button type="button" class="ppa-cta" style="' + th.btn + '" onclick="ppAnnRsvpConfirm(\'' + jsArg(id) + '\',\'' + kind + '\')">✓ Confirm my RSVP</button>'
+                + '</div>';
+            _rsvpDone = false;
             ppAnnRsvpPollStart(id, kind);
+            clearTimeout(_rsvpFallbackTimer);
+            _rsvpFallbackTimer = setTimeout(function () {
+                if (_rsvpDone) return;
+                var el = document.getElementById('ppa-rsvp-fallback'); if (el) el.style.display = 'block';
+            }, 8000);
         });
     }
     function ppAnnRsvpPollStart(id, kind) {
         clearTimeout(_rsvpPollTimer); _rsvpPollTries = 0;
-        if (!_rsvpPartner.contactId) return;   // nothing to watch — the form still works, just no auto-advance
+        if (!_rsvpPartner.contactId) return;   // nothing to watch — the fallback button still lets them finish
         (function tick() {
             var c = rsvpFind(id); if (!c || !rsvpContainer(kind)) return;
             _rsvpPollTries++;
@@ -501,8 +511,19 @@
             });
         })();
     }
+    window.ppAnnRsvpConfirm = function (id, kind) {
+        if (_rsvpDone) return;
+        var c = rsvpFind(id); if (!c) return;
+        var body = rsvpContainer(kind);
+        var btn = body && body.querySelector('#ppa-rsvp-fallback .ppa-cta'); if (btn) { btn.disabled = true; btn.textContent = 'Confirming…'; }
+        rsvpApi({ action: 'submit_ghl_form', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone }).then(function (r) {
+            if (!r.success) { if (btn) { btn.disabled = false; btn.textContent = '✓ Confirm my RSVP'; } return; }
+            ppAnnRsvpGhlFormDone(id, kind, r);
+        });
+    };
     function ppAnnRsvpGhlFormDone(id, kind, r) {
-        clearTimeout(_rsvpPollTimer);
+        if (_rsvpDone) return; _rsvpDone = true;
+        clearTimeout(_rsvpPollTimer); clearTimeout(_rsvpFallbackTimer);
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
         var th = annTheme(c);
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
