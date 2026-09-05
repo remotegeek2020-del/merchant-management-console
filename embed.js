@@ -395,7 +395,14 @@
         var id = 'ppx-rf-' + jsArg(f.name);
         if (f.type === 'textarea') return '<textarea style="' + INP + 'min-height:70px;" id="' + id + '" data-name="' + esc(f.name) + '"></textarea>';
         if (f.type === 'dropdown') return '<select style="' + INP + '" id="' + id + '" data-name="' + esc(f.name) + '"><option value="">— select —</option>' + (f.options || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
-        if (f.type === 'checkbox') return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="' + id + '" data-name="' + esc(f.name) + '"> Yes</label>';
+        if (f.type === 'checkbox') {
+            if (f.options && f.options.length) {
+                return '<div data-name="' + esc(f.name) + '" data-multi="1" style="display:flex;flex-direction:column;gap:6px;">' + (f.options || []).map(function (o) {
+                    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" value="' + esc(o) + '"> ' + esc(o) + '</label>';
+                }).join('') + '</div>';
+            }
+            return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="' + id + '" data-name="' + esc(f.name) + '"> Yes</label>';
+        }
         var t = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
         return '<input type="' + t + '" style="' + INP + '" id="' + id + '" data-name="' + esc(f.name) + '">';
     }
@@ -458,7 +465,16 @@
         var th = theme(c);
         var answers = {};
         var els = body.querySelectorAll('[data-name]');
-        for (var i = 0; i < els.length; i++) { var el = els[i]; answers[el.getAttribute('data-name')] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value; }
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i]; var nm = el.getAttribute('data-name');
+            if (el.getAttribute('data-multi') === '1') {
+                var checked = el.querySelectorAll('input[type=checkbox]:checked');
+                var vals = []; for (var j = 0; j < checked.length; j++) vals.push(checked[j].value);
+                answers[nm] = vals.join(', ');
+            } else {
+                answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
+            }
+        }
         rsvpApi({ action: 'submit', event_key: c.rsvp.event_key, partner_id: _rsvpPartner.id, email: _rsvpPartner.email, phone: _rsvpPartner.phone, answers: answers }).then(function (r) {
             var err = document.getElementById('ppx-rsvp-err');
             if (!r.success) { if (err) err.textContent = r.message || 'Something went wrong.'; return; }

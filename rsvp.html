@@ -78,7 +78,10 @@ function fieldInput(f){
   const id='f_'+f.name.replace(/[^a-z0-9]+/gi,'_');
   if(f.type==='textarea') return `<textarea class="inp" id="${id}" data-name="${esc(f.name)}"></textarea>`;
   if(f.type==='dropdown') return `<select class="inp" id="${id}" data-name="${esc(f.name)}"><option value="">— select —</option>${(f.options||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select>`;
-  if(f.type==='checkbox') return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;"><input type="checkbox" id="${id}" data-name="${esc(f.name)}"> Yes</label>`;
+  if(f.type==='checkbox'){
+    if(f.options && f.options.length) return `<div data-name="${esc(f.name)}" data-multi="1" style="display:flex;flex-direction:column;gap:6px;">${(f.options||[]).map(o=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;"><input type="checkbox" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;"><input type="checkbox" id="${id}" data-name="${esc(f.name)}"> Yes</label>`;
+  }
   const t = f.type==='number'?'number':(f.type==='date'?'date':'text');
   return `<input class="inp" type="${t}" id="${id}" data-name="${esc(f.name)}">`;
 }
@@ -94,7 +97,10 @@ function screenForm(){
 }
 async function doSubmit(){
   const answers={};
-  document.querySelectorAll('[data-name]').forEach(el=>{ answers[el.dataset.name] = (el.type==='checkbox') ? (el.checked?'Yes':'') : el.value; });
+  document.querySelectorAll('[data-name]').forEach(el=>{
+    if(el.dataset.multi==='1'){ answers[el.dataset.name] = Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(c=>c.value).join(', '); }
+    else{ answers[el.dataset.name] = (el.type==='checkbox') ? (el.checked?'Yes':'') : el.value; }
+  });
   const btn=document.getElementById('subBtn'); const err=document.getElementById('fErr'); err.textContent='';
   btn.disabled=true; btn.textContent='Submitting…';
   const r=await api({action:'submit', partner_id:PARTNER.id, email:PARTNER.email, phone:PARTNER.phone, answers});

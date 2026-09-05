@@ -2331,7 +2331,7 @@ function rsvpCollectFields(){
   rows.forEach(row=>{ const on=row.querySelector('.rf_on').checked; if(!on) return;
     const type=row.querySelector('.rf_type').value;
     let options=[];
-    if(type==='dropdown'){ try{ options=JSON.parse(row.dataset.options||'[]'); }catch(e){ options=[]; } }
+    if(type==='dropdown'||type==='checkbox'){ try{ options=JSON.parse(row.dataset.options||'[]'); }catch(e){ options=[]; } }
     out.push({ name:row.dataset.fname, label:row.dataset.fname, type, required:row.querySelector('.rf_req').checked, options }); });
   return out;
 }
