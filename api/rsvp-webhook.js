@@ -12,9 +12,10 @@
 // The webhook body should include (via HighLevel merge fields in the Webhook
 // action's custom payload): the contact's id/email/phone/name, and — required
 // to know WHICH partner RSVP'd — the Partner ID. That means the RSVP form
-// needs a hidden field (e.g. "Partner ID") configured in HighLevel to prefill
-// from a URL parameter, since we already pass `?partner_id=...` (along with
-// name/email/phone) on the embedded form's iframe src.
+// needs a hidden field called "ppid" configured in HighLevel to prefill from
+// a URL parameter (named "ppid" — not "partner_id", which is already used by
+// another field on this account), since we already pass `?ppid=...` (along
+// with name/email/phone) on the embedded form's iframe src.
 import { createClient } from '@supabase/supabase-js';
 import { ghlAddContactToWorkflow } from './_ghl.js';
 import { alreadyRegistered } from './rsvp.js';
@@ -89,9 +90,9 @@ export default async function handler(req, res) {
         const phone = pick(body, ['phone']) || pick(contact, ['phone']);
         const nameParts = [pick(contact, ['first_name', 'firstName']), pick(contact, ['last_name', 'lastName'])].filter(Boolean);
         const name = pick(body, ['full_name', 'name']) || pick(contact, ['full_name', 'name']) || nameParts.join(' ');
-        const pid = pick(body, ['partner_id', 'partnerId', 'partner_id_string'])
-            || pick(contact, ['partner_id', 'partnerId'])
-            || findCustomField(body, ['partner']);
+        const pid = pick(body, ['ppid', 'partner_id', 'partnerId', 'partner_id_string'])
+            || pick(contact, ['ppid', 'partner_id', 'partnerId'])
+            || findCustomField(body, ['ppid', 'partner']);
 
         if (!pid) {
             console.warn('[rsvp-webhook] no partner id in payload for event', eventKey);

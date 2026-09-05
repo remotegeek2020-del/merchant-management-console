@@ -479,7 +479,7 @@
         if (_rsvpPartner.name) { var parts = String(_rsvpPartner.name).trim().split(/\s+/); var fn = parts.shift(); if (fn) qp.push('first_name=' + encodeURIComponent(fn)); if (parts.length) qp.push('last_name=' + encodeURIComponent(parts.join(' '))); }
         if (_rsvpPartner.email) qp.push('email=' + encodeURIComponent(_rsvpPartner.email));
         if (_rsvpPartner.phone) qp.push('phone=' + encodeURIComponent(_rsvpPartner.phone));
-        if (_rsvpPartner.id) qp.push('partner_id=' + encodeURIComponent(_rsvpPartner.id));
+        if (_rsvpPartner.id) qp.push('ppid=' + encodeURIComponent(_rsvpPartner.id));
         var src = 'https://api.leadconnectorhq.com/widget/form/' + esc(_rsvpCfg.ghl_form_id) + (qp.length ? '?' + qp.join('&') : '');
         body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(_rsvpCfg.name || c.title || 'RSVP') + '</div>'
             + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:9px 11px;font-size:12px;color:#0369a1;margin:6px 0 10px;"><b>' + esc(_rsvpPartner.name || 'Partner') + '</b>' + (_rsvpPartner.email ? '<br>' + esc(_rsvpPartner.email) : '') + '</div>'
