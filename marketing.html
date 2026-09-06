@@ -344,6 +344,21 @@
           <textarea class="inp" id="p49_eligible_body" rows="2" placeholder="Great news — one or more of your merchants qualify. Book a call to get started."></textarea>
           <label class="fld">Not-yet-eligible message</label>
           <textarea class="inp" id="p49_not_eligible_body" rows="2" placeholder="None of your merchants are in the qualifying volume range just yet."></textarea>
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:6px;">Next step when eligible</div>
+            <div class="seg" style="margin-bottom:10px;">
+              <button type="button" id="p49EligBookCalBtn" class="on" onclick="p49SetBookingMode('elig','calendar')">Calendar</button>
+              <button type="button" id="p49EligBookFormBtn" onclick="p49SetBookingMode('elig','form')">Form</button>
+            </div>
+            <div id="p49EligBookCalWrap">
+              <label class="fld" style="margin-top:0;">Book-a-call calendar</label>
+              <select class="inp" id="p49_elig_calendar"><option value="">Choose a sub-account first…</option></select>
+            </div>
+            <div id="p49EligBookFormWrap" style="display:none;">
+              <label class="fld" style="margin-top:0;">Form</label>
+              <select class="inp" id="p49_elig_form"><option value="">Choose a sub-account first…</option></select>
+            </div>
+          </div>
         </div>
 
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
@@ -363,21 +378,20 @@
           <input class="inp" id="p49_declined_headline" placeholder="Thanks for your interest">
           <label class="fld">Declined message</label>
           <textarea class="inp" id="p49_declined_body" rows="2" placeholder="Prime49 isn't the right fit just yet — we'll keep you posted."></textarea>
-        </div>
-
-        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
-          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Next step <span class="muted" style="font-weight:400;">(shown when eligible / qualified — shared by both paths)</span></div>
-          <div class="seg" style="margin-bottom:10px;">
-            <button type="button" id="p49BookCalBtn" class="on" onclick="p49SetBookingMode('calendar')">Calendar</button>
-            <button type="button" id="p49BookFormBtn" onclick="p49SetBookingMode('form')">Form</button>
-          </div>
-          <div id="p49BookCalWrap">
-            <label class="fld" style="margin-top:0;">Book-a-call calendar</label>
-            <select class="inp" id="p49_calendar"><option value="">Choose a sub-account first…</option></select>
-          </div>
-          <div id="p49BookFormWrap" style="display:none;">
-            <label class="fld" style="margin-top:0;">Form</label>
-            <select class="inp" id="p49_booking_form"><option value="">Choose a sub-account first…</option></select>
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:6px;">Next step when qualified</div>
+            <div class="seg" style="margin-bottom:10px;">
+              <button type="button" id="p49SurveyBookCalBtn" class="on" onclick="p49SetBookingMode('survey','calendar')">Calendar</button>
+              <button type="button" id="p49SurveyBookFormBtn" onclick="p49SetBookingMode('survey','form')">Form</button>
+            </div>
+            <div id="p49SurveyBookCalWrap">
+              <label class="fld" style="margin-top:0;">Book-a-call calendar</label>
+              <select class="inp" id="p49_survey_calendar"><option value="">Choose a sub-account first…</option></select>
+            </div>
+            <div id="p49SurveyBookFormWrap" style="display:none;">
+              <label class="fld" style="margin-top:0;">Form</label>
+              <select class="inp" id="p49_survey_form"><option value="">Choose a sub-account first…</option></select>
+            </div>
           </div>
         </div>
       </div>
@@ -1363,10 +1377,9 @@ function openEditor(type){
   // don't block a new Prime49 setup on that dropdown being populated.
   document.getElementById('p49_location').innerHTML='<option value="'+P49_DEFAULT_LOCATION.id+'">'+P49_DEFAULT_LOCATION.name+'</option>';
   document.getElementById('p49_eligible_workflow').innerHTML='<option value="">— none —</option>';
-  document.getElementById('p49_calendar').innerHTML='<option value="">Choose a sub-account first…</option>';
-  document.getElementById('p49_booking_form').innerHTML='<option value="">Choose a sub-account first…</option>';
+  ['p49_elig_calendar','p49_elig_form','p49_survey_calendar','p49_survey_form'].forEach(id=>{ document.getElementById(id).innerHTML='<option value="">Choose a sub-account first…</option>'; });
   document.getElementById('p49_external_only').checked=false;
-  p49SetBookingMode('calendar');
+  p49SetBookingMode('elig','calendar'); p49SetBookingMode('survey','calendar');
   if(_isP49) populateP49Locations().then(()=>onP49Location());
   document.getElementById('p49_eligible_tag').value=''; document.getElementById('p49_min_volume').value='20000'; document.getElementById('p49_max_volume').value='30000';
   document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_body').value='';
@@ -1484,9 +1497,10 @@ async function editCampaign(id){
       document.getElementById('p49_declined_headline').value=p49.declined_headline||'';
       document.getElementById('p49_declined_body').value=p49.declined_body||'';
       p49RenderSurvey(Array.isArray(p49.survey_fields)?p49.survey_fields:[]);
-      p49SetBookingMode(p49.booking_mode==='form'?'form':'calendar');
+      p49SetBookingMode('elig', p49.eligible_booking_mode==='form'?'form':'calendar');
+      p49SetBookingMode('survey', p49.survey_booking_mode==='form'?'form':'calendar');
       document.getElementById('p49_external_only').checked=!!c.hide_from_portal;
-      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.calendar_id||'', p49.booking_form_id||''); });
+      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||''); });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1827,6 +1841,11 @@ async function saveCampaign(){
       eligible_headline: document.getElementById('p49_eligible_headline').value.trim()||null,
       eligible_body: document.getElementById('p49_eligible_body').value.trim()||null,
       not_eligible_body: document.getElementById('p49_not_eligible_body').value.trim()||null,
+      eligible_booking_mode: window._p49BookingMode_elig==='form' ? 'form' : 'calendar',
+      eligible_calendar_id: document.getElementById('p49_elig_calendar').value||null,
+      eligible_calendar_name: (document.getElementById('p49_elig_calendar').options[document.getElementById('p49_elig_calendar').selectedIndex]||{}).text||null,
+      eligible_form_id: document.getElementById('p49_elig_form').value||null,
+      eligible_form_name: (document.getElementById('p49_elig_form').options[document.getElementById('p49_elig_form').selectedIndex]||{}).text||null,
       survey_fields: p49CollectSurvey(),
       survey_qualify_mode: document.getElementById('p49_qualify_mode').value,
       survey_tag: document.getElementById('p49_survey_tag').value.trim()||null,
@@ -1834,11 +1853,11 @@ async function saveCampaign(){
       qualified_body: document.getElementById('p49_qualified_body').value.trim()||null,
       declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
       declined_body: document.getElementById('p49_declined_body').value.trim()||null,
-      calendar_id: document.getElementById('p49_calendar').value||null,
-      calendar_name: (document.getElementById('p49_calendar').options[document.getElementById('p49_calendar').selectedIndex]||{}).text||null,
-      booking_mode: window._p49BookingMode==='form' ? 'form' : 'calendar',
-      booking_form_id: document.getElementById('p49_booking_form').value||null,
-      booking_form_name: (document.getElementById('p49_booking_form').options[document.getElementById('p49_booking_form').selectedIndex]||{}).text||null
+      survey_booking_mode: window._p49BookingMode_survey==='form' ? 'form' : 'calendar',
+      survey_calendar_id: document.getElementById('p49_survey_calendar').value||null,
+      survey_calendar_name: (document.getElementById('p49_survey_calendar').options[document.getElementById('p49_survey_calendar').selectedIndex]||{}).text||null,
+      survey_form_id: document.getElementById('p49_survey_form').value||null,
+      survey_form_name: (document.getElementById('p49_survey_form').options[document.getElementById('p49_survey_form').selectedIndex]||{}).text||null
     } : undefined,
     hide_from_portal: window._campaignKind==='prime49' ? document.getElementById('p49_external_only').checked : false
   };
@@ -2508,30 +2527,40 @@ async function populateP49Locations(selectedId){
   }
   sel.value=want;
 }
-async function onP49Location(preWfId, preCalId, preFormId){
+function p49FillSelect(sel, items, preId, emptyLabel, noneFoundLabel){
+  sel.innerHTML='<option value="">'+esc(emptyLabel)+'</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.name||x.id)}</option>`).join('');
+  if(!items.length && noneFoundLabel) sel.innerHTML='<option value="">'+esc(noneFoundLabel)+'</option>';
+  if(preId){ if(!Array.from(sel.options).some(o=>o.value===preId)){ const o=document.createElement('option'); o.value=preId; o.textContent=preId; sel.appendChild(o);} sel.value=preId; }
+}
+async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalId, preSurveyFormId){
   const loc=document.getElementById('p49_location').value;
-  const wSel=document.getElementById('p49_eligible_workflow'), cSel=document.getElementById('p49_calendar'), fSel=document.getElementById('p49_booking_form');
-  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; cSel.innerHTML='<option value="">Choose a sub-account first…</option>'; fSel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
-  wSel.innerHTML='<option value="">Loading…</option>'; cSel.innerHTML='<option value="">Loading…</option>'; fSel.innerHTML='<option value="">Loading…</option>';
+  const wSel=document.getElementById('p49_eligible_workflow');
+  const sels=['p49_elig_calendar','p49_elig_form','p49_survey_calendar','p49_survey_form'].map(id=>document.getElementById(id));
+  if(!loc){
+    wSel.innerHTML='<option value="">— none —</option>';
+    sels.forEach(s=>s.innerHTML='<option value="">Choose a sub-account first…</option>');
+    return;
+  }
+  wSel.innerHTML='<option value="">Loading…</option>'; sels.forEach(s=>s.innerHTML='<option value="">Loading…</option>');
   const [wr,cr,fr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc}), api({action:'ghl_forms',location_id:loc})]);
   const wfs=(wr.success?wr.data:[])||[];
   wSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
   if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
-  const cals=(cr.success?cr.data:[])||[];
-  cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join('');
-  if(!cals.length) cSel.innerHTML='<option value="">No calendars found in this sub-account</option>';
-  if(preCalId){ if(!Array.from(cSel.options).some(o=>o.value===preCalId)){ const o=document.createElement('option'); o.value=preCalId; o.textContent=preCalId; cSel.appendChild(o);} cSel.value=preCalId; }
-  const forms=(fr.success?fr.data:[])||[];
-  fSel.innerHTML='<option value="">— select a form —</option>'+forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name||f.id)}</option>`).join('');
-  if(!forms.length) fSel.innerHTML='<option value="">No forms found in this sub-account</option>';
-  if(preFormId){ if(!Array.from(fSel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; fSel.appendChild(o);} fSel.value=preFormId; }
+  const cals=(cr.success?cr.data:[])||[], forms=(fr.success?fr.data:[])||[];
+  p49FillSelect(document.getElementById('p49_elig_calendar'), cals, preEligCalId, '— none —', 'No calendars found in this sub-account');
+  p49FillSelect(document.getElementById('p49_elig_form'), forms, preEligFormId, '— select a form —', 'No forms found in this sub-account');
+  p49FillSelect(document.getElementById('p49_survey_calendar'), cals, preSurveyCalId, '— none —', 'No calendars found in this sub-account');
+  p49FillSelect(document.getElementById('p49_survey_form'), forms, preSurveyFormId, '— select a form —', 'No forms found in this sub-account');
 }
-function p49SetBookingMode(mode){
-  window._p49BookingMode = mode==='form' ? 'form' : 'calendar';
-  document.getElementById('p49BookCalBtn').classList.toggle('on', window._p49BookingMode==='calendar');
-  document.getElementById('p49BookFormBtn').classList.toggle('on', window._p49BookingMode==='form');
-  document.getElementById('p49BookCalWrap').style.display = window._p49BookingMode==='calendar' ? 'block' : 'none';
-  document.getElementById('p49BookFormWrap').style.display = window._p49BookingMode==='form' ? 'block' : 'none';
+function p49SetBookingMode(path,mode){
+  // path: 'elig' (Path A — I am a PPT Partner) or 'survey' (Path B — prospective).
+  var m = mode==='form' ? 'form' : 'calendar';
+  window['_p49BookingMode_'+path] = m;
+  var pfx = path==='elig' ? 'p49Elig' : 'p49Survey';
+  document.getElementById(pfx+'BookCalBtn').classList.toggle('on', m==='calendar');
+  document.getElementById(pfx+'BookFormBtn').classList.toggle('on', m==='form');
+  document.getElementById(pfx+'BookCalWrap').style.display = m==='calendar' ? 'block' : 'none';
+  document.getElementById(pfx+'BookFormWrap').style.display = m==='form' ? 'block' : 'none';
 }
 function p49ToggleQOptions(sel){
   const row=sel.closest('.p49-qrow');

@@ -67,11 +67,14 @@ async function eligibilityForPerson(personId, minVolume, maxVolume) {
 }
 
 // What to hand the visitor once they qualify: either a HighLevel calendar
-// (booking widget) or a HighLevel form — staff's choice, set once per campaign,
-// shared by both paths.
-function bookingInfo(cfg) {
-    if (cfg.booking_mode === 'form' && cfg.booking_form_id) return { booking_mode: 'form', form_id: cfg.booking_form_id };
-    if (cfg.calendar_id) return { booking_mode: 'calendar', calendar_id: cfg.calendar_id };
+// (booking widget) or a HighLevel form — staff's choice, set independently
+// per path ('eligible' for Path A, 'survey' for Path B).
+function bookingInfo(cfg, path) {
+    const mode = cfg[path + '_booking_mode'];
+    const formId = cfg[path + '_form_id'];
+    const calId = cfg[path + '_calendar_id'];
+    if (mode === 'form' && formId) return { booking_mode: 'form', form_id: formId };
+    if (calId) return { booking_mode: 'calendar', calendar_id: calId };
     return { booking_mode: null };
 }
 
@@ -156,7 +159,7 @@ export default async function handler(req, res) {
 
             return ok(res, {
                 status: 'found', name, email, phone, eligible, merchants,
-                ...(eligible ? bookingInfo(cfg) : {})
+                ...(eligible ? bookingInfo(cfg, 'eligible') : {})
             });
         }
 
@@ -194,7 +197,7 @@ export default async function handler(req, res) {
                 qualified,
                 headline: qualified ? (cfg.qualified_headline || "You're a great fit!") : (cfg.declined_headline || 'Thanks for your interest'),
                 body: qualified ? (cfg.qualified_body || null) : (cfg.declined_body || null),
-                ...(qualified ? bookingInfo(cfg) : {})
+                ...(qualified ? bookingInfo(cfg, 'survey') : {})
             });
         }
 
