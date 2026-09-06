@@ -1199,7 +1199,7 @@ async function loadList(){
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           ${c.image_url?`<img src="${esc(c.image_url)}" style="width:44px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`:`<div style="width:44px;height:32px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:16px;color:#94a3b8;">${c.content_type==='text'?'notes':'image'}</span></div>`}
-          <div><div style="font-weight:700;">${kindBadge(c)} ${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${c.rsvp_event_id?(c.rsvp_count||0)+' RSVP(s)':esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
+          <div><div style="font-weight:700;">${kindBadge(c)} ${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${c.rsvp_event_id?(c.rsvp_count||0)+' RSVP(s)':c.campaign_kind==='prime49'?(c.prime49_count||0)+' conversion(s)':esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
         </div>
       </td>
       <td><span class="pill ${c.audience}">${audienceLabel(c.audience)}</span></td>
@@ -1210,6 +1210,7 @@ async function loadList(){
       <td><span class="switch"><input type="checkbox" ${c.is_active?'checked':''} onchange="toggleActive('${c.id}',this.checked)"><span class="slider"></span></span></td>
       <td style="text-align:right;white-space:nowrap;">
         ${c.rsvp_event_id?`<button class="btn btn-neutral" style="padding:6px 9px;" title="RSVPs" onclick='viewRsvps(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">how_to_reg</span></button>`:''}
+        ${c.campaign_kind==='prime49'?`<button class="btn btn-neutral" style="padding:6px 9px;" title="Prime49 conversions" onclick='viewPrime49(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">emoji_events</span></button>`:''}
         <button class="btn btn-neutral" style="padding:6px 9px;" title="Stats" onclick='showStats(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">insights</span></button>
         <button class="btn btn-neutral" style="padding:6px 9px;" title="Edit" onclick='editCampaign(${JSON.stringify(c.id)})'><span class="material-icons" style="font-size:16px;">edit</span></button>
         <button class="btn btn-danger" style="padding:6px 9px;" title="Delete" onclick='delCampaign(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">delete</span></button>
@@ -1217,7 +1218,7 @@ async function loadList(){
     </tr>`;
   }).join('');
 }
-function kindBadge(c){ return c.campaign_kind==='youtube'?'▶️':(c.campaign_kind==='rsvp'||c.rsvp_event_id)?'🎟️':'📢'; }
+function kindBadge(c){ return c.campaign_kind==='youtube'?'▶️':(c.campaign_kind==='rsvp'||c.rsvp_event_id)?'🎟️':c.campaign_kind==='prime49'?'🏆':'📢'; }
 async function viewRsvps(id, title){
   Swal.fire({title:'Loading…', didOpen:()=>Swal.showLoading()});
   const r = await api({action:'rsvp_submissions', id});
@@ -1238,6 +1239,30 @@ async function exportRsvps(id, title){
   if(!r.success || !r.data || !r.data.csv){ Swal.fire('No data','Nothing to export.','info'); return; }
   const blob=new Blob([r.data.csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download=('rsvps-'+(title||'event')).replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+async function viewPrime49(id, title){
+  Swal.fire({title:'Loading…', didOpen:()=>Swal.showLoading()});
+  const r = await api({action:'prime49_submissions', id});
+  const subs = (r.success?r.data:[])||[];
+  const existing = subs.filter(s=>s.path==='existing'), prospective = subs.filter(s=>s.path==='prospective');
+  const eligibleCount = existing.filter(s=>s.eligible).length, qualifiedCount = prospective.filter(s=>s.qualified).length;
+  const tagCell = s => s.tag_applied
+    ? '<span title="Tag applied" style="color:#16a34a;">✓</span>'
+    : `<span title="${esc(s.hl_error||'Tag not applied')}" style="color:#dc2626;cursor:help;">⚠️</span>`;
+  const row = s => `<tr><td style="padding:5px 8px;">${s.path==='existing'?'🅰️ Partner':'🅱️ Prospect'}</td><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;text-align:center;">${(s.path==='existing'?s.eligible:s.qualified)?'<span style="color:#16a34a;">✓</span>':'<span style="color:#94a3b8;">—</span>'}</td><td style="padding:5px 8px;text-align:center;">${tagCell(s)}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`;
+  const rows = subs.length ? subs.map(row).join('') : '<tr><td colspan="7" class="muted" style="padding:10px;">No conversions yet.</td></tr>';
+  Swal.fire({title:'Prime49 — '+esc(title), width:720, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
+    html:`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="muted" style="font-size:11px;">${existing.length} Path A check(s) (${eligibleCount} eligible) · ${prospective.length} Path B survey(s) (${qualifiedCount} qualified). ⚠️ = the HighLevel tag/contact step failed (hover for why) — the conversion was still recorded.</div>
+        <button class="btn btn-neutral btn-sm" onclick='exportPrime49(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:15px;">download</span> Export CSV</button>
+      </div>
+      <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Path</th><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Eligible/Qualified</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
+}
+async function exportPrime49(id, title){
+  const r = await api({action:'export_prime49', id});
+  if(!r.success || !r.data || !r.data.csv){ Swal.fire('No data','Nothing to export.','info'); return; }
+  const blob=new Blob([r.data.csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=('prime49-'+(title||'campaign')).replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 
 function audienceLabel(a){ return ({partner:'Partner',staff:'Staff',prospect:'Prospect',both:'Partners + Staff',all:'Everyone'})[a]||a||'—'; }

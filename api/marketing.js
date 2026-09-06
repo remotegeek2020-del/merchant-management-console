@@ -502,7 +502,7 @@ const ADMIN_ACTIONS = new Set([
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
-    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp'
+    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
 
@@ -1308,6 +1308,28 @@ export default async function handler(req, res) {
                 const csv = [header].concat((rows || []).map(r => [
                     r.name, r.email, r.partner_id_string, r.tag_applied ? 'yes' : 'no', r.hl_error || '', r.created_at
                 ].concat(qCols.map(c => (r.answers || {})[c] || '')).map(csvEsc).join(','))).join('\n');
+                return ok(res, { csv });
+            }
+
+            // Prime49 conversions for a campaign — every Path A eligibility check
+            // and Path B survey submission, so staff can see the full funnel, not
+            // just the headline "upgraded" count.
+            if (action === 'prime49_submissions') {
+                const { data } = await supabase.from('prime49_submissions').select('*').eq('campaign_id', req.body.id).order('created_at', { ascending: false }).limit(5000);
+                return ok(res, data || []);
+            }
+            if (action === 'export_prime49') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'campaign id required');
+                const { data: rows } = await supabase.from('prime49_submissions').select('*')
+                    .eq('campaign_id', id).order('created_at', { ascending: false }).limit(20000);
+                const csvEsc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+                const header = ['path', 'name', 'email', 'partner_id', 'eligible_or_qualified', 'tag_applied', 'hl_error', 'submitted_at'].join(',');
+                const csv = [header].concat((rows || []).map(r => [
+                    r.path, r.name, r.email, r.partner_id_string || '',
+                    r.path === 'existing' ? (r.eligible ? 'yes' : 'no') : (r.qualified ? 'yes' : 'no'),
+                    r.tag_applied ? 'yes' : 'no', r.hl_error || '', r.created_at
+                ].map(csvEsc).join(','))).join('\n');
                 return ok(res, { csv });
             }
 

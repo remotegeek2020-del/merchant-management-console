@@ -582,6 +582,7 @@
     }
     window.ppAnnP49ExistingStart = function (id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        track(id, 'click', 'p49_existing');
         if (c.prime49Cfg) { ppAnnP49RenderIdScreen(id, kind); return; }
         var th = annTheme(c);
         var textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
@@ -645,6 +646,7 @@
     }
     window.ppAnnP49SurveyStart = function (id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        track(id, 'click', 'p49_prospective');
         var th = annTheme(c);
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
         body.innerHTML = '<div class="' + textCls + '" style="color:' + th.text + ';">Loading…</div>';
