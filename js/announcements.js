@@ -531,6 +531,11 @@
             link.href = 'https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
             document.head.appendChild(link);
         } catch (e) {}
+        try {
+            var style = document.createElement('style');
+            style.textContent = '@keyframes ppaP49Spin{to{transform:rotate(360deg);}}';
+            document.head.appendChild(style);
+        } catch (e) {}
     }
     window.ppAnnP49Start = function (id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
@@ -555,34 +560,54 @@
             +   '</button>'
             + '</div>';
     };
-    window.ppAnnP49ExistingStart = function (id, kind) {
+    // A "thinking" screen shown while a lookup/survey round trip is in
+    // flight, so nothing ever looks like a dead button.
+    function ppAnnP49Thinking(id, kind, text) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var th = annTheme(c);
+        var textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:18px 6px;text-align:center;">'
+            + '<div style="width:26px;height:26px;border-radius:50%;border:3px solid rgba(0,0,0,.1);border-top-color:#f97316;animation:ppaP49Spin .8s linear infinite;"></div>'
+            + '<div class="' + textCls + '" style="color:' + th.text + ';margin-top:10px;">' + esc(text) + '</div></div>';
+    }
+    function ppAnnP49RenderIdScreen(id, kind, errMsg) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
         var th = annTheme(c);
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">I am a PPT Partner</div>'
+            + '<div class="' + textCls + '" style="color:' + th.text + ';margin-bottom:8px;">Enter your Partner ID — we\'ll check your merchants against the eligibility band.</div>'
+            + '<input id="ppa-p49-id-' + kind + '" style="' + SVINP + '" placeholder="e.g. 144704" autocomplete="off">'
+            + '<div id="ppa-p49-err-' + kind + '" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;">' + esc(errMsg || '') + '</div>'
+            + '<button type="button" class="ppa-cta" style="margin-top:8px;background:#f97316;border:none;" onclick="ppAnnP49Lookup(\'' + jsArg(id) + '\',\'' + kind + '\')">Check eligibility</button>';
+    }
+    window.ppAnnP49ExistingStart = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        if (c.prime49Cfg) { ppAnnP49RenderIdScreen(id, kind); return; }
+        var th = annTheme(c);
+        var textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
         body.innerHTML = '<div class="' + textCls + '" style="color:' + th.text + ';">Loading…</div>';
         p49Api({ action: 'config', campaign_id: c.prime49.campaign_id }).then(function (r) {
             if (!rsvpFind(id)) return;
             c.prime49Cfg = r.success ? r.config : null;
-            body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">I am a PPT Partner</div>'
-                + '<div class="' + textCls + '" style="color:' + th.text + ';margin-bottom:8px;">Enter your Partner ID — we\'ll check your merchants against the eligibility band.</div>'
-                + '<input id="ppa-p49-id-' + kind + '" style="' + SVINP + '" placeholder="e.g. 144704" autocomplete="off">'
-                + '<div id="ppa-p49-err-' + kind + '" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
-                + '<button type="button" class="ppa-cta" style="margin-top:8px;background:#f97316;border:none;" onclick="ppAnnP49Lookup(\'' + jsArg(id) + '\',\'' + kind + '\')">Check eligibility</button>';
+            ppAnnP49RenderIdScreen(id, kind);
         });
     };
     window.ppAnnP49Lookup = function (id, kind) {
         var c = rsvpFind(id); if (!c) return;
-        var input = document.getElementById('ppa-p49-id-' + kind), err = document.getElementById('ppa-p49-err-' + kind);
+        var input = document.getElementById('ppa-p49-id-' + kind);
         var pid = input ? input.value.trim() : '';
-        if (!pid) { if (err) err.textContent = 'Please enter your Partner ID.'; return; }
-        if (err) err.textContent = '';
+        if (!pid) { var err = document.getElementById('ppa-p49-err-' + kind); if (err) err.textContent = 'Please enter your Partner ID.'; return; }
+        ppAnnP49Thinking(id, kind, 'Analyzing your merchants across all your Partner IDs…');
         p49Api({ action: 'lookup_existing', campaign_id: c.prime49.campaign_id, partner_id: pid }).then(function (r) {
-            if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
-            if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
+            if (!rsvpFind(id)) return;
+            if (!r.success) { ppAnnP49RenderIdScreen(id, kind, r.message || 'Error.'); return; }
+            if (r.status === 'not_found') { ppAnnP49RenderIdScreen(id, kind, "We couldn't find that Partner ID. Please double-check it."); return; }
             _p49Partner = { id: pid, name: r.name, email: r.email, phone: r.phone };
             ppAnnP49Results(id, kind, r);
         });
     };
+    // The tag/workflow was already applied server-side (in the same
+    // lookup_existing call) when eligible — this just renders the outcome.
     function ppAnnP49Results(id, kind, r) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
         var th = annTheme(c);
@@ -599,27 +624,22 @@
         var cfg = c.prime49Cfg || {};
         var headline = r.eligible ? cfg.eligible_headline : cfg.not_eligible_headline;
         var msg = r.eligible ? cfg.eligible_body : cfg.not_eligible_body;
+        if (r.eligible) { track(id, 'click', 'p49_eligible'); permAdd(id); dismissServer(id); }
         body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + (r.eligible ? '🎉 ' + esc(headline || "You're eligible for Prime49!") : esc(headline || 'Not yet eligible')) + '</div>'
             + '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(msg || (r.eligible ? "We found merchants that qualify — see below." : "None of your merchants are in the qualifying volume range right now.")) + '</div>'
             + '<div style="max-height:180px;overflow:auto;margin-top:8px;">' + (list || '<div class="' + textCls + '" style="font-size:11.5px;">No merchants found under your Partner ID(s).</div>') + '</div>'
-            + (r.eligible ? '<button type="button" class="ppa-cta" style="margin-top:10px;background:#f97316;border:none;" onclick="ppAnnP49Confirm(\'' + jsArg(id) + '\',\'' + kind + '\')">Continue</button>' : '');
-        if (r.eligible) ppAnnP49Confirm(id, kind, true);
+            + ppAnnP49BookingHtml(r);
     }
-    window.ppAnnP49Confirm = function (id, kind, silent) {
-        var c = rsvpFind(id); if (!c || !_p49Partner) return;
-        p49Api({ action: 'confirm_existing', campaign_id: c.prime49.campaign_id, partner_id: _p49Partner.id, email: _p49Partner.email, phone: _p49Partner.phone }).then(function (r) {
-            if (!r.success) return;
-            track(id, 'click', 'p49_eligible'); permAdd(id); dismissServer(id);
-            if (!silent || !r.calendar_id) return;
-            var body = rsvpContainer(kind); if (!body) return;
-            var a = document.createElement('a');
-            a.href = 'https://api.leadconnectorhq.com/widget/booking/' + encodeURIComponent(r.calendar_id);
-            a.target = '_blank'; a.rel = 'noopener';
-            a.className = 'ppa-cta'; a.style.cssText = 'display:block;text-align:center;margin-top:10px;background:#f97316;border:none;text-decoration:none;';
-            a.textContent = 'Book a call';
-            body.appendChild(a);
-        });
-    };
+    // Shared calendar-or-form outcome renderer for both paths.
+    function ppAnnP49BookingHtml(r) {
+        if (r.booking_mode === 'form' && r.form_id) {
+            return '<div style="margin-top:10px;border-radius:9px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(r.form_id) + '" style="width:100%;min-height:400px;border:none;" scrolling="yes"></iframe></div>';
+        }
+        if (r.booking_mode === 'calendar' && r.calendar_id) {
+            return '<a class="ppa-cta" style="display:block;text-align:center;margin-top:10px;background:#f97316;border:none;text-decoration:none;" href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener">Book a call</a>';
+        }
+        return '';
+    }
     window.ppAnnP49SurveyStart = function (id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
         var th = annTheme(c);
@@ -644,6 +664,7 @@
     function p49FieldInput(f) {
         var id = 'ppa-p49-q-' + jsArg(f.name);
         if (f.type === 'textarea') return '<textarea style="' + SVINP + 'min-height:60px;" id="' + id + '" data-name="' + esc(f.name) + '"></textarea>';
+        if (f.type === 'number') return '<input type="number" style="' + SVINP + '" id="' + id + '" data-name="' + esc(f.name) + '">';
         if (f.type === 'dropdown') return '<select style="' + SVINP + '" id="' + id + '" data-name="' + esc(f.name) + '"><option value="">— select —</option>' + (f.options || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
         if (f.type === 'checkbox') {
             if (f.options && f.options.length) {
@@ -674,13 +695,15 @@
                 answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
             }
         }
+        var savedHtml = body.innerHTML;
+        ppAnnP49Thinking(id, kind, 'Reviewing your answers…');
         p49Api({ action: 'submit_survey', campaign_id: c.prime49.campaign_id, name: name, email: email, phone: phone, answers: answers }).then(function (r) {
-            var err = document.getElementById('ppa-p49-serr-' + kind);
-            if (!r.success) { if (err) err.textContent = r.message || 'Something went wrong.'; return; }
+            if (!rsvpFind(id)) return;
+            if (!r.success) { body.innerHTML = savedHtml; var err = document.getElementById('ppa-p49-serr-' + kind); if (err) err.textContent = r.message || 'Something went wrong.'; return; }
             track(id, 'click', 'p49_survey_submit'); permAdd(id); dismissServer(id);
             body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + (r.qualified ? '🎉 ' : '👋 ') + esc(r.headline || '') + '</div>'
                 + (r.body ? '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(r.body) + '</div>' : '')
-                + (r.calendar_id ? ('<a class="ppa-cta" style="display:block;text-align:center;margin-top:10px;background:#f97316;border:none;text-decoration:none;" href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener">Book a call</a>') : '');
+                + ppAnnP49BookingHtml(r);
         });
     };
 

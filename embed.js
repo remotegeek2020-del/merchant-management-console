@@ -588,7 +588,8 @@
                 '@media (max-width:680px){.ppx-p49-grid{grid-template-columns:1fr;}}' +
                 '.ppx-p49-card{position:relative;border-radius:16px;padding:20px 50px 20px 22px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;font-family:inherit;text-align:left;border:none;width:100%;display:block;}' +
                 '.ppx-p49-card:hover{transform:translateY(-2px);}' +
-                '.ppx-p49-arrow{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none;}';
+                '.ppx-p49-arrow{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none;}' +
+                '@keyframes ppxP49Spin{to{transform:rotate(360deg);}}';
             document.head.appendChild(style);
         } catch (e) {}
     }
@@ -639,21 +640,38 @@
         var modal = backdrop && backdrop.querySelector('.ppx-modal');
         return modal;
     }
+    // A dark, on-brand "thinking" screen — shown while the lookup/survey
+    // round trip is in flight, so it never looks like a dead button.
+    function __ppxP49Thinking(id, text) {
+        var modal = p49Body(id); if (!modal) return;
+        modal.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:34px 10px;text-align:center;">'
+            + '<div style="width:32px;height:32px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:#f97316;animation:ppxP49Spin .8s linear infinite;"></div>'
+            + '<div style="margin-top:14px;font-size:13.5px;color:#cbd5e1;">' + esc(text) + '</div></div>';
+    }
+    // Renders/re-renders the "what's your Partner ID" screen. Keeps the fetched
+    // config cached on the campaign object so retrying after an error (or the
+    // "not found" message) doesn't need a second config round trip.
+    function __ppxP49RenderIdScreen(id, errMsg) {
+        var c = current; if (!c || c.id !== id) return;
+        var modal = p49Body(id); if (!modal) return;
+        modal.innerHTML = '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
+            + '<div style="font-size:19px;font-weight:800;">I am a PPT Partner</div>'
+            + '<div style="font-size:13px;color:#94a3b8;margin-top:4px;">Enter your Partner ID and we\'ll check your merchants against the current Prime49 eligibility band.</div>'
+            + '<input id="ppx-p49-id" style="' + INP + 'margin-top:12px;" placeholder="e.g. 144704" autocomplete="off">'
+            + '<div id="ppx-p49-err" style="color:#fca5a5;font-size:12px;margin-top:6px;min-height:14px;">' + esc(errMsg || '') + '</div>'
+            + '<button type="button" class="ppx-cta" style="margin-top:10px;background:#f97316;color:#0b1220;border:none;border-radius:10px;padding:12px 16px;font-weight:800;width:100%;cursor:pointer;" onclick="__ppxP49Lookup(\'' + jsArg(id) + '\')">Check eligibility</button>';
+        setTimeout(function () { var el = document.getElementById('ppx-p49-id'); if (el) el.focus(); }, 30);
+    }
     window.__ppxP49ExistingStart = function (id) {
         var c = current; if (!c || c.id !== id) return;
         track(id, 'click', 'p49_existing', c.variant);
+        if (c.prime49Cfg) { __ppxP49RenderIdScreen(id); return; }
         var modal = p49Body(id); if (!modal) return;
         modal.innerHTML = '<div style="color:#94a3b8;font-size:13px;">Loading…</div>';
         p49Api({ action: 'config', campaign_id: c.prime49.campaign_id }).then(function (r) {
             if (!current || current.id !== id) return;
             c.prime49Cfg = r.success ? r.config : null;
-            modal.innerHTML = '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
-                + '<div style="font-size:19px;font-weight:800;">I am a PPT Partner</div>'
-                + '<div style="font-size:13px;color:#94a3b8;margin-top:4px;">Enter your Partner ID and we\'ll check your merchants against the current Prime49 eligibility band.</div>'
-                + '<input id="ppx-p49-id" style="' + INP + 'margin-top:12px;" placeholder="e.g. 144704" autocomplete="off">'
-                + '<div id="ppx-p49-err" style="color:#fca5a5;font-size:12px;margin-top:6px;min-height:14px;"></div>'
-                + '<button type="button" class="ppx-cta" style="margin-top:10px;background:#f97316;color:#0b1220;border:none;border-radius:10px;padding:12px 16px;font-weight:800;width:100%;cursor:pointer;" onclick="__ppxP49Lookup(\'' + jsArg(id) + '\')">Check eligibility</button>';
-            setTimeout(function () { var el = document.getElementById('ppx-p49-id'); if (el) el.focus(); }, 30);
+            __ppxP49RenderIdScreen(id);
         });
     };
     window.__ppxP49Lookup = function (id) {
@@ -661,14 +679,19 @@
         var input = document.getElementById('ppx-p49-id'), err = document.getElementById('ppx-p49-err');
         var pid = input ? input.value.trim() : '';
         if (!pid) { if (err) err.textContent = 'Please enter your Partner ID.'; return; }
-        if (err) err.textContent = '';
+        __ppxP49Thinking(id, "Analyzing your merchants across all your Partner IDs…");
         p49Api({ action: 'lookup_existing', campaign_id: c.prime49.campaign_id, partner_id: pid }).then(function (r) {
-            if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
-            if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
+            if (!current || current.id !== id) return;
+            if (!r.success) { __ppxP49RenderIdScreen(id, r.message || 'Error.'); return; }
+            if (r.status === 'not_found') { __ppxP49RenderIdScreen(id, "We couldn't find that Partner ID. Please double-check it."); return; }
             _p49Partner = { id: pid, name: r.name, email: r.email, phone: r.phone };
             __ppxP49Results(id, r);
         });
     };
+    // The tag/workflow was already applied server-side (in the same
+    // lookup_existing call) when eligible — this just renders the outcome,
+    // including the calendar link or embedded form staff configured. No
+    // separate "confirm"/"continue" click needed.
     function __ppxP49Results(id, r) {
         var c = current; if (!c || c.id !== id) return;
         var modal = p49Body(id); if (!modal) return;
@@ -684,28 +707,23 @@
         var cfg = c.prime49Cfg || {};
         var headline = r.eligible ? cfg.eligible_headline : cfg.not_eligible_headline;
         var msg = r.eligible ? cfg.eligible_body : cfg.not_eligible_body;
+        if (r.eligible) { track(id, 'click', 'p49_eligible', c.variant); permAdd(id); api({ action: 'dismiss', campaign_id: id }); }
         modal.innerHTML = '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
             + '<div style="font-size:19px;font-weight:800;">' + (r.eligible ? '🎉 ' + esc(headline || "You're eligible for Prime49!") : esc(headline || 'Not yet eligible')) + '</div>'
             + '<div style="font-size:13px;color:#94a3b8;margin-top:4px;">' + bodyHtml(msg || (r.eligible ? "We found merchants that qualify — see below." : "None of your merchants are in the qualifying volume range right now.")) + '</div>'
             + '<div style="max-height:220px;overflow:auto;margin-top:10px;">' + (list || '<div style="color:#94a3b8;font-size:12.5px;">No merchants found under your Partner ID(s).</div>') + '</div>'
-            + (r.eligible ? '<button type="button" style="margin-top:14px;background:#f97316;color:#0b1220;border:none;border-radius:10px;padding:12px 16px;font-weight:800;width:100%;cursor:pointer;" onclick="__ppxP49Confirm(\'' + jsArg(id) + '\')">Continue</button>' : '');
-        if (r.eligible) __ppxP49Confirm(id, true);
+            + __ppxP49BookingHtml(r);
     }
-    window.__ppxP49Confirm = function (id, silent) {
-        var c = current; if (!c || c.id !== id || !_p49Partner) return;
-        p49Api({ action: 'confirm_existing', campaign_id: c.prime49.campaign_id, partner_id: _p49Partner.id, email: _p49Partner.email, phone: _p49Partner.phone }).then(function (r) {
-            if (!r.success) return;
-            track(id, 'click', 'p49_eligible', c.variant); permAdd(id); api({ action: 'dismiss', campaign_id: id });
-            if (!silent) return;
-            if (r.calendar_id) {
-                var modal = p49Body(id); if (!modal) return;
-                var btn = modal.querySelector('button.ppx-cta, button[onclick*="__ppxP49Confirm"]');
-                var bookBtn = document.createElement('div');
-                bookBtn.innerHTML = '<a href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:14px;background:#f97316;color:#0b1220;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;">Book a call</a>';
-                modal.appendChild(bookBtn.firstChild);
-            }
-        });
-    };
+    // Shared calendar-or-form outcome renderer for both paths.
+    function __ppxP49BookingHtml(r) {
+        if (r.booking_mode === 'form' && r.form_id) {
+            return '<div style="margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(r.form_id) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe></div>';
+        }
+        if (r.booking_mode === 'calendar' && r.calendar_id) {
+            return '<a href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:14px;background:#f97316;color:#0a0a0c;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;">Book a call</a>';
+        }
+        return '';
+    }
     window.__ppxP49SurveyStart = function (id) {
         var c = current; if (!c || c.id !== id) return;
         track(id, 'click', 'p49_prospective', c.variant);
@@ -730,6 +748,7 @@
     function p49FieldInput(f) {
         var id = 'ppx-p49-q-' + jsArg(f.name);
         if (f.type === 'textarea') return '<textarea style="' + INP + 'min-height:70px;" id="' + id + '" data-name="' + esc(f.name) + '"></textarea>';
+        if (f.type === 'number') return '<input type="number" style="' + INP + '" id="' + id + '" data-name="' + esc(f.name) + '">';
         if (f.type === 'dropdown') return '<select style="' + INP + '" id="' + id + '" data-name="' + esc(f.name) + '"><option value="">— select —</option>' + (f.options || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
         if (f.type === 'checkbox') {
             if (f.options && f.options.length) {
@@ -759,15 +778,17 @@
                 answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
             }
         }
+        var savedHtml = modal.innerHTML;
+        __ppxP49Thinking(id, 'Reviewing your answers…');
         p49Api({ action: 'submit_survey', campaign_id: c.prime49.campaign_id, name: name, email: email, phone: phone, answers: answers }).then(function (r) {
-            var err = document.getElementById('ppx-p49-serr');
-            if (!r.success) { if (err) err.textContent = r.message || 'Something went wrong.'; return; }
+            if (!current || current.id !== id) return;
+            if (!r.success) { modal.innerHTML = savedHtml; var err = document.getElementById('ppx-p49-serr'); if (err) err.textContent = r.message || 'Something went wrong.'; return; }
             track(id, 'click', 'p49_survey_submit', c.variant); permAdd(id); api({ action: 'dismiss', campaign_id: id });
             modal.innerHTML = '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
                 + '<div style="font-size:22px;">' + (r.qualified ? '🎉' : '👋') + '</div>'
                 + '<div style="font-size:19px;font-weight:800;margin-top:6px;">' + esc(r.headline || '') + '</div>'
                 + (r.body ? '<div style="font-size:13px;color:#94a3b8;margin-top:6px;">' + bodyHtml(r.body) + '</div>' : '')
-                + (r.calendar_id ? ('<a href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:14px;background:#f97316;color:#0b1220;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;">Book a call</a>') : '');
+                + __ppxP49BookingHtml(r);
         });
     };
 

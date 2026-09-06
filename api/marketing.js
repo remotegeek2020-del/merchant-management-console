@@ -690,6 +690,7 @@ export default async function handler(req, res) {
                         ? { enabled: true, form_id: String(b.cta_gate.form_id).trim(), location_id: b.cta_gate.location_id ? String(b.cta_gate.location_id).trim() : null, until: b.cta_gate.until || null }
                         : null,
                     is_active: !!b.is_active,
+                    hide_from_portal: !!b.hide_from_portal,
                     // 3-phase event mode (gated → live → replay), driven by dates.
                     campaign_kind: ['youtube', 'rsvp', 'prime49'].includes(b.campaign_kind) ? b.campaign_kind : 'classic',
                     event_mode: (b.event_mode && b.event_mode.enabled && (b.event_mode.live_at || b.event_mode.live_until)) ? {
@@ -783,10 +784,12 @@ export default async function handler(req, res) {
                     const surveyFields = Array.isArray(pb.survey_fields) ? pb.survey_fields.map(f => ({
                         name: String(f.name || '').slice(0, 120),
                         label: String(f.label || f.name || '').slice(0, 200),
-                        type: ['text', 'textarea', 'dropdown', 'checkbox'].includes(f.type) ? f.type : 'text',
+                        type: ['text', 'textarea', 'number', 'dropdown', 'checkbox'].includes(f.type) ? f.type : 'text',
                         required: !!f.required,
                         options: Array.isArray(f.options) ? f.options.map(o => String(o).slice(0, 160)).slice(0, 30) : [],
-                        qualify: Array.isArray(f.qualify) ? f.qualify.map(o => String(o).slice(0, 160)).slice(0, 30) : []
+                        qualify: Array.isArray(f.qualify) ? f.qualify.map(o => String(o).slice(0, 160)).slice(0, 30) : [],
+                        qualify_min: Number.isFinite(+f.qualify_min) ? +f.qualify_min : null,
+                        qualify_max: Number.isFinite(+f.qualify_max) ? +f.qualify_max : null
                     })).filter(f => f.name) : [];
                     const cfgRow = {
                         campaign_id: row.id,
@@ -795,6 +798,9 @@ export default async function handler(req, res) {
                         eligible_workflow_id: pb.eligible_workflow_id ? String(pb.eligible_workflow_id).trim() : null,
                         calendar_id: pb.calendar_id ? String(pb.calendar_id).trim() : null,
                         calendar_name: pb.calendar_name ? String(pb.calendar_name).slice(0, 200) : null,
+                        booking_mode: pb.booking_mode === 'form' ? 'form' : 'calendar',
+                        booking_form_id: pb.booking_form_id ? String(pb.booking_form_id).trim() : null,
+                        booking_form_name: pb.booking_form_name ? String(pb.booking_form_name).slice(0, 200) : null,
                         min_volume: Number.isFinite(+pb.min_volume) ? +pb.min_volume : 20000,
                         max_volume: Number.isFinite(+pb.max_volume) ? +pb.max_volume : 30000,
                         eligible_headline: str(pb.eligible_headline, 200) || null,
@@ -1690,6 +1696,7 @@ export default async function handler(req, res) {
                 // Active + audience match; date-window + dismissals filtered in JS for clarity.
                 const { data: all } = await supabase.from('marketing_campaigns').select('*')
                     .eq('is_active', true)
+                    .eq('hide_from_portal', false)
                     .in('audience', [who.type, 'both', 'all'])
                     .order('priority', { ascending: false })
                     .order('created_at', { ascending: false });

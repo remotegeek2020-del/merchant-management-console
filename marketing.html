@@ -326,6 +326,7 @@
         <div class="muted" style="font-size:11px;margin-bottom:10px;">Two paths, both run INSIDE the popup: <b>I am a PPT Partner</b> — Partner ID → we consolidate every merchant across ALL of that person's Partner IDs → check each one's 30-day volume against your eligibility band. <b>I am interested in becoming a partner</b> — a short qualifying survey you define → pass/fail → book a call.</div>
         <label class="fld" style="margin-top:0;">HighLevel sub-account</label>
         <select class="inp" id="p49_location" onchange="onP49Location()"><option value="">— select —</option></select>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;"><input type="checkbox" id="p49_external_only"> Show only on external websites (Webflow, GoHighLevel, etc.) — hide from the internal portal</label>
 
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
           <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path A — I am a PPT Partner</div>
@@ -347,7 +348,7 @@
 
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
           <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path B — I am interested in becoming a partner</div>
-          <div class="muted" style="font-size:11px;margin-bottom:8px;">Build the qualifying survey. For dropdown/checkbox questions, mark which exact answers count as a PASS — one per line, must match an option exactly.</div>
+          <div class="muted" style="font-size:11px;margin-bottom:8px;">Build the survey. Any question can be turned into a qualifying question — dropdown/checkbox: pick which options count as a PASS; number: set a qualifying min/max range; text/textarea: list keywords that count as a PASS. Leave a question's qualifying settings blank to keep it informational only (no effect on pass/fail).</div>
           <div id="p49SurveyList"></div>
           <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddQuestion()">+ Add question</button>
           <div class="row2" style="margin-top:10px;">
@@ -365,8 +366,19 @@
         </div>
 
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
-          <label class="fld" style="margin-top:0;">Book-a-call calendar <span class="muted" style="font-weight:400;">(shown on eligible/qualified)</span></label>
-          <select class="inp" id="p49_calendar"><option value="">Choose a sub-account first…</option></select>
+          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Next step <span class="muted" style="font-weight:400;">(shown when eligible / qualified — shared by both paths)</span></div>
+          <div class="seg" style="margin-bottom:10px;">
+            <button type="button" id="p49BookCalBtn" class="on" onclick="p49SetBookingMode('calendar')">Calendar</button>
+            <button type="button" id="p49BookFormBtn" onclick="p49SetBookingMode('form')">Form</button>
+          </div>
+          <div id="p49BookCalWrap">
+            <label class="fld" style="margin-top:0;">Book-a-call calendar</label>
+            <select class="inp" id="p49_calendar"><option value="">Choose a sub-account first…</option></select>
+          </div>
+          <div id="p49BookFormWrap" style="display:none;">
+            <label class="fld" style="margin-top:0;">Form</label>
+            <select class="inp" id="p49_booking_form"><option value="">Choose a sub-account first…</option></select>
+          </div>
         </div>
       </div>
 
@@ -1352,6 +1364,9 @@ function openEditor(type){
   document.getElementById('p49_location').innerHTML='<option value="'+P49_DEFAULT_LOCATION.id+'">'+P49_DEFAULT_LOCATION.name+'</option>';
   document.getElementById('p49_eligible_workflow').innerHTML='<option value="">— none —</option>';
   document.getElementById('p49_calendar').innerHTML='<option value="">Choose a sub-account first…</option>';
+  document.getElementById('p49_booking_form').innerHTML='<option value="">Choose a sub-account first…</option>';
+  document.getElementById('p49_external_only').checked=false;
+  p49SetBookingMode('calendar');
   if(_isP49) populateP49Locations().then(()=>onP49Location());
   document.getElementById('p49_eligible_tag').value=''; document.getElementById('p49_min_volume').value='20000'; document.getElementById('p49_max_volume').value='30000';
   document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_body').value='';
@@ -1469,7 +1484,9 @@ async function editCampaign(id){
       document.getElementById('p49_declined_headline').value=p49.declined_headline||'';
       document.getElementById('p49_declined_body').value=p49.declined_body||'';
       p49RenderSurvey(Array.isArray(p49.survey_fields)?p49.survey_fields:[]);
-      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.calendar_id||''); });
+      p49SetBookingMode(p49.booking_mode==='form'?'form':'calendar');
+      document.getElementById('p49_external_only').checked=!!c.hide_from_portal;
+      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.calendar_id||'', p49.booking_form_id||''); });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1818,8 +1835,12 @@ async function saveCampaign(){
       declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
       declined_body: document.getElementById('p49_declined_body').value.trim()||null,
       calendar_id: document.getElementById('p49_calendar').value||null,
-      calendar_name: (document.getElementById('p49_calendar').options[document.getElementById('p49_calendar').selectedIndex]||{}).text||null
-    } : undefined
+      calendar_name: (document.getElementById('p49_calendar').options[document.getElementById('p49_calendar').selectedIndex]||{}).text||null,
+      booking_mode: window._p49BookingMode==='form' ? 'form' : 'calendar',
+      booking_form_id: document.getElementById('p49_booking_form').value||null,
+      booking_form_name: (document.getElementById('p49_booking_form').options[document.getElementById('p49_booking_form').selectedIndex]||{}).text||null
+    } : undefined,
+    hide_from_portal: window._campaignKind==='prime49' ? document.getElementById('p49_external_only').checked : false
   };
   if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
   if (document.getElementById('f_show_embed').checked && document.querySelector('input[name=embedScope]:checked')?.value==='specific' && !payload.embed_site_ids.length){ Swal.fire('Pick sites','Select at least one site for “Specific sites only”, or switch to “All registered sites”.','warning'); return; }
@@ -2487,12 +2508,12 @@ async function populateP49Locations(selectedId){
   }
   sel.value=want;
 }
-async function onP49Location(preWfId, preCalId){
+async function onP49Location(preWfId, preCalId, preFormId){
   const loc=document.getElementById('p49_location').value;
-  const wSel=document.getElementById('p49_eligible_workflow'), cSel=document.getElementById('p49_calendar');
-  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; cSel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
-  wSel.innerHTML='<option value="">Loading…</option>'; cSel.innerHTML='<option value="">Loading…</option>';
-  const [wr,cr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc})]);
+  const wSel=document.getElementById('p49_eligible_workflow'), cSel=document.getElementById('p49_calendar'), fSel=document.getElementById('p49_booking_form');
+  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; cSel.innerHTML='<option value="">Choose a sub-account first…</option>'; fSel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
+  wSel.innerHTML='<option value="">Loading…</option>'; cSel.innerHTML='<option value="">Loading…</option>'; fSel.innerHTML='<option value="">Loading…</option>';
+  const [wr,cr,fr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc}), api({action:'ghl_forms',location_id:loc})]);
   const wfs=(wr.success?wr.data:[])||[];
   wSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
   if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
@@ -2500,11 +2521,27 @@ async function onP49Location(preWfId, preCalId){
   cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join('');
   if(!cals.length) cSel.innerHTML='<option value="">No calendars found in this sub-account</option>';
   if(preCalId){ if(!Array.from(cSel.options).some(o=>o.value===preCalId)){ const o=document.createElement('option'); o.value=preCalId; o.textContent=preCalId; cSel.appendChild(o);} cSel.value=preCalId; }
+  const forms=(fr.success?fr.data:[])||[];
+  fSel.innerHTML='<option value="">— select a form —</option>'+forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name||f.id)}</option>`).join('');
+  if(!forms.length) fSel.innerHTML='<option value="">No forms found in this sub-account</option>';
+  if(preFormId){ if(!Array.from(fSel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; fSel.appendChild(o);} fSel.value=preFormId; }
+}
+function p49SetBookingMode(mode){
+  window._p49BookingMode = mode==='form' ? 'form' : 'calendar';
+  document.getElementById('p49BookCalBtn').classList.toggle('on', window._p49BookingMode==='calendar');
+  document.getElementById('p49BookFormBtn').classList.toggle('on', window._p49BookingMode==='form');
+  document.getElementById('p49BookCalWrap').style.display = window._p49BookingMode==='calendar' ? 'block' : 'none';
+  document.getElementById('p49BookFormWrap').style.display = window._p49BookingMode==='form' ? 'block' : 'none';
 }
 function p49ToggleQOptions(sel){
   const row=sel.closest('.p49-qrow');
-  const wrap=row.querySelector('.p49q-optwrap');
-  if(wrap) wrap.style.display=(sel.value==='dropdown'||sel.value==='checkbox')?'block':'none';
+  const type=sel.value;
+  const optWrap=row.querySelector('.p49q-optwrap');
+  const numWrap=row.querySelector('.p49q-numwrap');
+  const kwWrap=row.querySelector('.p49q-kwwrap');
+  if(optWrap) optWrap.style.display=(type==='dropdown'||type==='checkbox')?'block':'none';
+  if(numWrap) numWrap.style.display=(type==='number')?'block':'none';
+  if(kwWrap) kwWrap.style.display=(type==='text'||type==='textarea')?'block':'none';
 }
 function p49AddQuestion(q){
   q=q||{};
@@ -2512,23 +2549,35 @@ function p49AddQuestion(q){
   const div=document.createElement('div');
   div.className='p49-qrow';
   div.style.cssText='border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;background:#fff;';
-  const showOpts=(q.type==='dropdown'||q.type==='checkbox');
+  const type=q.type||'text';
   div.innerHTML=`
     <div style="display:flex;gap:8px;align-items:center;">
       <input class="inp p49q-label" placeholder="Question, e.g. What's your monthly volume?" style="flex:1;" value="${esc(q.label||'')}">
       <select class="inp p49q-type" style="width:110px;" onchange="p49ToggleQOptions(this)">
-        <option value="text" ${(!q.type||q.type==='text')?'selected':''}>text</option>
-        <option value="textarea" ${q.type==='textarea'?'selected':''}>textarea</option>
-        <option value="dropdown" ${q.type==='dropdown'?'selected':''}>dropdown</option>
-        <option value="checkbox" ${q.type==='checkbox'?'selected':''}>checkbox</option>
+        <option value="text" ${type==='text'?'selected':''}>text</option>
+        <option value="textarea" ${type==='textarea'?'selected':''}>textarea</option>
+        <option value="number" ${type==='number'?'selected':''}>number</option>
+        <option value="dropdown" ${type==='dropdown'?'selected':''}>dropdown</option>
+        <option value="checkbox" ${type==='checkbox'?'selected':''}>checkbox</option>
       </select>
       <label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" class="p49q-req" ${q.required?'checked':''}> req</label>
       <button type="button" class="btn btn-neutral" style="padding:4px 8px;" onclick="this.closest('.p49-qrow').remove()">✕</button>
     </div>
-    <div class="p49q-optwrap" style="display:${showOpts?'block':'none'};margin-top:6px;">
+    <div class="p49q-optwrap" style="display:${(type==='dropdown'||type==='checkbox')?'block':'none'};margin-top:6px;">
       <div class="muted" style="font-size:10px;margin-bottom:2px;">Options (one per line):</div>
       <textarea class="inp p49q-opts" rows="2">${esc((q.options||[]).join('\n'))}</textarea>
-      <div class="muted" style="font-size:10px;margin:4px 0 2px;">Qualifying answers — which options count as a PASS (one per line, must match exactly):</div>
+      <div class="muted" style="font-size:10px;margin:4px 0 2px;">Qualifying answers — which options count as a PASS (one per line, must match exactly). Leave blank for an informational-only question.</div>
+      <textarea class="inp p49q-qualify" rows="2">${esc((q.qualify||[]).join('\n'))}</textarea>
+    </div>
+    <div class="p49q-numwrap" style="display:${type==='number'?'block':'none'};margin-top:6px;">
+      <div class="muted" style="font-size:10px;margin-bottom:2px;">Qualifying range (leave both blank for an informational-only question):</div>
+      <div class="row2">
+        <input class="inp p49q-qmin" type="number" placeholder="Min" value="${q.qualify_min!=null?esc(String(q.qualify_min)):''}">
+        <input class="inp p49q-qmax" type="number" placeholder="Max" value="${q.qualify_max!=null?esc(String(q.qualify_max)):''}">
+      </div>
+    </div>
+    <div class="p49q-kwwrap" style="display:${(type==='text'||type==='textarea')?'block':'none'};margin-top:6px;">
+      <div class="muted" style="font-size:10px;margin-bottom:2px;">Qualifying keywords — the answer counts as a PASS if it contains any of these (one per line, case-insensitive). Leave blank for an informational-only question.</div>
       <textarea class="inp p49q-qualify" rows="2">${esc((q.qualify||[]).join('\n'))}</textarea>
     </div>`;
   box.appendChild(div);
@@ -2544,12 +2593,20 @@ function p49CollectSurvey(){
     const label=row.querySelector('.p49q-label').value.trim();
     if(!label) return;
     const type=row.querySelector('.p49q-type').value;
-    let options=[], qualify=[];
+    let options=[], qualify=[], qualify_min=null, qualify_max=null;
     if(type==='dropdown'||type==='checkbox'){
       options=(row.querySelector('.p49q-opts').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
-      qualify=(row.querySelector('.p49q-qualify').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      const qEl=row.querySelector('.p49q-optwrap .p49q-qualify');
+      qualify=(qEl?qEl.value:'').split('\n').map(s=>s.trim()).filter(Boolean);
+    } else if(type==='number'){
+      const minEl=row.querySelector('.p49q-qmin'), maxEl=row.querySelector('.p49q-qmax');
+      qualify_min = minEl && minEl.value!=='' ? parseFloat(minEl.value) : null;
+      qualify_max = maxEl && maxEl.value!=='' ? parseFloat(maxEl.value) : null;
+    } else if(type==='text'||type==='textarea'){
+      const kwEl=row.querySelector('.p49q-kwwrap .p49q-qualify');
+      qualify=(kwEl?kwEl.value:'').split('\n').map(s=>s.trim()).filter(Boolean);
     }
-    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify });
+    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify, qualify_min, qualify_max });
   });
   return out;
 }

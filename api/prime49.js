@@ -2,10 +2,12 @@
 // Long-running, brand-level campaign (campaign_kind='prime49') with two paths,
 // both run entirely INSIDE the popup, no separate page:
 //   A) "I am a PPT Partner"        → Partner ID lookup → cross-ID merchant
-//                                     eligibility check ($ volume band) →
-//                                     tag/workflow + book-a-call.
+//                                     eligibility check ($ volume band) → if
+//                                     eligible, tag/workflow applied and a
+//                                     calendar or form is handed back, all in
+//                                     one round trip (no separate confirm step).
 //   B) "I am interested in..."     → a staff-defined qualifying survey →
-//                                     pass/fail → book-a-call (pass) or a
+//                                     pass/fail → calendar/form (pass) or a
 //                                     decline message (fail).
 import { createClient } from '@supabase/supabase-js';
 import { applyRsvpTagWorkflow } from './rsvp.js';
@@ -64,6 +66,45 @@ async function eligibilityForPerson(personId, minVolume, maxVolume) {
     return { merchants: rows, eligible: rows.some(r => r.eligible) };
 }
 
+// What to hand the visitor once they qualify: either a HighLevel calendar
+// (booking widget) or a HighLevel form — staff's choice, set once per campaign,
+// shared by both paths.
+function bookingInfo(cfg) {
+    if (cfg.booking_mode === 'form' && cfg.booking_form_id) return { booking_mode: 'form', form_id: cfg.booking_form_id };
+    if (cfg.calendar_id) return { booking_mode: 'calendar', calendar_id: cfg.calendar_id };
+    return { booking_mode: null };
+}
+
+// Does this ONE question's answer qualify, per however staff configured it?
+// Returns null when the question isn't set up as a qualifying question at all
+// (informational only) so it's excluded from the overall pass/fail decision.
+function fieldQualifies(f, answers) {
+    const given = answers[f.name];
+    if (f.type === 'number') {
+        if (f.qualify_min == null && f.qualify_max == null) return null;
+        const v = parseFloat(given);
+        if (Number.isNaN(v)) return false;
+        if (f.qualify_min != null && v < f.qualify_min) return false;
+        if (f.qualify_max != null && v > f.qualify_max) return false;
+        return true;
+    }
+    if (f.type === 'dropdown' || f.type === 'checkbox') {
+        if (!Array.isArray(f.qualify) || !f.qualify.length) return null;
+        const givenArr = Array.isArray(given) ? given.map(String) : [String(given == null ? '' : given)];
+        return givenArr.some(v => f.qualify.includes(v));
+    }
+    // text / textarea: qualifies if the answer contains any of the configured
+    // keywords/phrases (case-insensitive).
+    if (!Array.isArray(f.qualify) || !f.qualify.length) return null;
+    const s = String(given == null ? '' : given).toLowerCase();
+    return f.qualify.some(k => s.indexOf(String(k).toLowerCase()) !== -1);
+}
+function evaluateSurvey(fields, answers, mode) {
+    const results = fields.map(f => fieldQualifies(f, answers)).filter(r => r !== null);
+    if (!results.length) return true;
+    return mode === 'any' ? results.some(Boolean) : results.every(Boolean);
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -80,13 +121,14 @@ export default async function handler(req, res) {
                 eligible_headline: cfg.eligible_headline, eligible_body: cfg.eligible_body, not_eligible_body: cfg.not_eligible_body,
                 survey_fields: (cfg.survey_fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] })),
                 qualified_headline: cfg.qualified_headline, qualified_body: cfg.qualified_body,
-                declined_headline: cfg.declined_headline, declined_body: cfg.declined_body,
-                has_calendar: !!cfg.calendar_id
+                declined_headline: cfg.declined_headline, declined_body: cfg.declined_body
             } });
         }
 
         // Path A — existing partner: look up by Partner ID, consolidate every
-        // merchant under every ID that same person holds, and report eligibility.
+        // merchant under every ID that same person holds, report eligibility,
+        // and — if eligible — apply the tag/workflow and hand back the booking
+        // step immediately. One round trip; no separate "confirm" click.
         if (action === 'lookup_existing') {
             const cfg = await loadConfig(campaignId);
             if (!cfg || !cfg.enabled) return bad(res, 'This is not available.');
@@ -95,45 +137,35 @@ export default async function handler(req, res) {
             const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return ok(res, { status: 'not_found' });
-            const { merchants, eligible } = await eligibilityForPerson(p.person_id, cfg.min_volume, cfg.max_volume);
-            return ok(res, {
-                status: 'found', name: p.full_name || '', email: p.email || '', phone: p.phone || '',
-                eligible, merchants,
-                calendar_id: eligible ? (cfg.calendar_id || null) : null
-            });
-        }
 
-        // Confirm eligibility: apply the tag/workflow to their known HighLevel
-        // contact and record the outcome (idempotent-ish — always upserts).
-        if (action === 'confirm_existing') {
-            const cfg = await loadConfig(campaignId);
-            if (!cfg || !cfg.enabled) return bad(res, 'This is not available.');
-            const pid = String(body.partner_id || '').trim();
-            if (!pid) return bad(res, 'Missing Partner ID.');
-            const { data } = await supabase.rpc('partner_contact_by_id', { p_id: pid });
-            const p = Array.isArray(data) && data[0] ? data[0] : null;
-            if (!p) return bad(res, 'Partner ID not found.');
             const { merchants, eligible } = await eligibilityForPerson(p.person_id, cfg.min_volume, cfg.max_volume);
+            const email = String(body.email || p.email || '').trim();
+            const phone = String(body.phone || p.phone || '').trim();
+            const name = String(p.full_name || '').trim();
+
             let contactId = null, tagApplied = false, error = null;
             if (eligible && cfg.ghl_location_id) {
-                const name = String(p.full_name || '').trim();
-                const email = String(body.email || p.email || '').trim();
-                const phone = String(body.phone || p.phone || '').trim();
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, p, name, email, phone, { rsvp_tag: cfg.eligible_tag, workflow_id: cfg.eligible_workflow_id });
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
             }
             await supabase.from('prime49_submissions').insert({
                 campaign_id: campaignId, path: 'existing', partner_id_string: pid, person_id: p.person_id || null,
-                hl_contact_id: contactId || p.hl_contact_id || null, email: p.email || '', name: p.full_name || '',
+                hl_contact_id: contactId || p.hl_contact_id || null, email, name,
                 eligible, qualifying_merchants: merchants, tag_applied: tagApplied, hl_error: error || null
             });
-            return ok(res, { eligible, calendar_id: eligible ? (cfg.calendar_id || null) : null });
+
+            return ok(res, {
+                status: 'found', name, email, phone, eligible, merchants,
+                ...(eligible ? bookingInfo(cfg) : {})
+            });
         }
 
         // Path B — prospective partner: evaluate a staff-defined pass/fail
-        // survey. Each field can list which of its answer(s) "qualify"; the
-        // campaign-level mode decides whether ALL or ANY qualifying answers
-        // are required overall.
+        // survey. Each question can be marked as qualifying (dropdown/checkbox:
+        // pick which options pass; number: a min/max range; text/textarea:
+        // keyword match) — non-qualifying questions are informational only.
+        // The campaign-level mode decides whether ALL or ANY qualifying
+        // questions must pass overall.
         if (action === 'submit_survey') {
             const cfg = await loadConfig(campaignId);
             if (!cfg || !cfg.enabled) return bad(res, 'This is not available.');
@@ -144,13 +176,7 @@ export default async function handler(req, res) {
                     return bad(res, `Please answer: ${f.label || f.name}`);
                 }
             }
-            const results = fields.filter(f => Array.isArray(f.qualify) && f.qualify.length).map(f => {
-                const given = answers[f.name];
-                const givenArr = Array.isArray(given) ? given.map(String) : [String(given == null ? '' : given)];
-                return givenArr.some(v => f.qualify.includes(v));
-            });
-            const qualified = results.length === 0 ? true
-                : (cfg.survey_qualify_mode === 'any' ? results.some(Boolean) : results.every(Boolean));
+            const qualified = evaluateSurvey(fields, answers, cfg.survey_qualify_mode);
 
             const name = String(body.name || '').trim();
             const email = String(body.email || '').trim();
@@ -168,7 +194,7 @@ export default async function handler(req, res) {
                 qualified,
                 headline: qualified ? (cfg.qualified_headline || "You're a great fit!") : (cfg.declined_headline || 'Thanks for your interest'),
                 body: qualified ? (cfg.qualified_body || null) : (cfg.declined_body || null),
-                calendar_id: qualified ? (cfg.calendar_id || null) : null
+                ...(qualified ? bookingInfo(cfg) : {})
             });
         }
 
