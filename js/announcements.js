@@ -522,23 +522,36 @@
         return fetch(P49_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
             .then(function (r) { return r.json(); }).catch(function () { return { success: false, message: 'Network error.' }; });
     }
-    var _p49Partner = null;
+    var _p49Partner = null, _p49CssInjected = false;
+    // Loads the two real Prime49 brand fonts, once.
+    function injectP49Css() {
+        if (_p49CssInjected) return; _p49CssInjected = true;
+        try {
+            var link = document.createElement('link'); link.rel = 'stylesheet';
+            link.href = 'https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
+            document.head.appendChild(link);
+        } catch (e) {}
+    }
     window.ppAnnP49Start = function (id, kind) {
         var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        injectP49Css();
         track(id, 'click', 'p49_open');
         var th = annTheme(c);
         var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
         var accent = (c.theme && c.theme.accent) || '#f97316';
-        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(c.title || 'Your Prime49 path starts here.') + '</div>'
+        var fh = 'font-family:\'Oswald\',\'Plus Jakarta Sans\',sans-serif;';
+        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';' + fh + '">' + esc(c.title || 'Your Prime49 path starts here.') + '</div>'
             + (c.body_text ? '<div class="' + textCls + '" style="color:' + th.text + ';margin-bottom:10px;">' + bodyHtml(c.body_text) + '</div>' : '')
             + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'
-            +   '<button type="button" onclick="ppAnnP49ExistingStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="text-align:left;background:' + esc(accent) + ';color:#0b1220;border:none;border-radius:10px;padding:12px 14px;cursor:pointer;font-family:inherit;">'
+            +   '<button type="button" onclick="ppAnnP49ExistingStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="position:relative;text-align:left;background:' + esc(accent) + ';color:#0a0a0c;border:none;border-radius:10px;padding:12px 42px 12px 14px;cursor:pointer;font-family:inherit;">'
             +     '<div style="font-size:9px;font-weight:800;letter-spacing:.5px;opacity:.75;">CURRENT PARTNER</div>'
-            +     '<div style="font-size:14px;font-weight:800;margin-top:2px;">I am a PPT Partner</div>'
+            +     '<div style="' + fh + 'font-size:14px;font-weight:600;margin-top:2px;">I am a PPT Partner</div>'
+            +     '<span style="position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:50%;background:#0a0a0c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">→</span>'
             +   '</button>'
-            +   '<button type="button" onclick="ppAnnP49SurveyStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="text-align:left;background:rgba(0,0,0,.06);color:' + th.title + ';border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:12px 14px;cursor:pointer;font-family:inherit;">'
+            +   '<button type="button" onclick="ppAnnP49SurveyStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="position:relative;text-align:left;background:rgba(0,0,0,.06);color:' + th.title + ';border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:12px 42px 12px 14px;cursor:pointer;font-family:inherit;">'
             +     '<div style="font-size:9px;font-weight:800;letter-spacing:.5px;opacity:.65;">PROSPECTIVE PARTNER</div>'
-            +     '<div style="font-size:14px;font-weight:800;margin-top:2px;">I am interested in becoming a partner</div>'
+            +     '<div style="' + fh + 'font-size:14px;font-weight:600;margin-top:2px;">I am interested in becoming a PPT Partner</div>'
+            +     '<span style="position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:50%;background:' + esc(accent) + ';color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-size:12px;">→</span>'
             +   '</button>'
             + '</div>';
     };

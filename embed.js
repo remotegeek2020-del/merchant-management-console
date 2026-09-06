@@ -570,27 +570,63 @@
         return fetch(P49_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
             .then(function (r) { return r.json(); }).catch(function () { return { success: false, message: 'Network error.' }; });
     }
-    var _p49Partner = null;
+    var _p49Partner = null, _p49CssInjected = false;
+    // Loads the two real Prime49 brand fonts + the split-layout styles, once.
+    function injectP49Css() {
+        if (_p49CssInjected) return; _p49CssInjected = true;
+        try {
+            var link = document.createElement('link'); link.rel = 'stylesheet';
+            link.href = 'https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
+            document.head.appendChild(link);
+        } catch (e) {}
+        try {
+            var style = document.createElement('style');
+            style.textContent =
+                '.ppx-p49{font-family:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,sans-serif;}' +
+                '.ppx-p49-h{font-family:"Oswald","Plus Jakarta Sans",sans-serif;text-transform:none;}' +
+                '.ppx-p49-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:30px;align-items:start;}' +
+                '@media (max-width:680px){.ppx-p49-grid{grid-template-columns:1fr;}}' +
+                '.ppx-p49-card{position:relative;border-radius:16px;padding:20px 50px 20px 22px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;font-family:inherit;text-align:left;border:none;width:100%;display:block;}' +
+                '.ppx-p49-card:hover{transform:translateY(-2px);}' +
+                '.ppx-p49-arrow{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none;}';
+            document.head.appendChild(style);
+        } catch (e) {}
+    }
     function renderPrime49Landing(c) {
-        var modal = backdrop && backdrop.querySelector('.ppx-modal');
+        injectP49Css();
         var cid = jsArg(c.id);
         var accent = (c.theme && c.theme.accent) || '#f97316';
-        var html = '<div class="ppx-modal" style="background:#0b1220;color:#fff;border-radius:18px;width:min(620px,100%);padding:28px 26px;">'
+        var checks = ['Guided setup', 'Clear next steps', 'Real partner support'].map(function (t) {
+            return '<div style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#cbd5e1;"><span style="color:#4ade80;font-size:13px;">✓</span>' + esc(t) + '</div>';
+        }).join('');
+        var html = '<div class="ppx-modal ppx-p49" style="background:#0a0a0c;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:34px 34px;color:#fff;border-radius:20px;width:min(760px,100%);padding:30px 30px 32px;">'
             + '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
-            + '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(249,115,22,.15);color:' + esc(accent) + ';font-size:11px;font-weight:800;letter-spacing:.5px;padding:4px 10px;border-radius:99px;margin-bottom:12px;">PPT PARTNER ACCESS</div>'
-            + '<div style="font-size:26px;font-weight:800;line-height:1.15;">' + esc(c.title || 'Your Prime49 path starts here.') + '</div>'
-            + (c.body_text ? '<div style="color:#94a3b8;font-size:14px;margin-top:10px;">' + bodyHtml(c.body_text) + '</div>' : '')
-            + '<div style="margin-top:18px;display:flex;flex-direction:column;gap:10px;">'
-            +   '<button type="button" onclick="__ppxP49ExistingStart(\'' + cid + '\')" style="text-align:left;background:' + esc(accent) + ';color:#0b1220;border:none;border-radius:12px;padding:16px 18px;cursor:pointer;font-family:inherit;">'
-            +     '<div style="font-size:10px;font-weight:800;letter-spacing:.5px;opacity:.75;">CURRENT PARTNER</div>'
-            +     '<div style="font-size:17px;font-weight:800;margin-top:3px;">I am a PPT Partner</div>'
-            +     '<div style="font-size:12.5px;margin-top:4px;opacity:.85;">Check if your merchants qualify for Prime49.</div>'
-            +   '</button>'
-            +   '<button type="button" onclick="__ppxP49SurveyStart(\'' + cid + '\')" style="text-align:left;background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:16px 18px;cursor:pointer;font-family:inherit;">'
-            +     '<div style="font-size:10px;font-weight:800;letter-spacing:.5px;opacity:.65;">PROSPECTIVE PARTNER</div>'
-            +     '<div style="font-size:17px;font-weight:800;margin-top:3px;">I am interested in becoming a partner</div>'
-            +     '<div style="font-size:12.5px;margin-top:4px;opacity:.75;">See if Prime49 is the right fit and book a call.</div>'
-            +   '</button>'
+            + '<div style="display:inline-flex;align-items:center;gap:6px;background:#fff;color:#0a0a0c;font-size:11px;font-weight:800;padding:6px 12px;border-radius:8px;margin-bottom:18px;">PPT <span style="color:' + esc(accent) + ';">×</span> PRIME49</div>'
+            + '<div class="ppx-p49-grid">'
+            +   '<div>'
+            +     '<div style="display:flex;align-items:center;gap:8px;color:' + esc(accent) + ';font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:10px;"><span style="display:inline-block;width:18px;height:2px;background:' + esc(accent) + ';"></span>PPT PARTNER ACCESS</div>'
+            +     '<div class="ppx-p49-h" style="font-size:30px;font-weight:600;line-height:1.15;">' + esc(c.title || 'Your Prime49 path starts here.') + '</div>'
+            +     (c.body_text ? '<div style="color:#94a3b8;font-size:13.5px;margin-top:12px;line-height:1.5;">' + bodyHtml(c.body_text) + '</div>' : '')
+            +     '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:16px;">' + checks + '</div>'
+            +     '<div style="height:3px;width:110px;margin-top:18px;border-radius:2px;background:linear-gradient(90deg,#4ade80,' + esc(accent) + ');"></div>'
+            +   '</div>'
+            +   '<div>'
+            +     '<div style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Choose the path that fits you.</div>'
+            +     '<div style="display:flex;flex-direction:column;gap:12px;">'
+            +       '<button type="button" class="ppx-p49-card" onclick="__ppxP49ExistingStart(\'' + cid + '\')" style="background:' + esc(accent) + ';color:#0a0a0c;">'
+            +         '<div style="font-size:10px;font-weight:800;letter-spacing:.5px;opacity:.75;">CURRENT PARTNER</div>'
+            +         '<div class="ppx-p49-h" style="font-size:18px;font-weight:600;margin-top:4px;">I am a PPT Partner</div>'
+            +         '<div style="font-size:12.5px;margin-top:5px;opacity:.85;">Check if your merchants qualify for Prime49.</div>'
+            +         '<span class="ppx-p49-arrow" style="background:#0a0a0c;color:#fff;">→</span>'
+            +       '</button>'
+            +       '<button type="button" class="ppx-p49-card" onclick="__ppxP49SurveyStart(\'' + cid + '\')" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14) !important;color:#fff;">'
+            +         '<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:#94a3b8;">PROSPECTIVE PARTNER</div>'
+            +         '<div class="ppx-p49-h" style="font-size:18px;font-weight:600;margin-top:4px;">I am interested in becoming a PPT Partner</div>'
+            +         '<div style="font-size:12.5px;margin-top:5px;color:#94a3b8;">See if Prime49 is the right fit and book a call.</div>'
+            +         '<span class="ppx-p49-arrow" style="background:#fff;color:#0a0a0c;">→</span>'
+            +       '</button>'
+            +     '</div>'
+            +   '</div>'
             + '</div></div>';
         backdrop = document.createElement('div'); backdrop.className = 'ppx-back';
         backdrop.style.background = 'rgba(4,10,22,.75)';
