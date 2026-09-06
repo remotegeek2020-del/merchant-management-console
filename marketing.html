@@ -858,6 +858,11 @@ function ensureQuill(){
   return bodyQuill;
 }
 
+// The HighLevel sub-account already wired up for RSVP ("PayProTec Partners").
+// Used as the default for new Prime49 setups when the live sub-account list
+// can't load (needs GHL_AGENCY_TOKEN + GHL_COMPANY_ID configured).
+const P49_DEFAULT_LOCATION = { id:'dfg08aPdtlQ1RhIKkCnN', name:'PayProTec Partners' };
+
 // ── Design presets ──
 const THEME_PRESETS = {
   'Brand':   { swatch:'#004990', bg:'#ffffff', title:'#0a1628', text:'#475569', accent:'#004990', btnText:'#ffffff', radius:16, width:'normal', align:'left',   btnStyle:'solid',   imgPos:'top', overlay:'dark' },
@@ -1340,9 +1345,14 @@ function openEditor(type){
   // landing from the start, same as RSVP, no CTA button system needed.
   var _isP49 = (type==='announcement' && _kind==='prime49');
   document.getElementById('prime49Block').style.display = _isP49 ? 'block' : 'none';
-  document.getElementById('p49_location').innerHTML='<option value="">— select —</option>';
+  // Default to the same HighLevel sub-account already wired up for RSVP
+  // ("PayProTec Partners") — the live sub-account list needs GHL_AGENCY_TOKEN
+  // + GHL_COMPANY_ID configured, which isn't set up in every environment, so
+  // don't block a new Prime49 setup on that dropdown being populated.
+  document.getElementById('p49_location').innerHTML='<option value="'+P49_DEFAULT_LOCATION.id+'">'+P49_DEFAULT_LOCATION.name+'</option>';
   document.getElementById('p49_eligible_workflow').innerHTML='<option value="">— none —</option>';
   document.getElementById('p49_calendar').innerHTML='<option value="">Choose a sub-account first…</option>';
+  if(_isP49) populateP49Locations().then(()=>onP49Location());
   document.getElementById('p49_eligible_tag').value=''; document.getElementById('p49_min_volume').value='20000'; document.getElementById('p49_max_volume').value='30000';
   document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_body').value='';
   document.getElementById('p49_survey_tag').value=''; document.getElementById('p49_qualify_mode').value='all';
@@ -2469,7 +2479,13 @@ async function populateP49Locations(selectedId){
   const data=await getGhlLocations();
   const locs=(data.locations||[]);
   sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
-  if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent=selectedId; sel.appendChild(o);} sel.value=selectedId; }
+  const want=selectedId||P49_DEFAULT_LOCATION.id;
+  if(!Array.from(sel.options).some(o=>o.value===want)){
+    const o=document.createElement('option'); o.value=want;
+    o.textContent = want===P49_DEFAULT_LOCATION.id ? P49_DEFAULT_LOCATION.name : want;
+    sel.appendChild(o);
+  }
+  sel.value=want;
 }
 async function onP49Location(preWfId, preCalId){
   const loc=document.getElementById('p49_location').value;
