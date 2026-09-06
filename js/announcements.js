@@ -631,12 +631,15 @@
             + ppAnnP49BookingHtml(r);
     }
     // Shared calendar-or-form outcome renderer for both paths.
+    // Both outcomes embed the HighLevel widget right in the card/float body
+    // (an iframe), never a new tab/window — leaving to book/fill a form
+    // elsewhere is exactly the drop-off point we want to avoid.
     function ppAnnP49BookingHtml(r) {
         if (r.booking_mode === 'form' && r.form_id) {
             return '<div style="margin-top:10px;border-radius:9px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(r.form_id) + '" style="width:100%;min-height:400px;border:none;" scrolling="yes"></iframe></div>';
         }
         if (r.booking_mode === 'calendar' && r.calendar_id) {
-            return '<a class="ppa-cta" style="display:block;text-align:center;margin-top:10px;background:#f97316;border:none;text-decoration:none;" href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener">Book a call</a>';
+            return '<div style="margin-top:10px;border-radius:9px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" style="width:100%;min-height:560px;border:none;" scrolling="yes"></iframe></div>';
         }
         return '';
     }
