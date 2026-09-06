@@ -581,7 +581,14 @@ export default async function handler(req, res) {
                     const { data: subs } = await supabase.from('rsvp_submissions').select('event_id').in('event_id', rsvpEventIds).limit(100000);
                     (subs || []).forEach(s => { rsvpCounts[s.event_id] = (rsvpCounts[s.event_id] || 0) + 1; });
                 }
-                return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 }, rsvp_count: c.rsvp_event_id ? (rsvpCounts[c.rsvp_event_id] || 0) : null })));
+                // Prime49-kind campaigns show a submission count too.
+                const p49Ids = (data || []).filter(c => c.campaign_kind === 'prime49').map(c => c.id);
+                let p49Counts = {};
+                if (p49Ids.length) {
+                    const { data: subs } = await supabase.from('prime49_submissions').select('campaign_id').in('campaign_id', p49Ids).limit(100000);
+                    (subs || []).forEach(s => { p49Counts[s.campaign_id] = (p49Counts[s.campaign_id] || 0) + 1; });
+                }
+                return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 }, rsvp_count: c.rsvp_event_id ? (rsvpCounts[c.rsvp_event_id] || 0) : null, prime49_count: c.campaign_kind === 'prime49' ? (p49Counts[c.id] || 0) : null })));
             }
 
             if (action === 'get_campaign') {
@@ -593,6 +600,11 @@ export default async function handler(req, res) {
                 if (data.rsvp_event_id) {
                     const { data: rev } = await supabase.from('rsvp_events').select('*').eq('id', data.rsvp_event_id).maybeSingle();
                     data.rsvp_event = rev || null;
+                }
+                // Prime49-kind campaigns carry their linked prime49_configs row.
+                if (data.campaign_kind === 'prime49') {
+                    const { data: p49 } = await supabase.from('prime49_configs').select('*').eq('campaign_id', data.id).maybeSingle();
+                    data.prime49 = p49 || null;
                 }
                 return ok(res, data);
             }
@@ -679,7 +691,7 @@ export default async function handler(req, res) {
                         : null,
                     is_active: !!b.is_active,
                     // 3-phase event mode (gated → live → replay), driven by dates.
-                    campaign_kind: ['youtube', 'rsvp'].includes(b.campaign_kind) ? b.campaign_kind : 'classic',
+                    campaign_kind: ['youtube', 'rsvp', 'prime49'].includes(b.campaign_kind) ? b.campaign_kind : 'classic',
                     event_mode: (b.event_mode && b.event_mode.enabled && (b.event_mode.live_at || b.event_mode.live_until)) ? {
                         enabled: true,
                         opt_in_until: b.event_mode.opt_in_until || null,
@@ -761,6 +773,50 @@ export default async function handler(req, res) {
                             .update({ rsvp_event_id: eventId, cta_url: `${proto}://${host}/rsvp?e=${newEv.event_key}`, cta_enabled: true })
                             .eq('id', row.id).select().single();
                         if (!patchErr) row = patched;
+                    }
+                }
+                // Prime49-kind campaigns own exactly one prime49_configs row (the two
+                // paths: existing-partner eligibility lookup + prospective-partner
+                // qualifying survey). Upsert it here, keyed 1:1 on campaign_id.
+                if (rec.campaign_kind === 'prime49' && b.prime49) {
+                    const pb = b.prime49;
+                    const surveyFields = Array.isArray(pb.survey_fields) ? pb.survey_fields.map(f => ({
+                        name: String(f.name || '').slice(0, 120),
+                        label: String(f.label || f.name || '').slice(0, 200),
+                        type: ['text', 'textarea', 'dropdown', 'checkbox'].includes(f.type) ? f.type : 'text',
+                        required: !!f.required,
+                        options: Array.isArray(f.options) ? f.options.map(o => String(o).slice(0, 160)).slice(0, 30) : [],
+                        qualify: Array.isArray(f.qualify) ? f.qualify.map(o => String(o).slice(0, 160)).slice(0, 30) : []
+                    })).filter(f => f.name) : [];
+                    const cfgRow = {
+                        campaign_id: row.id,
+                        ghl_location_id: pb.location_id ? String(pb.location_id).trim() : null,
+                        eligible_tag: pb.eligible_tag ? String(pb.eligible_tag).trim() : null,
+                        eligible_workflow_id: pb.eligible_workflow_id ? String(pb.eligible_workflow_id).trim() : null,
+                        calendar_id: pb.calendar_id ? String(pb.calendar_id).trim() : null,
+                        calendar_name: pb.calendar_name ? String(pb.calendar_name).slice(0, 200) : null,
+                        min_volume: Number.isFinite(+pb.min_volume) ? +pb.min_volume : 20000,
+                        max_volume: Number.isFinite(+pb.max_volume) ? +pb.max_volume : 30000,
+                        eligible_headline: str(pb.eligible_headline, 200) || null,
+                        eligible_body: str(pb.eligible_body, 2000) || null,
+                        not_eligible_body: str(pb.not_eligible_body, 2000) || null,
+                        survey_fields: surveyFields,
+                        survey_qualify_mode: pb.survey_qualify_mode === 'any' ? 'any' : 'all',
+                        survey_tag: pb.survey_tag ? String(pb.survey_tag).trim() : null,
+                        survey_workflow_id: pb.survey_workflow_id ? String(pb.survey_workflow_id).trim() : null,
+                        qualified_headline: str(pb.qualified_headline, 200) || null,
+                        qualified_body: str(pb.qualified_body, 2000) || null,
+                        declined_headline: str(pb.declined_headline, 200) || null,
+                        declined_body: str(pb.declined_body, 2000) || null,
+                        enabled: !!row.is_active,
+                        updated_at: new Date().toISOString()
+                    };
+                    const { data: existingCfg } = await supabase.from('prime49_configs').select('id').eq('campaign_id', row.id).maybeSingle();
+                    if (existingCfg) {
+                        await supabase.from('prime49_configs').update(cfgRow).eq('id', existingCfg.id);
+                    } else {
+                        cfgRow.created_by = actorName;
+                        await supabase.from('prime49_configs').insert(cfgRow);
                     }
                 }
                 return ok(res, row);
@@ -1682,6 +1738,16 @@ export default async function handler(req, res) {
                         .select('id, event_key, mode').eq('enabled', true).in('id', rsvpIds);
                     (revs || []).forEach(r => { rsvpMap[r.id] = { event_key: r.event_key, mode: r.mode }; });
                 }
+                // Prime49-kind campaigns run their whole two-path flow (existing-partner
+                // eligibility check, or prospective-partner survey) INSIDE the popup —
+                // just flag which campaigns have it enabled; the renderer fetches the
+                // full config (headlines/survey fields) lazily via api/prime49.js.
+                const p49CampIds = [...new Set(live.filter(c => c.campaign_kind === 'prime49').map(c => c.id))];
+                let p49EnabledSet = new Set();
+                if (p49CampIds.length) {
+                    const { data: p49s } = await supabase.from('prime49_configs').select('campaign_id').eq('enabled', true).in('campaign_id', p49CampIds);
+                    p49EnabledSet = new Set((p49s || []).map(p => p.campaign_id));
+                }
                 const out = live.filter(c => !dismissed.has(c.id)).map(c => {
                     // ── A/B: deterministically show variant A or B per user ──────
                     let variant = null, v = c;
@@ -1747,6 +1813,7 @@ export default async function handler(req, res) {
                         theme: c.theme || null,
                         event_phase: eventPhase,
                         rsvp: c.rsvp_event_id ? (rsvpMap[c.rsvp_event_id] || null) : null,
+                        prime49: (c.campaign_kind === 'prime49' && p49EnabledSet.has(c.id)) ? { campaign_id: c.id } : null,
                         variant
                     };
                 });

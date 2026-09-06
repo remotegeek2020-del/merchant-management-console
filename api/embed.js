@@ -165,6 +165,16 @@ export default async function handler(req, res) {
                     .select('id, event_key, mode').eq('enabled', true).in('id', rsvpIds);
                 (revs || []).forEach(r => { rsvpMap[r.id] = { event_key: r.event_key, mode: r.mode }; });
             }
+            // Prime49-kind campaigns run their whole two-path flow (existing-partner
+            // eligibility check, or prospective-partner survey) INSIDE the popup —
+            // just flag which are enabled; the renderer fetches the full config
+            // (headlines/survey fields) lazily via api/prime49.js.
+            const p49CampIds = [...new Set(live.filter(c => c.campaign_kind === 'prime49').map(c => c.id))];
+            let p49EnabledSet = new Set();
+            if (p49CampIds.length) {
+                const { data: p49s } = await supabase.from('prime49_configs').select('campaign_id').eq('enabled', true).in('campaign_id', p49CampIds);
+                p49EnabledSet = new Set((p49s || []).map(p => p.campaign_id));
+            }
             const out = live.filter(c => !dismissed.has(c.id)).map(c => {
                 let variant = null, v = c;
                 if (c.ab_enabled) {
@@ -235,6 +245,7 @@ export default async function handler(req, res) {
                     // Gate is dropped during live/replay (and once expired) → CTA becomes a plain link.
                     cta_gate: gateActive ? { form_id: c.cta_gate.form_id, location_id: c.cta_gate.location_id || null } : null,
                     rsvp: c.rsvp_event_id ? (rsvpMap[c.rsvp_event_id] || null) : null,
+                    prime49: (c.campaign_kind === 'prime49' && p49EnabledSet.has(c.id)) ? { campaign_id: c.id } : null,
                     variant
                 };
             });

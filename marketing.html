@@ -320,6 +320,56 @@
         </div>
       </div>
 
+      <!-- ── PRIME49 ANNOUNCEMENT SETUP: two paths, evergreen brand campaign ── -->
+      <div id="prime49Block" style="display:none;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:12px;background:#fafbfc;">
+        <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:2px;">🏆 Prime49 setup</div>
+        <div class="muted" style="font-size:11px;margin-bottom:10px;">Two paths, both run INSIDE the popup: <b>I am a PPT Partner</b> — Partner ID → we consolidate every merchant across ALL of that person's Partner IDs → check each one's 30-day volume against your eligibility band. <b>I am interested in becoming a partner</b> — a short qualifying survey you define → pass/fail → book a call.</div>
+        <label class="fld" style="margin-top:0;">HighLevel sub-account</label>
+        <select class="inp" id="p49_location" onchange="onP49Location()"><option value="">— select —</option></select>
+
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path A — I am a PPT Partner</div>
+          <div class="row2">
+            <div><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="p49_min_volume" value="20000"></div>
+            <div><label class="fld" style="margin-top:0;">Max 30-day volume</label><input class="inp" type="number" id="p49_max_volume" value="30000"></div>
+          </div>
+          <div class="row2">
+            <div><label class="fld" style="margin-top:0;">Eligible tag <span class="muted" style="font-weight:400;">(applied in HighLevel)</span></label><input class="inp" id="p49_eligible_tag" placeholder="e.g. Prime49 Eligible"></div>
+            <div><label class="fld" style="margin-top:0;">Workflow <span class="muted" style="font-weight:400;">(optional)</span></label><select class="inp" id="p49_eligible_workflow"><option value="">— none —</option></select></div>
+          </div>
+          <label class="fld">Eligible headline</label>
+          <input class="inp" id="p49_eligible_headline" placeholder="You're eligible for Prime49!">
+          <label class="fld">Eligible message</label>
+          <textarea class="inp" id="p49_eligible_body" rows="2" placeholder="Great news — one or more of your merchants qualify. Book a call to get started."></textarea>
+          <label class="fld">Not-yet-eligible message</label>
+          <textarea class="inp" id="p49_not_eligible_body" rows="2" placeholder="None of your merchants are in the qualifying volume range just yet."></textarea>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path B — I am interested in becoming a partner</div>
+          <div class="muted" style="font-size:11px;margin-bottom:8px;">Build the qualifying survey. For dropdown/checkbox questions, mark which exact answers count as a PASS — one per line, must match an option exactly.</div>
+          <div id="p49SurveyList"></div>
+          <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddQuestion()">+ Add question</button>
+          <div class="row2" style="margin-top:10px;">
+            <div><label class="fld" style="margin-top:0;">Qualify if</label><select class="inp" id="p49_qualify_mode"><option value="all">ALL pass-fail questions pass</option><option value="any">ANY pass-fail question passes</option></select></div>
+            <div><label class="fld" style="margin-top:0;">Tag on qualify <span class="muted" style="font-weight:400;">(optional)</span></label><input class="inp" id="p49_survey_tag" placeholder="e.g. Prospective Prime49"></div>
+          </div>
+          <label class="fld">Qualified headline</label>
+          <input class="inp" id="p49_qualified_headline" placeholder="You're a great fit!">
+          <label class="fld">Qualified message</label>
+          <textarea class="inp" id="p49_qualified_body" rows="2" placeholder="Let's get you on a call."></textarea>
+          <label class="fld">Declined headline</label>
+          <input class="inp" id="p49_declined_headline" placeholder="Thanks for your interest">
+          <label class="fld">Declined message</label>
+          <textarea class="inp" id="p49_declined_body" rows="2" placeholder="Prime49 isn't the right fit just yet — we'll keep you posted."></textarea>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+          <label class="fld" style="margin-top:0;">Book-a-call calendar <span class="muted" style="font-weight:400;">(shown on eligible/qualified)</span></label>
+          <select class="inp" id="p49_calendar"><option value="">Choose a sub-account first…</option></select>
+        </div>
+      </div>
+
       <!-- Interactive config — driven by the campaign TYPE chosen up front. -->
       <!-- Hidden state checkboxes (set programmatically by applyCampaignType). -->
       <input type="checkbox" id="f_sv_enabled" style="display:none;">
@@ -1228,7 +1278,8 @@ async function pickAnnouncementKind(){
   var OPTS=[
     ['youtube','▶️','YouTube Video Announcement','Opt-in → LIVE (with badge) → Replay, auto-switching by date'],
     ['classic','📢','Classic Announcement','A message / image with an optional button (the standard one)'],
-    ['rsvp','🎟️','RSVP Announcement','Partner-exclusive — Partner ID → confirm/questions → submit, right inside the popup']
+    ['rsvp','🎟️','RSVP Announcement','Partner-exclusive — Partner ID → confirm/questions → submit, right inside the popup'],
+    ['prime49','🏆','Prime49 Announcement','Evergreen two-path popup — existing-partner eligibility check, or a prospective-partner qualifying survey']
   ];
   await Swal.fire({ title:'Announcement type', width:520, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Back',
     html:`<div style="display:grid;gap:10px;text-align:left;">${OPTS.map(function(t){return '<button type="button" class="pp-annkind" data-k="'+t[0]+'" style="display:flex;gap:13px;align-items:center;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;cursor:pointer;font-family:inherit;"><div style="font-size:26px;line-height:1;">'+t[1]+'</div><div><div style="font-weight:800;font-size:14px;color:#0f172a;">'+t[2]+'</div><div style="font-size:12px;color:#64748b;margin-top:2px;">'+t[3]+'</div></div></button>';}).join('')}</div>`,
@@ -1253,7 +1304,7 @@ function applyCampaignType(type){
   g('svRating').style.display=currentType==='rating'?'block':'none';
   g('svContact').style.display=currentType==='lead'?'block':'none';
   // Reflect the type (and announcement sub-kind) in the editor title.
-  var kindLabel = isAnn ? (window._campaignKind==='youtube'?'YouTube Video Announcement':window._campaignKind==='rsvp'?'RSVP Announcement':'Classic Announcement') : (TYPE_LABEL[currentType]||'Campaign');
+  var kindLabel = isAnn ? (window._campaignKind==='youtube'?'YouTube Video Announcement':window._campaignKind==='rsvp'?'RSVP Announcement':window._campaignKind==='prime49'?'Prime49 Announcement':'Classic Announcement') : (TYPE_LABEL[currentType]||'Campaign');
   g('editorTitle').innerText=(editing?'Edit ':'New ')+kindLabel;
   try{ renderPreview(); }catch(e){}
 }
@@ -1285,14 +1336,31 @@ function openEditor(type){
   document.getElementById('rsvp_embed_url').value=''; document.getElementById('rsvp_thankyou').value='';
   document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>';
   window._rsvpEditFields=[]; _rsvpCf=[];
-  // RSVP kind: the CTA IS the RSVP button (no manual link, no gate, no separate enable toggle).
-  document.getElementById('ctaUrlWrap').style.display = _isRSVP ? 'none' : '';
-  document.getElementById('ctaUrlRsvpNote').style.display = _isRSVP ? '' : 'none';
-  document.getElementById('ctaGateBox').style.display = _isRSVP ? 'none' : '';
-  document.getElementById('ctaEnableRow').style.display = _isRSVP ? 'none' : '';
-  document.getElementById('ctaSectionLabel').textContent = _isRSVP ? 'RSVP button' : 'Call-to-action button (optional)';
-  document.getElementById('ctaSectionHint').style.display = _isRSVP ? 'none' : '';
+  // Prime49 kind → show the Prime49 setup block; the popup IS the two-path
+  // landing from the start, same as RSVP, no CTA button system needed.
+  var _isP49 = (type==='announcement' && _kind==='prime49');
+  document.getElementById('prime49Block').style.display = _isP49 ? 'block' : 'none';
+  document.getElementById('p49_location').innerHTML='<option value="">— select —</option>';
+  document.getElementById('p49_eligible_workflow').innerHTML='<option value="">— none —</option>';
+  document.getElementById('p49_calendar').innerHTML='<option value="">Choose a sub-account first…</option>';
+  document.getElementById('p49_eligible_tag').value=''; document.getElementById('p49_min_volume').value='20000'; document.getElementById('p49_max_volume').value='30000';
+  document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_body').value='';
+  document.getElementById('p49_survey_tag').value=''; document.getElementById('p49_qualify_mode').value='all';
+  document.getElementById('p49_qualified_headline').value=''; document.getElementById('p49_qualified_body').value='';
+  document.getElementById('p49_declined_headline').value=''; document.getElementById('p49_declined_body').value='';
+  document.getElementById('p49SurveyList').innerHTML='';
+  // RSVP/Prime49 kind: the CTA IS the flow itself (no manual link, no gate, no separate enable toggle).
+  var _isFlowKind = _isRSVP || _isP49;
+  document.getElementById('ctaUrlWrap').style.display = _isFlowKind ? 'none' : '';
+  document.getElementById('ctaUrlRsvpNote').style.display = _isFlowKind ? '' : 'none';
+  document.getElementById('ctaGateBox').style.display = _isFlowKind ? 'none' : '';
+  document.getElementById('ctaEnableRow').style.display = _isFlowKind ? 'none' : '';
+  document.getElementById('ctaSectionLabel').textContent = _isRSVP ? 'RSVP button' : (_isP49 ? 'Prime49 button' : 'Call-to-action button (optional)');
+  document.getElementById('ctaSectionHint').style.display = _isFlowKind ? 'none' : '';
   if(_isRSVP){ document.getElementById('f_cta_enabled').checked=true; document.getElementById('ctaFields').style.display='grid'; document.getElementById('f_cta_label').value='RSVP Now'; }
+  // Prime49's two-path landing IS the popup content from the moment it opens
+  // (matching the reference design) — no CTA button gate needed at all.
+  if(_isP49){ document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none'; }
   // Clear survey field values, then tailor to the chosen type.
   ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_sv_scale').value='5';
@@ -1304,8 +1372,10 @@ function openEditor(type){
   document.getElementById('f_sv_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
   setContactMode('native');
   // RSVP announcements default to the Event Hero design (dark + orange split-screen).
-  loadTheme(_isRSVP ? Object.assign({}, THEME_PRESETS['Night Event'], {layout:'event_hero', hero:{}}) : null);
+  // Prime49 defaults to the same dark palette (its own bespoke two-card layout).
+  loadTheme(_isRSVP ? Object.assign({}, THEME_PRESETS['Night Event'], {layout:'event_hero', hero:{}}) : (_isP49 ? THEME_PRESETS['Night Event'] : null));
   if(_isRSVP) document.getElementById('rsvp_thankyou').value="Your RSVP is confirmed. We'll see you there.";
+  if(_isP49) p49AddQuestion();
   applyCampaignType(type||'announcement');
   if((type||'announcement')==='lead') populateSvLocations('');
   document.getElementById('f_audience').value='partner';
@@ -1354,15 +1424,17 @@ async function editCampaign(id){
   { var cw=c.click_workflow||{}; document.getElementById('f_cw_enabled').checked=!!cw.enabled; document.getElementById('clickWfFields').style.display=cw.enabled?'block':'none';
     document.getElementById('cw_tags').value=Array.isArray(cw.tags)?cw.tags.join(', '):'';
     if(cw.enabled){ populateClickWfLocations(cw.location_id||'').then(function(){ if(cw.location_id) return loadClickWf(cw.workflow_id||''); }); } }
-  { var em=c.event_mode||{}; var isYT=(c.campaign_kind==='youtube')||!!em.enabled; var isRSVP=(c.campaign_kind==='rsvp')||!!c.rsvp_event_id;
-    window._campaignKind=isYT?'youtube':(isRSVP?'rsvp':'classic');
+  { var em=c.event_mode||{}; var isYT=(c.campaign_kind==='youtube')||!!em.enabled; var isRSVP=(c.campaign_kind==='rsvp')||!!c.rsvp_event_id; var isP49=(c.campaign_kind==='prime49');
+    window._campaignKind=isYT?'youtube':(isRSVP?'rsvp':(isP49?'prime49':'classic'));
     document.getElementById('rsvpBlock').style.display=isRSVP?'block':'none';
-    document.getElementById('ctaUrlWrap').style.display=isRSVP?'none':'';
-    document.getElementById('ctaUrlRsvpNote').style.display=isRSVP?'':'none';
-    document.getElementById('ctaGateBox').style.display=isRSVP?'none':'';
-    document.getElementById('ctaEnableRow').style.display=isRSVP?'none':'';
-    document.getElementById('ctaSectionLabel').textContent=isRSVP?'RSVP button':'Call-to-action button (optional)';
-    document.getElementById('ctaSectionHint').style.display=isRSVP?'none':'';
+    document.getElementById('prime49Block').style.display=isP49?'block':'none';
+    var isFlowKind=isRSVP||isP49;
+    document.getElementById('ctaUrlWrap').style.display=isFlowKind?'none':'';
+    document.getElementById('ctaUrlRsvpNote').style.display=isFlowKind?'':'none';
+    document.getElementById('ctaGateBox').style.display=isFlowKind?'none':'';
+    document.getElementById('ctaEnableRow').style.display=isFlowKind?'none':'';
+    document.getElementById('ctaSectionLabel').textContent=isRSVP?'RSVP button':(isP49?'Prime49 button':'Call-to-action button (optional)');
+    document.getElementById('ctaSectionHint').style.display=isFlowKind?'none':'';
     if(isRSVP){
       var rev=c.rsvp_event||{};
       document.getElementById('rsvp_tag').value=rev.rsvp_tag||'';
@@ -1371,6 +1443,23 @@ async function editCampaign(id){
       document.getElementById('rsvp_thankyou').value=rev.thankyou||'';
       window._rsvpEditFields=Array.isArray(rev.fields)?rev.fields:[];
       populateRsvpLocations(rev.ghl_location_id||'').then(function(){ if(rev.ghl_location_id) return onRsvpLocation(rev.workflow_id||''); else document.getElementById('rsvpFieldList').innerHTML='<div class="muted" style="font-size:12px;">Pick a sub-account above to load its custom fields.</div>'; });
+    }
+    if(isP49){
+      var p49=c.prime49||{};
+      document.getElementById('p49_eligible_tag').value=p49.eligible_tag||'';
+      document.getElementById('p49_min_volume').value=p49.min_volume!=null?p49.min_volume:20000;
+      document.getElementById('p49_max_volume').value=p49.max_volume!=null?p49.max_volume:30000;
+      document.getElementById('p49_eligible_headline').value=p49.eligible_headline||'';
+      document.getElementById('p49_eligible_body').value=p49.eligible_body||'';
+      document.getElementById('p49_not_eligible_body').value=p49.not_eligible_body||'';
+      document.getElementById('p49_qualify_mode').value=p49.survey_qualify_mode==='any'?'any':'all';
+      document.getElementById('p49_survey_tag').value=p49.survey_tag||'';
+      document.getElementById('p49_qualified_headline').value=p49.qualified_headline||'';
+      document.getElementById('p49_qualified_body').value=p49.qualified_body||'';
+      document.getElementById('p49_declined_headline').value=p49.declined_headline||'';
+      document.getElementById('p49_declined_body').value=p49.declined_body||'';
+      p49RenderSurvey(Array.isArray(p49.survey_fields)?p49.survey_fields:[]);
+      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.calendar_id||''); });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1633,6 +1722,9 @@ async function saveCampaign(){
   if (window._campaignKind==='rsvp' && !document.getElementById('rsvp_location').value){
     Swal.fire('Pick a sub-account','Choose the HighLevel sub-account for this RSVP under RSVP setup.','warning'); return;
   }
+  if (window._campaignKind==='prime49' && !document.getElementById('p49_location').value){
+    Swal.fire('Pick a sub-account','Choose the HighLevel sub-account under Prime49 setup.','warning'); return;
+  }
   const payload={
     action: editing&&editing.id ? 'update_campaign':'create_campaign',
     id: editing&&editing.id ? editing.id : undefined,
@@ -1698,6 +1790,25 @@ async function saveCampaign(){
       embed_url: document.getElementById('rsvp_embed_url').value.trim()||null,
       thankyou: document.getElementById('rsvp_thankyou').value.trim()||null,
       fields: rsvpCollectFields()
+    } : undefined,
+    prime49: window._campaignKind==='prime49' ? {
+      location_id: document.getElementById('p49_location').value,
+      min_volume: parseFloat(document.getElementById('p49_min_volume').value)||20000,
+      max_volume: parseFloat(document.getElementById('p49_max_volume').value)||30000,
+      eligible_tag: document.getElementById('p49_eligible_tag').value.trim()||null,
+      eligible_workflow_id: document.getElementById('p49_eligible_workflow').value||null,
+      eligible_headline: document.getElementById('p49_eligible_headline').value.trim()||null,
+      eligible_body: document.getElementById('p49_eligible_body').value.trim()||null,
+      not_eligible_body: document.getElementById('p49_not_eligible_body').value.trim()||null,
+      survey_fields: p49CollectSurvey(),
+      survey_qualify_mode: document.getElementById('p49_qualify_mode').value,
+      survey_tag: document.getElementById('p49_survey_tag').value.trim()||null,
+      qualified_headline: document.getElementById('p49_qualified_headline').value.trim()||null,
+      qualified_body: document.getElementById('p49_qualified_body').value.trim()||null,
+      declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
+      declined_body: document.getElementById('p49_declined_body').value.trim()||null,
+      calendar_id: document.getElementById('p49_calendar').value||null,
+      calendar_name: (document.getElementById('p49_calendar').options[document.getElementById('p49_calendar').selectedIndex]||{}).text||null
     } : undefined
   };
   if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
@@ -2349,6 +2460,81 @@ function rsvpCollectFields(){
       options=raw.split('\n').map(s=>s.trim()).filter(Boolean);
     }
     out.push({ name:row.dataset.fname, label:row.dataset.fname, type, required:row.querySelector('.rf_req').checked, options }); });
+  return out;
+}
+
+// ── Prime49 setup (sub-account, eligibility, calendar, qualifying survey) ──
+async function populateP49Locations(selectedId){
+  const sel=document.getElementById('p49_location');
+  const data=await getGhlLocations();
+  const locs=(data.locations||[]);
+  sel.innerHTML='<option value="">— select —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(selectedId){ if(!Array.from(sel.options).some(o=>o.value===selectedId)){ const o=document.createElement('option'); o.value=selectedId; o.textContent=selectedId; sel.appendChild(o);} sel.value=selectedId; }
+}
+async function onP49Location(preWfId, preCalId){
+  const loc=document.getElementById('p49_location').value;
+  const wSel=document.getElementById('p49_eligible_workflow'), cSel=document.getElementById('p49_calendar');
+  if(!loc){ wSel.innerHTML='<option value="">— none —</option>'; cSel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
+  wSel.innerHTML='<option value="">Loading…</option>'; cSel.innerHTML='<option value="">Loading…</option>';
+  const [wr,cr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc})]);
+  const wfs=(wr.success?wr.data:[])||[];
+  wSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
+  if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
+  const cals=(cr.success?cr.data:[])||[];
+  cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join('');
+  if(!cals.length) cSel.innerHTML='<option value="">No calendars found in this sub-account</option>';
+  if(preCalId){ if(!Array.from(cSel.options).some(o=>o.value===preCalId)){ const o=document.createElement('option'); o.value=preCalId; o.textContent=preCalId; cSel.appendChild(o);} cSel.value=preCalId; }
+}
+function p49ToggleQOptions(sel){
+  const row=sel.closest('.p49-qrow');
+  const wrap=row.querySelector('.p49q-optwrap');
+  if(wrap) wrap.style.display=(sel.value==='dropdown'||sel.value==='checkbox')?'block':'none';
+}
+function p49AddQuestion(q){
+  q=q||{};
+  const box=document.getElementById('p49SurveyList');
+  const div=document.createElement('div');
+  div.className='p49-qrow';
+  div.style.cssText='border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;background:#fff;';
+  const showOpts=(q.type==='dropdown'||q.type==='checkbox');
+  div.innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input class="inp p49q-label" placeholder="Question, e.g. What's your monthly volume?" style="flex:1;" value="${esc(q.label||'')}">
+      <select class="inp p49q-type" style="width:110px;" onchange="p49ToggleQOptions(this)">
+        <option value="text" ${(!q.type||q.type==='text')?'selected':''}>text</option>
+        <option value="textarea" ${q.type==='textarea'?'selected':''}>textarea</option>
+        <option value="dropdown" ${q.type==='dropdown'?'selected':''}>dropdown</option>
+        <option value="checkbox" ${q.type==='checkbox'?'selected':''}>checkbox</option>
+      </select>
+      <label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" class="p49q-req" ${q.required?'checked':''}> req</label>
+      <button type="button" class="btn btn-neutral" style="padding:4px 8px;" onclick="this.closest('.p49-qrow').remove()">✕</button>
+    </div>
+    <div class="p49q-optwrap" style="display:${showOpts?'block':'none'};margin-top:6px;">
+      <div class="muted" style="font-size:10px;margin-bottom:2px;">Options (one per line):</div>
+      <textarea class="inp p49q-opts" rows="2">${esc((q.options||[]).join('\n'))}</textarea>
+      <div class="muted" style="font-size:10px;margin:4px 0 2px;">Qualifying answers — which options count as a PASS (one per line, must match exactly):</div>
+      <textarea class="inp p49q-qualify" rows="2">${esc((q.qualify||[]).join('\n'))}</textarea>
+    </div>`;
+  box.appendChild(div);
+}
+function p49RenderSurvey(fields){
+  document.getElementById('p49SurveyList').innerHTML='';
+  (fields||[]).forEach(f=>p49AddQuestion(f));
+  if(!fields || !fields.length) p49AddQuestion();
+}
+function p49CollectSurvey(){
+  const rows=document.querySelectorAll('#p49SurveyList .p49-qrow'); const out=[];
+  rows.forEach((row,i)=>{
+    const label=row.querySelector('.p49q-label').value.trim();
+    if(!label) return;
+    const type=row.querySelector('.p49q-type').value;
+    let options=[], qualify=[];
+    if(type==='dropdown'||type==='checkbox'){
+      options=(row.querySelector('.p49q-opts').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      qualify=(row.querySelector('.p49q-qualify').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    }
+    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify });
+  });
   return out;
 }
 

@@ -203,6 +203,7 @@
             // Live/replay: play the YouTube video inside the card; CTA still links out.
             if (c.video_url) html += '<div style="position:relative;width:100%;padding-top:56.25%;margin-top:14px;border-radius:10px;overflow:hidden;background:#000;"><iframe src="' + esc(safeUrl(c.video_url)) + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="' + esc(c.title || 'Video') + '"></iframe></div>';
             if (c.rsvp) html += '<div style="margin-top:14px;' + th.btnRow + '"><button type="button" class="ppa-cta" style="' + th.btn + th.btnWrap + 'border:none;" onclick="ppAnnRsvpStart(\'' + jsArg(c.id) + '\',\'card\')">' + esc(c.cta_label || 'RSVP Now') + '</button></div>';
+            else if (c.prime49) html += '<div style="margin-top:14px;' + th.btnRow + '"><button type="button" class="ppa-cta" style="' + th.btn + th.btnWrap + 'border:none;" onclick="ppAnnP49Start(\'' + jsArg(c.id) + '\',\'card\')">' + esc(c.cta_label || 'Explore Prime49') + '</button></div>';
             else if (c.cta_enabled && c.cta_url) html += '<div style="margin-top:14px;' + th.btnRow + '"><a class="ppa-cta" style="' + th.btn + th.btnWrap + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a></div>';
             html += surveyHtml(c);
             html += '</div>';
@@ -288,6 +289,8 @@
         // just opens the link + counts, then snoozes (re-shows later).
         if (c.rsvp) {
             html += '<button type="button" class="ppa-fcta" style="border:none;" onclick="ppAnnRsvpStart(\'' + fcid + '\',\'float\')">' + esc(c.cta_label || 'RSVP Now') + '</button>';
+        } else if (c.prime49) {
+            html += '<button type="button" class="ppa-fcta" style="border:none;" onclick="ppAnnP49Start(\'' + fcid + '\',\'float\')">' + esc(c.cta_label || 'Explore Prime49') + '</button>';
         } else if (c.cta_enabled && c.cta_url) {
             var onCta = untilAction ? 'ppAnnAction(\'' + fcid + '\',\'cta\')' : 'ppAnnCta(\'' + fcid + '\')';
             html += '<a class="ppa-fcta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + onCta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
@@ -508,6 +511,163 @@
                 + '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(r.thankyou || "Your RSVP is confirmed. We'll see you there.") + '</div></div>'
                 + (embed ? ('<div style="position:relative;width:100%;padding-top:120%;margin-top:12px;border-radius:9px;overflow:hidden;"><iframe src="' + esc(embed) + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="camera; microphone; autoplay; fullscreen"></iframe></div>') : '');
             if (!embed) setTimeout(function () { removeEverywhere(id); }, 2600);
+        });
+    };
+
+    // ── Prime49 — evergreen two-path popup (same shared functions drive both
+    // the inline card and the floating widget, picking the right container via
+    // rsvpContainer(kind)) ───────────────────────────────────────────────────
+    var P49_API = '/api/prime49';
+    function p49Api(b) {
+        return fetch(P49_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+            .then(function (r) { return r.json(); }).catch(function () { return { success: false, message: 'Network error.' }; });
+    }
+    var _p49Partner = null;
+    window.ppAnnP49Start = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        track(id, 'click', 'p49_open');
+        var th = annTheme(c);
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        var accent = (c.theme && c.theme.accent) || '#f97316';
+        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(c.title || 'Your Prime49 path starts here.') + '</div>'
+            + (c.body_text ? '<div class="' + textCls + '" style="color:' + th.text + ';margin-bottom:10px;">' + bodyHtml(c.body_text) + '</div>' : '')
+            + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'
+            +   '<button type="button" onclick="ppAnnP49ExistingStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="text-align:left;background:' + esc(accent) + ';color:#0b1220;border:none;border-radius:10px;padding:12px 14px;cursor:pointer;font-family:inherit;">'
+            +     '<div style="font-size:9px;font-weight:800;letter-spacing:.5px;opacity:.75;">CURRENT PARTNER</div>'
+            +     '<div style="font-size:14px;font-weight:800;margin-top:2px;">I am a PPT Partner</div>'
+            +   '</button>'
+            +   '<button type="button" onclick="ppAnnP49SurveyStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="text-align:left;background:rgba(0,0,0,.06);color:' + th.title + ';border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:12px 14px;cursor:pointer;font-family:inherit;">'
+            +     '<div style="font-size:9px;font-weight:800;letter-spacing:.5px;opacity:.65;">PROSPECTIVE PARTNER</div>'
+            +     '<div style="font-size:14px;font-weight:800;margin-top:2px;">I am interested in becoming a partner</div>'
+            +   '</button>'
+            + '</div>';
+    };
+    window.ppAnnP49ExistingStart = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var th = annTheme(c);
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        body.innerHTML = '<div class="' + textCls + '" style="color:' + th.text + ';">Loading…</div>';
+        p49Api({ action: 'config', campaign_id: c.prime49.campaign_id }).then(function (r) {
+            if (!rsvpFind(id)) return;
+            c.prime49Cfg = r.success ? r.config : null;
+            body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">I am a PPT Partner</div>'
+                + '<div class="' + textCls + '" style="color:' + th.text + ';margin-bottom:8px;">Enter your Partner ID — we\'ll check your merchants against the eligibility band.</div>'
+                + '<input id="ppa-p49-id-' + kind + '" style="' + SVINP + '" placeholder="e.g. 144704" autocomplete="off">'
+                + '<div id="ppa-p49-err-' + kind + '" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
+                + '<button type="button" class="ppa-cta" style="margin-top:8px;background:#f97316;border:none;" onclick="ppAnnP49Lookup(\'' + jsArg(id) + '\',\'' + kind + '\')">Check eligibility</button>';
+        });
+    };
+    window.ppAnnP49Lookup = function (id, kind) {
+        var c = rsvpFind(id); if (!c) return;
+        var input = document.getElementById('ppa-p49-id-' + kind), err = document.getElementById('ppa-p49-err-' + kind);
+        var pid = input ? input.value.trim() : '';
+        if (!pid) { if (err) err.textContent = 'Please enter your Partner ID.'; return; }
+        if (err) err.textContent = '';
+        p49Api({ action: 'lookup_existing', campaign_id: c.prime49.campaign_id, partner_id: pid }).then(function (r) {
+            if (!r.success) { if (err) err.textContent = r.message || 'Error.'; return; }
+            if (r.status === 'not_found') { if (err) err.textContent = "We couldn't find that Partner ID. Please double-check it."; return; }
+            _p49Partner = { id: pid, name: r.name, email: r.email, phone: r.phone };
+            ppAnnP49Results(id, kind, r);
+        });
+    };
+    function ppAnnP49Results(id, kind, r) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var th = annTheme(c);
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        var byId = {};
+        (r.merchants || []).forEach(function (m) { (byId[m.partner_id_string] = byId[m.partner_id_string] || []).push(m); });
+        var list = Object.keys(byId).map(function (pidKey) {
+            var rows = byId[pidKey].map(function (m) {
+                var tag = m.eligible ? '<span style="color:#16a34a;">✓ eligible</span>' : (m.already_prime49 ? '<span style="color:#94a3b8;">already Prime49</span>' : '<span style="color:#94a3b8;">not in range</span>');
+                return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:11.5px;"><span>' + esc(m.dba_name || m.merchant_id) + '</span><span style="text-align:right;">$' + (m.volume_30_day || 0).toLocaleString() + ' · ' + tag + '</span></div>';
+            }).join('');
+            return '<div style="margin-top:8px;"><div style="font-size:10px;font-weight:800;color:#94a3b8;">PARTNER ID ' + esc(pidKey) + '</div>' + rows + '</div>';
+        }).join('');
+        var cfg = c.prime49Cfg || {};
+        var headline = r.eligible ? cfg.eligible_headline : cfg.not_eligible_headline;
+        var msg = r.eligible ? cfg.eligible_body : cfg.not_eligible_body;
+        body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + (r.eligible ? '🎉 ' + esc(headline || "You're eligible for Prime49!") : esc(headline || 'Not yet eligible')) + '</div>'
+            + '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(msg || (r.eligible ? "We found merchants that qualify — see below." : "None of your merchants are in the qualifying volume range right now.")) + '</div>'
+            + '<div style="max-height:180px;overflow:auto;margin-top:8px;">' + (list || '<div class="' + textCls + '" style="font-size:11.5px;">No merchants found under your Partner ID(s).</div>') + '</div>'
+            + (r.eligible ? '<button type="button" class="ppa-cta" style="margin-top:10px;background:#f97316;border:none;" onclick="ppAnnP49Confirm(\'' + jsArg(id) + '\',\'' + kind + '\')">Continue</button>' : '');
+        if (r.eligible) ppAnnP49Confirm(id, kind, true);
+    }
+    window.ppAnnP49Confirm = function (id, kind, silent) {
+        var c = rsvpFind(id); if (!c || !_p49Partner) return;
+        p49Api({ action: 'confirm_existing', campaign_id: c.prime49.campaign_id, partner_id: _p49Partner.id, email: _p49Partner.email, phone: _p49Partner.phone }).then(function (r) {
+            if (!r.success) return;
+            track(id, 'click', 'p49_eligible'); permAdd(id); dismissServer(id);
+            if (!silent || !r.calendar_id) return;
+            var body = rsvpContainer(kind); if (!body) return;
+            var a = document.createElement('a');
+            a.href = 'https://api.leadconnectorhq.com/widget/booking/' + encodeURIComponent(r.calendar_id);
+            a.target = '_blank'; a.rel = 'noopener';
+            a.className = 'ppa-cta'; a.style.cssText = 'display:block;text-align:center;margin-top:10px;background:#f97316;border:none;text-decoration:none;';
+            a.textContent = 'Book a call';
+            body.appendChild(a);
+        });
+    };
+    window.ppAnnP49SurveyStart = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var th = annTheme(c);
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        body.innerHTML = '<div class="' + textCls + '" style="color:' + th.text + ';">Loading…</div>';
+        p49Api({ action: 'config', campaign_id: c.prime49.campaign_id }).then(function (r) {
+            if (!rsvpFind(id)) return;
+            if (!r.success) { body.innerHTML = '<div class="' + textCls + '" style="color:' + th.text + ';">' + esc(r.message || 'Not available.') + '</div>'; return; }
+            c.prime49Cfg = r.config;
+            var qs = (r.config.survey_fields || []).map(function (f) {
+                return '<div style="margin-top:8px;"><label style="display:block;font-size:11px;font-weight:700;color:' + th.text + ';margin-bottom:4px;">' + esc(f.label || f.name) + (f.required ? ' *' : '') + '</label>' + p49FieldInput(f) + '</div>';
+            }).join('');
+            body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">I am interested in becoming a partner</div>'
+                + '<input id="ppa-p49-name-' + kind + '" style="' + SVINP + '" placeholder="Full name">'
+                + '<input id="ppa-p49-email-' + kind + '" style="' + SVINP + 'margin-top:6px;" placeholder="Email" type="email">'
+                + '<input id="ppa-p49-phone-' + kind + '" style="' + SVINP + 'margin-top:6px;" placeholder="Phone">'
+                + qs
+                + '<div id="ppa-p49-serr-' + kind + '" style="color:#dc2626;font-size:12px;margin-top:6px;min-height:14px;"></div>'
+                + '<button type="button" class="ppa-cta" style="margin-top:8px;background:#f97316;border:none;" onclick="ppAnnP49SurveySubmit(\'' + jsArg(id) + '\',\'' + kind + '\')">Submit</button>';
+        });
+    };
+    function p49FieldInput(f) {
+        var id = 'ppa-p49-q-' + jsArg(f.name);
+        if (f.type === 'textarea') return '<textarea style="' + SVINP + 'min-height:60px;" id="' + id + '" data-name="' + esc(f.name) + '"></textarea>';
+        if (f.type === 'dropdown') return '<select style="' + SVINP + '" id="' + id + '" data-name="' + esc(f.name) + '"><option value="">— select —</option>' + (f.options || []).map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
+        if (f.type === 'checkbox') {
+            if (f.options && f.options.length) {
+                return '<div data-name="' + esc(f.name) + '" data-multi="1" style="display:flex;flex-direction:column;gap:5px;">' + (f.options || []).map(function (o) {
+                    return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;"><input type="checkbox" value="' + esc(o) + '"> ' + esc(o) + '</label>';
+                }).join('') + '</div>';
+            }
+            return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;"><input type="checkbox" id="' + id + '" data-name="' + esc(f.name) + '"> Yes</label>';
+        }
+        return '<input type="text" style="' + SVINP + '" id="' + id + '" data-name="' + esc(f.name) + '">';
+    }
+    window.ppAnnP49SurveySubmit = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        var th = annTheme(c);
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        var name = (document.getElementById('ppa-p49-name-' + kind) || {}).value || '';
+        var email = (document.getElementById('ppa-p49-email-' + kind) || {}).value || '';
+        var phone = (document.getElementById('ppa-p49-phone-' + kind) || {}).value || '';
+        var answers = {};
+        var els = body.querySelectorAll('[data-name]');
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i]; var nm = el.getAttribute('data-name');
+            if (el.getAttribute('data-multi') === '1') {
+                var checked = el.querySelectorAll('input[type=checkbox]:checked');
+                var vals = []; for (var j = 0; j < checked.length; j++) vals.push(checked[j].value);
+                answers[nm] = vals;
+            } else {
+                answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
+            }
+        }
+        p49Api({ action: 'submit_survey', campaign_id: c.prime49.campaign_id, name: name, email: email, phone: phone, answers: answers }).then(function (r) {
+            var err = document.getElementById('ppa-p49-serr-' + kind);
+            if (!r.success) { if (err) err.textContent = r.message || 'Something went wrong.'; return; }
+            track(id, 'click', 'p49_survey_submit'); permAdd(id); dismissServer(id);
+            body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + (r.qualified ? '🎉 ' : '👋 ') + esc(r.headline || '') + '</div>'
+                + (r.body ? '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(r.body) + '</div>' : '')
+                + (r.calendar_id ? ('<a class="ppa-cta" style="display:block;text-align:center;margin-top:10px;background:#f97316;border:none;text-decoration:none;" href="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" target="_blank" rel="noopener">Book a call</a>') : '');
         });
     };
 
