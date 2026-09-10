@@ -1208,7 +1208,7 @@ async function loadList(){
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           ${c.image_url?`<img src="${esc(c.image_url)}" style="width:44px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`:`<div style="width:44px;height:32px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:16px;color:#94a3b8;">${c.content_type==='text'?'notes':'image'}</span></div>`}
-          <div><div style="font-weight:700;">${kindBadge(c)} ${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${c.rsvp_event_id?(c.rsvp_count||0)+' RSVP(s)':c.campaign_kind==='prime49'?(c.prime49_count||0)+' conversion(s)':esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
+          <div><div style="font-weight:700;">${kindBadge(c)} ${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${c.rsvp_event_id?(c.rsvp_count||0)+' RSVP(s)':c.campaign_kind==='prime49'?(c.prime49_converted_count||0)+' converted / '+(c.prime49_count||0)+' submission(s)':esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
         </div>
       </td>
       <td><span class="pill ${c.audience}">${audienceLabel(c.audience)}</span></td>
@@ -1255,17 +1255,21 @@ async function viewPrime49(id, title){
   const subs = (r.success?r.data:[])||[];
   const existing = subs.filter(s=>s.path==='existing'), prospective = subs.filter(s=>s.path==='prospective');
   const eligibleCount = existing.filter(s=>s.eligible).length, qualifiedCount = prospective.filter(s=>s.qualified).length;
+  const convertedCount = subs.filter(s=>s.converted).length;
   const tagCell = s => s.tag_applied
     ? '<span title="Tag applied" style="color:#16a34a;">✓</span>'
     : `<span title="${esc(s.hl_error||'Tag not applied')}" style="color:#dc2626;cursor:help;">⚠️</span>`;
-  const row = s => `<tr><td style="padding:5px 8px;">${s.path==='existing'?'🅰️ Partner':'🅱️ Prospect'}</td><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;text-align:center;">${(s.path==='existing'?s.eligible:s.qualified)?'<span style="color:#16a34a;">✓</span>':'<span style="color:#94a3b8;">—</span>'}</td><td style="padding:5px 8px;text-align:center;">${tagCell(s)}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`;
-  const rows = subs.length ? subs.map(row).join('') : '<tr><td colspan="7" class="muted" style="padding:10px;">No conversions yet.</td></tr>';
-  Swal.fire({title:'Prime49 — '+esc(title), width:720, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
+  const convertedCell = s => s.converted
+    ? `<span title="Converted via ${esc(s.converted_via||'?')}" style="color:#16a34a;">✓ ${esc(s.converted_via||'')}</span>`
+    : '<span style="color:#94a3b8;">—</span>';
+  const row = s => `<tr><td style="padding:5px 8px;">${s.path==='existing'?'🅰️ Partner':'🅱️ Prospect'}</td><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;text-align:center;">${(s.path==='existing'?s.eligible:s.qualified)?'<span style="color:#16a34a;">✓</span>':'<span style="color:#94a3b8;">—</span>'}</td><td style="padding:5px 8px;text-align:center;">${convertedCell(s)}</td><td style="padding:5px 8px;text-align:center;">${tagCell(s)}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`;
+  const rows = subs.length ? subs.map(row).join('') : '<tr><td colspan="8" class="muted" style="padding:10px;">No conversions yet.</td></tr>';
+  Swal.fire({title:'Prime49 — '+esc(title), width:760, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
     html:`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div class="muted" style="font-size:11px;">${existing.length} Path A check(s) (${eligibleCount} eligible) · ${prospective.length} Path B survey(s) (${qualifiedCount} qualified). ⚠️ = the HighLevel tag/contact step failed (hover for why) — the conversion was still recorded.</div>
+        <div class="muted" style="font-size:11px;">${existing.length} Path A check(s) (${eligibleCount} eligible) · ${prospective.length} Path B survey(s) (${qualifiedCount} qualified) · <b>${convertedCount} actually converted</b> (booked a call or filled the form). ⚠️ = the HighLevel tag/contact step failed (hover for why) — the record was still saved.</div>
         <button class="btn btn-neutral btn-sm" onclick='exportPrime49(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:15px;">download</span> Export CSV</button>
       </div>
-      <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Path</th><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Eligible/Qualified</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
+      <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Path</th><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Eligible/Qualified</th><th style="padding:5px 8px;text-align:center;">Converted</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
 }
 async function exportPrime49(id, title){
   const r = await api({action:'export_prime49', id});

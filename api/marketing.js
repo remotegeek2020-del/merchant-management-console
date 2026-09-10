@@ -581,14 +581,19 @@ export default async function handler(req, res) {
                     const { data: subs } = await supabase.from('rsvp_submissions').select('event_id').in('event_id', rsvpEventIds).limit(100000);
                     (subs || []).forEach(s => { rsvpCounts[s.event_id] = (rsvpCounts[s.event_id] || 0) + 1; });
                 }
-                // Prime49-kind campaigns show a submission count too.
+                // Prime49-kind campaigns show a submission count too — and a
+                // converted count (actually booked/filled the form), which is
+                // what "successful conversion" means for this campaign kind.
                 const p49Ids = (data || []).filter(c => c.campaign_kind === 'prime49').map(c => c.id);
-                let p49Counts = {};
+                let p49Counts = {}, p49Converted = {};
                 if (p49Ids.length) {
-                    const { data: subs } = await supabase.from('prime49_submissions').select('campaign_id').in('campaign_id', p49Ids).limit(100000);
-                    (subs || []).forEach(s => { p49Counts[s.campaign_id] = (p49Counts[s.campaign_id] || 0) + 1; });
+                    const { data: subs } = await supabase.from('prime49_submissions').select('campaign_id, converted').in('campaign_id', p49Ids).limit(100000);
+                    (subs || []).forEach(s => {
+                        p49Counts[s.campaign_id] = (p49Counts[s.campaign_id] || 0) + 1;
+                        if (s.converted) p49Converted[s.campaign_id] = (p49Converted[s.campaign_id] || 0) + 1;
+                    });
                 }
-                return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 }, rsvp_count: c.rsvp_event_id ? (rsvpCounts[c.rsvp_event_id] || 0) : null, prime49_count: c.campaign_kind === 'prime49' ? (p49Counts[c.id] || 0) : null })));
+                return ok(res, (data || []).map(c => ({ ...c, stats: stats[c.id] || { impression: 0, click: 0, dismiss: 0 }, rsvp_count: c.rsvp_event_id ? (rsvpCounts[c.rsvp_event_id] || 0) : null, prime49_count: c.campaign_kind === 'prime49' ? (p49Counts[c.id] || 0) : null, prime49_converted_count: c.campaign_kind === 'prime49' ? (p49Converted[c.id] || 0) : null })));
             }
 
             if (action === 'get_campaign') {
@@ -1326,10 +1331,11 @@ export default async function handler(req, res) {
                 const { data: rows } = await supabase.from('prime49_submissions').select('*')
                     .eq('campaign_id', id).order('created_at', { ascending: false }).limit(20000);
                 const csvEsc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-                const header = ['path', 'name', 'email', 'partner_id', 'eligible_or_qualified', 'tag_applied', 'hl_error', 'submitted_at'].join(',');
+                const header = ['path', 'name', 'email', 'partner_id', 'eligible_or_qualified', 'converted', 'converted_via', 'tag_applied', 'hl_error', 'submitted_at'].join(',');
                 const csv = [header].concat((rows || []).map(r => [
                     r.path, r.name, r.email, r.partner_id_string || '',
                     r.path === 'existing' ? (r.eligible ? 'yes' : 'no') : (r.qualified ? 'yes' : 'no'),
+                    r.converted ? 'yes' : 'no', r.converted_via || '',
                     r.tag_applied ? 'yes' : 'no', r.hl_error || '', r.created_at
                 ].map(csvEsc).join(','))).join('\n');
                 return ok(res, { csv });

@@ -740,16 +740,49 @@
             + '<div style="max-height:220px;overflow:auto;margin-top:10px;">' + (list || '<div style="color:#94a3b8;font-size:12.5px;">No merchants found under your Partner ID(s).</div>') + '</div>'
             + __ppxP49BookingHtml(r);
     }
+    // Query params HighLevel's booking/form widgets accept for prefill.
+    function p49PrefillQs(prefill) {
+        var p = prefill || {};
+        var parts = [];
+        if (p.first_name) parts.push('first_name=' + encodeURIComponent(p.first_name));
+        if (p.last_name) parts.push('last_name=' + encodeURIComponent(p.last_name));
+        if (p.email) parts.push('email=' + encodeURIComponent(p.email));
+        if (p.phone) parts.push('phone=' + encodeURIComponent(p.phone));
+        return parts.length ? ('?' + parts.join('&')) : '';
+    }
+    // "Successful conversion" for Prime49 = they actually booked the call or
+    // filled the form — not just eligible/qualified. Since the widget runs in
+    // a cross-origin HighLevel iframe, completion is detected via postMessage
+    // (best-effort — HighLevel doesn't formally document this contract).
+    var _p49PendingConversion = null, _p49MsgListenerAdded = false;
+    function p49ListenForConversion() {
+        if (_p49MsgListenerAdded) return; _p49MsgListenerAdded = true;
+        window.addEventListener('message', function (e) {
+            if (!_p49PendingConversion) return;
+            if (!/leadconnectorhq\.com$|msgsndr\.com$/.test(String(e.origin || '').replace(/^https?:\/\//, ''))) return;
+            var d = e.data;
+            var s = typeof d === 'string' ? d : JSON.stringify(d || {});
+            if (!/submit|book|appoint|schedul/i.test(s)) return;
+            var pending = _p49PendingConversion; _p49PendingConversion = null;
+            p49Api({ action: 'record_conversion', campaign_id: pending.campaignId, submission_id: pending.submissionId, via: pending.via });
+            track(pending.campaignId, 'click', 'p49_converted_' + pending.via, pending.variant);
+        });
+    }
     // Shared calendar-or-form outcome renderer for both paths.
     // Both outcomes embed the HighLevel widget right in the modal (an iframe),
     // never a new tab/window — leaving the popup to book/fill a form elsewhere
     // is exactly the drop-off point staff want to avoid.
     function __ppxP49BookingHtml(r) {
+        if (r.submission_id) {
+            p49ListenForConversion();
+            _p49PendingConversion = { campaignId: current ? current.id : null, submissionId: r.submission_id, via: r.booking_mode, variant: current ? current.variant : null };
+        }
+        var qs = p49PrefillQs(r.prefill);
         if (r.booking_mode === 'form' && r.form_id) {
-            return '<div style="margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(r.form_id) + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe></div>';
+            return '<div style="margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(r.form_id) + qs + '" style="width:100%;min-height:440px;border:none;" scrolling="yes"></iframe></div>';
         }
         if (r.booking_mode === 'calendar' && r.calendar_id) {
-            return '<div style="margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + '" style="width:100%;min-height:640px;border:none;" scrolling="yes"></iframe></div>';
+            return '<div style="margin-top:14px;border-radius:10px;overflow:hidden;"><iframe src="https://api.leadconnectorhq.com/widget/booking/' + esc(r.calendar_id) + qs + '" style="width:100%;min-height:640px;border:none;" scrolling="yes"></iframe></div>';
         }
         return '';
     }

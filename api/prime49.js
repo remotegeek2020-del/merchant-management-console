@@ -69,13 +69,20 @@ async function eligibilityForPerson(personId, minVolume, maxVolume) {
 // What to hand the visitor once they qualify: either a HighLevel calendar
 // (booking widget) or a HighLevel form — staff's choice, set independently
 // per path ('eligible' for Path A, 'survey' for Path B).
-function bookingInfo(cfg, path) {
+function bookingInfo(cfg, path, prefill) {
     const mode = cfg[path + '_booking_mode'];
     const formId = cfg[path + '_form_id'];
     const calId = cfg[path + '_calendar_id'];
-    if (mode === 'form' && formId) return { booking_mode: 'form', form_id: formId };
-    if (calId) return { booking_mode: 'calendar', calendar_id: calId };
+    const p = prefill || {};
+    if (mode === 'form' && formId) return { booking_mode: 'form', form_id: formId, prefill: p };
+    if (calId) return { booking_mode: 'calendar', calendar_id: calId, prefill: p };
     return { booking_mode: null };
+}
+function splitName(name) {
+    const s = String(name || '').trim();
+    if (!s) return { first_name: '', last_name: '' };
+    const parts = s.split(/\s+/);
+    return { first_name: parts[0], last_name: parts.slice(1).join(' ') };
 }
 
 // Does this ONE question's answer qualify, per however staff configured it?
@@ -152,15 +159,16 @@ export default async function handler(req, res) {
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, p, name, email, phone, { rsvp_tag: cfg.eligible_tag, workflow_id: cfg.eligible_workflow_id });
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
             }
-            await supabase.from('prime49_submissions').insert({
+            const { data: inserted } = await supabase.from('prime49_submissions').insert({
                 campaign_id: campaignId, path: 'existing', partner_id_string: pid, person_id: p.person_id || null,
                 hl_contact_id: contactId || p.hl_contact_id || null, email, name,
                 eligible, qualifying_merchants: merchants, tag_applied: tagApplied, hl_error: error || null
-            });
+            }).select('id').single();
 
             return ok(res, {
                 status: 'found', name, email, phone, eligible, merchants,
-                ...(eligible ? bookingInfo(cfg, 'eligible') : {})
+                submission_id: inserted ? inserted.id : null,
+                ...(eligible ? bookingInfo(cfg, 'eligible', { email, phone, ...splitName(name) }) : {})
             });
         }
 
@@ -185,21 +193,37 @@ export default async function handler(req, res) {
             const name = String(body.name || '').trim();
             const email = String(body.email || '').trim();
             const phone = String(body.phone || '').trim();
+            // Qualifying always creates/updates the HighLevel contact, whether or
+            // not staff configured a tag/workflow for this path.
             let contactId = null, tagApplied = false, error = null;
-            if (qualified && cfg.ghl_location_id && (cfg.survey_tag || cfg.survey_workflow_id)) {
+            if (qualified && cfg.ghl_location_id) {
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id });
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
             }
-            await supabase.from('prime49_submissions').insert({
+            const { data: inserted } = await supabase.from('prime49_submissions').insert({
                 campaign_id: campaignId, path: 'prospective', hl_contact_id: contactId, email, phone, name,
                 survey_answers: answers, qualified, tag_applied: tagApplied, hl_error: error || null
-            });
+            }).select('id').single();
             return ok(res, {
                 qualified,
+                submission_id: inserted ? inserted.id : null,
                 headline: qualified ? (cfg.qualified_headline || "You're a great fit!") : (cfg.declined_headline || 'Thanks for your interest'),
                 body: qualified ? (cfg.qualified_body || null) : (cfg.declined_body || null),
-                ...(qualified ? bookingInfo(cfg, 'survey') : {})
+                ...(qualified ? bookingInfo(cfg, 'survey', { email, phone, ...splitName(name) }) : {})
             });
+        }
+
+        // Marks a submission as an actual conversion — they booked the call or
+        // filled out the form, not merely eligible/qualified. This is what
+        // "successful conversion" means for Prime49 stats.
+        if (action === 'record_conversion') {
+            const submissionId = body.submission_id;
+            if (!submissionId) return bad(res, 'Missing submission id');
+            const via = body.via === 'form' ? 'form' : 'calendar';
+            await supabase.from('prime49_submissions')
+                .update({ converted: true, converted_via: via, converted_at: new Date().toISOString() })
+                .eq('id', submissionId).eq('campaign_id', campaignId);
+            return ok(res, {});
         }
 
         return bad(res, 'Unknown action');
