@@ -1293,9 +1293,20 @@ async function viewPrime49(id, title){
   Swal.fire({title:'Prime49 — '+esc(title), width:860, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
     html:`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div class="muted" style="font-size:11px;">${existing.length} Path A check(s) (${eligibleCount} eligible) · ${prospective.length} Path B survey(s) (${qualifiedCount} qualified) · <b>${convertedCount} actually converted</b> (booked a call or filled the form). 🤖 = Gemini-assigned rep (hover for its reasoning). ⚠️ = the HighLevel tag/contact step failed (hover for why) — the record was still saved.</div>
-        <button class="btn btn-neutral btn-sm" onclick='exportPrime49(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:15px;">download</span> Export CSV</button>
+        <div style="display:flex;gap:6px;flex:none;">
+          <button class="btn btn-neutral btn-sm" onclick='reconcilePrime49(${JSON.stringify(id)},${JSON.stringify(title)})' title="Check HighLevel for real bookings/form fills that weren't caught live"><span class="material-icons" style="font-size:15px;">sync</span> Reconcile</button>
+          <button class="btn btn-neutral btn-sm" onclick='exportPrime49(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:15px;">download</span> Export CSV</button>
+        </div>
       </div>
       <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Path</th><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Eligible/Qualified</th><th style="padding:5px 8px;text-align:center;">Converted</th><th style="padding:5px 8px;">Assigned rep</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
+}
+async function reconcilePrime49(id, title){
+  Swal.fire({title:'Checking HighLevel…', didOpen:()=>Swal.showLoading()});
+  const r = await api({action:'reconcile_prime49', id});
+  if(!r.success){ Swal.fire('Failed', r.message||'Could not reconcile.', 'error'); return; }
+  const d = r.data||{};
+  await Swal.fire({icon:'success', title:'Reconciled', html:`Checked <b>${d.checked||0}</b> eligible/qualified submission(s) · found <b>${d.converted||0}</b> new conversion(s) in HighLevel.`, confirmButtonColor:'#004990'});
+  viewPrime49(id, title);
 }
 async function exportPrime49(id, title){
   const r = await api({action:'export_prime49', id});

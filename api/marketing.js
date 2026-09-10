@@ -502,7 +502,7 @@ const ADMIN_ACTIONS = new Set([
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'ghl_users', 'prime49_reps', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
-    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49'
+    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49', 'reconcile_prime49'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
 
@@ -1381,6 +1381,64 @@ export default async function handler(req, res) {
                     r.tag_applied ? 'yes' : 'no', r.hl_error || '', r.created_at
                 ].map(csvEsc).join(','))).join('\n');
                 return ok(res, { csv });
+            }
+
+            // Reconcile Prime49 "converted" against what actually happened in
+            // HighLevel — a real booking/form fill, not the in-modal postMessage
+            // guess (unreliable: HighLevel doesn't document that contract, and
+            // it was found to never fire in practice). Pulls the relevant
+            // calendar(s)/form(s) once, then matches each un-converted
+            // eligible/qualified submission by HighLevel contact id (or email as
+            // a fallback) within the time window after it was recorded.
+            if (action === 'reconcile_prime49') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'campaign id required');
+                const { data: cfg } = await supabase.from('prime49_configs').select('*').eq('campaign_id', id).maybeSingle();
+                if (!cfg) return bad(res, 'No Prime49 setup found for this campaign.');
+                const { data: subs } = await supabase.from('prime49_submissions')
+                    .select('id, path, email, hl_contact_id, eligible, qualified, assigned_rep_ghl_user_id, created_at')
+                    .eq('campaign_id', id).eq('converted', false).limit(2000);
+                const candidates = (subs || []).filter(s => (s.path === 'existing' ? s.eligible : s.qualified));
+                if (!candidates.length) return ok(res, { checked: 0, converted: 0 });
+
+                const repCalById = {};
+                (cfg.survey_reps || []).forEach(r => { if (r.ghl_user_id && r.calendar_id) repCalById[r.ghl_user_id] = r.calendar_id; });
+                const calendarIds = new Set(), formIds = new Set();
+                if (cfg.eligible_calendar_id) calendarIds.add(cfg.eligible_calendar_id);
+                if (cfg.eligible_form_id) formIds.add(cfg.eligible_form_id);
+                if (cfg.survey_calendar_id) calendarIds.add(cfg.survey_calendar_id);
+                if (cfg.survey_form_id) formIds.add(cfg.survey_form_id);
+                Object.values(repCalById).forEach(cid => calendarIds.add(cid));
+
+                const earliestMs = Math.min(...candidates.map(s => new Date(s.created_at).getTime()));
+                const nowMs = Date.now();
+                const apptsByCal = {}, subsByForm = {};
+                for (const calId of calendarIds) apptsByCal[calId] = await ghlCalendarAppointments(cfg.ghl_location_id, calId, earliestMs, nowMs);
+                for (const formId of formIds) subsByForm[formId] = await ghlFormSubmissions(cfg.ghl_location_id, formId, earliestMs, nowMs);
+
+                let convertedCount = 0;
+                for (const s of candidates) {
+                    const calId = s.path === 'existing' ? cfg.eligible_calendar_id : (repCalById[s.assigned_rep_ghl_user_id] || cfg.survey_calendar_id);
+                    const formId = s.path === 'existing' ? cfg.eligible_form_id : cfg.survey_form_id;
+                    const subCreatedMs = new Date(s.created_at).getTime();
+                    const matchesAfterSubmission = x => {
+                        const atMs = x.at ? new Date(x.at).getTime() : NaN;
+                        if (!Number.isFinite(atMs) || atMs < subCreatedMs) return false;
+                        if (s.hl_contact_id && x.contact_id) return x.contact_id === s.hl_contact_id;
+                        return !!(s.email && x.email && x.email.toLowerCase() === s.email.toLowerCase());
+                    };
+                    let matched = null, via = null;
+                    if (calId && apptsByCal[calId]) { matched = apptsByCal[calId].find(matchesAfterSubmission); if (matched) via = 'calendar'; }
+                    if (!matched && formId && subsByForm[formId]) { matched = subsByForm[formId].find(matchesAfterSubmission); if (matched) via = 'form'; }
+                    if (matched) {
+                        await supabase.from('prime49_submissions').update({
+                            converted: true, converted_via: via,
+                            converted_at: matched.at ? new Date(matched.at).toISOString() : new Date().toISOString()
+                        }).eq('id', s.id);
+                        convertedCount++;
+                    }
+                }
+                return ok(res, { checked: candidates.length, converted: convertedCount });
             }
 
             // Scan a CTA landing page for an embedded GHL form / calendar and
