@@ -370,6 +370,22 @@
             <div><label class="fld" style="margin-top:0;">Qualify if</label><select class="inp" id="p49_qualify_mode"><option value="all">ALL pass-fail questions pass</option><option value="any">ANY pass-fail question passes</option></select></div>
             <div><label class="fld" style="margin-top:0;">Tag on qualify <span class="muted" style="font-weight:400;">(optional)</span></label><input class="inp" id="p49_survey_tag" placeholder="e.g. Prospective Prime49"></div>
           </div>
+
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_ai_enabled" onchange="p49ToggleAi()"> AI assessment (Gemini) — replaces the qualify rules above and picks a rep to assign</label>
+            <div id="p49AiWrap" style="display:none;margin-top:8px;">
+              <div class="muted" style="font-size:11px;margin-bottom:8px;">Gemini reads the applicant's answers against your criteria below, decides qualify/decline, and — when qualified — picks the best-fit rep from the pool you configure. The contact is created in HighLevel and assigned to that rep before the applicant ever books.</div>
+              <label class="fld" style="margin-top:0;">Qualifying criteria <span class="muted" style="font-weight:400;">(plain English — what makes a good fit)</span></label>
+              <textarea class="inp" id="p49_ai_criteria" rows="3" placeholder="e.g. Must process at least $15,000/month and have been in business 1+ years. Prioritize applicants in retail or restaurants."></textarea>
+              <label class="fld">Eligible reps <span class="muted" style="font-weight:400;">(Gemini picks one of these when qualified)</span></label>
+              <div id="p49RepList"></div>
+              <div class="row2" style="margin-top:6px;">
+                <select class="inp" id="p49_rep_picker"><option value="">Choose a sub-account first…</option></select>
+                <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddRep()">+ Add rep</button>
+              </div>
+            </div>
+          </div>
+
           <label class="fld">Qualified headline</label>
           <input class="inp" id="p49_qualified_headline" placeholder="You're a great fit!">
           <label class="fld">Qualified message</label>
@@ -1262,14 +1278,17 @@ async function viewPrime49(id, title){
   const convertedCell = s => s.converted
     ? `<span title="Converted via ${esc(s.converted_via||'?')}" style="color:#16a34a;">✓ ${esc(s.converted_via||'')}</span>`
     : '<span style="color:#94a3b8;">—</span>';
-  const row = s => `<tr><td style="padding:5px 8px;">${s.path==='existing'?'🅰️ Partner':'🅱️ Prospect'}</td><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;text-align:center;">${(s.path==='existing'?s.eligible:s.qualified)?'<span style="color:#16a34a;">✓</span>':'<span style="color:#94a3b8;">—</span>'}</td><td style="padding:5px 8px;text-align:center;">${convertedCell(s)}</td><td style="padding:5px 8px;text-align:center;">${tagCell(s)}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`;
-  const rows = subs.length ? subs.map(row).join('') : '<tr><td colspan="8" class="muted" style="padding:10px;">No conversions yet.</td></tr>';
-  Swal.fire({title:'Prime49 — '+esc(title), width:760, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
+  const repCell = s => s.assigned_rep_name
+    ? `<span title="${esc(s.ai_reasoning||'')}" style="cursor:${s.ai_reasoning?'help':'default'};">🤖 ${esc(s.assigned_rep_name)}</span>`
+    : '<span style="color:#94a3b8;">—</span>';
+  const row = s => `<tr><td style="padding:5px 8px;">${s.path==='existing'?'🅰️ Partner':'🅱️ Prospect'}</td><td style="padding:5px 8px;">${esc(s.name||'—')}</td><td style="padding:5px 8px;">${esc(s.email||'')}</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">${esc(s.partner_id_string||'')}</td><td style="padding:5px 8px;text-align:center;">${(s.path==='existing'?s.eligible:s.qualified)?'<span style="color:#16a34a;">✓</span>':'<span style="color:#94a3b8;">—</span>'}</td><td style="padding:5px 8px;text-align:center;">${convertedCell(s)}</td><td style="padding:5px 8px;">${repCell(s)}</td><td style="padding:5px 8px;text-align:center;">${tagCell(s)}</td><td style="padding:5px 8px;color:#64748b;font-size:11px;">${new Date(s.created_at).toLocaleDateString()}</td></tr>`;
+  const rows = subs.length ? subs.map(row).join('') : '<tr><td colspan="9" class="muted" style="padding:10px;">No conversions yet.</td></tr>';
+  Swal.fire({title:'Prime49 — '+esc(title), width:860, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Close',
     html:`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div class="muted" style="font-size:11px;">${existing.length} Path A check(s) (${eligibleCount} eligible) · ${prospective.length} Path B survey(s) (${qualifiedCount} qualified) · <b>${convertedCount} actually converted</b> (booked a call or filled the form). ⚠️ = the HighLevel tag/contact step failed (hover for why) — the record was still saved.</div>
+        <div class="muted" style="font-size:11px;">${existing.length} Path A check(s) (${eligibleCount} eligible) · ${prospective.length} Path B survey(s) (${qualifiedCount} qualified) · <b>${convertedCount} actually converted</b> (booked a call or filled the form). 🤖 = Gemini-assigned rep (hover for its reasoning). ⚠️ = the HighLevel tag/contact step failed (hover for why) — the record was still saved.</div>
         <button class="btn btn-neutral btn-sm" onclick='exportPrime49(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:15px;">download</span> Export CSV</button>
       </div>
-      <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Path</th><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Eligible/Qualified</th><th style="padding:5px 8px;text-align:center;">Converted</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
+      <div style="max-height:50vh;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;"><thead><tr style="background:#f8fafc;"><th style="padding:5px 8px;">Path</th><th style="padding:5px 8px;">Name</th><th style="padding:5px 8px;">Email</th><th style="padding:5px 8px;">Partner ID</th><th style="padding:5px 8px;text-align:center;">Eligible/Qualified</th><th style="padding:5px 8px;text-align:center;">Converted</th><th style="padding:5px 8px;">Assigned rep</th><th style="padding:5px 8px;text-align:center;">Tag</th><th style="padding:5px 8px;">When</th></tr></thead><tbody>${rows}</tbody></table></div>`});
 }
 async function exportPrime49(id, title){
   const r = await api({action:'export_prime49', id});
@@ -1426,6 +1445,8 @@ function openEditor(type){
   document.getElementById('p49_declined_headline').value=''; document.getElementById('p49_declined_body').value='';
   document.getElementById('p49_merchant_headline').value='I am a merchant'; document.getElementById('p49_merchant_body').value='Merchant Support line: 800-226-2273 (extension 5382, option 1)';
   document.getElementById('p49SurveyList').innerHTML='';
+  document.getElementById('p49_ai_enabled').checked=false; document.getElementById('p49_ai_criteria').value='';
+  window._p49Reps=[]; p49ToggleAi(); p49RenderReps();
   // RSVP/Prime49 kind: the CTA IS the flow itself (no manual link, no gate, no separate enable toggle).
   var _isFlowKind = _isRSVP || _isP49;
   document.getElementById('ctaUrlWrap').style.display = _isFlowKind ? 'none' : '';
@@ -1541,7 +1562,11 @@ async function editCampaign(id){
       p49SetBookingMode('elig', p49.eligible_booking_mode==='form'?'form':'calendar');
       p49SetBookingMode('survey', p49.survey_booking_mode==='form'?'form':'calendar');
       document.getElementById('p49_external_only').checked=!!c.hide_from_portal;
-      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||''); });
+      document.getElementById('p49_ai_enabled').checked=!!p49.survey_ai_enabled;
+      document.getElementById('p49_ai_criteria').value=p49.survey_ai_criteria||'';
+      p49ToggleAi();
+      window._p49Reps = Array.isArray(p49.survey_reps) ? p49.survey_reps.map(r=>({...r})) : [];
+      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||'').then(p49RenderReps); else p49RenderReps(); });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1890,6 +1915,9 @@ async function saveCampaign(){
       survey_fields: p49CollectSurvey(),
       survey_qualify_mode: document.getElementById('p49_qualify_mode').value,
       survey_tag: document.getElementById('p49_survey_tag').value.trim()||null,
+      survey_ai_enabled: document.getElementById('p49_ai_enabled').checked,
+      survey_ai_criteria: document.getElementById('p49_ai_criteria').value.trim()||null,
+      survey_reps: p49CollectReps(),
       qualified_headline: document.getElementById('p49_qualified_headline').value.trim()||null,
       qualified_body: document.getElementById('p49_qualified_body').value.trim()||null,
       declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
@@ -2594,6 +2622,49 @@ async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalI
   p49FillSelect(document.getElementById('p49_elig_form'), forms, preEligFormId, '— select a form —', 'No forms found in this sub-account');
   p49FillSelect(document.getElementById('p49_survey_calendar'), cals, preSurveyCalId, '— none —', 'No calendars found in this sub-account');
   p49FillSelect(document.getElementById('p49_survey_form'), forms, preSurveyFormId, '— select a form —', 'No forms found in this sub-account');
+  window._p49GhlCalendars = cals;
+  const ur = await api({action:'ghl_users',location_id:loc});
+  window._p49GhlUsers = (ur.success?ur.data:[])||[];
+  const rp=document.getElementById('p49_rep_picker');
+  rp.innerHTML='<option value="">— pick a HighLevel user —</option>'+window._p49GhlUsers.map(u=>`<option value="${esc(u.id)}">${esc(u.name||u.email||u.id)}</option>`).join('');
+}
+function p49ToggleAi(){
+  document.getElementById('p49AiWrap').style.display = document.getElementById('p49_ai_enabled').checked ? 'block' : 'none';
+}
+window._p49Reps = [];
+function p49RenderReps(){
+  const box=document.getElementById('p49RepList');
+  const users=window._p49GhlUsers||[], cals=window._p49GhlCalendars||[];
+  box.innerHTML = window._p49Reps.map((r,i)=>{
+    const u = users.find(x=>x.id===r.ghl_user_id);
+    const name = r.name || (u&&u.name) || r.ghl_user_id;
+    const calOpts = '<option value="">— no calendar (won\'t be selectable) —</option>'+cals.map(c=>`<option value="${esc(c.id)}" ${c.id===r.calendar_id?'selected':''}>${esc(c.name||c.id)}</option>`).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;background:#fff;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:700;font-size:12.5px;">${esc(name)}</div>
+        <button type="button" class="btn btn-neutral" style="padding:4px 8px;" onclick="p49RemoveRep(${i})">✕</button>
+      </div>
+      <div class="muted" style="font-size:10px;margin:6px 0 2px;">Fit notes for Gemini — what makes this rep a good match (territory, specialty, etc.)</div>
+      <textarea class="inp p49rep-notes" rows="2" data-i="${i}" oninput="p49CollectReps()" placeholder="e.g. Handles high-volume retail merchants, West Coast.">${esc(r.notes||'')}</textarea>
+      <div class="muted" style="font-size:10px;margin:6px 0 2px;">This rep's own booking calendar (shown once assigned)</div>
+      <select class="inp p49rep-cal" data-i="${i}" onchange="p49CollectReps()">${calOpts}</select>
+    </div>`;
+  }).join('') || '<div class="muted" style="font-size:11px;">No reps added yet — Gemini can\'t assign anyone until you add at least one.</div>';
+}
+function p49AddRep(){
+  const sel=document.getElementById('p49_rep_picker');
+  const id=sel.value; if(!id) return;
+  if(window._p49Reps.some(r=>r.ghl_user_id===id)) return;
+  const u=(window._p49GhlUsers||[]).find(x=>x.id===id);
+  window._p49Reps.push({ ghl_user_id:id, name:(u&&u.name)||id, notes:'', calendar_id:'' });
+  sel.value='';
+  p49RenderReps();
+}
+function p49RemoveRep(i){ window._p49Reps.splice(i,1); p49RenderReps(); }
+function p49CollectReps(){
+  document.querySelectorAll('#p49RepList .p49rep-notes').forEach(el=>{ window._p49Reps[+el.dataset.i].notes=el.value; });
+  document.querySelectorAll('#p49RepList .p49rep-cal').forEach(el=>{ window._p49Reps[+el.dataset.i].calendar_id=el.value; });
+  return window._p49Reps;
 }
 function p49SetBookingMode(path,mode){
   // path: 'elig' (Path A — I am a PPT Partner) or 'survey' (Path B — prospective).

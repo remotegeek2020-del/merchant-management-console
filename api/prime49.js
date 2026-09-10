@@ -10,8 +10,10 @@
 //                                     pass/fail → calendar/form (pass) or a
 //                                     decline message (fail).
 import { createClient } from '@supabase/supabase-js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { applyRsvpTagWorkflow } from './rsvp.js';
 import { ghlSetContactCustomFieldsByName } from './_ghl.js';
+import { getConfigValue } from './api-config.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 function cors(res) {
@@ -116,6 +118,48 @@ function evaluateSurvey(fields, answers, mode) {
     return mode === 'any' ? results.some(Boolean) : results.every(Boolean);
 }
 
+// AI assessment (Path B, when staff enables it): Gemini reads the survey
+// answers against staff-written criteria and — if it qualifies — picks the
+// best-fit rep from the staff-configured pool. Returns null on any failure
+// (no key configured, bad JSON, API error) so the caller can fail closed
+// with a retry message rather than silently guessing.
+async function assessWithGemini(cfg, fields, answers) {
+    const key = process.env.GEMINI_API_KEY || (await getConfigValue('GEMINI_API_KEY')) || '';
+    if (!key) return null;
+    const reps = Array.isArray(cfg.survey_reps) ? cfg.survey_reps : [];
+    try {
+        const genAI = new GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { temperature: 0.3, responseMimeType: 'application/json' } });
+        const qa = fields.map(f => `- ${f.label || f.name}: ${JSON.stringify(answers[f.name] == null ? '' : answers[f.name])}`).join('\n') || '(no questions configured)';
+        const repList = reps.length
+            ? reps.map(r => `- id:"${r.ghl_user_id}" name:"${r.name || ''}" notes:"${r.notes || ''}"`).join('\n')
+            : '(no reps configured — return rep_id:null)';
+        const prompt = `You are assessing a prospective partner application for PayProTec's Prime49 program.
+
+Staff qualifying criteria:
+${cfg.survey_ai_criteria || '(none provided — use your best judgment on general fit for a payment processing referral partner program)'}
+
+Applicant's answers:
+${qa}
+
+Sales reps available to assign if the applicant qualifies (pick the single best fit based on their notes vs. the applicant's answers; if none fit well or none are listed, use null):
+${repList}
+
+Return ONLY strict JSON, no markdown: {"qualified": true or false, "rep_id": "<one of the ids above, or null>", "reasoning": "<one or two sentences explaining the decision>"}`;
+        const r = await model.generateContent(prompt);
+        const text = (r && r.response && r.response.text() || '').trim();
+        const j = JSON.parse(text);
+        return {
+            qualified: !!j.qualified,
+            rep_id: j.rep_id ? String(j.rep_id) : null,
+            reasoning: String(j.reasoning || '').slice(0, 1000)
+        };
+    } catch (e) {
+        console.error('[prime49] Gemini assessment failed:', e.message);
+        return null;
+    }
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -189,17 +233,34 @@ export default async function handler(req, res) {
                     return bad(res, `Please answer: ${f.label || f.name}`);
                 }
             }
-            const qualified = evaluateSurvey(fields, answers, cfg.survey_qualify_mode);
+            // AI assessment (if staff turned it on) replaces the rule-based
+            // qualify logic AND picks the rep to assign. If Gemini can't be
+            // reached or returns something unusable, fail closed with a retry
+            // message rather than silently falling back or guessing a rep.
+            let qualified, assignedRep = null, aiReasoning = null, aiRaw = null;
+            if (cfg.survey_ai_enabled) {
+                const assessment = await assessWithGemini(cfg, fields, answers);
+                if (!assessment) return bad(res, "We couldn't process your application right now. Please try again in a moment.");
+                qualified = assessment.qualified;
+                aiReasoning = assessment.reasoning;
+                aiRaw = assessment;
+                if (qualified && assessment.rep_id) {
+                    assignedRep = (cfg.survey_reps || []).find(r => String(r.ghl_user_id) === String(assessment.rep_id)) || null;
+                }
+            } else {
+                qualified = evaluateSurvey(fields, answers, cfg.survey_qualify_mode);
+            }
 
             const name = String(body.name || '').trim();
             const email = String(body.email || '').trim();
             const phone = String(body.phone || '').trim();
             // Every submission — qualified or not — creates/updates the
             // HighLevel contact, so declined leads aren't lost. The tag/
-            // workflow (if configured) is only applied when they qualify.
+            // workflow (if configured) is only applied when they qualify, and
+            // the contact is assigned to the AI-picked rep BEFORE they book.
             let contactId = null, tagApplied = false, error = null;
             if (cfg.ghl_location_id) {
-                const ev = qualified ? { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id } : {};
+                const ev = qualified ? { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id, assigned_to: assignedRep ? assignedRep.ghl_user_id : undefined } : {};
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, ev);
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
                 if (contactId) {
@@ -210,14 +271,38 @@ export default async function handler(req, res) {
             }
             const { data: inserted } = await supabase.from('prime49_submissions').insert({
                 campaign_id: campaignId, path: 'prospective', hl_contact_id: contactId, email, phone, name,
-                survey_answers: answers, qualified, tag_applied: tagApplied, hl_error: error || null
+                survey_answers: answers, qualified, tag_applied: tagApplied, hl_error: error || null,
+                assigned_rep_ghl_user_id: assignedRep ? assignedRep.ghl_user_id : null,
+                assigned_rep_name: assignedRep ? assignedRep.name : null,
+                ai_reasoning: aiReasoning, ai_raw: aiRaw
             }).select('id').single();
+            // With a rep assigned, hand back their profile + their own
+            // calendar (in place of the campaign's default booking setup) —
+            // "paired with a rep" always means seeing that specific person.
+            // Bio/photo/job level come from app_users (the same fields staff
+            // set via the Secret Dungeon rep-profile bypass), not duplicated
+            // into the campaign config.
+            let repBooking = null;
+            if (assignedRep && assignedRep.calendar_id) {
+                const { data: repUser } = await supabase.from('app_users')
+                    .select('full_name, email, rep_bio, rep_job_level, rep_photo_url')
+                    .eq('ghl_user_id', assignedRep.ghl_user_id).maybeSingle();
+                repBooking = {
+                    booking_mode: 'calendar', calendar_id: assignedRep.calendar_id, prefill: { email, phone, ...splitName(name) },
+                    rep: {
+                        name: (repUser && repUser.full_name) || assignedRep.name || '',
+                        photo: (repUser && repUser.rep_photo_url) || assignedRep.photo || '',
+                        bio: (repUser && repUser.rep_bio) || '',
+                        job_level: (repUser && repUser.rep_job_level) || ''
+                    }
+                };
+            }
             return ok(res, {
                 qualified,
                 submission_id: inserted ? inserted.id : null,
                 headline: qualified ? (cfg.qualified_headline || "You're a great fit!") : (cfg.declined_headline || 'Thanks for your interest'),
                 body: qualified ? (cfg.qualified_body || null) : (cfg.declined_body || null),
-                ...(qualified ? bookingInfo(cfg, 'survey', { email, phone, ...splitName(name) }) : {})
+                ...(repBooking || (qualified ? bookingInfo(cfg, 'survey', { email, phone, ...splitName(name) }) : {}))
             });
         }
 

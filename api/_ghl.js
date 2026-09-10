@@ -117,6 +117,8 @@ export async function ghlAddContactToWorkflow(locationId, contactId, workflowId)
 }
 
 // Create/update a contact in a sub-account with optional tags (lead push).
+// contact.assignedTo (a HighLevel user id) assigns the contact to that rep —
+// e.g. so it's already owned by the right person before they ever book.
 export async function ghlUpsertContact(locationId, contact = {}, tags = []) {
     const lt = await ghlLocationToken(locationId);
     if (!lt) return { ok: false, error: 'no location token' };
@@ -128,6 +130,7 @@ export async function ghlUpsertContact(locationId, contact = {}, tags = []) {
         firstName: parts.shift() || undefined,
         lastName: parts.join(' ') || undefined,
         tags: (Array.isArray(tags) && tags.length) ? tags : undefined,
+        assignedTo: contact.assignedTo || undefined,
         source: 'PayProTec Announcement'
     };
     try {

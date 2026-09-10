@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags, ghlFindContactByEmail, ghlListCustomFields } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact, ghlContactTags, ghlContactInfo, ghlListWorkflows, ghlAddContactToWorkflow, ghlAddContactTags, ghlFindContactByEmail, ghlListCustomFields, ghlListUsers } from './_ghl.js';
 import { setConfigValue, getConfigValue } from './api-config.js';
 import { logActivity } from './_activity.js';
 import * as webflow from './_webflow.js';
@@ -501,7 +501,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'ghl_users', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
     'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -813,6 +813,12 @@ export default async function handler(req, res) {
                         eligible_form_name: pb.eligible_form_name ? String(pb.eligible_form_name).slice(0, 200) : null,
                         survey_fields: surveyFields,
                         survey_qualify_mode: pb.survey_qualify_mode === 'any' ? 'any' : 'all',
+                        survey_ai_enabled: !!pb.survey_ai_enabled,
+                        survey_ai_criteria: str(pb.survey_ai_criteria, 4000) || null,
+                        survey_reps: Array.isArray(pb.survey_reps) ? pb.survey_reps.slice(0, 50).map(r => ({
+                            ghl_user_id: str(r.ghl_user_id, 100) || '', name: str(r.name, 200) || '',
+                            notes: str(r.notes, 1000) || '', calendar_id: str(r.calendar_id, 100) || ''
+                        })).filter(r => r.ghl_user_id) : [],
                         survey_tag: pb.survey_tag ? String(pb.survey_tag).trim() : null,
                         survey_workflow_id: pb.survey_workflow_id ? String(pb.survey_workflow_id).trim() : null,
                         qualified_headline: str(pb.qualified_headline, 200) || null,
@@ -1283,6 +1289,10 @@ export default async function handler(req, res) {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListCalendars(req.body.location_id));
             }
+            if (action === 'ghl_users') {
+                if (!req.body.location_id) return ok(res, []);
+                return ok(res, await ghlListUsers(req.body.location_id));
+            }
             if (action === 'ghl_workflows') {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListWorkflows(req.body.location_id));
@@ -1331,11 +1341,12 @@ export default async function handler(req, res) {
                 const { data: rows } = await supabase.from('prime49_submissions').select('*')
                     .eq('campaign_id', id).order('created_at', { ascending: false }).limit(20000);
                 const csvEsc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-                const header = ['path', 'name', 'email', 'partner_id', 'eligible_or_qualified', 'converted', 'converted_via', 'tag_applied', 'hl_error', 'submitted_at'].join(',');
+                const header = ['path', 'name', 'email', 'partner_id', 'eligible_or_qualified', 'converted', 'converted_via', 'assigned_rep', 'ai_reasoning', 'tag_applied', 'hl_error', 'submitted_at'].join(',');
                 const csv = [header].concat((rows || []).map(r => [
                     r.path, r.name, r.email, r.partner_id_string || '',
                     r.path === 'existing' ? (r.eligible ? 'yes' : 'no') : (r.qualified ? 'yes' : 'no'),
                     r.converted ? 'yes' : 'no', r.converted_via || '',
+                    r.assigned_rep_name || '', r.ai_reasoning || '',
                     r.tag_applied ? 'yes' : 'no', r.hl_error || '', r.created_at
                 ].map(csvEsc).join(','))).join('\n');
                 return ok(res, { csv });

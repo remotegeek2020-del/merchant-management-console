@@ -757,17 +757,34 @@
                 answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
             }
         }
-        var savedHtml = body.innerHTML;
+        var savedHtml = body.innerHTML, settled = false;
         ppAnnP49Thinking(id, kind, 'Reviewing your answers…');
+        setTimeout(function () { if (!settled) ppAnnP49Thinking(id, kind, 'Gemini is assessing your application…'); }, 900);
         p49Api({ action: 'submit_survey', campaign_id: c.prime49.campaign_id, name: name, email: email, phone: phone, answers: answers }).then(function (r) {
+            settled = true;
             if (!rsvpFind(id)) return;
             if (!r.success) { body.innerHTML = savedHtml; var err = document.getElementById('ppa-p49-serr-' + kind); if (err) err.textContent = r.message || 'Something went wrong.'; return; }
             track(id, 'click', 'p49_survey_submit'); permAdd(id); dismissServer(id);
             body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + (r.qualified ? '🎉 ' : '👋 ') + esc(r.headline || '') + '</div>'
                 + (r.body ? '<div class="' + textCls + '" style="color:' + th.text + ';">' + bodyHtml(r.body) + '</div>' : '')
+                + ppAnnP49RepCardHtml(th, r.rep)
                 + ppAnnP49BookingHtml(id, r);
         });
     };
+    // Rep profile card — shown once Gemini has picked a rep, right before
+    // that rep's own calendar.
+    function ppAnnP49RepCardHtml(th, rep) {
+        if (!rep || !rep.name) return '';
+        var avatar = rep.photo
+            ? '<img src="' + esc(rep.photo) + '" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">'
+            : '<div style="width:40px;height:40px;border-radius:50%;background:#f97316;color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;">' + esc((rep.name || '?').charAt(0).toUpperCase()) + '</div>';
+        return '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:9px 11px;">'
+            + avatar
+            + '<div><div style="font-size:12.5px;font-weight:800;color:' + th.title + ';">' + esc(rep.name) + '</div>'
+            + (rep.job_level ? '<div style="font-size:10.5px;color:#94a3b8;">' + esc(rep.job_level) + '</div>' : '')
+            + (rep.bio ? '<div style="font-size:11px;color:' + th.text + ';margin-top:2px;">' + esc(rep.bio) + '</div>' : '')
+            + '</div></div>';
+    }
 
     var REFRESH_MS = 3 * 60 * 1000;    // re-poll get_active so mid-day campaigns appear without a reload
     var started = false;

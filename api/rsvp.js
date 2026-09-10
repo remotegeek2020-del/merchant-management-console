@@ -39,7 +39,7 @@ export async function applyRsvpTagWorkflow(loc, p, name, email, phone, ev) {
     let contactId = p.hl_contact_id || '';
     let error = null;
     if (!contactId) {
-        const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined }, []);
+        const up = await ghlUpsertContact(loc, { name, email: email || undefined, phone: phone || undefined, assignedTo: ev.assigned_to || undefined }, []);
         contactId = (up && up.id) || '';
         error = up && !up.ok ? (up.error || null) : null;
         if (!contactId && email) {

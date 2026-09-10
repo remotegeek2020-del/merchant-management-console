@@ -768,6 +768,20 @@
             track(pending.campaignId, 'click', 'p49_converted_' + pending.via, pending.variant);
         });
     }
+    // Rep profile card — shown once Gemini has picked a rep, right before
+    // that rep's own calendar.
+    function __ppxP49RepCardHtml(rep) {
+        if (!rep || !rep.name) return '';
+        var avatar = rep.photo
+            ? '<img src="' + esc(rep.photo) + '" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">'
+            : '<div style="width:48px;height:48px;border-radius:50%;background:#f97316;color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;">' + esc((rep.name || '?').charAt(0).toUpperCase()) + '</div>';
+        return '<div style="margin-top:14px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px 14px;">'
+            + avatar
+            + '<div><div style="font-size:14.5px;font-weight:800;">' + esc(rep.name) + '</div>'
+            + (rep.job_level ? '<div style="font-size:11.5px;color:#94a3b8;">' + esc(rep.job_level) + '</div>' : '')
+            + (rep.bio ? '<div style="font-size:12px;color:#cbd5e1;margin-top:3px;">' + esc(rep.bio) + '</div>' : '')
+            + '</div></div>';
+    }
     // Shared calendar-or-form outcome renderer for both paths.
     // Both outcomes embed the HighLevel widget right in the modal (an iframe),
     // never a new tab/window — leaving the popup to book/fill a form elsewhere
@@ -840,9 +854,11 @@
                 answers[nm] = (el.type === 'checkbox') ? (el.checked ? 'Yes' : '') : el.value;
             }
         }
-        var savedHtml = modal.innerHTML;
+        var savedHtml = modal.innerHTML, settled = false;
         __ppxP49Thinking(id, 'Reviewing your answers…');
+        setTimeout(function () { if (!settled) __ppxP49Thinking(id, 'Gemini is assessing your application…'); }, 900);
         p49Api({ action: 'submit_survey', campaign_id: c.prime49.campaign_id, name: name, email: email, phone: phone, answers: answers }).then(function (r) {
+            settled = true;
             if (!current || current.id !== id) return;
             if (!r.success) { modal.innerHTML = savedHtml; var err = document.getElementById('ppx-p49-serr'); if (err) err.textContent = r.message || 'Something went wrong.'; return; }
             track(id, 'click', 'p49_survey_submit', c.variant); permAdd(id); api({ action: 'dismiss', campaign_id: id });
@@ -850,6 +866,7 @@
                 + '<div style="font-size:22px;">' + (r.qualified ? '🎉' : '👋') + '</div>'
                 + '<div style="font-size:19px;font-weight:800;margin-top:6px;">' + esc(r.headline || '') + '</div>'
                 + (r.body ? '<div style="font-size:13px;color:#94a3b8;margin-top:6px;">' + bodyHtml(r.body) + '</div>' : '')
+                + __ppxP49RepCardHtml(r.rep)
                 + __ppxP49BookingHtml(r);
         });
     };
