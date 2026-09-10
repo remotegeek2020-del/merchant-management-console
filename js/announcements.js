@@ -759,7 +759,7 @@
         }
         var savedHtml = body.innerHTML, settled = false;
         ppAnnP49Thinking(id, kind, 'Reviewing your answers…');
-        setTimeout(function () { if (!settled) ppAnnP49Thinking(id, kind, 'Gemini is assessing your application…'); }, 900);
+        setTimeout(function () { if (!settled) ppAnnP49Thinking(id, kind, 'Matching you with the right partner rep…'); }, 900);
         p49Api({ action: 'submit_survey', campaign_id: c.prime49.campaign_id, name: name, email: email, phone: phone, answers: answers }).then(function (r) {
             settled = true;
             if (!rsvpFind(id)) return;
