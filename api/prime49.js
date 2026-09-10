@@ -277,13 +277,13 @@ export default async function handler(req, res) {
             const name = String(body.name || '').trim();
             const email = String(body.email || '').trim();
             const phone = String(body.phone || '').trim();
-            // Every submission — qualified or not — creates/updates the
-            // HighLevel contact, so declined leads aren't lost. The tag/
-            // workflow (if configured) is only applied when they qualify, and
-            // the contact is assigned to the AI-picked rep BEFORE they book.
+            // Only a qualifying submission creates/updates the HighLevel
+            // contact — the tag/workflow (if configured) is applied at the
+            // same time, and the contact is assigned to the AI-picked rep
+            // BEFORE they book.
             let contactId = null, tagApplied = false, error = null;
-            if (cfg.ghl_location_id) {
-                const ev = qualified ? { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id, assigned_to: assignedRep ? assignedRep.ghl_user_id : undefined } : {};
+            if (qualified && cfg.ghl_location_id) {
+                const ev = { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id, assigned_to: assignedRep ? assignedRep.ghl_user_id : undefined };
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, ev);
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
                 if (contactId) {
