@@ -771,18 +771,35 @@
                 + ppAnnP49BookingHtml(id, r);
         });
     };
-    // Rep profile card — shown once Gemini has picked a rep, right before
-    // that rep's own calendar.
+    // Rep profile card — shown once a rep has been picked, right before that
+    // rep's own calendar. Keeps to a short summary by default; "Show more"
+    // expands the rest of what's on their staff profile.
+    window.ppAnnP49RepToggle = function (btn) {
+        var box = btn.parentElement.querySelector('.ppa-rep-more');
+        if (!box) return;
+        var open = box.style.display !== 'none';
+        box.style.display = open ? 'none' : 'block';
+        btn.textContent = open ? 'Show more' : 'Show less';
+    };
     function ppAnnP49RepCardHtml(th, rep) {
         if (!rep || !rep.name) return '';
         var avatar = rep.photo
             ? '<img src="' + esc(rep.photo) + '" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">'
             : '<div style="width:40px;height:40px;border-radius:50%;background:#f97316;color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;">' + esc((rep.name || '?').charAt(0).toUpperCase()) + '</div>';
-        return '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:9px 11px;">'
+        var role = Array.isArray(rep.professional_role) ? rep.professional_role.filter(Boolean) : [];
+        var moreHtml = (role.length || rep.industry_context)
+            ? '<div class="ppa-rep-more" style="display:none;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.08);">'
+                + (role.length ? '<div style="font-size:9.5px;font-weight:800;letter-spacing:.4px;color:#94a3b8;margin-bottom:3px;">ROLE AT PAYPROTEC</div><ul style="margin:0 0 6px;padding-left:14px;font-size:11px;color:' + th.text + ';">' + role.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' : '')
+                + (rep.industry_context ? '<div style="font-size:9.5px;font-weight:800;letter-spacing:.4px;color:#94a3b8;margin-bottom:3px;">INDUSTRY CONTEXT</div><div style="font-size:11px;color:' + th.text + ';">' + esc(rep.industry_context) + '</div>' : '')
+              + '</div>'
+              + '<button type="button" onclick="ppAnnP49RepToggle(this)" style="margin-top:6px;background:none;border:none;color:#f97316;font-size:10.5px;font-weight:700;cursor:pointer;padding:0;">Show more</button>'
+            : '';
+        return '<div style="margin-top:10px;display:flex;align-items:flex-start;gap:10px;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:9px 11px;">'
             + avatar
-            + '<div><div style="font-size:12.5px;font-weight:800;color:' + th.title + ';">' + esc(rep.name) + '</div>'
+            + '<div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:800;color:' + th.title + ';">' + esc(rep.name) + '</div>'
             + (rep.job_level ? '<div style="font-size:10.5px;color:#94a3b8;">' + esc(rep.job_level) + '</div>' : '')
             + (rep.bio ? '<div style="font-size:11px;color:' + th.text + ';margin-top:2px;">' + esc(rep.bio) + '</div>' : '')
+            + moreHtml
             + '</div></div>';
     }
 

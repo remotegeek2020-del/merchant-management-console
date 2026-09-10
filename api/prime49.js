@@ -308,7 +308,7 @@ export default async function handler(req, res) {
             let repBooking = null;
             if (assignedRep && assignedRep.calendar_id) {
                 const { data: repUser } = await supabase.from('app_users')
-                    .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url')
+                    .select('userid, first_name, last_name, email, rep_bio, rep_job_level, rep_photo_url, rep_professional_role, rep_industry_context')
                     .eq('ghl_user_id', assignedRep.ghl_user_id).maybeSingle();
                 let avatarUrl = '';
                 if (repUser) {
@@ -321,7 +321,9 @@ export default async function handler(req, res) {
                         name: repUser ? (`${repUser.first_name || ''} ${repUser.last_name || ''}`.trim() || repUser.email) : (assignedRep.name || ''),
                         photo: avatarUrl || (repUser && repUser.rep_photo_url) || '',
                         bio: (repUser && repUser.rep_bio) || '',
-                        job_level: (repUser && repUser.rep_job_level) || ''
+                        job_level: (repUser && repUser.rep_job_level) || '',
+                        professional_role: (repUser && Array.isArray(repUser.rep_professional_role)) ? repUser.rep_professional_role : [],
+                        industry_context: (repUser && repUser.rep_industry_context) || ''
                     }
                 };
             }

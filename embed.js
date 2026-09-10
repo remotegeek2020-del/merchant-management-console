@@ -768,18 +768,35 @@
             track(pending.campaignId, 'click', 'p49_converted_' + pending.via, pending.variant);
         });
     }
-    // Rep profile card — shown once Gemini has picked a rep, right before
-    // that rep's own calendar.
+    // Rep profile card — shown once a rep has been picked, right before that
+    // rep's own calendar. Keeps to a short summary by default; "Show more"
+    // expands the rest of what's on their staff profile.
+    window.__ppxP49RepToggle = function (btn) {
+        var box = btn.parentElement.querySelector('.ppx-rep-more');
+        if (!box) return;
+        var open = box.style.display !== 'none';
+        box.style.display = open ? 'none' : 'block';
+        btn.textContent = open ? 'Show more' : 'Show less';
+    };
     function __ppxP49RepCardHtml(rep) {
         if (!rep || !rep.name) return '';
         var avatar = rep.photo
             ? '<img src="' + esc(rep.photo) + '" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">'
             : '<div style="width:48px;height:48px;border-radius:50%;background:#f97316;color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;">' + esc((rep.name || '?').charAt(0).toUpperCase()) + '</div>';
-        return '<div style="margin-top:14px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px 14px;">'
+        var role = Array.isArray(rep.professional_role) ? rep.professional_role.filter(Boolean) : [];
+        var moreHtml = (role.length || rep.industry_context)
+            ? '<div class="ppx-rep-more" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1);">'
+                + (role.length ? '<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;color:#94a3b8;margin-bottom:4px;">ROLE AT PAYPROTEC</div><ul style="margin:0 0 8px;padding-left:16px;font-size:12px;color:#cbd5e1;">' + role.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' : '')
+                + (rep.industry_context ? '<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;color:#94a3b8;margin-bottom:4px;">INDUSTRY CONTEXT</div><div style="font-size:12px;color:#cbd5e1;">' + esc(rep.industry_context) + '</div>' : '')
+              + '</div>'
+              + '<button type="button" onclick="__ppxP49RepToggle(this)" style="margin-top:8px;background:none;border:none;color:#f97316;font-size:11.5px;font-weight:700;cursor:pointer;padding:0;">Show more</button>'
+            : '';
+        return '<div style="margin-top:14px;display:flex;align-items:flex-start;gap:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px 14px;">'
             + avatar
-            + '<div><div style="font-size:14.5px;font-weight:800;">' + esc(rep.name) + '</div>'
+            + '<div style="flex:1;min-width:0;"><div style="font-size:14.5px;font-weight:800;">' + esc(rep.name) + '</div>'
             + (rep.job_level ? '<div style="font-size:11.5px;color:#94a3b8;">' + esc(rep.job_level) + '</div>' : '')
             + (rep.bio ? '<div style="font-size:12px;color:#cbd5e1;margin-top:3px;">' + esc(rep.bio) + '</div>' : '')
+            + moreHtml
             + '</div></div>';
     }
     // Shared calendar-or-form outcome renderer for both paths.
