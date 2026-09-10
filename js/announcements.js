@@ -558,7 +558,31 @@
             +     '<div style="' + fh + 'font-size:14px;font-weight:600;margin-top:2px;">I am interested in becoming a PPT Partner</div>'
             +     '<span style="position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:50%;background:' + esc(accent) + ';color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-size:12px;">→</span>'
             +   '</button>'
+            +   '<button type="button" onclick="ppAnnP49MerchantStart(\'' + jsArg(id) + '\',\'' + kind + '\')" style="position:relative;text-align:left;background:rgba(0,0,0,.06);color:' + th.title + ';border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:12px 42px 12px 14px;cursor:pointer;font-family:inherit;">'
+            +     '<div style="font-size:9px;font-weight:800;letter-spacing:.5px;opacity:.65;">MERCHANT</div>'
+            +     '<div style="' + fh + 'font-size:14px;font-weight:600;margin-top:2px;">I am a merchant</div>'
+            +     '<span style="position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:50%;background:' + esc(accent) + ';color:#0a0a0c;display:flex;align-items:center;justify-content:center;font-size:12px;">→</span>'
+            +   '</button>'
             + '</div>';
+    };
+    // Path C — merchant: purely informational, no lookup/survey needed.
+    window.ppAnnP49MerchantStart = function (id, kind) {
+        var c = rsvpFind(id); var body = rsvpContainer(kind); if (!c || !body) return;
+        track(id, 'click', 'p49_merchant');
+        var th = annTheme(c);
+        var titleCls = kind === 'float' ? 'ppa-ftitle' : 'ppa-title', textCls = kind === 'float' ? 'ppa-ftext' : 'ppa-text';
+        function renderMsg() {
+            var cfg = c.prime49Cfg || {};
+            body.innerHTML = '<div class="' + titleCls + '" style="color:' + th.title + ';">' + esc(cfg.merchant_support_headline || 'I am a merchant') + '</div>'
+                + '<div class="' + textCls + '" style="color:' + th.text + ';margin-top:6px;">' + bodyHtml(cfg.merchant_support_body || 'Merchant Support line: 800-226-2273 (extension 5382, option 1)') + '</div>';
+        }
+        if (c.prime49Cfg) { renderMsg(); return; }
+        body.innerHTML = '<div class="' + textCls + '" style="color:' + th.text + ';">Loading…</div>';
+        p49Api({ action: 'config', campaign_id: c.prime49.campaign_id }).then(function (r) {
+            if (!rsvpFind(id)) return;
+            c.prime49Cfg = r.success ? r.config : null;
+            renderMsg();
+        });
     };
     // A "thinking" screen shown while a lookup/survey round trip is in
     // flight, so nothing ever looks like a dead button.

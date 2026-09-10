@@ -394,6 +394,15 @@
             </div>
           </div>
         </div>
+
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path C — I am a merchant</div>
+          <div class="muted" style="font-size:11px;margin-bottom:8px;">Purely informational — no lookup, no survey. Clicking this path just shows the message below.</div>
+          <label class="fld" style="margin-top:0;">Headline</label>
+          <input class="inp" id="p49_merchant_headline" placeholder="I am a merchant">
+          <label class="fld">Message</label>
+          <textarea class="inp" id="p49_merchant_body" rows="2" placeholder="Merchant Support line: 800-226-2273 (extension 5382, option 1)"></textarea>
+        </div>
       </div>
 
       <!-- Interactive config — driven by the campaign TYPE chosen up front. -->
@@ -1411,6 +1420,7 @@ function openEditor(type){
   document.getElementById('p49_survey_tag').value=''; document.getElementById('p49_qualify_mode').value='all';
   document.getElementById('p49_qualified_headline').value=''; document.getElementById('p49_qualified_body').value='';
   document.getElementById('p49_declined_headline').value=''; document.getElementById('p49_declined_body').value='';
+  document.getElementById('p49_merchant_headline').value='I am a merchant'; document.getElementById('p49_merchant_body').value='Merchant Support line: 800-226-2273 (extension 5382, option 1)';
   document.getElementById('p49SurveyList').innerHTML='';
   // RSVP/Prime49 kind: the CTA IS the flow itself (no manual link, no gate, no separate enable toggle).
   var _isFlowKind = _isRSVP || _isP49;
@@ -1521,6 +1531,8 @@ async function editCampaign(id){
       document.getElementById('p49_qualified_body').value=p49.qualified_body||'';
       document.getElementById('p49_declined_headline').value=p49.declined_headline||'';
       document.getElementById('p49_declined_body').value=p49.declined_body||'';
+      document.getElementById('p49_merchant_headline').value=p49.merchant_support_headline||'I am a merchant';
+      document.getElementById('p49_merchant_body').value=p49.merchant_support_body||'Merchant Support line: 800-226-2273 (extension 5382, option 1)';
       p49RenderSurvey(Array.isArray(p49.survey_fields)?p49.survey_fields:[]);
       p49SetBookingMode('elig', p49.eligible_booking_mode==='form'?'form':'calendar');
       p49SetBookingMode('survey', p49.survey_booking_mode==='form'?'form':'calendar');
@@ -1878,6 +1890,8 @@ async function saveCampaign(){
       qualified_body: document.getElementById('p49_qualified_body').value.trim()||null,
       declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
       declined_body: document.getElementById('p49_declined_body').value.trim()||null,
+      merchant_support_headline: document.getElementById('p49_merchant_headline').value.trim()||null,
+      merchant_support_body: document.getElementById('p49_merchant_body').value.trim()||null,
       survey_booking_mode: window._p49BookingMode_survey==='form' ? 'form' : 'calendar',
       survey_calendar_id: document.getElementById('p49_survey_calendar').value||null,
       survey_calendar_name: (document.getElementById('p49_survey_calendar').options[document.getElementById('p49_survey_calendar').selectedIndex]||{}).text||null,

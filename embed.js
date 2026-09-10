@@ -626,6 +626,12 @@
             +         '<div style="font-size:12.5px;margin-top:5px;color:#94a3b8;">See if Prime49 is the right fit and book a call.</div>'
             +         '<span class="ppx-p49-arrow" style="background:#fff;color:#0a0a0c;">→</span>'
             +       '</button>'
+            +       '<button type="button" class="ppx-p49-card" onclick="__ppxP49MerchantStart(\'' + cid + '\')" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14) !important;color:#fff;">'
+            +         '<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:#94a3b8;">MERCHANT</div>'
+            +         '<div class="ppx-p49-h" style="font-size:18px;font-weight:600;margin-top:4px;">I am a merchant</div>'
+            +         '<div style="font-size:12.5px;margin-top:5px;color:#94a3b8;">Get in touch with Merchant Support.</div>'
+            +         '<span class="ppx-p49-arrow" style="background:#fff;color:#0a0a0c;">→</span>'
+            +       '</button>'
             +     '</div>'
             +   '</div>'
             + '</div></div>';
@@ -672,6 +678,26 @@
             if (!current || current.id !== id) return;
             c.prime49Cfg = r.success ? r.config : null;
             __ppxP49RenderIdScreen(id);
+        });
+    };
+    // Path C — merchant: purely informational, no lookup/survey needed. Just
+    // shows the staff-configured Merchant Support message.
+    window.__ppxP49MerchantStart = function (id) {
+        var c = current; if (!c || c.id !== id) return;
+        track(id, 'click', 'p49_merchant', c.variant);
+        var modal = p49Body(id); if (!modal) return;
+        function renderMsg() {
+            var cfg = c.prime49Cfg || {};
+            modal.innerHTML = '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
+                + '<div style="font-size:19px;font-weight:800;">' + esc(cfg.merchant_support_headline || 'I am a merchant') + '</div>'
+                + '<div style="font-size:13.5px;color:#cbd5e1;margin-top:10px;line-height:1.5;">' + bodyHtml(cfg.merchant_support_body || 'Merchant Support line: 800-226-2273 (extension 5382, option 1)') + '</div>';
+        }
+        if (c.prime49Cfg) { renderMsg(); return; }
+        modal.innerHTML = '<div style="color:#94a3b8;font-size:13px;">Loading…</div>';
+        p49Api({ action: 'config', campaign_id: c.prime49.campaign_id }).then(function (r) {
+            if (!current || current.id !== id) return;
+            c.prime49Cfg = r.success ? r.config : null;
+            renderMsg();
         });
     };
     window.__ppxP49Lookup = function (id) {

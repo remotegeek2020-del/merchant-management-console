@@ -124,7 +124,8 @@ export default async function handler(req, res) {
                 eligible_headline: cfg.eligible_headline, eligible_body: cfg.eligible_body, not_eligible_body: cfg.not_eligible_body,
                 survey_fields: (cfg.survey_fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] })),
                 qualified_headline: cfg.qualified_headline, qualified_body: cfg.qualified_body,
-                declined_headline: cfg.declined_headline, declined_body: cfg.declined_body
+                declined_headline: cfg.declined_headline, declined_body: cfg.declined_body,
+                merchant_support_headline: cfg.merchant_support_headline, merchant_support_body: cfg.merchant_support_body
             } });
         }
 

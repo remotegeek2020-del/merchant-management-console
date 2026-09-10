@@ -814,6 +814,8 @@ export default async function handler(req, res) {
                         qualified_body: str(pb.qualified_body, 2000) || null,
                         declined_headline: str(pb.declined_headline, 200) || null,
                         declined_body: str(pb.declined_body, 2000) || null,
+                        merchant_support_headline: str(pb.merchant_support_headline, 200) || null,
+                        merchant_support_body: str(pb.merchant_support_body, 2000) || null,
                         survey_booking_mode: pb.survey_booking_mode === 'form' ? 'form' : 'calendar',
                         survey_calendar_id: pb.survey_calendar_id ? String(pb.survey_calendar_id).trim() : null,
                         survey_calendar_name: pb.survey_calendar_name ? String(pb.survey_calendar_name).slice(0, 200) : null,
