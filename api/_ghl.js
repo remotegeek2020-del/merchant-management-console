@@ -88,6 +88,23 @@ export async function ghlListCalendars(locationId) {
     return (d?.calendars || []).map(c => ({ id: c.id, name: c.name || c.id }));
 }
 
+// How many open slots does this calendar have in [startMs, endMs)? Used to
+// skip assigning a rep whose calendar is fully blocked out. Returns null
+// (not "0 slots") when the lookup itself fails, so callers can tell "no
+// availability" apart from "couldn't check" and fail open rather than
+// wrongly treating an API hiccup as a blocked calendar.
+export async function ghlCalendarFreeSlots(locationId, calendarId, startMs, endMs) {
+    if (!calendarId) return null;
+    const d = await locGet(locationId, `/calendars/${encodeURIComponent(calendarId)}/free-slots?startDate=${startMs}&endDate=${endMs}`);
+    if (!d || typeof d !== 'object') return null;
+    let count = 0;
+    Object.keys(d).forEach(k => {
+        const v = d[k];
+        if (v && Array.isArray(v.slots)) count += v.slots.length;
+    });
+    return count;
+}
+
 // Tags in a sub-account (for the lead-capture tag picker).
 export async function ghlListTags(locationId) {
     const d = await locGet(locationId, `/locations/${encodeURIComponent(locationId)}/tags`);

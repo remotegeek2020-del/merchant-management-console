@@ -12,7 +12,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { applyRsvpTagWorkflow } from './rsvp.js';
-import { ghlSetContactCustomFieldsByName } from './_ghl.js';
+import { ghlSetContactCustomFieldsByName, ghlCalendarFreeSlots } from './_ghl.js';
 import { getConfigValue } from './api-config.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -112,6 +112,22 @@ function fieldQualifies(f, answers) {
     const s = String(given == null ? '' : given).toLowerCase();
     return f.qualify.some(k => s.indexOf(String(k).toLowerCase()) !== -1);
 }
+// Walks Gemini's ranked rep list and returns the first one whose calendar
+// actually has open slots in the next 14 days — so a rep who's fully
+// blocked out never gets assigned just because they were the top pick.
+// Fails open on an availability-check error (treats it as available)
+// rather than skipping a rep just because HighLevel hiccuped.
+async function firstAvailableRep(locationId, reps, rankedIds) {
+    const now = Date.now(), horizon = now + 14 * 24 * 60 * 60 * 1000;
+    for (const id of rankedIds) {
+        const rep = reps.find(r => String(r.ghl_user_id) === String(id));
+        if (!rep) continue;
+        if (!rep.calendar_id) continue;
+        const slots = await ghlCalendarFreeSlots(locationId, rep.calendar_id, now, horizon);
+        if (slots === null || slots > 0) return rep;
+    }
+    return null;
+}
 function evaluateSurvey(fields, answers, mode) {
     const results = fields.map(f => fieldQualifies(f, answers)).filter(r => r !== null);
     if (!results.length) return true;
@@ -162,19 +178,21 @@ ${cfg.survey_ai_criteria || '(none provided — use your best judgment on genera
 Applicant's answers:
 ${qa}
 
-Sales reps available to assign if the applicant qualifies (pick the single best fit; if none fit well or none are listed, use null):
+Sales reps available to assign if the applicant qualifies (rank ALL of them best-fit first; if none fit well or none are listed, return an empty list):
 ${repList}
 
-Staff pre-ranked rep priorities triggered by this applicant's specific answers (treat as a strong signal — lower number = higher priority; if multiple answers point to different reps, weigh them together with the rep notes above to decide the single best overall fit):
+Staff pre-ranked rep priorities triggered by this applicant's specific answers (treat as a strong signal — lower number = higher priority; if multiple answers point to different reps, weigh them together with the rep notes above to decide the overall ranking):
 ${voteBlock}
 
-Return ONLY strict JSON, no markdown: {"qualified": true or false, "rep_id": "<one of the ids above, or null>", "reasoning": "<one or two sentences explaining the decision, mentioning which signals drove the rep pick>"}`;
+One of the ranked reps may turn out to be unavailable on their calendar — that's checked separately after your ranking, so ALWAYS return every rep you'd consider acceptable, ordered best-fit first, not just your single top pick.
+
+Return ONLY strict JSON, no markdown: {"qualified": true or false, "rep_ids": ["<id>", "<id>", ...] (best fit first, empty array if none fit), "reasoning": "<one or two sentences explaining the ranking, mentioning which signals drove it>"}`;
         const r = await model.generateContent(prompt);
         const text = (r && r.response && r.response.text() || '').trim();
         const j = JSON.parse(text);
         return {
             qualified: !!j.qualified,
-            rep_id: j.rep_id ? String(j.rep_id) : null,
+            rep_ids: Array.isArray(j.rep_ids) ? j.rep_ids.map(id => String(id)).filter(Boolean) : (j.rep_id ? [String(j.rep_id)] : []),
             reasoning: String(j.reasoning || '').slice(0, 1000)
         };
     } catch (e) {
@@ -267,8 +285,9 @@ export default async function handler(req, res) {
                 qualified = assessment.qualified;
                 aiReasoning = assessment.reasoning;
                 aiRaw = assessment;
-                if (qualified && assessment.rep_id) {
-                    assignedRep = (cfg.survey_reps || []).find(r => String(r.ghl_user_id) === String(assessment.rep_id)) || null;
+                if (qualified && assessment.rep_ids && assessment.rep_ids.length && cfg.ghl_location_id) {
+                    assignedRep = await firstAvailableRep(cfg.ghl_location_id, cfg.survey_reps || [], assessment.rep_ids);
+                    if (!assignedRep) aiReasoning = (aiReasoning ? aiReasoning + ' ' : '') + '(All ranked reps were fully booked in the next 2 weeks — no rep assigned.)';
                 }
             } else {
                 qualified = evaluateSurvey(fields, answers, cfg.survey_qualify_mode);
