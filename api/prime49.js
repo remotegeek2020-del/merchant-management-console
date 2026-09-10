@@ -237,10 +237,13 @@ export default async function handler(req, res) {
             if (!p) return ok(res, { status: 'not_found' });
 
             const { merchants, eligible, prime49Ids } = await eligibilityForPerson(p.person_id, cfg.min_volume, cfg.max_volume);
-            // The exact Partner ID they typed is itself already enrolled in
-            // Prime49 (agent_identifiers.prime49) — tell them directly instead
-            // of lumping this in with the generic "not eligible" message.
-            const alreadyEnrolled = Array.from(prime49Ids).some(id => String(id).toLowerCase() === pid.toLowerCase());
+            // Any Partner ID belonging to this SAME PERSON is already enrolled
+            // in Prime49 (agent_identifiers.prime49) — not just the exact ID
+            // they typed. Someone can hold several IDs (e.g. one already in
+            // Prime49, one they just typed that isn't) and still be "already
+            // in the program" as a person. Tell them directly instead of
+            // lumping this in with the generic "not eligible" message.
+            const alreadyEnrolled = prime49Ids.size > 0;
             const email = String(body.email || p.email || '').trim();
             const phone = String(body.phone || p.phone || '').trim();
             const name = String(p.full_name || '').trim();
