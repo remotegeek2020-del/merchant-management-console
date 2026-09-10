@@ -731,6 +731,14 @@
             return '<div style="margin-top:10px;"><div style="font-size:11px;font-weight:800;color:#94a3b8;">PARTNER ID ' + esc(pidKey) + '</div>' + rows + '</div>';
         }).join('');
         var cfg = c.prime49Cfg || {};
+        if (r.already_enrolled) {
+            track(id, 'click', 'p49_already_enrolled', c.variant); permAdd(id); api({ action: 'dismiss', campaign_id: id });
+            modal.innerHTML = '<button class="ppx-x" style="color:#fff;" onclick="__ppxClose()">×</button>'
+                + '<div style="font-size:19px;font-weight:800;">🏆 ' + esc(cfg.already_enrolled_headline || "You're already part of Prime49!") + '</div>'
+                + '<div style="font-size:13px;color:#94a3b8;margin-top:4px;">' + bodyHtml(cfg.already_enrolled_body || 'This Partner ID is already enrolled in Prime49 — no action needed.') + '</div>'
+                + '<div style="max-height:220px;overflow:auto;margin-top:10px;">' + (list || '') + '</div>';
+            return;
+        }
         var headline = r.eligible ? cfg.eligible_headline : cfg.not_eligible_headline;
         var msg = r.eligible ? cfg.eligible_body : cfg.not_eligible_body;
         if (r.eligible) { track(id, 'click', 'p49_eligible', c.variant); permAdd(id); api({ action: 'dismiss', campaign_id: id }); }

@@ -51,8 +51,8 @@ async function allIdStringsForPerson(personId) {
 async function eligibilityForPerson(personId, minVolume, maxVolume) {
     const idents = await allIdStringsForPerson(personId);
     const idStrings = idents.map(i => i.id_string).filter(Boolean);
-    if (!idStrings.length) return { merchants: [], eligible: false };
     const prime49Ids = new Set(idents.filter(i => i.prime49).map(i => i.id_string));
+    if (!idStrings.length) return { merchants: [], eligible: false, prime49Ids };
     const { data: merchants } = await supabase.from('merchant_portfolio_view')
         .select('merchant_id, dba_name, agent_id, account_status, volume_30_day, company_display_name')
         .in('agent_id', idStrings).limit(5000);
@@ -66,7 +66,7 @@ async function eligibilityForPerson(personId, minVolume, maxVolume) {
             volume_30_day: vol, already_prime49: alreadyPrime49, eligible: inBand && !alreadyPrime49
         };
     });
-    return { merchants: rows, eligible: rows.some(r => r.eligible) };
+    return { merchants: rows, eligible: rows.some(r => r.eligible), prime49Ids };
 }
 
 // What to hand the visitor once they qualify: either a HighLevel calendar
@@ -215,6 +215,7 @@ export default async function handler(req, res) {
             if (!cfg || !cfg.enabled) return bad(res, 'This is not available.');
             return ok(res, { config: {
                 eligible_headline: cfg.eligible_headline, eligible_body: cfg.eligible_body, not_eligible_body: cfg.not_eligible_body,
+                already_enrolled_headline: cfg.already_enrolled_headline, already_enrolled_body: cfg.already_enrolled_body,
                 survey_fields: (cfg.survey_fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] })),
                 qualified_headline: cfg.qualified_headline, qualified_body: cfg.qualified_body,
                 declined_headline: cfg.declined_headline, declined_body: cfg.declined_body,
@@ -235,13 +236,17 @@ export default async function handler(req, res) {
             const p = Array.isArray(data) && data[0] ? data[0] : null;
             if (!p) return ok(res, { status: 'not_found' });
 
-            const { merchants, eligible } = await eligibilityForPerson(p.person_id, cfg.min_volume, cfg.max_volume);
+            const { merchants, eligible, prime49Ids } = await eligibilityForPerson(p.person_id, cfg.min_volume, cfg.max_volume);
+            // The exact Partner ID they typed is itself already enrolled in
+            // Prime49 (agent_identifiers.prime49) — tell them directly instead
+            // of lumping this in with the generic "not eligible" message.
+            const alreadyEnrolled = Array.from(prime49Ids).some(id => String(id).toLowerCase() === pid.toLowerCase());
             const email = String(body.email || p.email || '').trim();
             const phone = String(body.phone || p.phone || '').trim();
             const name = String(p.full_name || '').trim();
 
             let contactId = null, tagApplied = false, error = null;
-            if (eligible && cfg.ghl_location_id) {
+            if (eligible && !alreadyEnrolled && cfg.ghl_location_id) {
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, p, name, email, phone, { rsvp_tag: cfg.eligible_tag, workflow_id: cfg.eligible_workflow_id });
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
             }
@@ -252,9 +257,9 @@ export default async function handler(req, res) {
             }).select('id').single();
 
             return ok(res, {
-                status: 'found', name, email, phone, eligible, merchants,
+                status: 'found', name, email, phone, eligible, merchants, already_enrolled: alreadyEnrolled,
                 submission_id: inserted ? inserted.id : null,
-                ...(eligible ? bookingInfo(cfg, 'eligible', { email, phone, ...splitName(name) }) : {})
+                ...(!alreadyEnrolled && eligible ? bookingInfo(cfg, 'eligible', { email, phone, ...splitName(name) }) : {})
             });
         }
 

@@ -344,6 +344,10 @@
           <textarea class="inp" id="p49_eligible_body" rows="2" placeholder="Great news — one or more of your merchants qualify. Book a call to get started."></textarea>
           <label class="fld">Not-yet-eligible message</label>
           <textarea class="inp" id="p49_not_eligible_body" rows="2" placeholder="None of your merchants are in the qualifying volume range just yet."></textarea>
+          <label class="fld">Already-enrolled headline <span class="muted" style="font-weight:400;">(shown when the Partner ID they typed is already in Prime49)</span></label>
+          <input class="inp" id="p49_already_enrolled_headline" placeholder="You're already part of Prime49!">
+          <label class="fld">Already-enrolled message</label>
+          <textarea class="inp" id="p49_already_enrolled_body" rows="2" placeholder="This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions."></textarea>
           <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
             <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:6px;">Next step when eligible</div>
             <div class="seg" style="margin-bottom:10px;">
@@ -1458,6 +1462,7 @@ function openEditor(type){
   if(_isP49) populateP49Locations().then(()=>onP49Location());
   document.getElementById('p49_eligible_tag').value=''; document.getElementById('p49_min_volume').value='20000'; document.getElementById('p49_max_volume').value='30000';
   document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_body').value='';
+  document.getElementById('p49_already_enrolled_headline').value='You\'re already part of Prime49!'; document.getElementById('p49_already_enrolled_body').value='This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions.';
   document.getElementById('p49_survey_tag').value=''; document.getElementById('p49_qualify_mode').value='all';
   document.getElementById('p49_qualified_headline').value=''; document.getElementById('p49_qualified_body').value='';
   document.getElementById('p49_declined_headline').value=''; document.getElementById('p49_declined_body').value='';
@@ -1568,6 +1573,8 @@ async function editCampaign(id){
       document.getElementById('p49_eligible_headline').value=p49.eligible_headline||'';
       document.getElementById('p49_eligible_body').value=p49.eligible_body||'';
       document.getElementById('p49_not_eligible_body').value=p49.not_eligible_body||'';
+      document.getElementById('p49_already_enrolled_headline').value=p49.already_enrolled_headline||'You\'re already part of Prime49!';
+      document.getElementById('p49_already_enrolled_body').value=p49.already_enrolled_body||'This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions.';
       document.getElementById('p49_qualify_mode').value=p49.survey_qualify_mode==='any'?'any':'all';
       document.getElementById('p49_survey_tag').value=p49.survey_tag||'';
       document.getElementById('p49_qualified_headline').value=p49.qualified_headline||'';
@@ -1925,6 +1932,8 @@ async function saveCampaign(){
       eligible_headline: document.getElementById('p49_eligible_headline').value.trim()||null,
       eligible_body: document.getElementById('p49_eligible_body').value.trim()||null,
       not_eligible_body: document.getElementById('p49_not_eligible_body').value.trim()||null,
+      already_enrolled_headline: document.getElementById('p49_already_enrolled_headline').value.trim()||null,
+      already_enrolled_body: document.getElementById('p49_already_enrolled_body').value.trim()||null,
       eligible_booking_mode: window._p49BookingMode_elig==='form' ? 'form' : 'calendar',
       eligible_calendar_id: document.getElementById('p49_elig_calendar').value||null,
       eligible_calendar_name: (document.getElementById('p49_elig_calendar').options[document.getElementById('p49_elig_calendar').selectedIndex]||{}).text||null,

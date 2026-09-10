@@ -818,6 +818,8 @@ export default async function handler(req, res) {
                         eligible_headline: str(pb.eligible_headline, 200) || null,
                         eligible_body: str(pb.eligible_body, 2000) || null,
                         not_eligible_body: str(pb.not_eligible_body, 2000) || null,
+                        already_enrolled_headline: str(pb.already_enrolled_headline, 200) || null,
+                        already_enrolled_body: str(pb.already_enrolled_body, 2000) || null,
                         eligible_booking_mode: pb.eligible_booking_mode === 'form' ? 'form' : 'calendar',
                         eligible_calendar_id: pb.eligible_calendar_id ? String(pb.eligible_calendar_id).trim() : null,
                         eligible_calendar_name: pb.eligible_calendar_name ? String(pb.eligible_calendar_name).slice(0, 200) : null,
