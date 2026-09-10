@@ -366,22 +366,28 @@
           <div class="muted" style="font-size:11px;margin-bottom:8px;">Build the survey. Any question can be turned into a qualifying question — dropdown/checkbox: pick which options count as a PASS; number: set a qualifying min/max range; text/textarea: list keywords that count as a PASS. Leave a question's qualifying settings blank to keep it informational only (no effect on pass/fail).</div>
           <div id="p49SurveyList"></div>
           <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddQuestion()">+ Add question</button>
-          <div class="row2" style="margin-top:10px;">
-            <div><label class="fld" style="margin-top:0;">Qualify if</label><select class="inp" id="p49_qualify_mode"><option value="all">ALL pass-fail questions pass</option><option value="any">ANY pass-fail question passes</option></select></div>
-            <div><label class="fld" style="margin-top:0;">Tag on qualify <span class="muted" style="font-weight:400;">(optional)</span></label><input class="inp" id="p49_survey_tag" placeholder="e.g. Prospective Prime49"></div>
-          </div>
 
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_ai_enabled" onchange="p49ToggleAi()"> AI assessment (Gemini) — replaces the qualify rules above and picks a rep to assign</label>
-            <div id="p49AiWrap" style="display:none;margin-top:8px;">
-              <div class="muted" style="font-size:11px;margin-bottom:8px;">Gemini reads the applicant's answers against your criteria below, decides qualify/decline, and — when qualified — picks the best-fit rep from the pool you configure. The contact is created in HighLevel and assigned to that rep before the applicant ever books.</div>
-              <label class="fld" style="margin-top:0;">Qualifying criteria <span class="muted" style="font-weight:400;">(plain English — what makes a good fit)</span></label>
-              <textarea class="inp" id="p49_ai_criteria" rows="3" placeholder="e.g. Must process at least $15,000/month and have been in business 1+ years. Prioritize applicants in retail or restaurants."></textarea>
-              <label class="fld">Eligible reps <span class="muted" style="font-weight:400;">(Gemini picks one of these when qualified)</span></label>
-              <div id="p49RepList"></div>
-              <div class="row2" style="margin-top:6px;">
-                <select class="inp" id="p49_rep_picker"><option value="">Choose a sub-account first…</option></select>
-                <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddRep()">+ Add rep</button>
+          <div style="border:1px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
+            <div style="background:#f8fafc;padding:8px 12px;font-weight:800;font-size:11px;color:var(--navy);">HOW SHOULD PATH B APPLICATIONS BE QUALIFIED? <span class="muted" style="font-weight:400;">(pick one — this does not affect Path A, existing partners are never assessed)</span></div>
+            <div id="p49RuleWrap" style="padding:10px 12px;">
+              <div style="font-weight:700;font-size:11.5px;color:var(--navy);margin-bottom:6px;">Option 1 — Rule-based (default)</div>
+              <div class="row2">
+                <div><label class="fld" style="margin-top:0;">Qualify if</label><select class="inp" id="p49_qualify_mode"><option value="all">ALL pass-fail questions pass</option><option value="any">ANY pass-fail question passes</option></select></div>
+                <div><label class="fld" style="margin-top:0;">Tag on qualify <span class="muted" style="font-weight:400;">(optional)</span></label><input class="inp" id="p49_survey_tag" placeholder="e.g. Prospective Prime49"></div>
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--border);padding:10px 12px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_ai_enabled" onchange="p49ToggleAi()"> Option 2 — AI assessment (Gemini) instead of the rule above</label>
+              <div id="p49AiWrap" style="display:none;margin-top:8px;">
+                <div class="muted" style="font-size:11px;margin-bottom:8px;">Path B only. Gemini reads the applicant's answers against your criteria below, decides qualify/decline, and — when qualified — picks the best-fit rep from the pool you configure. The HighLevel contact is created and assigned to that rep before the applicant ever books.</div>
+                <label class="fld" style="margin-top:0;">Qualifying criteria <span class="muted" style="font-weight:400;">(plain English — what makes a good fit)</span></label>
+                <textarea class="inp" id="p49_ai_criteria" rows="3" placeholder="e.g. Must process at least $15,000/month and have been in business 1+ years. Prioritize applicants in retail or restaurants."></textarea>
+                <label class="fld">Eligible reps <span class="muted" style="font-weight:400;">(Gemini picks one of these when qualified)</span></label>
+                <div id="p49RepList"></div>
+                <div class="row2" style="margin-top:6px;">
+                  <select class="inp" id="p49_rep_picker"><option value="">Choose a sub-account first…</option></select>
+                  <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddRep()">+ Add rep</button>
+                </div>
               </div>
             </div>
           </div>
@@ -395,7 +401,8 @@
           <label class="fld">Declined message</label>
           <textarea class="inp" id="p49_declined_body" rows="2" placeholder="Prime49 isn't the right fit just yet — we'll keep you posted."></textarea>
           <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
-            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:6px;">Next step when qualified</div>
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:2px;">Next step when qualified</div>
+            <div class="muted" style="font-size:10.5px;margin-bottom:6px;">If AI assessment above assigns a rep, that rep's own calendar is shown instead of this. This calendar/form is used when AI assessment is off, or on if no rep ends up assigned.</div>
             <div class="seg" style="margin-bottom:10px;">
               <button type="button" id="p49SurveyBookCalBtn" class="on" onclick="p49SetBookingMode('survey','calendar')">Calendar</button>
               <button type="button" id="p49SurveyBookFormBtn" onclick="p49SetBookingMode('survey','form')">Form</button>
@@ -2629,7 +2636,11 @@ async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalI
   rp.innerHTML='<option value="">— pick a HighLevel user —</option>'+window._p49GhlUsers.map(u=>`<option value="${esc(u.id)}">${esc(u.name||u.email||u.id)}</option>`).join('');
 }
 function p49ToggleAi(){
-  document.getElementById('p49AiWrap').style.display = document.getElementById('p49_ai_enabled').checked ? 'block' : 'none';
+  const on = document.getElementById('p49_ai_enabled').checked;
+  document.getElementById('p49AiWrap').style.display = on ? 'block' : 'none';
+  const ruleWrap = document.getElementById('p49RuleWrap');
+  ruleWrap.style.opacity = on ? '0.4' : '1';
+  ruleWrap.querySelectorAll('input,select').forEach(el=>el.disabled=on);
 }
 window._p49Reps = [];
 function p49RenderReps(){
