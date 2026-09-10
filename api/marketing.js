@@ -795,6 +795,10 @@ export default async function handler(req, res) {
                         qualify: Array.isArray(f.qualify) ? f.qualify.map(o => String(o).slice(0, 160)).slice(0, 30) : [],
                         qualify_min: Number.isFinite(+f.qualify_min) ? +f.qualify_min : null,
                         qualify_max: Number.isFinite(+f.qualify_max) ? +f.qualify_max : null,
+                        // Real HighLevel custom field NAME this answer saves to
+                        // (matched by ghlSetContactCustomFieldsByName) — blank
+                        // means the answer stays internal-only.
+                        hl_field: str(f.hl_field, 200) || null,
                         // Per-answer-option ranked rep assignment (AI assessment only):
                         // { "<option text>": ["<ghl_user_id>", ...] } in priority order.
                         option_reps: (f.option_reps && typeof f.option_reps === 'object' && !Array.isArray(f.option_reps))

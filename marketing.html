@@ -2632,10 +2632,12 @@ async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalI
     return;
   }
   wSel.innerHTML='<option value="">Loading…</option>'; sels.forEach(s=>s.innerHTML='<option value="">Loading…</option>');
-  const [wr,cr,fr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc}), api({action:'ghl_forms',location_id:loc})]);
+  const [wr,cr,fr,cfr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc}), api({action:'ghl_forms',location_id:loc}), api({action:'ghl_custom_fields',location_id:loc})]);
   const wfs=(wr.success?wr.data:[])||[];
   wSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
   if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
+  window._p49CustomFields = (cfr.success?cfr.data:[])||[];
+  document.querySelectorAll('#p49SurveyList .p49q-hlfield').forEach(p49RenderHlFieldSelect);
   const cals=(cr.success?cr.data:[])||[], forms=(fr.success?fr.data:[])||[];
   p49FillSelect(document.getElementById('p49_elig_calendar'), cals, preEligCalId, '— none —', 'No calendars found in this sub-account');
   p49FillSelect(document.getElementById('p49_elig_form'), forms, preEligFormId, '— select a form —', 'No forms found in this sub-account');
@@ -2822,6 +2824,10 @@ function p49AddQuestion(q){
       <label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" class="p49q-req" ${q.required?'checked':''}> req</label>
       <button type="button" class="btn btn-neutral" style="padding:4px 8px;" onclick="this.closest('.p49-qrow').remove()">✕</button>
     </div>
+    <div style="margin-top:6px;">
+      <label class="fld" style="margin-top:0;font-size:10px;">Save answer to HighLevel custom field <span class="muted" style="font-weight:400;">(optional — leave unmapped to keep it internal-only)</span></label>
+      <select class="inp p49q-hlfield" style="font-size:12px;" data-selected="${esc(q.hl_field||'')}"></select>
+    </div>
     <div class="p49q-optwrap" style="display:${(type==='dropdown'||type==='checkbox')?'block':'none'};margin-top:6px;">
       <div class="muted" style="font-size:10px;margin-bottom:2px;">Options (one per line):</div>
       <textarea class="inp p49q-opts" rows="2">${esc((q.options||[]).join('\n'))}</textarea>
@@ -2847,6 +2853,23 @@ function p49AddQuestion(q){
   box.appendChild(div);
   if(type==='dropdown'||type==='checkbox'){
     p49BuildOptRepRows(div.querySelector('.p49q-rep-rows'), q.options||[], q.option_reps||{});
+  }
+  p49RenderHlFieldSelect(div.querySelector('.p49q-hlfield'));
+}
+// Populates a question's "save to HighLevel custom field" dropdown from the
+// sub-account's REAL custom fields (window._p49CustomFields) — matching by
+// the survey question's auto-generated internal name would never line up
+// with an actual HighLevel field, which is exactly why custom-field syncing
+// silently failed before this mapping existed.
+function p49RenderHlFieldSelect(sel){
+  if(!sel) return;
+  const selected=sel.dataset.selected||sel.value||'';
+  const fields=window._p49CustomFields||[];
+  sel.innerHTML = fields.length
+    ? '<option value="">— not saved to HighLevel —</option>'+fields.map(f=>`<option value="${esc(f.name)}" ${f.name===selected?'selected':''}>${esc(f.name)}</option>`).join('')
+    : '<option value="">Choose a sub-account above to load custom fields</option>';
+  if(selected && !Array.from(sel.options).some(o=>o.value===selected)){
+    const o=document.createElement('option'); o.value=selected; o.textContent=selected+' (not found — check it still exists)'; o.selected=true; sel.appendChild(o);
   }
 }
 function p49RenderSurvey(fields){
@@ -2877,7 +2900,8 @@ function p49CollectSurvey(){
       const kwEl=row.querySelector('.p49q-kwwrap .p49q-qualify');
       qualify=(kwEl?kwEl.value:'').split('\n').map(s=>s.trim()).filter(Boolean);
     }
-    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify, qualify_min, qualify_max, option_reps });
+    const hlField=(row.querySelector('.p49q-hlfield')||{}).value||'';
+    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify, qualify_min, qualify_max, option_reps, hl_field:hlField });
   });
   return out;
 }

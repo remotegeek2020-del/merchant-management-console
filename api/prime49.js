@@ -306,8 +306,13 @@ export default async function handler(req, res) {
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, ev);
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
                 if (contactId) {
+                    // Keyed by the REAL HighLevel custom field name staff mapped
+                    // this question to — the auto-generated internal field name
+                    // (f.name, e.g. "q0_whats_your_experience...") never matches
+                    // an actual HighLevel field, which is why this silently did
+                    // nothing before the mapping picker existed.
                     const cfMap = {};
-                    fields.forEach(f => { const v = answers[f.name]; if (v != null && String(v).trim() !== '') cfMap[f.name] = v; });
+                    fields.forEach(f => { if (!f.hl_field) return; const v = answers[f.name]; if (v != null && String(v).trim() !== '') cfMap[f.hl_field] = v; });
                     if (Object.keys(cfMap).length) await ghlSetContactCustomFieldsByName(cfg.ghl_location_id, contactId, cfMap);
                 }
             }
