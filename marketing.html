@@ -2617,6 +2617,7 @@ async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalI
   if(!loc){
     wSel.innerHTML='<option value="">— none —</option>';
     sels.forEach(s=>s.innerHTML='<option value="">Choose a sub-account first…</option>');
+    await p49LoadReps();
     return;
   }
   wSel.innerHTML='<option value="">Loading…</option>'; sels.forEach(s=>s.innerHTML='<option value="">Loading…</option>');
@@ -2630,10 +2631,20 @@ async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalI
   p49FillSelect(document.getElementById('p49_survey_calendar'), cals, preSurveyCalId, '— none —', 'No calendars found in this sub-account');
   p49FillSelect(document.getElementById('p49_survey_form'), forms, preSurveyFormId, '— select a form —', 'No forms found in this sub-account');
   window._p49GhlCalendars = cals;
-  const ur = await api({action:'ghl_users',location_id:loc});
-  window._p49GhlUsers = (ur.success?ur.data:[])||[];
+  await p49LoadReps();
+}
+// Rep pool = Secret Dungeon staff profiles (name/bio/job level/photo) that
+// are mapped to a HighLevel user (User Management), NOT the raw HighLevel
+// user list — so what staff pick here is exactly what applicants see.
+async function p49LoadReps(){
+  const rr = await api({action:'prime49_reps'});
+  window._p49StaffReps = (rr.success?rr.data:[])||[];
   const rp=document.getElementById('p49_rep_picker');
-  rp.innerHTML='<option value="">— pick a HighLevel user —</option>'+window._p49GhlUsers.map(u=>`<option value="${esc(u.id)}">${esc(u.name||u.email||u.id)}</option>`).join('');
+  if (!window._p49StaffReps.length){
+    rp.innerHTML='<option value="">No staff mapped to a HighLevel user yet — set this in User Management</option>';
+    return;
+  }
+  rp.innerHTML='<option value="">— pick a rep —</option>'+window._p49StaffReps.map(u=>`<option value="${esc(u.ghl_user_id)}">${esc(u.name||u.email||u.ghl_user_id)}</option>`).join('');
 }
 function p49ToggleAi(){
   const on = document.getElementById('p49_ai_enabled').checked;
@@ -2645,14 +2656,18 @@ function p49ToggleAi(){
 window._p49Reps = [];
 function p49RenderReps(){
   const box=document.getElementById('p49RepList');
-  const users=window._p49GhlUsers||[], cals=window._p49GhlCalendars||[];
+  const staff=window._p49StaffReps||[], cals=window._p49GhlCalendars||[];
   box.innerHTML = window._p49Reps.map((r,i)=>{
-    const u = users.find(x=>x.id===r.ghl_user_id);
-    const name = r.name || (u&&u.name) || r.ghl_user_id;
+    const u = staff.find(x=>x.ghl_user_id===r.ghl_user_id);
+    const name = (u&&u.name) || r.name || r.ghl_user_id;
+    const photo = u&&u.photo;
+    const avatar = photo
+      ? `<img src="${esc(photo)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">`
+      : `<div style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">${esc((name||'?').charAt(0).toUpperCase())}</div>`;
     const calOpts = '<option value="">— no calendar (won\'t be selectable) —</option>'+cals.map(c=>`<option value="${esc(c.id)}" ${c.id===r.calendar_id?'selected':''}>${esc(c.name||c.id)}</option>`).join('');
     return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;background:#fff;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-weight:700;font-size:12.5px;">${esc(name)}</div>
+        <div style="display:flex;align-items:center;gap:8px;">${avatar}<div><div style="font-weight:700;font-size:12.5px;">${esc(name)}</div>${u&&u.job_level?`<div class="muted" style="font-size:10px;">${esc(u.job_level)}</div>`:''}</div></div>
         <button type="button" class="btn btn-neutral" style="padding:4px 8px;" onclick="p49RemoveRep(${i})">✕</button>
       </div>
       <div class="muted" style="font-size:10px;margin:6px 0 2px;">Fit notes for Gemini — what makes this rep a good match (territory, specialty, etc.)</div>
@@ -2666,7 +2681,7 @@ function p49AddRep(){
   const sel=document.getElementById('p49_rep_picker');
   const id=sel.value; if(!id) return;
   if(window._p49Reps.some(r=>r.ghl_user_id===id)) return;
-  const u=(window._p49GhlUsers||[]).find(x=>x.id===id);
+  const u=(window._p49StaffReps||[]).find(x=>x.ghl_user_id===id);
   window._p49Reps.push({ ghl_user_id:id, name:(u&&u.name)||id, notes:'', calendar_id:'' });
   sel.value='';
   p49RenderReps();

@@ -501,7 +501,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard', 'referrals_report', 'referral_link',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'ghl_users', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'ghl_users', 'prime49_reps', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
     'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -1292,6 +1292,29 @@ export default async function handler(req, res) {
             if (action === 'ghl_users') {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListUsers(req.body.location_id));
+            }
+            // Prime49's rep picker sources from the same Secret Dungeon staff
+            // profiles (name/bio/job level/photo) instead of the raw HighLevel
+            // user list, so what staff pick here is exactly what applicants see.
+            // Only staff already mapped to a HighLevel user (ghl_user_id set,
+            // via User Management) can be assigned a contact.
+            if (action === 'prime49_reps') {
+                const { data: rows } = await supabase.from('app_users')
+                    .select('userid, first_name, last_name, email, is_active, ghl_user_id, rep_bio, rep_job_level, rep_photo_url')
+                    .not('ghl_user_id', 'is', null).order('first_name');
+                const staff = (rows || []).filter(r => r.is_active !== false);
+                const ids = staff.map(r => r.userid);
+                let avatars = {};
+                if (ids.length) {
+                    const { data: profs } = await supabase.from('user_profiles').select('user_id, avatar_url').in('user_id', ids);
+                    (profs || []).forEach(p => { avatars[p.user_id] = p.avatar_url; });
+                }
+                return ok(res, staff.map(r => ({
+                    ghl_user_id: r.ghl_user_id,
+                    name: (`${r.first_name || ''} ${r.last_name || ''}`.trim()) || r.email,
+                    email: r.email, bio: r.rep_bio || '', job_level: r.rep_job_level || '',
+                    photo: avatars[r.userid] || r.rep_photo_url || ''
+                })));
             }
             if (action === 'ghl_workflows') {
                 if (!req.body.location_id) return ok(res, []);
