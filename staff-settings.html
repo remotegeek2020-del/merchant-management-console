@@ -95,6 +95,12 @@
         <input type="text" class="field-input" id="repPhone" placeholder="e.g. (555) 555-5555">
         <label class="field-label">Background / About you</label>
         <textarea class="field-input" id="repBio" placeholder="A short background — your experience, how you help partners get started, what to expect on the call…"></textarea>
+        <label class="field-label" style="margin-top:14px;">Professional Role at PayProTec</label>
+        <div style="font-size:11px;color:var(--text-muted);margin:-4px 0 8px;">One bullet per line — what you actually do here (e.g. "Manage the West Coast partner book", "Lead onboarding for new agents").</div>
+        <textarea class="field-input" id="repProfessionalRole" placeholder="Manage the West Coast partner book&#10;Lead onboarding for new agents&#10;Handle escalations for high-volume merchants"></textarea>
+        <label class="field-label" style="margin-top:14px;">Industry Context</label>
+        <div style="font-size:11px;color:var(--text-muted);margin:-4px 0 8px;">Any industry focus, specialty, or context worth knowing (e.g. verticals you work with, certifications, territory).</div>
+        <textarea class="field-input" id="repIndustryContext" placeholder="e.g. Focused on retail and restaurant merchants, 8 years in payment processing."></textarea>
         <label class="field-label" style="margin-top:14px;">Milestones</label>
         <div style="font-size:11px;color:var(--text-muted);margin:-4px 0 8px;">Career highlights or achievements (e.g. "2019 · Joined PayProTec", "500+ partners onboarded").</div>
         <div id="repMsList"></div>
@@ -559,6 +565,8 @@ async function loadRepProfile() {
         document.getElementById('repJobLevel').value = p.rep_job_level || '';
         document.getElementById('repPhone').value = p.rep_phone || '';
         document.getElementById('repBio').value = p.rep_bio || '';
+        document.getElementById('repProfessionalRole').value = (Array.isArray(p.rep_professional_role) ? p.rep_professional_role : []).join('\n');
+        document.getElementById('repIndustryContext').value = p.rep_industry_context || '';
         document.getElementById('repMsList').innerHTML = '';
         (Array.isArray(p.rep_milestones) ? p.rep_milestones : []).forEach(m => repMsAdd(m.label, m.detail));
     } catch (e) { /* ignore */ }
@@ -595,6 +603,8 @@ async function saveRepProfile(silent) {
         rep_job_level: document.getElementById('repJobLevel').value.trim(),
         rep_phone: document.getElementById('repPhone').value.trim(),
         rep_bio: document.getElementById('repBio').value.trim(),
+        rep_professional_role: document.getElementById('repProfessionalRole').value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean),
+        rep_industry_context: document.getElementById('repIndustryContext').value.trim(),
         rep_milestones: milestones
     };
     if (!silent) Swal.fire({ title: 'Saving…', didOpen: () => Swal.showLoading() });

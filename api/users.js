@@ -309,7 +309,7 @@ export default async function handler(req, res) {
             if (action === 'get_rep_profile') {
                 const uid = req.body.target_userid || session.userid;
                 const { data: u } = await supabase.from('app_users')
-                    .select('userid, first_name, last_name, role, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones, rep_phone').eq('userid', uid).maybeSingle();
+                    .select('userid, first_name, last_name, role, email, rep_bio, rep_job_level, rep_photo_url, rep_milestones, rep_phone, rep_professional_role, rep_industry_context').eq('userid', uid).maybeSingle();
                 return res.status(200).json({ success: true, profile: u || null });
             }
             if (action === 'save_rep_profile') {
@@ -317,11 +317,15 @@ export default async function handler(req, res) {
                 const ms = Array.isArray(req.body.rep_milestones) ? req.body.rep_milestones
                     .map(m => ({ label: String(m.label || '').slice(0, 160), detail: String(m.detail || '').slice(0, 400) }))
                     .filter(m => m.label).slice(0, 40) : [];
+                const role = Array.isArray(req.body.rep_professional_role) ? req.body.rep_professional_role
+                    .map(s => String(s || '').slice(0, 200)).filter(Boolean).slice(0, 30) : [];
                 const upd = {
                     rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
                     rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
                     rep_phone: (req.body.rep_phone ?? '').toString().slice(0, 60),
-                    rep_milestones: ms
+                    rep_milestones: ms,
+                    rep_professional_role: role,
+                    rep_industry_context: (req.body.rep_industry_context ?? '').toString().slice(0, 2000)
                 };
                 const { error } = await supabase.from('app_users').update(upd).eq('userid', session.userid);
                 if (error) return res.status(500).json({ success: false, message: error.message });
@@ -381,7 +385,7 @@ export default async function handler(req, res) {
                 }
                 if (action === 'admin_list_rep_profiles') {
                     const { data: rows } = await supabase.from('app_users')
-                        .select('userid, first_name, last_name, email, role, is_active, rep_bio, rep_job_level')
+                        .select('userid, first_name, last_name, email, role, is_active, rep_bio, rep_job_level, rep_professional_role, rep_industry_context')
                         .order('first_name');
                     // Attach the single "actual photo" (community avatar).
                     const ids = (rows || []).map(r => r.userid);
@@ -391,9 +395,13 @@ export default async function handler(req, res) {
                 }
                 const tid = req.body.target_userid;
                 if (!tid) return res.status(400).json({ success: false, message: 'target_userid required' });
+                const adminRole = Array.isArray(req.body.rep_professional_role) ? req.body.rep_professional_role
+                    .map(s => String(s || '').slice(0, 200)).filter(Boolean).slice(0, 30) : [];
                 const upd = {
                     rep_bio: (req.body.rep_bio ?? '').toString().slice(0, 4000),
-                    rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120)
+                    rep_job_level: (req.body.rep_job_level ?? '').toString().slice(0, 120),
+                    rep_professional_role: adminRole,
+                    rep_industry_context: (req.body.rep_industry_context ?? '').toString().slice(0, 2000)
                 };
                 const { error } = await supabase.from('app_users').update(upd).eq('userid', tid);
                 if (error) return res.status(500).json({ success: false, message: error.message });
