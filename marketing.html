@@ -1565,6 +1565,7 @@ async function editCampaign(id){
       document.getElementById('p49_declined_body').value=p49.declined_body||'';
       document.getElementById('p49_merchant_headline').value=p49.merchant_support_headline||'I am a merchant';
       document.getElementById('p49_merchant_body').value=p49.merchant_support_body||'Merchant Support line: 800-226-2273 (extension 5382, option 1)';
+      window._p49Reps = Array.isArray(p49.survey_reps) ? p49.survey_reps.map(r=>({...r})) : [];
       p49RenderSurvey(Array.isArray(p49.survey_fields)?p49.survey_fields:[]);
       p49SetBookingMode('elig', p49.eligible_booking_mode==='form'?'form':'calendar');
       p49SetBookingMode('survey', p49.survey_booking_mode==='form'?'form':'calendar');
@@ -1572,8 +1573,7 @@ async function editCampaign(id){
       document.getElementById('p49_ai_enabled').checked=!!p49.survey_ai_enabled;
       document.getElementById('p49_ai_criteria').value=p49.survey_ai_criteria||'';
       p49ToggleAi();
-      window._p49Reps = Array.isArray(p49.survey_reps) ? p49.survey_reps.map(r=>({...r})) : [];
-      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||'').then(p49RenderReps); else p49RenderReps(); });
+      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||'').then(function(){ p49RenderReps(); p49RefreshOptionRepUI(); }); else { p49RenderReps(); p49RefreshOptionRepUI(); } });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -2685,12 +2685,91 @@ function p49AddRep(){
   window._p49Reps.push({ ghl_user_id:id, name:(u&&u.name)||id, notes:'', calendar_id:'' });
   sel.value='';
   p49RenderReps();
+  p49RefreshOptionRepUI();
 }
-function p49RemoveRep(i){ window._p49Reps.splice(i,1); p49RenderReps(); }
+function p49RemoveRep(i){
+  const removedId=window._p49Reps[i] && window._p49Reps[i].ghl_user_id;
+  window._p49Reps.splice(i,1);
+  p49RenderReps();
+  // Also strip that rep from any per-answer priority assignments — they're
+  // no longer bookable once out of the pool.
+  if(removedId){
+    document.querySelectorAll('#p49SurveyList .p49-optrep-row').forEach(r=>{
+      const ids=JSON.parse(r.dataset.reps||'[]').filter(id=>id!==removedId);
+      r.dataset.reps=JSON.stringify(ids);
+    });
+  }
+  p49RefreshOptionRepUI();
+}
 function p49CollectReps(){
   document.querySelectorAll('#p49RepList .p49rep-notes').forEach(el=>{ window._p49Reps[+el.dataset.i].notes=el.value; });
   document.querySelectorAll('#p49RepList .p49rep-cal').forEach(el=>{ window._p49Reps[+el.dataset.i].calendar_id=el.value; });
+  p49RefreshOptionRepUI();
   return window._p49Reps;
+}
+
+// ── Per-answer-option ranked rep assignment (dropdown/checkbox questions) ──
+// Reps are drawn from the "Eligible reps" pool (window._p49Reps) so every
+// rep referenced here always has a resolvable calendar for booking.
+function p49OptRepChipsHtml(ids){
+  return ids.map((id,i)=>{
+    const u=(window._p49Reps||[]).find(x=>x.ghl_user_id===id);
+    const name=(u&&u.name)||id;
+    return `<span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px;">${i+1}. ${esc(name)}<span style="cursor:pointer;" onclick="p49RemoveOptRep(this)">✕</span></span>`;
+  }).join('') || '<span class="muted" style="font-size:10.5px;">No reps assigned — falls back to general fit notes.</span>';
+}
+function p49RenderOptRepRow(rowEl){
+  const ids=JSON.parse(rowEl.dataset.reps||'[]');
+  rowEl.querySelector('.p49-optrep-chips').innerHTML=p49OptRepChipsHtml(ids);
+  const pool=window._p49Reps||[];
+  const remaining=pool.filter(u=>!ids.includes(u.ghl_user_id));
+  const sel=rowEl.querySelector('.p49-optrep-add');
+  sel.innerHTML = pool.length
+    ? '<option value="">+ add rep…</option>'+remaining.map(u=>`<option value="${esc(u.ghl_user_id)}">${esc(u.name)}</option>`).join('')
+    : '<option value="">Add reps to "Eligible reps" below first</option>';
+}
+function p49BuildOptRepRows(container, options, optionRepsMap){
+  optionRepsMap = optionRepsMap||{};
+  container.innerHTML = options.map(opt=>{
+    const ids=Array.isArray(optionRepsMap[opt]) ? optionRepsMap[opt] : [];
+    return `<div class="p49-optrep-row" data-opt="${esc(opt)}" data-reps='${esc(JSON.stringify(ids))}' style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-bottom:6px;">
+      <div style="font-size:11px;font-weight:700;">${esc(opt)}</div>
+      <div class="p49-optrep-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;"></div>
+      <select class="p49-optrep-add inp" style="font-size:11px;padding:4px 6px;" onchange="p49AddOptRep(this)"></select>
+    </div>`;
+  }).join('') || '<div class="muted" style="font-size:10.5px;">Add options above, then click Sync.</div>';
+  container.querySelectorAll('.p49-optrep-row').forEach(p49RenderOptRepRow);
+}
+function p49SyncOptionReps(btn){
+  const row=btn.closest('.p49-qrow');
+  const options=(row.querySelector('.p49q-opts').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const container=row.querySelector('.p49q-rep-rows');
+  const existing={};
+  container.querySelectorAll('.p49-optrep-row').forEach(r=>{ existing[r.dataset.opt]=JSON.parse(r.dataset.reps||'[]'); });
+  p49BuildOptRepRows(container, options, existing);
+}
+function p49AddOptRep(sel){
+  const rowEl=sel.closest('.p49-optrep-row');
+  const id=sel.value; if(!id) return;
+  const ids=JSON.parse(rowEl.dataset.reps||'[]');
+  if(!ids.includes(id)) ids.push(id);
+  rowEl.dataset.reps=JSON.stringify(ids);
+  p49RenderOptRepRow(rowEl);
+}
+function p49RemoveOptRep(xEl){
+  const rowEl=xEl.closest('.p49-optrep-row');
+  const chip=xEl.parentElement;
+  const chips=Array.from(rowEl.querySelectorAll('.p49-optrep-chips > span'));
+  const idx=chips.indexOf(chip);
+  const ids=JSON.parse(rowEl.dataset.reps||'[]');
+  if(idx>-1) ids.splice(idx,1);
+  rowEl.dataset.reps=JSON.stringify(ids);
+  p49RenderOptRepRow(rowEl);
+}
+// Re-render every question's rep chips/dropdowns (e.g. after the Eligible
+// reps pool changes) so names stay in sync.
+function p49RefreshOptionRepUI(){
+  document.querySelectorAll('#p49SurveyList .p49-optrep-row').forEach(p49RenderOptRepRow);
 }
 function p49SetBookingMode(path,mode){
   // path: 'elig' (Path A — I am a PPT Partner) or 'survey' (Path B — prospective).
@@ -2737,6 +2816,11 @@ function p49AddQuestion(q){
       <textarea class="inp p49q-opts" rows="2">${esc((q.options||[]).join('\n'))}</textarea>
       <div class="muted" style="font-size:10px;margin:4px 0 2px;">Qualifying answers — which options count as a PASS (one per line, must match exactly). Leave blank for an informational-only question.</div>
       <textarea class="inp p49q-qualify" rows="2">${esc((q.qualify||[]).join('\n'))}</textarea>
+      <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:6px;">
+        <div class="muted" style="font-size:10px;margin-bottom:4px;">AI assessment only — assign reps to specific answers, ranked by priority (1st, 2nd, 3rd…). Gemini uses these as strong signals when picking the best-fit rep at the end. Reps must be added to "Eligible reps" below first.</div>
+        <button type="button" class="btn btn-neutral" style="padding:4px 10px;font-size:11px;" onclick="p49SyncOptionReps(this)">🔄 Sync options → assign reps</button>
+        <div class="p49q-rep-rows" style="margin-top:6px;"></div>
+      </div>
     </div>
     <div class="p49q-numwrap" style="display:${type==='number'?'block':'none'};margin-top:6px;">
       <div class="muted" style="font-size:10px;margin-bottom:2px;">Qualifying range (leave both blank for an informational-only question):</div>
@@ -2750,6 +2834,9 @@ function p49AddQuestion(q){
       <textarea class="inp p49q-qualify" rows="2">${esc((q.qualify||[]).join('\n'))}</textarea>
     </div>`;
   box.appendChild(div);
+  if(type==='dropdown'||type==='checkbox'){
+    p49BuildOptRepRows(div.querySelector('.p49q-rep-rows'), q.options||[], q.option_reps||{});
+  }
 }
 function p49RenderSurvey(fields){
   document.getElementById('p49SurveyList').innerHTML='';
@@ -2762,11 +2849,15 @@ function p49CollectSurvey(){
     const label=row.querySelector('.p49q-label').value.trim();
     if(!label) return;
     const type=row.querySelector('.p49q-type').value;
-    let options=[], qualify=[], qualify_min=null, qualify_max=null;
+    let options=[], qualify=[], qualify_min=null, qualify_max=null, option_reps={};
     if(type==='dropdown'||type==='checkbox'){
       options=(row.querySelector('.p49q-opts').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
       const qEl=row.querySelector('.p49q-optwrap .p49q-qualify');
       qualify=(qEl?qEl.value:'').split('\n').map(s=>s.trim()).filter(Boolean);
+      row.querySelectorAll('.p49-optrep-row').forEach(r=>{
+        const ids=JSON.parse(r.dataset.reps||'[]');
+        if(ids.length) option_reps[r.dataset.opt]=ids;
+      });
     } else if(type==='number'){
       const minEl=row.querySelector('.p49q-qmin'), maxEl=row.querySelector('.p49q-qmax');
       qualify_min = minEl && minEl.value!=='' ? parseFloat(minEl.value) : null;
@@ -2775,7 +2866,7 @@ function p49CollectSurvey(){
       const kwEl=row.querySelector('.p49q-kwwrap .p49q-qualify');
       qualify=(kwEl?kwEl.value:'').split('\n').map(s=>s.trim()).filter(Boolean);
     }
-    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify, qualify_min, qualify_max });
+    out.push({ name:'q'+i+'_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40), label, type, required:row.querySelector('.p49q-req').checked, options, qualify, qualify_min, qualify_max, option_reps });
   });
   return out;
 }

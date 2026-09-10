@@ -794,7 +794,15 @@ export default async function handler(req, res) {
                         options: Array.isArray(f.options) ? f.options.map(o => String(o).slice(0, 160)).slice(0, 30) : [],
                         qualify: Array.isArray(f.qualify) ? f.qualify.map(o => String(o).slice(0, 160)).slice(0, 30) : [],
                         qualify_min: Number.isFinite(+f.qualify_min) ? +f.qualify_min : null,
-                        qualify_max: Number.isFinite(+f.qualify_max) ? +f.qualify_max : null
+                        qualify_max: Number.isFinite(+f.qualify_max) ? +f.qualify_max : null,
+                        // Per-answer-option ranked rep assignment (AI assessment only):
+                        // { "<option text>": ["<ghl_user_id>", ...] } in priority order.
+                        option_reps: (f.option_reps && typeof f.option_reps === 'object' && !Array.isArray(f.option_reps))
+                            ? Object.fromEntries(Object.entries(f.option_reps).slice(0, 30).map(([k, v]) => [
+                                String(k).slice(0, 160),
+                                Array.isArray(v) ? v.map(id => String(id).slice(0, 100)).filter(Boolean).slice(0, 10) : []
+                            ]).filter(([, v]) => v.length))
+                            : {}
                     })).filter(f => f.name) : [];
                     const cfgRow = {
                         campaign_id: row.id,

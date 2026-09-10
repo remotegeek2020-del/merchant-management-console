@@ -134,6 +134,26 @@ async function assessWithGemini(cfg, fields, answers) {
         const repList = reps.length
             ? reps.map(r => `- id:"${r.ghl_user_id}" name:"${r.name || ''}" notes:"${r.notes || ''}"`).join('\n')
             : '(no reps configured — return rep_id:null)';
+        // Staff can pre-assign a ranked list of reps to specific answer options
+        // (e.g. "Learn how to sell merchant services" -> 1. Jasilee, 2. Danny,
+        // 3. Jenn). Surface every one the applicant actually triggered as a
+        // strong signal — Gemini still makes the final call, aggregating
+        // across all of these plus the general rep notes above.
+        const voteLines = [];
+        fields.forEach(f => {
+            if (!f.option_reps || typeof f.option_reps !== 'object') return;
+            const given = answers[f.name];
+            const givenArr = Array.isArray(given) ? given.map(String) : [String(given == null ? '' : given)];
+            givenArr.forEach(val => {
+                const ranked = f.option_reps[val];
+                if (Array.isArray(ranked) && ranked.length) {
+                    voteLines.push(`- For "${f.label || f.name}" = "${val}", staff ranked: ${ranked.map((id, i) => `${i + 1}. id:"${id}"`).join(', ')}`);
+                }
+            });
+        });
+        const voteBlock = voteLines.length
+            ? voteLines.join('\n')
+            : '(no answer-specific rep priorities apply to this application)';
         const prompt = `You are assessing a prospective partner application for PayProTec's Prime49 program.
 
 Staff qualifying criteria:
@@ -142,10 +162,13 @@ ${cfg.survey_ai_criteria || '(none provided — use your best judgment on genera
 Applicant's answers:
 ${qa}
 
-Sales reps available to assign if the applicant qualifies (pick the single best fit based on their notes vs. the applicant's answers; if none fit well or none are listed, use null):
+Sales reps available to assign if the applicant qualifies (pick the single best fit; if none fit well or none are listed, use null):
 ${repList}
 
-Return ONLY strict JSON, no markdown: {"qualified": true or false, "rep_id": "<one of the ids above, or null>", "reasoning": "<one or two sentences explaining the decision>"}`;
+Staff pre-ranked rep priorities triggered by this applicant's specific answers (treat as a strong signal — lower number = higher priority; if multiple answers point to different reps, weigh them together with the rep notes above to decide the single best overall fit):
+${voteBlock}
+
+Return ONLY strict JSON, no markdown: {"qualified": true or false, "rep_id": "<one of the ids above, or null>", "reasoning": "<one or two sentences explaining the decision, mentioning which signals drove the rep pick>"}`;
         const r = await model.generateContent(prompt);
         const text = (r && r.response && r.response.text() || '').trim();
         const j = JSON.parse(text);
