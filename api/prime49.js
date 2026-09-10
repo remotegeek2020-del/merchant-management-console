@@ -11,6 +11,7 @@
 //                                     decline message (fail).
 import { createClient } from '@supabase/supabase-js';
 import { applyRsvpTagWorkflow } from './rsvp.js';
+import { ghlSetContactCustomFieldsByName } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 function cors(res) {
@@ -193,12 +194,19 @@ export default async function handler(req, res) {
             const name = String(body.name || '').trim();
             const email = String(body.email || '').trim();
             const phone = String(body.phone || '').trim();
-            // Qualifying always creates/updates the HighLevel contact, whether or
-            // not staff configured a tag/workflow for this path.
+            // Every submission — qualified or not — creates/updates the
+            // HighLevel contact, so declined leads aren't lost. The tag/
+            // workflow (if configured) is only applied when they qualify.
             let contactId = null, tagApplied = false, error = null;
-            if (qualified && cfg.ghl_location_id) {
-                const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id });
+            if (cfg.ghl_location_id) {
+                const ev = qualified ? { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id } : {};
+                const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, ev);
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
+                if (contactId) {
+                    const cfMap = {};
+                    fields.forEach(f => { const v = answers[f.name]; if (v != null && String(v).trim() !== '') cfMap[f.name] = v; });
+                    if (Object.keys(cfMap).length) await ghlSetContactCustomFieldsByName(cfg.ghl_location_id, contactId, cfMap);
+                }
             }
             const { data: inserted } = await supabase.from('prime49_submissions').insert({
                 campaign_id: campaignId, path: 'prospective', hl_contact_id: contactId, email, phone, name,
