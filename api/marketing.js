@@ -502,7 +502,7 @@ const ADMIN_ACTIONS = new Set([
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_tags', 'ghl_calendars', 'ghl_workflows', 'ghl_custom_fields', 'ghl_users', 'prime49_reps', 'get_conversions', 'export_conversions', 'scan_cta', 'sync_optins', 'staff_recipients', 'send_stats', 'clickup_status', 'send_stats_clickup', 'get_share', 'set_share', 'regen_share', 'tag_converters',
-    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49', 'reconcile_prime49'
+    'set_location_token', 'test_location', 'rsvp_submissions', 'export_rsvp', 'prime49_submissions', 'export_prime49', 'reconcile_prime49', 'regenerate_prime49_secret'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
 
@@ -1401,6 +1401,18 @@ export default async function handler(req, res) {
             // calendar(s)/form(s) once, then matches each un-converted
             // eligible/qualified submission by HighLevel contact id (or email as
             // a fallback) within the time window after it was recorded.
+            // Rotates a campaign's Prime49 webhook secret (e.g. if it ever
+            // leaked) — staff never need Vercel access for this, it's fully
+            // self-service from the campaign editor.
+            if (action === 'regenerate_prime49_secret') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'campaign id required');
+                const secret = randomBytes(16).toString('hex');
+                const { error } = await supabase.from('prime49_configs').update({ webhook_secret: secret }).eq('campaign_id', id);
+                if (error) return bad(res, error.message);
+                return ok(res, { webhook_secret: secret });
+            }
+
             if (action === 'reconcile_prime49') {
                 const { id } = req.body;
                 if (!id) return bad(res, 'campaign id required');

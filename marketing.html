@@ -421,14 +421,18 @@
             </div>
           </div>
 
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;" id="p49WebhookSection">
             <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:2px;">Real-time conversion tracking</div>
-            <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Most reliable way to know they actually booked/filled the form — a HighLevel Workflow calls these URLs with the contact id, matched against the contact we already created. Set both up as separate HighLevel Workflows (Trigger → Webhook action).</div>
-            <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">
-              <div style="margin-bottom:6px;"><b>Appointment Booked</b> workflow → Webhook URL:<br><span id="p49WebhookCalUrl"></span></div>
-              <div><b>Form Submitted</b> workflow → Webhook URL:<br><span id="p49WebhookFormUrl"></span></div>
+            <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Most reliable way to know they actually booked/filled the form — a HighLevel Workflow calls these URLs with the contact id, matched against the contact we already created. Set both up as separate HighLevel Workflows (Trigger → Webhook action). These URLs are ready to paste in as-is — save the campaign once first if it's brand new.</div>
+            <div id="p49WebhookNoSaveNote" class="muted" style="font-size:10.5px;">Save this campaign once to generate its webhook URLs.</div>
+            <div id="p49WebhookUrlsWrap" style="display:none;">
+              <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">
+                <div style="margin-bottom:6px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Appointment Booked</b> workflow → Webhook URL:<br><span id="p49WebhookCalUrl"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookCalUrl')">Copy</button></div>
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Form Submitted</b> workflow → Webhook URL:<br><span id="p49WebhookFormUrl"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookFormUrl')">Copy</button></div>
+              </div>
+              <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:11px;margin-top:6px;" onclick="p49RegenerateSecret()">🔄 Regenerate secret</button>
+              <span class="muted" style="font-size:10px;">— only if this leaked; old webhook URLs stop working immediately.</span>
             </div>
-            <div class="muted" style="font-size:10px;margin-top:6px;">Replace &lt;SECRET&gt; with the value of the <code>PRIME49_WEBHOOK_SECRET</code> environment variable (set once in Vercel).</div>
           </div>
 
           <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
@@ -2717,10 +2721,29 @@ function p49ToggleFollowup(){
   document.getElementById('p49FollowupWrap').style.display = document.getElementById('p49_followup_enabled').checked ? 'block' : 'none';
 }
 function p49RenderWebhookUrls(){
+  const noSave=document.getElementById('p49WebhookNoSaveNote'), wrap=document.getElementById('p49WebhookUrlsWrap');
+  const campId = editing && editing.id;
+  const secret = editing && editing.prime49 && editing.prime49.webhook_secret;
+  if(!campId || !secret){ noSave.style.display='block'; wrap.style.display='none'; return; }
+  noSave.style.display='none'; wrap.style.display='block';
   const base = window.location.origin;
-  const calEl=document.getElementById('p49WebhookCalUrl'), formEl=document.getElementById('p49WebhookFormUrl');
-  if(calEl) calEl.textContent = base+'/api/prime49-webhook?secret=<SECRET>&via=calendar';
-  if(formEl) formEl.textContent = base+'/api/prime49-webhook?secret=<SECRET>&via=form';
+  document.getElementById('p49WebhookCalUrl').textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=calendar';
+  document.getElementById('p49WebhookFormUrl').textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=form';
+}
+function p49CopyWebhookUrl(elId){
+  const text=(document.getElementById(elId)||{}).textContent||'';
+  if(!text) return;
+  navigator.clipboard.writeText(text).then(function(){ if(window.Swal) Swal.fire({icon:'success',title:'Copied',timer:900,showConfirmButton:false}); });
+}
+async function p49RegenerateSecret(){
+  if(!editing || !editing.id) return;
+  const conf = await Swal.fire({icon:'warning', title:'Regenerate secret?', text:'The old webhook URLs stop working immediately — you\'ll need to update both HighLevel workflows with the new URL.', showCancelButton:true, confirmButtonText:'Regenerate', confirmButtonColor:'#dc2626'});
+  if(!conf.isConfirmed) return;
+  const r = await api({action:'regenerate_prime49_secret', id:editing.id});
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  editing.prime49 = editing.prime49||{}; editing.prime49.webhook_secret = r.data.webhook_secret;
+  p49RenderWebhookUrls();
+  Swal.fire({icon:'success', title:'Secret regenerated', timer:1200, showConfirmButton:false});
 }
 window._p49Reps = [];
 function p49RenderReps(){
