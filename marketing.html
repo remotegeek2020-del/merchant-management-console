@@ -467,8 +467,8 @@
               <select class="inp" id="p49_followup_workflow"><option value="">Choose a sub-account first…</option></select>
             </div>
 
-            <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;opacity:.5;pointer-events:none;user-select:none;" title="Coming soon">
-              <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_smsbot_enabled" onchange="p49ToggleSmsBot()" disabled> SMS follow-up bot (for lazy leads) <span style="background:#94a3b8;color:#fff;font-size:9px;font-weight:800;letter-spacing:.4px;padding:2px 7px;border-radius:99px;">COMING SOON</span></label>
+            <div id="p49SmsBotFeatureWrap" style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;opacity:.5;pointer-events:none;user-select:none;" title="Coming soon">
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_smsbot_enabled" onchange="p49ToggleSmsBot()" disabled> SMS follow-up bot (for lazy leads) <span id="p49SmsBotComingSoonBadge" style="background:#94a3b8;color:#fff;font-size:9px;font-weight:800;letter-spacing:.4px;padding:2px 7px;border-radius:99px;">COMING SOON</span></label>
               <div id="p49SmsBotWrap" style="display:none;margin-top:8px;">
                 <div class="muted" style="font-size:11px;margin-bottom:8px;">Texts the opener message(s) below when they haven't converted by the wait time above. If they reply, AI takes over the conversation — deciding whether to keep chatting or hand them the booking link — up to the reply cap, then it just sends the link and stops. Requires the "Customer Replied" webhook below to be wired up in HighLevel, or replies just sit unanswered.</div>
                 <label class="fld" style="margin-top:0;">Opener message(s) <span class="muted" style="font-weight:400;">(one per line — sent one at a time if they don't reply)</span></label>
@@ -2785,6 +2785,27 @@ function p49ToggleFollowup(){
 function p49ToggleSmsBot(){
   document.getElementById('p49SmsBotWrap').style.display = document.getElementById('p49_smsbot_enabled').checked ? 'block' : 'none';
 }
+// Master switch, set in Secret Dungeon > Automation. Defaults to locked
+// (coming soon) until we hear otherwise from the server.
+window._p49SmsBotFeatureOn = false;
+async function p49LoadSmsBotFeatureFlag(){
+  try {
+    const r = await fetch('/api/app-settings', {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({action:'get', key:'prime49_sms_bot_enabled'})
+    }).then(x=>x.json());
+    window._p49SmsBotFeatureOn = !!(r.success && r.value==='true');
+  } catch(e) { window._p49SmsBotFeatureOn = false; }
+  const wrap=document.getElementById('p49SmsBotFeatureWrap'), badge=document.getElementById('p49SmsBotComingSoonBadge'), cb=document.getElementById('p49_smsbot_enabled');
+  if(window._p49SmsBotFeatureOn){
+    wrap.style.opacity='1'; wrap.style.pointerEvents='auto'; wrap.style.userSelect='auto'; wrap.title='';
+    badge.style.display='none'; cb.disabled=false;
+  } else {
+    wrap.style.opacity='.5'; wrap.style.pointerEvents='none'; wrap.style.userSelect='none'; wrap.title='Coming soon';
+    badge.style.display='inline-block'; cb.disabled=true;
+  }
+}
+p49LoadSmsBotFeatureFlag();
 function p49RenderWebhookUrls(){
   const campId = editing && editing.id;
   const secret = editing && editing.prime49 && editing.prime49.webhook_secret;
