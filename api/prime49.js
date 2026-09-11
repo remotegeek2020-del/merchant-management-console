@@ -214,7 +214,8 @@ export default async function handler(req, res) {
             const cfg = await loadConfig(campaignId);
             if (!cfg || !cfg.enabled) return bad(res, 'This is not available.');
             return ok(res, { config: {
-                eligible_headline: cfg.eligible_headline, eligible_body: cfg.eligible_body, not_eligible_body: cfg.not_eligible_body,
+                eligible_headline: cfg.eligible_headline, eligible_body: cfg.eligible_body,
+                not_eligible_headline: cfg.not_eligible_headline, not_eligible_body: cfg.not_eligible_body,
                 already_enrolled_headline: cfg.already_enrolled_headline, already_enrolled_body: cfg.already_enrolled_body,
                 survey_fields: (cfg.survey_fields || []).map(f => ({ name: f.name, label: f.label, type: f.type, required: !!f.required, options: f.options || [] })),
                 qualified_headline: cfg.qualified_headline, qualified_body: cfg.qualified_body,
@@ -310,7 +311,7 @@ export default async function handler(req, res) {
             // BEFORE they book.
             let contactId = null, tagApplied = false, error = null;
             if (qualified && cfg.ghl_location_id) {
-                const ev = { rsvp_tag: cfg.survey_tag, workflow_id: cfg.survey_workflow_id, assigned_to: assignedRep ? assignedRep.ghl_user_id : undefined };
+                const ev = { rsvp_tag: cfg.survey_tag, assigned_to: assignedRep ? assignedRep.ghl_user_id : undefined };
                 const r = await applyRsvpTagWorkflow(cfg.ghl_location_id, { hl_contact_id: null }, name, email, phone, ev);
                 contactId = r.contactId || null; tagApplied = r.tagApplied; error = r.error;
                 if (contactId) {

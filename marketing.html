@@ -323,33 +323,40 @@
       <!-- ── PRIME49 ANNOUNCEMENT SETUP: two paths, evergreen brand campaign ── -->
       <div id="prime49Block" style="display:none;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:12px;background:#fafbfc;">
         <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:2px;">🏆 Prime49 setup</div>
-        <div class="muted" style="font-size:11px;margin-bottom:10px;">Two paths, both run INSIDE the popup: <b>I am a PPT Partner</b> — Partner ID → we consolidate every merchant across ALL of that person's Partner IDs → check each one's 30-day volume against your eligibility band. <b>I am interested in becoming a partner</b> — a short qualifying survey you define → pass/fail → book a call.</div>
-        <label class="fld" style="margin-top:0;">HighLevel sub-account</label>
-        <select class="inp" id="p49_location" onchange="onP49Location()"><option value="">— select —</option></select>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;"><input type="checkbox" id="p49_external_only"> Show only on external websites (Webflow, GoHighLevel, etc.) — hide from the internal portal</label>
+        <div class="muted" style="font-size:11px;margin-bottom:10px;">Three paths, all run INSIDE the popup: <b>Path A</b> — an existing partner checks Prime49 eligibility by Partner ID. <b>Path B</b> — a prospect applies to become a partner via a survey you build. <b>Path C</b> — a merchant sees a static support message. Click a path below to expand its settings.</div>
 
-        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
-          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path A — I am a PPT Partner</div>
-          <div class="row2">
-            <div><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="p49_min_volume" value="20000"></div>
-            <div><label class="fld" style="margin-top:0;">Max 30-day volume</label><input class="inp" type="number" id="p49_max_volume" value="30000"></div>
-          </div>
-          <div class="row2">
-            <div><label class="fld" style="margin-top:0;">Eligible tag <span class="muted" style="font-weight:400;">(applied in HighLevel)</span></label><input class="inp" id="p49_eligible_tag" placeholder="e.g. Prime49 Eligible"></div>
-            <div><label class="fld" style="margin-top:0;">Workflow <span class="muted" style="font-weight:400;">(optional)</span></label><select class="inp" id="p49_eligible_workflow"><option value="">— none —</option></select></div>
-          </div>
-          <label class="fld">Eligible headline</label>
-          <input class="inp" id="p49_eligible_headline" placeholder="You're eligible for Prime49!">
-          <label class="fld">Eligible message</label>
-          <textarea class="inp" id="p49_eligible_body" rows="2" placeholder="Great news — one or more of your merchants qualify. Book a call to get started."></textarea>
-          <label class="fld">Not-yet-eligible message</label>
-          <textarea class="inp" id="p49_not_eligible_body" rows="2" placeholder="None of your merchants are in the qualifying volume range just yet."></textarea>
-          <label class="fld">Already-enrolled headline <span class="muted" style="font-weight:400;">(shown when the Partner ID they typed is already in Prime49)</span></label>
-          <input class="inp" id="p49_already_enrolled_headline" placeholder="You're already part of Prime49!">
-          <label class="fld">Already-enrolled message</label>
-          <textarea class="inp" id="p49_already_enrolled_body" rows="2" placeholder="This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions."></textarea>
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
-            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:6px;">Next step when eligible</div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+          <div style="font-weight:800;font-size:10.5px;letter-spacing:.4px;color:var(--navy);margin-bottom:8px;">GENERAL</div>
+          <label class="fld" style="margin-top:0;">HighLevel sub-account</label>
+          <select class="inp" id="p49_location" onchange="onP49Location()"><option value="">— select —</option></select>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;"><input type="checkbox" id="p49_external_only"> Show only on external websites (Webflow, GoHighLevel, etc.) — hide from the internal portal</label>
+        </div>
+
+        <details open style="background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;">
+          <summary style="cursor:pointer;padding:10px 12px;font-weight:800;font-size:12px;color:var(--navy);">Path A — I am a PPT Partner</summary>
+          <div style="padding:0 12px 12px;">
+            <div class="row2">
+              <div><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="p49_min_volume" value="20000"></div>
+              <div><label class="fld" style="margin-top:0;">Max 30-day volume</label><input class="inp" type="number" id="p49_max_volume" value="30000"></div>
+            </div>
+            <div class="row2">
+              <div><label class="fld" style="margin-top:0;">Eligible tag <span class="muted" style="font-weight:400;">(applied in HighLevel)</span></label><input class="inp" id="p49_eligible_tag" placeholder="e.g. Prime49 Eligible"></div>
+              <div><label class="fld" style="margin-top:0;">Workflow <span class="muted" style="font-weight:400;">(optional)</span></label><select class="inp" id="p49_eligible_workflow"><option value="">— none —</option></select></div>
+            </div>
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:10px 0 6px;">Messages</div>
+            <label class="fld" style="margin-top:0;">Eligible headline</label>
+            <input class="inp" id="p49_eligible_headline" placeholder="You're eligible for Prime49!">
+            <label class="fld">Eligible message</label>
+            <textarea class="inp" id="p49_eligible_body" rows="2" placeholder="Great news — one or more of your merchants qualify. Book a call to get started."></textarea>
+            <label class="fld">Not-yet-eligible headline</label>
+            <input class="inp" id="p49_not_eligible_headline" placeholder="Not yet eligible">
+            <label class="fld">Not-yet-eligible message</label>
+            <textarea class="inp" id="p49_not_eligible_body" rows="2" placeholder="None of your merchants are in the qualifying volume range just yet."></textarea>
+            <label class="fld">Already-enrolled headline <span class="muted" style="font-weight:400;">(shown when the Partner ID they typed is already in Prime49)</span></label>
+            <input class="inp" id="p49_already_enrolled_headline" placeholder="You're already part of Prime49!">
+            <label class="fld">Already-enrolled message</label>
+            <textarea class="inp" id="p49_already_enrolled_body" rows="2" placeholder="This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions."></textarea>
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:10px 0 6px;">Next step when eligible</div>
             <div class="seg" style="margin-bottom:10px;">
               <button type="button" id="p49EligBookCalBtn" class="on" onclick="p49SetBookingMode('elig','calendar')">Calendar</button>
               <button type="button" id="p49EligBookFormBtn" onclick="p49SetBookingMode('elig','form')">Form</button>
@@ -363,50 +370,54 @@
               <select class="inp" id="p49_elig_form"><option value="">Choose a sub-account first…</option></select>
             </div>
           </div>
-        </div>
+        </details>
 
-        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
-          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path B — I am interested in becoming a partner</div>
-          <div class="muted" style="font-size:11px;margin-bottom:8px;">Build the survey. Any question can be turned into a qualifying question — dropdown/checkbox: pick which options count as a PASS; number: set a qualifying min/max range; text/textarea: list keywords that count as a PASS. Leave a question's qualifying settings blank to keep it informational only (no effect on pass/fail).</div>
-          <div id="p49SurveyList"></div>
-          <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddQuestion()">+ Add question</button>
+        <details style="background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;">
+          <summary style="cursor:pointer;padding:10px 12px;font-weight:800;font-size:12px;color:var(--navy);">Path B — I am interested in becoming a partner</summary>
+          <div style="padding:0 12px 12px;">
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:10px 0 6px;">Survey questions</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px;">Any question can be turned into a qualifying question — dropdown/checkbox: pick which options count as a PASS; number: set a qualifying min/max range; text/textarea: list keywords that count as a PASS. Leave a question's qualifying settings blank to keep it informational only (no effect on pass/fail).</div>
+            <div id="p49SurveyList"></div>
+            <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddQuestion()">+ Add question</button>
 
-          <div style="border:1px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
-            <div style="background:#f8fafc;padding:8px 12px;font-weight:800;font-size:11px;color:var(--navy);">HOW SHOULD PATH B APPLICATIONS BE QUALIFIED? <span class="muted" style="font-weight:400;">(pick one — this does not affect Path A, existing partners are never assessed)</span></div>
-            <div id="p49RuleWrap" style="padding:10px 12px;">
-              <div style="font-weight:700;font-size:11.5px;color:var(--navy);margin-bottom:6px;">Option 1 — Rule-based (default)</div>
-              <div class="row2">
-                <div><label class="fld" style="margin-top:0;">Qualify if</label><select class="inp" id="p49_qualify_mode"><option value="all">ALL pass-fail questions pass</option><option value="any">ANY pass-fail question passes</option></select></div>
-                <div><label class="fld" style="margin-top:0;">Tag on qualify <span class="muted" style="font-weight:400;">(optional)</span></label><input class="inp" id="p49_survey_tag" placeholder="e.g. Prospective Prime49"></div>
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Qualifying logic</div>
+            <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+              <div style="background:#f8fafc;padding:8px 12px;font-weight:800;font-size:11px;color:var(--navy);">HOW SHOULD PATH B APPLICATIONS BE QUALIFIED? <span class="muted" style="font-weight:400;">(pick one — this does not affect Path A, existing partners are never assessed)</span></div>
+              <div id="p49RuleWrap" style="padding:10px 12px;">
+                <div style="font-weight:700;font-size:11.5px;color:var(--navy);margin-bottom:6px;">Option 1 — Rule-based (default)</div>
+                <div class="row2">
+                  <div><label class="fld" style="margin-top:0;">Qualify if</label><select class="inp" id="p49_qualify_mode"><option value="all">ALL pass-fail questions pass</option><option value="any">ANY pass-fail question passes</option></select></div>
+                  <div><label class="fld" style="margin-top:0;">Tag on qualify <span class="muted" style="font-weight:400;">(optional)</span></label><input class="inp" id="p49_survey_tag" placeholder="e.g. Prospective Prime49"></div>
+                </div>
               </div>
-            </div>
-            <div style="border-top:1px solid var(--border);padding:10px 12px;">
-              <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_ai_enabled" onchange="p49ToggleAi()"> Option 2 — AI assessment (Gemini) instead of the rule above</label>
-              <div id="p49AiWrap" style="display:none;margin-top:8px;">
-                <div class="muted" style="font-size:11px;margin-bottom:8px;">Path B only. Gemini reads the applicant's answers against your criteria below, decides qualify/decline, and — when qualified — ranks the pool you configure best-fit first. Each rep's calendar is then checked for open slots in the next 2 weeks, in ranking order, and the first one who's actually available gets assigned. The HighLevel contact is created and assigned to that rep before the applicant ever books; if everyone ranked turns out to be fully booked, no rep is assigned and the campaign's default booking calendar/form is used instead.</div>
-                <label class="fld" style="margin-top:0;">Qualifying criteria <span class="muted" style="font-weight:400;">(plain English — what makes a good fit)</span></label>
-                <textarea class="inp" id="p49_ai_criteria" rows="3" placeholder="e.g. Must process at least $15,000/month and have been in business 1+ years. Prioritize applicants in retail or restaurants."></textarea>
-                <label class="fld">Eligible reps <span class="muted" style="font-weight:400;">(Gemini picks one of these when qualified)</span></label>
-                <div id="p49RepList"></div>
-                <div class="row2" style="margin-top:6px;">
-                  <select class="inp" id="p49_rep_picker"><option value="">Choose a sub-account first…</option></select>
-                  <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddRep()">+ Add rep</button>
+              <div style="border-top:1px solid var(--border);padding:10px 12px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_ai_enabled" onchange="p49ToggleAi()"> Option 2 — AI assessment (Gemini) instead of the rule above</label>
+                <div id="p49AiWrap" style="display:none;margin-top:8px;">
+                  <div class="muted" style="font-size:11px;margin-bottom:8px;">Path B only. Gemini reads the applicant's answers against your criteria below, decides qualify/decline, and — when qualified — ranks the pool you configure best-fit first. Each rep's calendar is then checked for open slots in the next 2 weeks, in ranking order, and the first one who's actually available gets assigned. The HighLevel contact is created and assigned to that rep before the applicant ever books; if everyone ranked turns out to be fully booked, no rep is assigned and the campaign's default booking calendar/form is used instead.</div>
+                  <label class="fld" style="margin-top:0;">Qualifying criteria <span class="muted" style="font-weight:400;">(plain English — what makes a good fit)</span></label>
+                  <textarea class="inp" id="p49_ai_criteria" rows="3" placeholder="e.g. Must process at least $15,000/month and have been in business 1+ years. Prioritize applicants in retail or restaurants."></textarea>
+                  <label class="fld">Eligible reps <span class="muted" style="font-weight:400;">(Gemini picks one of these when qualified)</span></label>
+                  <div id="p49RepList"></div>
+                  <div class="row2" style="margin-top:6px;">
+                    <select class="inp" id="p49_rep_picker"><option value="">Choose a sub-account first…</option></select>
+                    <button type="button" class="btn btn-neutral" style="padding:6px 12px;font-size:12px;" onclick="p49AddRep()">+ Add rep</button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <label class="fld">Qualified headline</label>
-          <input class="inp" id="p49_qualified_headline" placeholder="You're a great fit!">
-          <label class="fld">Qualified message</label>
-          <textarea class="inp" id="p49_qualified_body" rows="2" placeholder="Let's get you on a call."></textarea>
-          <label class="fld">Declined headline</label>
-          <input class="inp" id="p49_declined_headline" placeholder="Thanks for your interest">
-          <label class="fld">Declined message</label>
-          <textarea class="inp" id="p49_declined_body" rows="2" placeholder="Based on your answers, we don't think this is the right fit for a PayProTec partnership right now — but we'll keep your info on file in case that changes."></textarea>
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
-            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:2px;">Next step when qualified</div>
-            <div class="muted" style="font-size:10.5px;margin-bottom:6px;">If AI assessment above assigns a rep, that rep's own calendar is shown instead of this. This calendar/form is used when AI assessment is off, or on if no rep ends up assigned.</div>
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Outcome messages</div>
+            <label class="fld" style="margin-top:0;">Qualified headline</label>
+            <input class="inp" id="p49_qualified_headline" placeholder="You're a great fit!">
+            <label class="fld">Qualified message</label>
+            <textarea class="inp" id="p49_qualified_body" rows="2" placeholder="Let's get you on a call."></textarea>
+            <label class="fld">Declined headline</label>
+            <input class="inp" id="p49_declined_headline" placeholder="Thanks for your interest">
+            <label class="fld">Declined message</label>
+            <textarea class="inp" id="p49_declined_body" rows="2" placeholder="Based on your answers, we don't think this is the right fit for a PayProTec partnership right now — but we'll keep your info on file in case that changes."></textarea>
+
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Booking</div>
+            <div class="muted" style="font-size:10.5px;margin-bottom:6px;">If AI assessment above assigns a rep, that rep's own calendar is shown instead of this. This calendar/form is used when AI assessment is off, or if no rep ends up assigned.</div>
             <div class="seg" style="margin-bottom:10px;">
               <button type="button" id="p49SurveyBookCalBtn" class="on" onclick="p49SetBookingMode('survey','calendar')">Calendar</button>
               <button type="button" id="p49SurveyBookFormBtn" onclick="p49SetBookingMode('survey','form')">Form</button>
@@ -419,10 +430,8 @@
               <label class="fld" style="margin-top:0;">Form</label>
               <select class="inp" id="p49_survey_form"><option value="">Choose a sub-account first…</option></select>
             </div>
-          </div>
 
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;" id="p49WebhookSection">
-            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:2px;">Real-time conversion tracking</div>
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;" id="p49WebhookSection">Conversion tracking</div>
             <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Most reliable way to know they actually booked/filled the form — a HighLevel Workflow calls these URLs with the contact id, matched against the contact we already created. Set both up as separate HighLevel Workflows (Trigger → Webhook action). These URLs are ready to paste in as-is — save the campaign once first if it's brand new.</div>
             <div id="p49WebhookNoSaveNote" class="muted" style="font-size:10.5px;">Save this campaign once to generate its webhook URLs.</div>
             <div id="p49WebhookUrlsWrap" style="display:none;">
@@ -433,9 +442,8 @@
               <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:11px;margin-top:6px;" onclick="p49RegenerateSecret()">🔄 Regenerate secret</button>
               <span class="muted" style="font-size:10px;">— only if this leaked; old webhook URLs stop working immediately.</span>
             </div>
-          </div>
 
-          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Follow-up</div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_followup_enabled" onchange="p49ToggleFollowup()"> Follow-up if they don't convert</label>
             <div id="p49FollowupWrap" style="display:none;margin-top:8px;">
               <div class="muted" style="font-size:11px;margin-bottom:8px;">If a qualified applicant hasn't booked a call or filled the form within this window, apply a tag and/or enroll them in a workflow — a nudge to follow up manually or via automation. Checked every 5 minutes.</div>
@@ -447,16 +455,18 @@
               <select class="inp" id="p49_followup_workflow"><option value="">Choose a sub-account first…</option></select>
             </div>
           </div>
-        </div>
+        </details>
 
-        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
-          <div style="font-weight:800;font-size:12px;color:var(--navy);margin-bottom:8px;">Path C — I am a merchant</div>
-          <div class="muted" style="font-size:11px;margin-bottom:8px;">Purely informational — no lookup, no survey. Clicking this path just shows the message below.</div>
-          <label class="fld" style="margin-top:0;">Headline</label>
-          <input class="inp" id="p49_merchant_headline" placeholder="I am a merchant">
-          <label class="fld">Message</label>
-          <textarea class="inp" id="p49_merchant_body" rows="2" placeholder="Merchant Support line: 800-226-2273 (extension 5382, option 1)"></textarea>
-        </div>
+        <details style="background:#fff;border:1px solid var(--border);border-radius:8px;">
+          <summary style="cursor:pointer;padding:10px 12px;font-weight:800;font-size:12px;color:var(--navy);">Path C — I am a merchant</summary>
+          <div style="padding:0 12px 12px;">
+            <div class="muted" style="font-size:11px;margin-bottom:8px;">Purely informational — no lookup, no survey. Clicking this path just shows the message below.</div>
+            <label class="fld" style="margin-top:0;">Headline</label>
+            <input class="inp" id="p49_merchant_headline" placeholder="I am a merchant">
+            <label class="fld">Message</label>
+            <textarea class="inp" id="p49_merchant_body" rows="2" placeholder="Merchant Support line: 800-226-2273 (extension 5382, option 1)"></textarea>
+          </div>
+        </details>
       </div>
 
       <!-- Interactive config — driven by the campaign TYPE chosen up front. -->
@@ -1488,7 +1498,7 @@ function openEditor(type){
   p49SetBookingMode('elig','calendar'); p49SetBookingMode('survey','calendar');
   if(_isP49) populateP49Locations().then(()=>onP49Location());
   document.getElementById('p49_eligible_tag').value=''; document.getElementById('p49_min_volume').value='20000'; document.getElementById('p49_max_volume').value='30000';
-  document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_body').value='';
+  document.getElementById('p49_eligible_headline').value=''; document.getElementById('p49_eligible_body').value=''; document.getElementById('p49_not_eligible_headline').value=''; document.getElementById('p49_not_eligible_body').value='';
   document.getElementById('p49_already_enrolled_headline').value='You\'re already part of Prime49!'; document.getElementById('p49_already_enrolled_body').value='This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions.';
   document.getElementById('p49_survey_tag').value=''; document.getElementById('p49_qualify_mode').value='all';
   document.getElementById('p49_qualified_headline').value=''; document.getElementById('p49_qualified_body').value='';
@@ -1601,6 +1611,7 @@ async function editCampaign(id){
       document.getElementById('p49_max_volume').value=p49.max_volume!=null?p49.max_volume:30000;
       document.getElementById('p49_eligible_headline').value=p49.eligible_headline||'';
       document.getElementById('p49_eligible_body').value=p49.eligible_body||'';
+      document.getElementById('p49_not_eligible_headline').value=p49.not_eligible_headline||'';
       document.getElementById('p49_not_eligible_body').value=p49.not_eligible_body||'';
       document.getElementById('p49_already_enrolled_headline').value=p49.already_enrolled_headline||'You\'re already part of Prime49!';
       document.getElementById('p49_already_enrolled_body').value=p49.already_enrolled_body||'This Partner ID is already enrolled in Prime49 — no action needed. Reach out to your rep if you have questions.';
@@ -1964,6 +1975,7 @@ async function saveCampaign(){
       eligible_workflow_id: document.getElementById('p49_eligible_workflow').value||null,
       eligible_headline: document.getElementById('p49_eligible_headline').value.trim()||null,
       eligible_body: document.getElementById('p49_eligible_body').value.trim()||null,
+      not_eligible_headline: document.getElementById('p49_not_eligible_headline').value.trim()||null,
       not_eligible_body: document.getElementById('p49_not_eligible_body').value.trim()||null,
       already_enrolled_headline: document.getElementById('p49_already_enrolled_headline').value.trim()||null,
       already_enrolled_body: document.getElementById('p49_already_enrolled_body').value.trim()||null,

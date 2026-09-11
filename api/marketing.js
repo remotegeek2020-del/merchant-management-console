@@ -817,6 +817,7 @@ export default async function handler(req, res) {
                         max_volume: Number.isFinite(+pb.max_volume) ? +pb.max_volume : 30000,
                         eligible_headline: str(pb.eligible_headline, 200) || null,
                         eligible_body: str(pb.eligible_body, 2000) || null,
+                        not_eligible_headline: str(pb.not_eligible_headline, 200) || null,
                         not_eligible_body: str(pb.not_eligible_body, 2000) || null,
                         already_enrolled_headline: str(pb.already_enrolled_headline, 200) || null,
                         already_enrolled_body: str(pb.already_enrolled_body, 2000) || null,
@@ -834,7 +835,6 @@ export default async function handler(req, res) {
                             notes: str(r.notes, 1000) || '', calendar_id: str(r.calendar_id, 100) || ''
                         })).filter(r => r.ghl_user_id) : [],
                         survey_tag: pb.survey_tag ? String(pb.survey_tag).trim() : null,
-                        survey_workflow_id: pb.survey_workflow_id ? String(pb.survey_workflow_id).trim() : null,
                         qualified_headline: str(pb.qualified_headline, 200) || null,
                         qualified_body: str(pb.qualified_body, 2000) || null,
                         declined_headline: str(pb.declined_headline, 200) || null,
