@@ -851,6 +851,11 @@ export default async function handler(req, res) {
                         survey_followup_tag: pb.survey_followup_tag ? String(pb.survey_followup_tag).trim() : null,
                         survey_followup_workflow_id: pb.survey_followup_workflow_id ? String(pb.survey_followup_workflow_id).trim() : null,
                         survey_followup_workflow_name: pb.survey_followup_workflow_name ? String(pb.survey_followup_workflow_name).slice(0, 200) : null,
+                        sms_bot_enabled: !!pb.sms_bot_enabled,
+                        sms_bot_opener_messages: Array.isArray(pb.sms_bot_opener_messages) ? pb.sms_bot_opener_messages.map(m => str(m, 480)).filter(Boolean).slice(0, 10) : [],
+                        sms_bot_opener_gap_minutes: Number.isFinite(+pb.sms_bot_opener_gap_minutes) && +pb.sms_bot_opener_gap_minutes > 0 ? +pb.sms_bot_opener_gap_minutes : 60,
+                        sms_bot_max_ai_replies: Number.isFinite(+pb.sms_bot_max_ai_replies) && +pb.sms_bot_max_ai_replies > 0 ? +pb.sms_bot_max_ai_replies : 6,
+                        sms_bot_persona: str(pb.sms_bot_persona, 4000) || null,
                         enabled: !!row.is_active,
                         updated_at: new Date().toISOString()
                     };

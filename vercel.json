@@ -24,7 +24,8 @@
     "api/cron-award-certificates.js": { "maxDuration": 60 },
     "api/partner-hl-sync.js": { "maxDuration": 60 },
     "api/cron-hl-sync.js": { "maxDuration": 60 },
-    "api/cron-prime49-followup.js": { "maxDuration": 60 }
+    "api/cron-prime49-followup.js": { "maxDuration": 60 },
+    "api/prime49-sms-bot.js": { "maxDuration": 30 }
   },
   "crons": [
     {

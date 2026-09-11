@@ -505,6 +505,41 @@ export async function ghlSetContactCustomFieldsByName(locationId, contactId, nam
     } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// Send an outbound SMS to a contact (the Prime49 SMS bot's opener/reply
+// messages). Uses the Conversations API — HighLevel finds/creates the
+// contact's SMS conversation automatically.
+export async function ghlSendSms(locationId, contactId, message) {
+    if (!contactId || !message) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    try {
+        const r = await fetch(`${GHL_BASE}/conversations/messages`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ type: 'SMS', contactId, message })
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// Is this contact opted out of SMS (DND)? Checked before every bot send so
+// the follow-up bot never texts someone who's opted out.
+export async function ghlContactSmsBlocked(locationId, contactId) {
+    if (!contactId) return true;
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return true;
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}`, { headers: ghlHeaders(lt) });
+        if (!r.ok) return true;
+        const j = await r.json().catch(() => null);
+        const c = j?.contact || j;
+        const dnd = c?.dnd === true;
+        const dndSettingsSms = c?.dndSettings?.SMS?.status === 'active';
+        return dnd || dndSettingsSms;
+    } catch { return true; }
+}
+
 export async function ghlGetContactAddress(contactId) {
     const key = await ghlKeys();
     if (!key || !contactId) return null;

@@ -466,6 +466,30 @@
               <label class="fld">Workflow to enroll <span class="muted" style="font-weight:400;">(optional)</span></label>
               <select class="inp" id="p49_followup_workflow"><option value="">Choose a sub-account first…</option></select>
             </div>
+
+            <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_smsbot_enabled" onchange="p49ToggleSmsBot()"> SMS follow-up bot (for lazy leads)</label>
+              <div id="p49SmsBotWrap" style="display:none;margin-top:8px;">
+                <div class="muted" style="font-size:11px;margin-bottom:8px;">Texts the opener message(s) below when they haven't converted by the wait time above. If they reply, AI takes over the conversation — deciding whether to keep chatting or hand them the booking link — up to the reply cap, then it just sends the link and stops. Requires the "Customer Replied" webhook below to be wired up in HighLevel, or replies just sit unanswered.</div>
+                <label class="fld" style="margin-top:0;">Opener message(s) <span class="muted" style="font-weight:400;">(one per line — sent one at a time if they don't reply)</span></label>
+                <textarea class="inp" id="p49_smsbot_openers" rows="3" placeholder="Hey {{first_name}}! Still interested in partnering with PayProTec? Let us know and we'll get you set up.&#10;Just checking back in — happy to answer any questions before you book your call."></textarea>
+                <div class="row2">
+                  <div><label class="fld" style="margin-top:0;">Gap between openers <span class="muted" style="font-weight:400;">(minutes)</span></label><input class="inp" type="number" id="p49_smsbot_gap_minutes" value="60"></div>
+                  <div><label class="fld" style="margin-top:0;">Max AI replies before handing off the link</label><input class="inp" type="number" id="p49_smsbot_max_replies" value="6"></div>
+                </div>
+                <label class="fld">AI persona / goal <span class="muted" style="font-weight:400;">(plain English — how it should sound and what it's trying to do)</span></label>
+                <textarea class="inp" id="p49_smsbot_persona" rows="3" placeholder="Be brief, casual, and friendly, like a real person texting. Your goal is to see if they're still interested and get them to book their intro call. Don't be pushy — if they say no, let it go."></textarea>
+                <div style="font-weight:700;font-size:11px;color:var(--navy);margin:10px 0 2px;">Inbound reply webhook</div>
+                <div class="muted" style="font-size:10.5px;margin-bottom:6px;">In HighLevel, create a Workflow: Trigger = "Customer Replied" → Webhook action → this URL. Shares the same secret as conversion tracking above.</div>
+                <div id="p49SmsBotWebhookNoSaveNote" class="muted" style="font-size:10.5px;">Save this campaign once to generate this webhook URL.</div>
+                <div id="p49SmsBotWebhookUrlsWrap" style="display:none;">
+                  <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+                    <span id="p49SmsBotWebhookUrl"></span>
+                    <button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49SmsBotWebhookUrl')">Copy</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -1520,7 +1544,10 @@ function openEditor(type){
   document.getElementById('p49_ai_enabled').checked=false; document.getElementById('p49_ai_criteria').value='';
   window._p49Reps=[]; p49ToggleAi(); p49RenderReps();
   document.getElementById('p49_followup_enabled').checked=false; document.getElementById('p49_followup_minutes').value='10';
-  document.getElementById('p49_followup_tag').value=''; p49ToggleFollowup(); p49RenderWebhookUrls();
+  document.getElementById('p49_followup_tag').value=''; p49ToggleFollowup();
+  document.getElementById('p49_smsbot_enabled').checked=false; document.getElementById('p49_smsbot_openers').value='';
+  document.getElementById('p49_smsbot_gap_minutes').value='60'; document.getElementById('p49_smsbot_max_replies').value='6';
+  document.getElementById('p49_smsbot_persona').value=''; p49ToggleSmsBot(); p49RenderWebhookUrls();
   // RSVP/Prime49 kind: the CTA IS the flow itself (no manual link, no gate, no separate enable toggle).
   var _isFlowKind = _isRSVP || _isP49;
   document.getElementById('ctaUrlWrap').style.display = _isFlowKind ? 'none' : '';
@@ -1646,7 +1673,13 @@ async function editCampaign(id){
       document.getElementById('p49_followup_enabled').checked=!!p49.survey_followup_enabled;
       document.getElementById('p49_followup_minutes').value=p49.survey_followup_minutes!=null?p49.survey_followup_minutes:10;
       document.getElementById('p49_followup_tag').value=p49.survey_followup_tag||'';
-      p49ToggleFollowup(); p49RenderWebhookUrls();
+      p49ToggleFollowup();
+      document.getElementById('p49_smsbot_enabled').checked=!!p49.sms_bot_enabled;
+      document.getElementById('p49_smsbot_openers').value=(Array.isArray(p49.sms_bot_opener_messages)?p49.sms_bot_opener_messages:[]).join('\n');
+      document.getElementById('p49_smsbot_gap_minutes').value=p49.sms_bot_opener_gap_minutes!=null?p49.sms_bot_opener_gap_minutes:60;
+      document.getElementById('p49_smsbot_max_replies').value=p49.sms_bot_max_ai_replies!=null?p49.sms_bot_max_ai_replies:6;
+      document.getElementById('p49_smsbot_persona').value=p49.sms_bot_persona||'';
+      p49ToggleSmsBot(); p49RenderWebhookUrls();
       populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||'', p49.survey_followup_workflow_id||'').then(function(){ p49RenderReps(); p49RefreshOptionRepUI(); }); else { p49RenderReps(); p49RefreshOptionRepUI(); } });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
@@ -2007,6 +2040,11 @@ async function saveCampaign(){
       survey_followup_tag: document.getElementById('p49_followup_tag').value.trim()||null,
       survey_followup_workflow_id: document.getElementById('p49_followup_workflow').value||null,
       survey_followup_workflow_name: (document.getElementById('p49_followup_workflow').options[document.getElementById('p49_followup_workflow').selectedIndex]||{}).text||null,
+      sms_bot_enabled: document.getElementById('p49_smsbot_enabled').checked,
+      sms_bot_opener_messages: document.getElementById('p49_smsbot_openers').value.split('\n').map(function(s){return s.trim();}).filter(Boolean),
+      sms_bot_opener_gap_minutes: parseInt(document.getElementById('p49_smsbot_gap_minutes').value, 10) || 60,
+      sms_bot_max_ai_replies: parseInt(document.getElementById('p49_smsbot_max_replies').value, 10) || 6,
+      sms_bot_persona: document.getElementById('p49_smsbot_persona').value.trim()||null,
       qualified_headline: document.getElementById('p49_qualified_headline').value.trim()||null,
       qualified_body: document.getElementById('p49_qualified_body').value.trim()||null,
       declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
@@ -2744,6 +2782,9 @@ function p49ToggleAi(){
 function p49ToggleFollowup(){
   document.getElementById('p49FollowupWrap').style.display = document.getElementById('p49_followup_enabled').checked ? 'block' : 'none';
 }
+function p49ToggleSmsBot(){
+  document.getElementById('p49SmsBotWrap').style.display = document.getElementById('p49_smsbot_enabled').checked ? 'block' : 'none';
+}
 function p49RenderWebhookUrls(){
   const campId = editing && editing.id;
   const secret = editing && editing.prime49 && editing.prime49.webhook_secret;
@@ -2755,6 +2796,10 @@ function p49RenderWebhookUrls(){
     document.getElementById('p49WebhookCalUrl_'+pathKey).textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=calendar&path='+pathKey;
     document.getElementById('p49WebhookFormUrl_'+pathKey).textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=form&path='+pathKey;
   });
+  const sbNoSave=document.getElementById('p49SmsBotWebhookNoSaveNote'), sbWrap=document.getElementById('p49SmsBotWebhookUrlsWrap');
+  if(!campId || !secret){ sbNoSave.style.display='block'; sbWrap.style.display='none'; return; }
+  sbNoSave.style.display='none'; sbWrap.style.display='block';
+  document.getElementById('p49SmsBotWebhookUrl').textContent = base+'/api/prime49-sms-bot?campaign_id='+campId+'&secret='+secret;
 }
 function p49CopyWebhookUrl(elId){
   const text=(document.getElementById(elId)||{}).textContent||'';

@@ -55,6 +55,8 @@ export default async function handler(req, res) {
             await supabase.from('prime49_submissions').update({
                 converted: true, converted_via: via, converted_at: new Date().toISOString()
             }).eq('id', sub.id);
+            // They booked — stop the SMS bot from continuing to text them.
+            await supabase.from('prime49_sms_threads').update({ status: 'converted', next_opener_at: null }).eq('submission_id', sub.id).in('status', ['opening', 'active', 'booking_offered']);
             return res.status(200).json({ success: true, matched: sub.id });
         }
         return res.status(200).json({ success: true, matched: null });
