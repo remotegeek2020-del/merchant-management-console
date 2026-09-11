@@ -369,6 +369,18 @@
               <label class="fld" style="margin-top:0;">Form</label>
               <select class="inp" id="p49_elig_form"><option value="">Choose a sub-account first…</option></select>
             </div>
+
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Conversion tracking (Path A — existing partner)</div>
+            <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Separate from Path B's — a HighLevel Workflow calls these URLs with the contact id when this path's calendar/form is booked/filled. Set up as separate HighLevel Workflows on Path A's own calendar/form (Trigger → Webhook action). These URLs are ready to paste in as-is — save the campaign once first if it's brand new.</div>
+            <div id="p49WebhookNoSaveNote_existing" class="muted" style="font-size:10.5px;">Save this campaign once to generate its webhook URLs.</div>
+            <div id="p49WebhookUrlsWrap_existing" style="display:none;">
+              <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">
+                <div style="margin-bottom:6px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Appointment Booked</b> workflow → Webhook URL:<br><span id="p49WebhookCalUrl_existing"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookCalUrl_existing')">Copy</button></div>
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Form Submitted</b> workflow → Webhook URL:<br><span id="p49WebhookFormUrl_existing"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookFormUrl_existing')">Copy</button></div>
+              </div>
+              <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:11px;margin-top:6px;" onclick="p49RegenerateSecret()">🔄 Regenerate secret</button>
+              <span class="muted" style="font-size:10px;">— shared with Path B above; regenerating updates both, and old webhook URLs stop working immediately.</span>
+            </div>
           </div>
         </details>
 
@@ -431,16 +443,16 @@
               <select class="inp" id="p49_survey_form"><option value="">Choose a sub-account first…</option></select>
             </div>
 
-            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;" id="p49WebhookSection">Conversion tracking</div>
-            <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Most reliable way to know they actually booked/filled the form — a HighLevel Workflow calls these URLs with the contact id, matched against the contact we already created. Set both up as separate HighLevel Workflows (Trigger → Webhook action). These URLs are ready to paste in as-is — save the campaign once first if it's brand new.</div>
-            <div id="p49WebhookNoSaveNote" class="muted" style="font-size:10.5px;">Save this campaign once to generate its webhook URLs.</div>
-            <div id="p49WebhookUrlsWrap" style="display:none;">
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Conversion tracking (Path B — prospective)</div>
+            <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Most reliable way to know they actually booked/filled the form — a HighLevel Workflow calls these URLs with the contact id, matched against the contact we already created. Separate from Path A's — set both up as separate HighLevel Workflows (Trigger → Webhook action). These URLs are ready to paste in as-is — save the campaign once first if it's brand new.</div>
+            <div id="p49WebhookNoSaveNote_prospective" class="muted" style="font-size:10.5px;">Save this campaign once to generate its webhook URLs.</div>
+            <div id="p49WebhookUrlsWrap_prospective" style="display:none;">
               <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">
-                <div style="margin-bottom:6px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Appointment Booked</b> workflow → Webhook URL:<br><span id="p49WebhookCalUrl"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookCalUrl')">Copy</button></div>
-                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Form Submitted</b> workflow → Webhook URL:<br><span id="p49WebhookFormUrl"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookFormUrl')">Copy</button></div>
+                <div style="margin-bottom:6px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Appointment Booked</b> workflow → Webhook URL:<br><span id="p49WebhookCalUrl_prospective"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookCalUrl_prospective')">Copy</button></div>
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><b>Form Submitted</b> workflow → Webhook URL:<br><span id="p49WebhookFormUrl_prospective"></span></div><button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:10px;flex:none;" onclick="p49CopyWebhookUrl('p49WebhookFormUrl_prospective')">Copy</button></div>
               </div>
               <button type="button" class="btn btn-neutral" style="padding:5px 10px;font-size:11px;margin-top:6px;" onclick="p49RegenerateSecret()">🔄 Regenerate secret</button>
-              <span class="muted" style="font-size:10px;">— only if this leaked; old webhook URLs stop working immediately.</span>
+              <span class="muted" style="font-size:10px;">— shared with Path A below; regenerating updates both, and old webhook URLs stop working immediately.</span>
             </div>
 
             <div style="font-weight:700;font-size:11px;color:var(--navy);margin:14px 0 6px;">Follow-up</div>
@@ -2733,14 +2745,16 @@ function p49ToggleFollowup(){
   document.getElementById('p49FollowupWrap').style.display = document.getElementById('p49_followup_enabled').checked ? 'block' : 'none';
 }
 function p49RenderWebhookUrls(){
-  const noSave=document.getElementById('p49WebhookNoSaveNote'), wrap=document.getElementById('p49WebhookUrlsWrap');
   const campId = editing && editing.id;
   const secret = editing && editing.prime49 && editing.prime49.webhook_secret;
-  if(!campId || !secret){ noSave.style.display='block'; wrap.style.display='none'; return; }
-  noSave.style.display='none'; wrap.style.display='block';
   const base = window.location.origin;
-  document.getElementById('p49WebhookCalUrl').textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=calendar';
-  document.getElementById('p49WebhookFormUrl').textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=form';
+  ['existing','prospective'].forEach(function(pathKey){
+    const noSave=document.getElementById('p49WebhookNoSaveNote_'+pathKey), wrap=document.getElementById('p49WebhookUrlsWrap_'+pathKey);
+    if(!campId || !secret){ noSave.style.display='block'; wrap.style.display='none'; return; }
+    noSave.style.display='none'; wrap.style.display='block';
+    document.getElementById('p49WebhookCalUrl_'+pathKey).textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=calendar&path='+pathKey;
+    document.getElementById('p49WebhookFormUrl_'+pathKey).textContent = base+'/api/prime49-webhook?campaign_id='+campId+'&secret='+secret+'&via=form&path='+pathKey;
+  });
 }
 function p49CopyWebhookUrl(elId){
   const text=(document.getElementById(elId)||{}).textContent||'';
