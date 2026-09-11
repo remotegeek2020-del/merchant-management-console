@@ -28,6 +28,18 @@ function extractMessageText(body) {
 function extractContactId(body) {
     return body.contact_id || body.contactId || (body.contact && body.contact.id) || '';
 }
+// HighLevel's "Customer Replied" trigger fires for every channel (SMS,
+// email, Facebook, Instagram, WhatsApp, GMB, etc.), not just SMS — staff
+// should restrict the trigger itself to SMS, but this is a safety net in
+// case that filter is missed: reject anything that isn't clearly an SMS
+// (only rejects when the payload explicitly says otherwise; if HighLevel's
+// payload omits a type field altogether, this doesn't have grounds to
+// block it, so the trigger-side filter is still the real fix).
+function isNonSmsChannel(body) {
+    const t = String(body.message?.type || body.messageType || body.type || body.channel || '').toUpperCase();
+    if (!t) return false;
+    return !t.includes('SMS') && !t.includes('TEXT') && !/^\d+$/.test(t);
+}
 
 async function bookingLinkFor(cfg, submissionId) {
     let calendarId = cfg.survey_calendar_id, formId = cfg.survey_form_id, mode = cfg.survey_booking_mode;
@@ -94,6 +106,7 @@ export default async function handler(req, res) {
         const contactId = extractContactId(body);
         const messageText = String(extractMessageText(body) || '').trim();
         if (!contactId || !messageText) return res.status(200).json({ success: false, message: 'Missing contact id or message text.' });
+        if (isNonSmsChannel(body)) return res.status(200).json({ success: true, ignored: 'non-SMS channel' });
 
         const { data: thread } = await supabase.from('prime49_sms_threads')
             .select('*').eq('campaign_id', campaignId).eq('hl_contact_id', contactId)
