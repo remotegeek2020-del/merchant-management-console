@@ -23,9 +23,14 @@
     "api/ghl-documents.js": { "maxDuration": 30 },
     "api/cron-award-certificates.js": { "maxDuration": 60 },
     "api/partner-hl-sync.js": { "maxDuration": 60 },
-    "api/cron-hl-sync.js": { "maxDuration": 60 }
+    "api/cron-hl-sync.js": { "maxDuration": 60 },
+    "api/cron-prime49-followup.js": { "maxDuration": 60 }
   },
   "crons": [
+    {
+      "path": "/api/cron-prime49-followup",
+      "schedule": "*/5 * * * *"
+    },
     {
       "path": "/api/cron-award-certificates",
       "schedule": "0 6 * * *"

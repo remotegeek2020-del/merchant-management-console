@@ -420,6 +420,29 @@
               <select class="inp" id="p49_survey_form"><option value="">Choose a sub-account first…</option></select>
             </div>
           </div>
+
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+            <div style="font-weight:700;font-size:11px;color:var(--navy);margin-bottom:2px;">Real-time conversion tracking</div>
+            <div class="muted" style="font-size:10.5px;margin-bottom:8px;">Most reliable way to know they actually booked/filled the form — a HighLevel Workflow calls these URLs with the contact id, matched against the contact we already created. Set both up as separate HighLevel Workflows (Trigger → Webhook action).</div>
+            <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;font-family:monospace;word-break:break-all;">
+              <div style="margin-bottom:6px;"><b>Appointment Booked</b> workflow → Webhook URL:<br><span id="p49WebhookCalUrl"></span></div>
+              <div><b>Form Submitted</b> workflow → Webhook URL:<br><span id="p49WebhookFormUrl"></span></div>
+            </div>
+            <div class="muted" style="font-size:10px;margin-top:6px;">Replace &lt;SECRET&gt; with the value of the <code>PRIME49_WEBHOOK_SECRET</code> environment variable (set once in Vercel).</div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy);"><input type="checkbox" id="p49_followup_enabled" onchange="p49ToggleFollowup()"> Follow-up if they don't convert</label>
+            <div id="p49FollowupWrap" style="display:none;margin-top:8px;">
+              <div class="muted" style="font-size:11px;margin-bottom:8px;">If a qualified applicant hasn't booked a call or filled the form within this window, apply a tag and/or enroll them in a workflow — a nudge to follow up manually or via automation. Checked every 5 minutes.</div>
+              <label class="fld" style="margin-top:0;">Wait <span class="muted" style="font-weight:400;">(minutes)</span></label>
+              <input class="inp" type="number" id="p49_followup_minutes" value="10" style="max-width:120px;">
+              <label class="fld">Tag to apply <span class="muted" style="font-weight:400;">(optional)</span></label>
+              <input class="inp" id="p49_followup_tag" placeholder="e.g. Prime49 No-Show Follow-Up">
+              <label class="fld">Workflow to enroll <span class="muted" style="font-weight:400;">(optional)</span></label>
+              <select class="inp" id="p49_followup_workflow"><option value="">Choose a sub-account first…</option></select>
+            </div>
+          </div>
         </div>
 
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
@@ -1470,6 +1493,8 @@ function openEditor(type){
   document.getElementById('p49SurveyList').innerHTML='';
   document.getElementById('p49_ai_enabled').checked=false; document.getElementById('p49_ai_criteria').value='';
   window._p49Reps=[]; p49ToggleAi(); p49RenderReps();
+  document.getElementById('p49_followup_enabled').checked=false; document.getElementById('p49_followup_minutes').value='10';
+  document.getElementById('p49_followup_tag').value=''; p49ToggleFollowup(); p49RenderWebhookUrls();
   // RSVP/Prime49 kind: the CTA IS the flow itself (no manual link, no gate, no separate enable toggle).
   var _isFlowKind = _isRSVP || _isP49;
   document.getElementById('ctaUrlWrap').style.display = _isFlowKind ? 'none' : '';
@@ -1591,7 +1616,11 @@ async function editCampaign(id){
       document.getElementById('p49_ai_enabled').checked=!!p49.survey_ai_enabled;
       document.getElementById('p49_ai_criteria').value=p49.survey_ai_criteria||'';
       p49ToggleAi();
-      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||'').then(function(){ p49RenderReps(); p49RefreshOptionRepUI(); }); else { p49RenderReps(); p49RefreshOptionRepUI(); } });
+      document.getElementById('p49_followup_enabled').checked=!!p49.survey_followup_enabled;
+      document.getElementById('p49_followup_minutes').value=p49.survey_followup_minutes!=null?p49.survey_followup_minutes:10;
+      document.getElementById('p49_followup_tag').value=p49.survey_followup_tag||'';
+      p49ToggleFollowup(); p49RenderWebhookUrls();
+      populateP49Locations(p49.ghl_location_id||'').then(function(){ if(p49.ghl_location_id) return onP49Location(p49.eligible_workflow_id||'', p49.eligible_calendar_id||'', p49.eligible_form_id||'', p49.survey_calendar_id||'', p49.survey_form_id||'', p49.survey_followup_workflow_id||'').then(function(){ p49RenderReps(); p49RefreshOptionRepUI(); }); else { p49RenderReps(); p49RefreshOptionRepUI(); } });
     }
     document.getElementById('eventModeBlock').style.display=isYT?'block':'none';
     document.getElementById('gateExpiresRow').style.display=isYT?'none':'';
@@ -1945,6 +1974,11 @@ async function saveCampaign(){
       survey_ai_enabled: document.getElementById('p49_ai_enabled').checked,
       survey_ai_criteria: document.getElementById('p49_ai_criteria').value.trim()||null,
       survey_reps: p49CollectReps(),
+      survey_followup_enabled: document.getElementById('p49_followup_enabled').checked,
+      survey_followup_minutes: parseInt(document.getElementById('p49_followup_minutes').value, 10) || 10,
+      survey_followup_tag: document.getElementById('p49_followup_tag').value.trim()||null,
+      survey_followup_workflow_id: document.getElementById('p49_followup_workflow').value||null,
+      survey_followup_workflow_name: (document.getElementById('p49_followup_workflow').options[document.getElementById('p49_followup_workflow').selectedIndex]||{}).text||null,
       qualified_headline: document.getElementById('p49_qualified_headline').value.trim()||null,
       qualified_body: document.getElementById('p49_qualified_body').value.trim()||null,
       declined_headline: document.getElementById('p49_declined_headline').value.trim()||null,
@@ -2630,21 +2664,25 @@ function p49FillSelect(sel, items, preId, emptyLabel, noneFoundLabel){
   if(!items.length && noneFoundLabel) sel.innerHTML='<option value="">'+esc(noneFoundLabel)+'</option>';
   if(preId){ if(!Array.from(sel.options).some(o=>o.value===preId)){ const o=document.createElement('option'); o.value=preId; o.textContent=preId; sel.appendChild(o);} sel.value=preId; }
 }
-async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalId, preSurveyFormId){
+async function onP49Location(preWfId, preEligCalId, preEligFormId, preSurveyCalId, preSurveyFormId, preFollowupWfId){
   const loc=document.getElementById('p49_location').value;
   const wSel=document.getElementById('p49_eligible_workflow');
+  const fwSel=document.getElementById('p49_followup_workflow');
   const sels=['p49_elig_calendar','p49_elig_form','p49_survey_calendar','p49_survey_form'].map(id=>document.getElementById(id));
   if(!loc){
     wSel.innerHTML='<option value="">— none —</option>';
+    fwSel.innerHTML='<option value="">Choose a sub-account first…</option>';
     sels.forEach(s=>s.innerHTML='<option value="">Choose a sub-account first…</option>');
     await p49LoadReps();
     return;
   }
-  wSel.innerHTML='<option value="">Loading…</option>'; sels.forEach(s=>s.innerHTML='<option value="">Loading…</option>');
+  wSel.innerHTML='<option value="">Loading…</option>'; fwSel.innerHTML='<option value="">Loading…</option>'; sels.forEach(s=>s.innerHTML='<option value="">Loading…</option>');
   const [wr,cr,fr,cfr]=await Promise.all([api({action:'ghl_workflows',location_id:loc}), api({action:'ghl_calendars',location_id:loc}), api({action:'ghl_forms',location_id:loc}), api({action:'ghl_custom_fields',location_id:loc})]);
   const wfs=(wr.success?wr.data:[])||[];
   wSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
   if(preWfId){ if(!Array.from(wSel.options).some(o=>o.value===preWfId)){ const o=document.createElement('option'); o.value=preWfId; o.textContent=preWfId; wSel.appendChild(o);} wSel.value=preWfId; }
+  fwSel.innerHTML='<option value="">— none —</option>'+wfs.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
+  if(preFollowupWfId){ if(!Array.from(fwSel.options).some(o=>o.value===preFollowupWfId)){ const o=document.createElement('option'); o.value=preFollowupWfId; o.textContent=preFollowupWfId; fwSel.appendChild(o);} fwSel.value=preFollowupWfId; }
   window._p49CustomFields = (cfr.success?cfr.data:[])||[];
   document.querySelectorAll('#p49SurveyList .p49q-hlfield').forEach(p49RenderHlFieldSelect);
   const cals=(cr.success?cr.data:[])||[], forms=(fr.success?fr.data:[])||[];
@@ -2674,6 +2712,15 @@ function p49ToggleAi(){
   const ruleWrap = document.getElementById('p49RuleWrap');
   ruleWrap.style.opacity = on ? '0.4' : '1';
   ruleWrap.querySelectorAll('input,select').forEach(el=>el.disabled=on);
+}
+function p49ToggleFollowup(){
+  document.getElementById('p49FollowupWrap').style.display = document.getElementById('p49_followup_enabled').checked ? 'block' : 'none';
+}
+function p49RenderWebhookUrls(){
+  const base = window.location.origin;
+  const calEl=document.getElementById('p49WebhookCalUrl'), formEl=document.getElementById('p49WebhookFormUrl');
+  if(calEl) calEl.textContent = base+'/api/prime49-webhook?secret=<SECRET>&via=calendar';
+  if(formEl) formEl.textContent = base+'/api/prime49-webhook?secret=<SECRET>&via=form';
 }
 window._p49Reps = [];
 function p49RenderReps(){

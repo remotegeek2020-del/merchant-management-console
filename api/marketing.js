@@ -846,6 +846,11 @@ export default async function handler(req, res) {
                         survey_calendar_name: pb.survey_calendar_name ? String(pb.survey_calendar_name).slice(0, 200) : null,
                         survey_form_id: pb.survey_form_id ? String(pb.survey_form_id).trim() : null,
                         survey_form_name: pb.survey_form_name ? String(pb.survey_form_name).slice(0, 200) : null,
+                        survey_followup_enabled: !!pb.survey_followup_enabled,
+                        survey_followup_minutes: Number.isFinite(+pb.survey_followup_minutes) && +pb.survey_followup_minutes > 0 ? +pb.survey_followup_minutes : 10,
+                        survey_followup_tag: pb.survey_followup_tag ? String(pb.survey_followup_tag).trim() : null,
+                        survey_followup_workflow_id: pb.survey_followup_workflow_id ? String(pb.survey_followup_workflow_id).trim() : null,
+                        survey_followup_workflow_name: pb.survey_followup_workflow_name ? String(pb.survey_followup_workflow_name).slice(0, 200) : null,
                         enabled: !!row.is_active,
                         updated_at: new Date().toISOString()
                     };
