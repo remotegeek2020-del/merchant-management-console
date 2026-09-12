@@ -18,7 +18,7 @@ const TOKENS_KEY = 'GHL_BOT_PROVIDER_TOKENS'; // JSON blob: access_token, refres
 
 export function providerRedirectUri(req) {
     // Must exactly match what's registered in the Marketplace App's Auth section.
-    return process.env.BOT_PROVIDER_REDIRECT_URI || 'https://portal.mypayprotec.com/api/bot-ghl-oauth-callback';
+    return process.env.BOT_PROVIDER_REDIRECT_URI || 'https://portal.mypayprotec.com/api/bot-oauth-callback';
 }
 
 export async function providerAuthUrl(req) {
