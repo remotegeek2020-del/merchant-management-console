@@ -73,7 +73,7 @@
   <div id="editorCard" class="card" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div id="editorTitle" style="font-weight:800;font-size:15px;">New bot</div>
-      <label class="switch"><input type="checkbox" id="f_active" checked><span class="slider"></span></label>
+      <label class="switch"><input type="checkbox" id="f_active" checked onchange="if(current) quickToggleBot(current.id, this.checked, this)"><span class="slider"></span></label>
     </div>
 
     <label class="fld" style="margin-top:10px;">Name</label>
@@ -201,9 +201,32 @@ async function loadBots(){
 function renderBotList(){
   const box = document.getElementById('botList');
   if(!bots.length){ box.innerHTML='<div class="muted" style="font-size:12px;">No bots yet — create one.</div>'; return; }
-  box.innerHTML = bots.map(b=>`<div class="bot-item ${current&&current.id===b.id?'active':''}" onclick='selectBot(${JSON.stringify(b.id)})'>
-      <span style="display:flex;align-items:center;gap:8px;overflow:hidden;"><span class="dot" style="background:${b.is_active?'#16a34a':'#cbd5e1'};"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.name)}</span></span>
+  box.innerHTML = bots.map(b=>`<div class="bot-item ${current&&current.id===b.id?'active':''}">
+      <span style="display:flex;align-items:center;gap:8px;overflow:hidden;flex:1;cursor:pointer;" onclick='selectBot(${JSON.stringify(b.id)})'><span class="dot" style="background:${b.is_active?'#16a34a':'#cbd5e1'};"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.name)}</span></span>
+      <label class="switch" style="width:32px;height:18px;" onclick="event.stopPropagation()" title="${b.is_active?'On — turn off':'Off — turn on'}">
+        <input type="checkbox" ${b.is_active?'checked':''} onchange='quickToggleBot(${JSON.stringify(b.id)}, this.checked, this)'>
+        <span class="slider"></span>
+      </label>
     </div>`).join('');
+}
+// Direct on/off from the list — no need to open the editor or hit Save.
+// Persists immediately against the server; reverts the switch visually if
+// the save fails, so the toggle never silently lies about the bot's state.
+async function quickToggleBot(id, isActive, inputEl){
+  const bot = bots.find(b=>b.id===id);
+  if(!bot) return;
+  const r = await api({action:'update_bot', id,
+    name: bot.name, slug: bot.slug, welcome_message: bot.welcome_message, persona: bot.persona,
+    photo_url: bot.photo_url, is_active: isActive, ghl_location_id: bot.ghl_location_id,
+    prime49_min_volume: bot.prime49_min_volume, prime49_max_volume: bot.prime49_max_volume,
+    booking_mode: bot.booking_mode, booking_calendar_id: bot.booking_calendar_id, booking_calendar_name: bot.booking_calendar_name,
+    booking_form_id: bot.booking_form_id, booking_form_name: bot.booking_form_name, booking_style: bot.booking_style,
+    followup_enabled: bot.followup_enabled, followup_hours: bot.followup_hours, followup_message: bot.followup_message
+  });
+  if(!r.success){ inputEl.checked = !isActive; Swal.fire('Failed', r.message||'Could not update.', 'error'); return; }
+  bot.is_active = isActive;
+  if(current && current.id===id){ current.is_active = isActive; document.getElementById('f_active').checked = isActive; }
+  renderBotList();
 }
 function marketingApi(body){ return fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
 function updatePhotoPreview(){
