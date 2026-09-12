@@ -28,7 +28,8 @@
     "api/prime49-sms-bot.js": { "maxDuration": 30 },
     "api/bot-chat.js": { "maxDuration": 30 },
     "api/bot-crawl.js": { "maxDuration": 60 },
-    "api/cron-bot-crawl.js": { "maxDuration": 60 }
+    "api/cron-bot-crawl.js": { "maxDuration": 60 },
+    "api/cron-bot-followup.js": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -38,6 +39,10 @@
     {
       "path": "/api/cron-bot-crawl",
       "schedule": "0 6 * * 0"
+    },
+    {
+      "path": "/api/cron-bot-followup",
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron-award-certificates",

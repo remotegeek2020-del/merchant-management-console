@@ -53,7 +53,10 @@ export default async function handler(req, res) {
                 booking_calendar_id: str(body.booking_calendar_id, 100) || null,
                 booking_calendar_name: str(body.booking_calendar_name, 200) || null,
                 booking_form_id: str(body.booking_form_id, 100) || null,
-                booking_form_name: str(body.booking_form_name, 200) || null
+                booking_form_name: str(body.booking_form_name, 200) || null,
+                followup_enabled: !!body.followup_enabled,
+                followup_hours: Number.isFinite(+body.followup_hours) && +body.followup_hours > 0 ? +body.followup_hours : 24,
+                followup_message: str(body.followup_message, 500) || null
             }).select('*').single();
             if (error) return bad(res, error.message);
             return ok(res, data);
@@ -74,6 +77,9 @@ export default async function handler(req, res) {
                 booking_calendar_name: str(body.booking_calendar_name, 200) || null,
                 booking_form_id: str(body.booking_form_id, 100) || null,
                 booking_form_name: str(body.booking_form_name, 200) || null,
+                followup_enabled: !!body.followup_enabled,
+                followup_hours: Number.isFinite(+body.followup_hours) && +body.followup_hours > 0 ? +body.followup_hours : 24,
+                followup_message: str(body.followup_message, 500) || null,
                 updated_at: new Date().toISOString()
             };
             if (body.slug) {

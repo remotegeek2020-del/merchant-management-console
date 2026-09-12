@@ -97,6 +97,14 @@
         <div style="flex:1;"><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="f_min_volume" value="20000"></div>
         <div style="flex:1;"><label class="fld" style="margin-top:0;">Max 30-day volume</label><input class="inp" type="number" id="f_max_volume" value="30000"></div>
       </div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;margin-top:16px;"><input type="checkbox" id="f_followup_enabled"> Follow up if the conversation goes cold</label>
+      <div class="muted" style="font-size:11px;margin:4px 0 8px;">If a visitor gave contact info but stops replying, sends one SMS nudge (via their HighLevel contact) after the quiet period below. Checked hourly.</div>
+      <div class="row2" style="display:flex;gap:10px;">
+        <div style="flex:1;"><label class="fld" style="margin-top:0;">Quiet for (hours)</label><input class="inp" type="number" id="f_followup_hours" value="24"></div>
+      </div>
+      <label class="fld">Follow-up message</label>
+      <textarea class="inp" id="f_followup_message" rows="2" placeholder="Hi! Just checking back in — still have questions, or ready to book a time? Happy to help whenever you're ready."></textarea>
     </div>
 
     <div style="margin-top:16px;display:flex;gap:10px;">
@@ -205,6 +213,7 @@ function newBot(){
   document.getElementById('f_welcome').value=''; document.getElementById('f_persona').value='';
   document.getElementById('f_active').checked = true;
   document.getElementById('f_min_volume').value = '20000'; document.getElementById('f_max_volume').value = '30000';
+  document.getElementById('f_followup_enabled').checked = false; document.getElementById('f_followup_hours').value = '24'; document.getElementById('f_followup_message').value='';
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('postSaveSections').style.display='none';
   document.getElementById('editorCard').style.display='block';
@@ -223,6 +232,9 @@ async function selectBot(id){
   document.getElementById('f_active').checked = !!current.is_active;
   document.getElementById('f_min_volume').value = current.prime49_min_volume!=null?current.prime49_min_volume:20000;
   document.getElementById('f_max_volume').value = current.prime49_max_volume!=null?current.prime49_max_volume:30000;
+  document.getElementById('f_followup_enabled').checked = !!current.followup_enabled;
+  document.getElementById('f_followup_hours').value = current.followup_hours!=null?current.followup_hours:24;
+  document.getElementById('f_followup_message').value = current.followup_message||'';
   setBookingMode(current.booking_mode==='form'?'form':'calendar');
   await loadBotLocations(current.ghl_location_id||'');
   if(current.ghl_location_id) await onBotLocation(current.booking_calendar_id||'', current.booking_form_id||'');
@@ -256,6 +268,9 @@ async function saveBot(){
     ghl_location_id: document.getElementById('f_location').value||null,
     prime49_min_volume: parseFloat(document.getElementById('f_min_volume').value)||20000,
     prime49_max_volume: parseFloat(document.getElementById('f_max_volume').value)||30000,
+    followup_enabled: document.getElementById('f_followup_enabled').checked,
+    followup_hours: parseInt(document.getElementById('f_followup_hours').value,10)||24,
+    followup_message: document.getElementById('f_followup_message').value.trim()||null,
     booking_mode: _botBookingMode,
     booking_calendar_id: calSel.value||null,
     booking_calendar_name: (calSel.options[calSel.selectedIndex]||{}).text||null,
