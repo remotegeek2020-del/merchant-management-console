@@ -494,7 +494,11 @@ async function testProviderMessage(){
   if(d.result && d.result.ok){
     Swal.fire({icon:'success', title:'Message sent', html:`HighLevel accepted it. If you still don't see a "Website Chat" tab on that contact's Conversations, open Settings → Conversation Providers in HighLevel and make sure "<b>Always show this Conversation Provider</b>" is checked on the provider — that checkbox controls whether it gets its own tab.`});
   } else {
-    Swal.fire({icon:'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Connected:</b> ${d.diagnostics.connected?'yes':'no'}<br><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}<br><b>Error:</b> ${esc((d.result&&d.result.error)||'unknown')}</div>`});
+    const err = (d.result&&d.result.error)||'unknown';
+    const idHint = /conversationProviderId/i.test(err)
+      ? `<div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border-radius:6px;">This usually means the <b>conversationProviderId</b> saved in Secret Dungeon → API Manager doesn't belong to the same Marketplace App as the connected OAuth token — for example, left over from an earlier app you recreated. Open HighLevel → your Marketplace App → Conversation Providers, copy the ID shown there for the app you actually connected with "Reconnect", and make sure it exactly matches <code>${esc(d.diagnostics.provider_id||'(not set)')}</code> below.</div>`
+      : '';
+    Swal.fire({icon:'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Connected:</b> ${d.diagnostics.connected?'yes':'no'}<br><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}<br><b>conversationProviderId on file:</b> ${esc(d.diagnostics.provider_id||'—')}<br><b>Error:</b> ${esc(err)}${idHint}</div>`});
   }
 }
 loadProviderStatus();

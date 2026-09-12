@@ -100,6 +100,7 @@ export async function providerDiagnostics() {
     return {
         client_configured: !!(clientId && clientSecret),
         provider_id_configured: !!providerId,
+        provider_id: providerId || null,
         connected: !!tok,
         location_id: tok?.location_id || null
     };
