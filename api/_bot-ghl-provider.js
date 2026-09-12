@@ -113,14 +113,20 @@ export async function logProviderMessage({ contactId, direction, body }) {
     if (!tok) return { ok: false, error: 'HighLevel Conversation Provider is not connected yet.' };
     const conversationProviderId = await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID');
     if (!conversationProviderId) return { ok: false, error: 'GHL_BOT_CONVO_PROVIDER_ID not configured' };
-    const path = direction === 'outbound' ? '/conversations/messages/outbound' : '/conversations/messages/inbound';
+    // NOTE: there is no separate "/conversations/messages/outbound" endpoint
+    // for an extra SMS-type custom provider (that path is Call-log-specific
+    // and rejects type:"SMS" with "type must be a valid enum value", which is
+    // exactly the error we hit testing this live). The single Add Inbound
+    // Message endpoint logs BOTH directions — it takes its own "direction"
+    // field to say which way the message went.
     try {
-        const r = await fetch(`${API_BASE}${path}`, {
+        const r = await fetch(`${API_BASE}/conversations/messages/inbound`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Version': '2021-04-15', 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
                 type: 'SMS', contactId, locationId: tok.location_id || undefined,
-                conversationProviderId, direction, message: body, body
+                conversationProviderId, direction: direction === 'outbound' ? 'outbound' : 'inbound',
+                message: body, body
             })
         });
         const j = await r.json().catch(() => null);
