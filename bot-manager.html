@@ -79,6 +79,11 @@
     <input class="inp" id="f_name" placeholder="e.g. Partner Info Bot">
     <label class="fld">Slug <span class="muted" style="text-transform:none;font-weight:400;">(used in the embed snippet — auto-generated from the name if left blank)</span></label>
     <input class="inp" id="f_slug" placeholder="e.g. partner-info">
+    <label class="fld">Photo <span class="muted" style="text-transform:none;font-weight:400;">(a face makes it feel like a real person, not a chatbot)</span></label>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <img id="f_photo_preview" style="width:44px;height:44px;border-radius:50%;object-fit:cover;background:#f1f5f9;border:1px solid var(--border);display:none;">
+      <input class="inp" id="f_photo_url" placeholder="https://…/photo.jpg" oninput="updatePhotoPreview()" style="flex:1;">
+    </div>
     <label class="fld">Welcome message</label>
     <input class="inp" id="f_welcome" placeholder="Hi! I'm here to help you learn about becoming a PayProTec partner.">
     <label class="fld">Persona / identity <span class="muted" style="text-transform:none;font-weight:400;">(who it is, how it should sound, what it should and shouldn't do)</span></label>
@@ -186,6 +191,11 @@ function renderBotList(){
     </div>`).join('');
 }
 function marketingApi(body){ return fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
+function updatePhotoPreview(){
+  const url = document.getElementById('f_photo_url').value.trim();
+  const img = document.getElementById('f_photo_preview');
+  if(url){ img.src = url; img.style.display = 'block'; } else { img.style.display = 'none'; }
+}
 let _botBookingMode = 'calendar';
 function setBookingMode(mode){
   _botBookingMode = mode === 'form' ? 'form' : 'calendar';
@@ -220,6 +230,7 @@ function newBot(){
   document.getElementById('editorTitle').textContent = 'New bot';
   document.getElementById('f_name').value=''; document.getElementById('f_slug').value='';
   document.getElementById('f_welcome').value=''; document.getElementById('f_persona').value='';
+  document.getElementById('f_photo_url').value=''; updatePhotoPreview();
   document.getElementById('f_active').checked = true;
   document.getElementById('f_min_volume').value = '20000'; document.getElementById('f_max_volume').value = '30000';
   document.getElementById('f_followup_enabled').checked = false; document.getElementById('f_followup_hours').value = '24'; document.getElementById('f_followup_message').value='';
@@ -238,6 +249,7 @@ async function selectBot(id){
   document.getElementById('f_slug').value = current.slug||'';
   document.getElementById('f_welcome').value = current.welcome_message||'';
   document.getElementById('f_persona').value = current.persona||'';
+  document.getElementById('f_photo_url').value = current.photo_url||''; updatePhotoPreview();
   document.getElementById('f_active').checked = !!current.is_active;
   document.getElementById('f_min_volume').value = current.prime49_min_volume!=null?current.prime49_min_volume:20000;
   document.getElementById('f_max_volume').value = current.prime49_max_volume!=null?current.prime49_max_volume:30000;
@@ -273,6 +285,7 @@ async function saveBot(){
     slug: document.getElementById('f_slug').value.trim(),
     welcome_message: document.getElementById('f_welcome').value.trim(),
     persona: document.getElementById('f_persona').value.trim(),
+    photo_url: document.getElementById('f_photo_url').value.trim(),
     is_active: document.getElementById('f_active').checked,
     ghl_location_id: document.getElementById('f_location').value||null,
     prime49_min_volume: parseFloat(document.getElementById('f_min_volume').value)||20000,

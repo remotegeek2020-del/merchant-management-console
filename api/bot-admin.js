@@ -58,6 +58,7 @@ export default async function handler(req, res) {
             const { data, error } = await supabase.from('bots').insert({
                 name, slug, persona: str(body.persona, 8000) || null,
                 welcome_message: str(body.welcome_message, 500) || null,
+                photo_url: str(body.photo_url, 1000) || null,
                 is_active: body.is_active !== false, created_by: session.userid,
                 ghl_location_id: str(body.ghl_location_id, 100) || null,
                 prime49_min_volume: Number.isFinite(+body.prime49_min_volume) ? +body.prime49_min_volume : 20000,
@@ -81,6 +82,7 @@ export default async function handler(req, res) {
                 name: str(body.name, 200) || null,
                 persona: str(body.persona, 8000) || null,
                 welcome_message: str(body.welcome_message, 500) || null,
+                photo_url: str(body.photo_url, 1000) || null,
                 is_active: !!body.is_active,
                 ghl_location_id: str(body.ghl_location_id, 100) || null,
                 prime49_min_volume: Number.isFinite(+body.prime49_min_volume) ? +body.prime49_min_volume : 20000,

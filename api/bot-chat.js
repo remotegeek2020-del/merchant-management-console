@@ -129,7 +129,7 @@ export default async function handler(req, res) {
             }
             let welcome = bot.welcome_message || `Hi! I'm ${bot.name}. How can I help?`;
             if (returning) welcome = 'Welcome back! ' + welcome;
-            return ok(res, { bot: { name: bot.name, welcome_message: welcome }, returning, visit_count: visitCount });
+            return ok(res, { bot: { name: bot.name, welcome_message: welcome, photo_url: bot.photo_url || null }, returning, visit_count: visitCount });
         }
 
         if (action === 'message') {
