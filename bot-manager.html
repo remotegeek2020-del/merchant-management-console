@@ -51,6 +51,15 @@
   <div class="sp"></div>
   <button class="btn btn-white" onclick="location.href='/'">← Dashboard</button>
 </div>
+<div style="max-width:1300px;margin:16px auto 0;padding:0 22px;">
+  <div class="card" id="providerBanner" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div style="font-weight:800;font-size:13px;" id="providerBannerTitle">Checking HighLevel connection…</div>
+      <div class="muted" style="font-size:11.5px;margin-top:2px;" id="providerBannerDesc">Conversations are logged into HighLevel's Conversations tab as a custom "Website Chat" channel — no real texts sent.</div>
+    </div>
+    <button class="btn btn-brand" id="providerConnectBtn" style="display:none;" onclick="connectProvider()">Connect HighLevel</button>
+  </div>
+</div>
 <div class="wrap">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -373,6 +382,33 @@ async function testSend(){
   typing.remove();
   testBubble('bot', r.success ? r.reply : (r.message||'Something went wrong.'));
 }
+async function loadProviderStatus(){
+  const r = await api({action:'provider_status'});
+  const banner = document.getElementById('providerBanner');
+  const title = document.getElementById('providerBannerTitle');
+  const btn = document.getElementById('providerConnectBtn');
+  if(!r.success){ banner.style.display='none'; return; }
+  banner.style.display='flex';
+  if(!r.data.configured){
+    title.textContent = '⚠️ HighLevel Conversation Provider not configured';
+    title.style.color = 'var(--amber)';
+    btn.style.display='none';
+  } else if(!r.data.connected){
+    title.textContent = '⚠️ HighLevel not connected yet';
+    title.style.color = 'var(--amber)';
+    btn.style.display='inline-flex'; btn.textContent = 'Connect HighLevel';
+  } else {
+    title.textContent = '✓ HighLevel connected';
+    title.style.color = 'var(--green)';
+    btn.style.display='inline-flex'; btn.textContent = 'Reconnect';
+  }
+}
+async function connectProvider(){
+  const r = await api({action:'provider_connect_url'});
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  window.open(r.data.url, '_blank');
+}
+loadProviderStatus();
 loadBots();
 </script>
 </body>

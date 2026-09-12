@@ -4,6 +4,8 @@
 // needed once this is a bigger surface with real reach).
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
+import { getConfigValue } from './api-config.js';
+import { providerAuthUrl } from './_bot-ghl-provider.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const ok = (res, data = {}) => res.status(200).json({ success: true, data });
@@ -23,6 +25,17 @@ export default async function handler(req, res) {
     const action = body.action;
 
     try {
+        if (action === 'provider_status') {
+            const configured = !!(await getConfigValue('GHL_BOT_CLIENT_ID')) && !!(await getConfigValue('GHL_BOT_CLIENT_SECRET')) && !!(await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID'));
+            const connected = !!(await getConfigValue('GHL_BOT_PROVIDER_TOKENS'));
+            return ok(res, { configured, connected });
+        }
+        if (action === 'provider_connect_url') {
+            const url = await providerAuthUrl(req);
+            if (!url) return bad(res, 'Add GHL_BOT_CLIENT_ID in Secret Dungeon → API Manager first.');
+            return ok(res, { url });
+        }
+
         if (action === 'list_bots') {
             const { data } = await supabase.from('bots').select('*').order('created_at', { ascending: false });
             return ok(res, data || []);

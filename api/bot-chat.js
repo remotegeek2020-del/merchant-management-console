@@ -9,12 +9,15 @@
 // Phase 3: create/update a HighLevel contact + hand back a booking widget
 //          (calendar or form, embedded in the same chat panel — never a new
 //          tab, same lesson learned from Prime49).
-// Phase 4: log the conversation as a HighLevel Note on that contact, created
-//          once then updated in place as the conversation continues.
+// Phase 4: log the conversation into HighLevel's Conversations tab via a
+//          Custom Conversation Provider (a "Website Chat" channel) — not a
+//          Note, and not a real SMS. See api/_bot-ghl-provider.js for the
+//          OAuth + message-logging details.
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getConfigValue } from './api-config.js';
-import { ghlUpsertContact, ghlCreateNote, ghlUpdateNote } from './_ghl.js';
+import { ghlUpsertContact } from './_ghl.js';
+import { logProviderMessage } from './_bot-ghl-provider.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 function cors(res) {
@@ -220,16 +223,21 @@ Keep replies conversational and concise (a few sentences), like a real chat, not
                 const newMessages = [...history, { role: 'user', text, at: new Date().toISOString() }, { role: 'bot', text: reply, at: new Date().toISOString() }];
                 await supabase.from('bot_conversations').update({ messages: newMessages, updated_at: new Date().toISOString() }).eq('id', convo.id);
 
-                // Phase 4: log/refresh the transcript as a Note on the HighLevel
-                // contact, once we have one tied to this conversation.
-                if (convo.hl_contact_id && bot.ghl_location_id) {
-                    const transcriptText = `Website bot conversation (${bot.name}):\n\n` + newMessages.map(m => `${m.role === 'user' ? 'Visitor' : 'Bot'}: ${m.text}`).join('\n');
-                    if (convo.hl_note_id) {
-                        await ghlUpdateNote(bot.ghl_location_id, convo.hl_contact_id, convo.hl_note_id, transcriptText);
-                    } else {
-                        const n = await ghlCreateNote(bot.ghl_location_id, convo.hl_contact_id, transcriptText);
-                        if (n.ok && n.id) await supabase.from('bot_conversations').update({ hl_note_id: n.id }).eq('id', convo.id);
-                    }
+                // Phase 4: log this exchange into HighLevel's Conversations tab
+                // (Custom Conversation Provider) once we have a contact tied to
+                // this conversation — the visitor's message as inbound, the
+                // bot's reply as outbound. Best-effort: never blocks the reply
+                // to the visitor if HighLevel logging fails.
+                if (convo.hl_contact_id) {
+                    // Awaited deliberately — a Vercel function can be frozen the
+                    // instant the response is sent, so fire-and-forget here would
+                    // risk silently dropping the log entirely.
+                    const [inRes, outRes] = await Promise.all([
+                        logProviderMessage({ contactId: convo.hl_contact_id, direction: 'inbound', body: text }),
+                        logProviderMessage({ contactId: convo.hl_contact_id, direction: 'outbound', body: reply })
+                    ]);
+                    if (!inRes.ok) console.error('[bot-chat] provider log (inbound) failed:', inRes.error);
+                    if (!outRes.ok) console.error('[bot-chat] provider log (outbound) failed:', outRes.error);
                 }
 
                 return ok(res, { reply, conversation_id: convo.id, booking });
