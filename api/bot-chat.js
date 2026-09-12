@@ -153,9 +153,12 @@ export default async function handler(req, res) {
             const key = await geminiKey();
             if (!key) return bad(res, "We couldn't process that right now. Please try again shortly.");
 
-            const { data: knowledgeRows } = await supabase.from('bot_knowledge').select('topic, content').eq('bot_id', bot.id).limit(200);
+            const { data: knowledgeRows } = await supabase.from('bot_knowledge').select('topic, content, source').eq('bot_id', bot.id).limit(200);
+            // Crawled facts carry their page URL as `source` — surfaced here so
+            // the bot can point back to the actual page ("you can read more
+            // here: ...") instead of just asserting facts with no reference.
             const knowledgeBlock = (knowledgeRows || []).length
-                ? (knowledgeRows || []).map(k => `- ${k.topic ? k.topic + ': ' : ''}${k.content}`).join('\n')
+                ? (knowledgeRows || []).map(k => `- ${k.topic ? k.topic + ': ' : ''}${k.content}${(k.source && /^https?:\/\//.test(k.source)) ? ` [source: ${k.source}]` : ''}`).join('\n')
                 : '(no reference material loaded yet — answer generally and honestly say when you do not know something specific)';
 
             let booking = null; // set by the tool if this turn should surface a booking widget
@@ -197,7 +200,7 @@ export default async function handler(req, res) {
 
 ${visitorContext}
 
-Reference material you can draw on to answer questions (do not invent facts beyond this and your persona instructions — if you don't know, say so and offer to connect them with a person):
+Reference material you can draw on to answer questions (do not invent facts beyond this and your persona instructions — if you don't know, say so and offer to connect them with a person). Some items include a [source: URL] — when you use one of those, casually mention where it's from or offer the link (e.g. "you can see the full details here: <url>"), so the answer feels grounded, not just asserted. Never show the [source: ...] tag itself verbatim; just describe/link it naturally:
 ${knowledgeBlock}
 
 Keep replies conversational and concise (a few sentences), like a real chat, not an essay.`

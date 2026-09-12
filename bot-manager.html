@@ -137,6 +137,13 @@
       </div>
 
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:4px;">Auto-embed on Webflow</div>
+        <div class="muted" style="font-size:11.5px;margin-bottom:8px;">Pushes the snippet above directly into a connected Webflow site's footer code and publishes — no manual pasting. Uses the same Webflow connection already set up for announcements.</div>
+        <div id="webflowNotConnected" class="muted" style="font-size:11.5px;"></div>
+        <div id="webflowSitesList"></div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
         <div style="font-weight:800;font-size:13px;margin-bottom:8px;">Knowledge <span class="muted" style="font-weight:400;">(what it can answer from)</span></div>
         <div id="knowledgeList"></div>
         <label class="fld" style="margin-top:8px;">Topic <span class="muted" style="text-transform:none;font-weight:400;">(optional label)</span></label>
@@ -264,6 +271,7 @@ async function selectBot(id){
   document.getElementById('editorCard').style.display='block';
   renderKnowledge(r.data.knowledge||[]);
   loadCrawlJobs();
+  loadWebflowSites();
   renderEmbed();
   document.getElementById('testChatBody').innerHTML='';
   testVisitorKey = 'staff-preview-' + Math.random().toString(36).slice(2);
@@ -375,6 +383,41 @@ async function startCrawl(){
 async function deleteCrawlJob(id){
   await crawlApi({action:'delete_job', id});
   loadCrawlJobs();
+}
+async function loadWebflowSites(){
+  if(!current) return;
+  const r = await api({action:'list_webflow_sites', bot_id: current.id});
+  const notConnected = document.getElementById('webflowNotConnected');
+  const list = document.getElementById('webflowSitesList');
+  if(!r.success){ notConnected.textContent = r.message||'Could not load Webflow sites.'; list.innerHTML=''; return; }
+  if(!r.data.app_configured){ notConnected.innerHTML = 'Webflow integration isn\'t set up yet — configure it in <a href="/marketing.html" target="_blank">Marketing &amp; Portals → Webflow</a> first.'; list.innerHTML=''; return; }
+  if(!r.data.connected){ notConnected.innerHTML = 'Not connected to Webflow yet — connect it in <a href="/marketing.html" target="_blank">Marketing &amp; Portals → Webflow</a> first (same connection is reused here).'; list.innerHTML=''; return; }
+  notConnected.textContent='';
+  const sites = r.data.sites||[];
+  if(!sites.length){ list.innerHTML = '<div class="muted" style="font-size:11.5px;">No Webflow sites found — sync sites in Marketing &amp; Portals → Webflow first.</div>'; return; }
+  list.innerHTML = sites.map(s=>{
+    const wired = s.wiring && s.wiring.wired;
+    const pos = (s.wiring && s.wiring.position) || 'bottom-right';
+    return `<div class="knowledge-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="font-weight:700;">${esc(s.name)} ${wired?'<span style="color:var(--green);font-weight:800;">● Live</span>':'<span class="muted">Not embedded</span>'}</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select class="inp" style="padding:5px 8px;font-size:11px;width:auto;" id="wfpos_${esc(s.id)}" ${wired?'disabled':''}>
+            <option value="bottom-right" ${pos==='bottom-right'?'selected':''}>Bottom-right</option>
+            <option value="bottom-left" ${pos==='bottom-left'?'selected':''}>Bottom-left</option>
+          </select>
+          <button class="btn ${wired?'btn-danger':'btn-brand'}" style="padding:5px 10px;font-size:11px;" onclick='toggleWebflowWire(${JSON.stringify(s.id)}, ${wired?'true':'false'})'>${wired?'Remove':'Embed now'}</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+async function toggleWebflowWire(siteId, currentlyWired){
+  if(!current) return;
+  const btn = event.target; btn.disabled = true; const orig = btn.textContent; btn.textContent = currentlyWired ? 'Removing…' : 'Embedding…';
+  const position = (document.getElementById('wfpos_'+siteId)||{}).value || 'bottom-right';
+  const r = await api({action: currentlyWired ? 'unwire_bot_webflow' : 'wire_bot_webflow', bot_id: current.id, site_id: siteId, position});
+  btn.disabled = false; btn.textContent = orig;
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  await loadWebflowSites();
 }
 function testBubble(role, text){
   const box = document.getElementById('testChatBody');

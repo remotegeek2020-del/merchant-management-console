@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 import { providerAuthUrl } from './_bot-ghl-provider.js';
+import * as webflow from './_webflow.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const ok = (res, data = {}) => res.status(200).json({ success: true, data });
@@ -14,6 +15,17 @@ const str = (v, n) => (v == null ? '' : String(v)).slice(0, n);
 
 function slugify(s) {
     return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+}
+// The Webflow-side loader — a tiny bootstrap that pulls in the real widget,
+// same pattern as the announcement system's embedLoaderSource.
+function botLoaderSource(origin, slug, position) {
+    const posAttr = position && position !== 'bottom-right' ? `s.setAttribute("data-position","${position}");` : '';
+    return `(function(d){var s=d.createElement("script");s.src="${origin}/bot-widget.js";s.setAttribute("data-bot","${slug}");${posAttr}(d.body||d.head).appendChild(s);})(document);`;
+}
+function reqOrigin(req) {
+    const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    return `${proto}://${host}`;
 }
 
 export default async function handler(req, res) {
@@ -39,6 +51,44 @@ export default async function handler(req, res) {
         if (action === 'list_bots') {
             const { data } = await supabase.from('bots').select('*').order('created_at', { ascending: false });
             return ok(res, data || []);
+        }
+
+        // ── Webflow auto-embed (reuses the existing Webflow connection the
+        // announcement system already set up — no separate OAuth needed) ──────
+        if (action === 'list_webflow_sites') {
+            const token = await webflow.getToken();
+            const { data: sites } = await supabase.from('marketing_sites')
+                .select('id, name, webflow_site_id').eq('provider', 'webflow').order('name');
+            const { data: wirings } = await supabase.from('bot_webflow_sites').select('*').eq('bot_id', body.bot_id);
+            const wiredBySite = Object.fromEntries((wirings || []).map(w => [w.site_id, w]));
+            return ok(res, {
+                app_configured: webflow.webflowConfigured(), connected: !!token,
+                sites: (sites || []).map(s => ({ ...s, wiring: wiredBySite[s.id] || null }))
+            });
+        }
+        if (action === 'wire_bot_webflow' || action === 'unwire_bot_webflow') {
+            const { bot_id, site_id, position } = body;
+            const { data: bot } = await supabase.from('bots').select('id, slug').eq('id', bot_id).maybeSingle();
+            const { data: site } = await supabase.from('marketing_sites').select('*').eq('id', site_id).maybeSingle();
+            if (!bot || !site || !site.webflow_site_id) return bad(res, 'Bot or Webflow site not found.');
+            try {
+                if (action === 'wire_bot_webflow') {
+                    const src = botLoaderSource(reqOrigin(req), bot.slug, position || 'bottom-right');
+                    const displayName = 'PPTBot-' + bot.slug;
+                    const scriptId = await webflow.ensureInlineScript(site.webflow_site_id, src, displayName, '1.0.0');
+                    await webflow.applyFooterScript(site.webflow_site_id, scriptId, '1.0.0');
+                    await webflow.publishSite(site.webflow_site_id);
+                    await supabase.from('bot_webflow_sites').upsert({
+                        bot_id, site_id, script_id: scriptId, position: position || 'bottom-right', wired: true
+                    }, { onConflict: 'bot_id,site_id' });
+                } else {
+                    const { data: wiring } = await supabase.from('bot_webflow_sites').select('script_id').eq('bot_id', bot_id).eq('site_id', site_id).maybeSingle();
+                    if (wiring && wiring.script_id) await webflow.removeFooterScript(site.webflow_site_id, wiring.script_id);
+                    await webflow.publishSite(site.webflow_site_id);
+                    await supabase.from('bot_webflow_sites').update({ wired: false }).eq('bot_id', bot_id).eq('site_id', site_id);
+                }
+            } catch (e) { return bad(res, e.message); }
+            return ok(res, { ok: true });
         }
 
         if (action === 'get_bot') {

@@ -86,14 +86,32 @@ export async function ensureInlineScript(siteId, sourceCode, displayName, versio
     }
 }
 
-// Apply a registered script to the site footer.
-export async function applyFooterScript(siteId, scriptId, version) {
-    return wf(`/sites/${siteId}/custom_code`, {
-        method: 'PUT', body: JSON.stringify({ scripts: [{ id: scriptId, location: 'footer', version }] })
-    });
+// What's currently applied to the site (both our features and anything else
+// registered there) — read first so applying/removing one script is
+// ADDITIVE/surgical, never clobbering another feature's script on the same
+// site (e.g. the announcement loader and the bot widget can coexist).
+export async function getAppliedScripts(siteId) {
+    const data = await wf(`/sites/${siteId}/custom_code`).catch(() => ({}));
+    return data.scripts || [];
 }
 
-// Remove all portal-applied custom code from a site.
+// Apply a registered script to the site footer, preserving any other
+// scripts already applied there.
+export async function applyFooterScript(siteId, scriptId, version) {
+    const existing = await getAppliedScripts(siteId);
+    const scripts = [...existing.filter(s => s.id !== scriptId), { id: scriptId, location: 'footer', version }];
+    return wf(`/sites/${siteId}/custom_code`, { method: 'PUT', body: JSON.stringify({ scripts }) });
+}
+
+// Remove ONE script by id, leaving any other applied scripts intact.
+export async function removeFooterScript(siteId, scriptId) {
+    const existing = await getAppliedScripts(siteId);
+    const scripts = existing.filter(s => s.id !== scriptId);
+    return wf(`/sites/${siteId}/custom_code`, { method: 'PUT', body: JSON.stringify({ scripts }) });
+}
+
+// Remove ALL portal-applied custom code from a site. Still exposed for a
+// full reset, but prefer removeFooterScript for normal unwiring.
 export async function clearCustomCode(siteId) {
     return wf(`/sites/${siteId}/custom_code`, { method: 'PUT', body: JSON.stringify({ scripts: [] }) });
 }

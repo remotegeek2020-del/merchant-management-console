@@ -1742,7 +1742,11 @@ export default async function handler(req, res) {
                         await webflow.publishSite(site.webflow_site_id);
                         await supabase.from('marketing_sites').update({ wired: true, script_id: scriptId, is_active: true }).eq('id', id);
                     } else {
-                        await webflow.clearCustomCode(site.webflow_site_id);
+                        // Surgical removal — only our own script, so any other
+                        // feature's script wired to this same site (e.g. the
+                        // website bot) is left untouched.
+                        if (site.script_id) await webflow.removeFooterScript(site.webflow_site_id, site.script_id);
+                        else await webflow.clearCustomCode(site.webflow_site_id);
                         await webflow.publishSite(site.webflow_site_id);
                         await supabase.from('marketing_sites').update({ wired: false }).eq('id', id);
                     }
