@@ -25,11 +25,14 @@
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ slug: SLUG }, body)) })
             .then(function (r) { return r.json(); }).catch(function () { return { success: false, message: 'Network error.' }; });
     }
+    // localStorage (not sessionStorage) so the same browser is recognized on
+    // a LATER visit too, not just within one tab session — this is what lets
+    // the bot say "welcome back" and remember visit count (Phase 5).
     function visitorKey() {
         var k = 'ppbot_vk_' + SLUG;
         try {
-            var v = sessionStorage.getItem(k);
-            if (!v) { v = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem(k, v); }
+            var v = localStorage.getItem(k);
+            if (!v) { v = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(k, v); }
             return v;
         } catch (e) { return 'v_' + Math.random().toString(36).slice(2); }
     }
@@ -68,7 +71,7 @@
     function ensureStarted() {
         if (started) return;
         started = true;
-        post({ action: 'config' }).then(function (r) {
+        post({ action: 'config', visitor_key: VK }).then(function (r) {
             if (!r.success) { bubble('bot', r.message || 'This assistant is not available right now.'); return; }
             botName = r.bot.name || botName;
             var head = document.getElementById(UID + '-headname'); if (head) head.textContent = botName;

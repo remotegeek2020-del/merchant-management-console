@@ -110,7 +110,23 @@ export default async function handler(req, res) {
         if (action === 'config') {
             const bot = await loadBot(slug);
             if (!bot || !bot.is_active) return bad(res, 'This assistant is not available.');
-            return ok(res, { bot: { name: bot.name, welcome_message: bot.welcome_message || `Hi! I'm ${bot.name}. How can I help?` } });
+            // Phase 5: remember revisits. The widget persists visitor_key in
+            // localStorage (not sessionStorage), so the same browser coming
+            // back later is recognized here.
+            const visitorKey = String(body.visitor_key || '').trim();
+            let returning = false, visitCount = 1;
+            if (visitorKey) {
+                const { data: existing } = await supabase.from('bot_visitors').select('visit_count').eq('bot_id', bot.id).eq('visitor_key', visitorKey).maybeSingle();
+                if (existing) {
+                    returning = true; visitCount = (existing.visit_count || 1) + 1;
+                    await supabase.from('bot_visitors').update({ visit_count: visitCount, last_seen_at: new Date().toISOString() }).eq('bot_id', bot.id).eq('visitor_key', visitorKey);
+                } else {
+                    await supabase.from('bot_visitors').insert({ bot_id: bot.id, visitor_key: visitorKey, visit_count: 1 });
+                }
+            }
+            let welcome = bot.welcome_message || `Hi! I'm ${bot.name}. How can I help?`;
+            if (returning) welcome = 'Welcome back! ' + welcome;
+            return ok(res, { bot: { name: bot.name, welcome_message: welcome }, returning, visit_count: visitCount });
         }
 
         if (action === 'message') {
@@ -153,6 +169,7 @@ export default async function handler(req, res) {
                             hl_contact_id: r.id, visitor_name: args.name || null, visitor_email: args.email || null, visitor_phone: args.phone || null
                         }).eq('id', convo.id);
                         convo.hl_contact_id = r.id;
+                        await supabase.from('bot_visitors').update({ hl_contact_id: r.id }).eq('bot_id', bot.id).eq('visitor_key', visitorKey);
                         if (bot.booking_mode === 'form' && bot.booking_form_id) booking = { mode: 'form', form_id: bot.booking_form_id };
                         else if (bot.booking_calendar_id) booking = { mode: 'calendar', calendar_id: bot.booking_calendar_id };
                         return { ok: true };
@@ -162,6 +179,11 @@ export default async function handler(req, res) {
                 return { ok: false, error: 'Unknown tool' };
             }
 
+            const { data: visitorRow } = await supabase.from('bot_visitors').select('visit_count, first_seen_at').eq('bot_id', bot.id).eq('visitor_key', visitorKey).maybeSingle();
+            const visitorContext = (visitorRow && visitorRow.visit_count > 1)
+                ? `This visitor has been here ${visitorRow.visit_count} times before (first visit ${new Date(visitorRow.first_seen_at).toDateString()}) — acknowledge that naturally if relevant, don't repeat your full introduction.`
+                : 'This looks like this visitor\'s first time chatting with you.';
+
             try {
                 const genAI = new GoogleGenerativeAI(key);
                 const model = genAI.getGenerativeModel({
@@ -169,6 +191,8 @@ export default async function handler(req, res) {
                     generationConfig: { temperature: 0.5 },
                     tools: [{ functionDeclarations }],
                     systemInstruction: `${bot.persona || 'You are a helpful assistant.'}
+
+${visitorContext}
 
 Reference material you can draw on to answer questions (do not invent facts beyond this and your persona instructions — if you don't know, say so and offer to connect them with a person):
 ${knowledgeBlock}
