@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 import { providerAuthUrl, providerDiagnostics, logProviderMessage } from './_bot-ghl-provider.js';
-import { ghlGetContactRaw } from './_ghl.js';
+import { ghlGetContactRaw, ghlFindOrCreateConversation } from './_ghl.js';
 import * as webflow from './_webflow.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -70,14 +70,21 @@ export default async function handler(req, res) {
                     matches: !!contact && contact.locationId === diag.location_id
                 };
             }
+            // Resolve (or create) this contact's conversation and pass it
+            // explicitly — contactId alone SHOULD be enough per HighLevel's
+            // docs, but if this account rejects a mismatched
+            // conversationProviderId against an existing conversation created
+            // on a different channel, supplying conversationId directly may
+            // route around that.
+            const conversationId = diag.location_id ? await ghlFindOrCreateConversation(diag.location_id, contactId) : null;
             // Test BOTH directions separately — if only one fails, that tells
             // us the direction flag itself (not the provider ID/type) is the
             // actual problem, instead of guessing from one combined result.
             const [inboundR, outboundR] = await Promise.all([
-                logProviderMessage({ contactId, direction: 'inbound', body: '[PayProTec bot test message — inbound — safe to ignore]' }),
-                logProviderMessage({ contactId, direction: 'outbound', body: '[PayProTec bot test message — outbound — safe to ignore]' })
+                logProviderMessage({ contactId, conversationId, direction: 'inbound', body: '[PayProTec bot test message — inbound — safe to ignore]' }),
+                logProviderMessage({ contactId, conversationId, direction: 'outbound', body: '[PayProTec bot test message — outbound — safe to ignore]' })
             ]);
-            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, inbound: inboundR, outbound: outboundR });
+            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, conversation_id: conversationId, inbound: inboundR, outbound: outboundR });
         }
 
         if (action === 'list_bots') {

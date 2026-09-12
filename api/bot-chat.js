@@ -16,7 +16,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getConfigValue } from './api-config.js';
-import { ghlUpsertContact, ghlCalendarFreeSlotsRaw, ghlCreateAppointment } from './_ghl.js';
+import { ghlUpsertContact, ghlCalendarFreeSlotsRaw, ghlCreateAppointment, ghlFindOrCreateConversation } from './_ghl.js';
 import { logProviderMessage } from './_bot-ghl-provider.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -289,12 +289,20 @@ Keep replies conversational and concise (a few sentences), like a real chat, not
                 // bot's reply as outbound. Best-effort: never blocks the reply
                 // to the visitor if HighLevel logging fails.
                 if (convo.hl_contact_id) {
+                    // Resolve once and cache — an explicit conversationId is
+                    // needed alongside contactId for some accounts (see
+                    // provider_test_message diagnostics in bot-admin.js).
+                    let hlConversationId = convo.hl_conversation_id || null;
+                    if (!hlConversationId && bot.ghl_location_id) {
+                        hlConversationId = await ghlFindOrCreateConversation(bot.ghl_location_id, convo.hl_contact_id);
+                        if (hlConversationId) await supabase.from('bot_conversations').update({ hl_conversation_id: hlConversationId }).eq('id', convo.id);
+                    }
                     // Awaited deliberately — a Vercel function can be frozen the
                     // instant the response is sent, so fire-and-forget here would
                     // risk silently dropping the log entirely.
                     const [inRes, outRes] = await Promise.all([
-                        logProviderMessage({ contactId: convo.hl_contact_id, direction: 'inbound', body: text }),
-                        logProviderMessage({ contactId: convo.hl_contact_id, direction: 'outbound', body: reply })
+                        logProviderMessage({ contactId: convo.hl_contact_id, conversationId: hlConversationId, direction: 'inbound', body: text }),
+                        logProviderMessage({ contactId: convo.hl_contact_id, conversationId: hlConversationId, direction: 'outbound', body: reply })
                     ]);
                     if (!inRes.ok) console.error('[bot-chat] provider log (inbound) failed:', inRes.error);
                     if (!outRes.ok) console.error('[bot-chat] provider log (outbound) failed:', outRes.error);

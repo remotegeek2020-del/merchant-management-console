@@ -109,7 +109,7 @@ export async function providerDiagnostics() {
 // Logs one message (inbound = from the visitor, outbound = from the bot)
 // into the Custom Conversation Provider channel so it shows in HighLevel's
 // Conversations tab for that contact, without sending a real SMS/email.
-export async function logProviderMessage({ contactId, direction, body }) {
+export async function logProviderMessage({ contactId, direction, body, conversationId }) {
     const tok = await getValidAccessToken();
     if (!tok) return { ok: false, error: 'HighLevel Conversation Provider is not connected yet.' };
     const conversationProviderId = await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID');
@@ -125,7 +125,7 @@ export async function logProviderMessage({ contactId, direction, body }) {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Version': '2021-04-15', 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
-                type: 'SMS', contactId, locationId: tok.location_id || undefined,
+                type: 'SMS', contactId, conversationId: conversationId || undefined, locationId: tok.location_id || undefined,
                 conversationProviderId, direction: direction === 'outbound' ? 'outbound' : 'inbound',
                 message: body, body
             })

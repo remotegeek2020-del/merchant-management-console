@@ -283,6 +283,35 @@ export async function ghlListLocations() {
     }
 }
 
+// Finds (or creates) the single conversation HighLevel maintains for a
+// contact. The Add Inbound/Outbound Message APIs accept EITHER contactId or
+// conversationId — passing contactId alone should be enough per HighLevel's
+// docs, but if a contact already has an existing conversation on a
+// DIFFERENT channel/provider, some accounts reject a mismatched
+// conversationProviderId unless the explicit conversationId is supplied
+// too. Returns null (not throw) on any failure so callers can fall back to
+// contactId-only.
+export async function ghlFindOrCreateConversation(locationId, contactId) {
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return null;
+    const headers = { 'Authorization': `Bearer ${lt}`, 'Version': '2021-04-15', 'Accept': 'application/json' };
+    try {
+        const sr = await fetch(`${GHL_BASE}/conversations/search?locationId=${encodeURIComponent(locationId)}&contactId=${encodeURIComponent(contactId)}`, { headers });
+        const sd = await sr.json().catch(() => ({}));
+        const existing = (sd?.conversations || [])[0];
+        if (existing?.id) return existing.id;
+    } catch { /* fall through to create */ }
+    try {
+        const cr = await fetch(`${GHL_BASE}/conversations`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ locationId, contactId })
+        });
+        const cd = await cr.json().catch(() => ({}));
+        return cd?.conversation?.id || cd?.id || null;
+    } catch { return null; }
+}
+
 // Raw contact record + which locationId HighLevel says it actually belongs
 // to — used to programmatically confirm a contact is in the sub-account we
 // think it's in, instead of comparing IDs by eye across screenshots (easy to

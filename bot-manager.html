@@ -507,7 +507,7 @@ async function testProviderMessage(){
     const idHint = (!locHint && /conversationProviderId/i.test(err))
       ? `<div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border-radius:6px;">conversationProviderId on file: <code>${esc(d.diagnostics.provider_id||'(not set)')}</code> — double-check it exactly matches the ID on HighLevel's Conversation Providers screen for the app you connected with "Reconnect".</div>`
       : '';
-    Swal.fire({icon: (d.inbound.ok||d.outbound.ok) ? 'warning' : 'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}${row('Inbound direction', d.inbound)}${row('Outbound direction', d.outbound)}${locHint}${idHint}</div>`});
+    Swal.fire({icon: (d.inbound.ok||d.outbound.ok) ? 'warning' : 'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}<br><b>Conversation ID used:</b> ${esc(d.conversation_id||'(none found/created)')}${row('Inbound direction', d.inbound)}${row('Outbound direction', d.outbound)}${locHint}${idHint}</div>`});
   }
 }
 loadProviderStatus();
