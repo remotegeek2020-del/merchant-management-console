@@ -496,10 +496,18 @@ async function testProviderMessage(){
     Swal.fire({icon:'success', title:'Both directions accepted', html:`HighLevel accepted both test messages. If you still don't see a "Website Chat" tab on that contact's Conversations, open Settings → Conversation Providers in HighLevel and make sure "<b>Always show this Conversation Provider</b>" is checked on the provider — that checkbox controls whether it gets its own tab.`});
   } else {
     const err = (d.inbound.error||'') + ' ' + (d.outbound.error||'');
-    const idHint = /conversationProviderId/i.test(err)
+    let locHint = '';
+    if (d.contact_check) {
+      if (!d.contact_check.found_via_our_location) {
+        locHint = `<div style="margin-top:8px;padding:8px 10px;background:#fee2e2;border-radius:6px;"><b>Found it:</b> this contact could NOT be found using our connected sub-account's token — it almost certainly belongs to a <b>different</b> HighLevel sub-account than the one connected (${esc(d.diagnostics.location_id||'—')}). Test with a contact that actually lives in that sub-account, or check "Location on file" is the sub-account you meant to connect.</div>`;
+      } else if (!d.contact_check.matches) {
+        locHint = `<div style="margin-top:8px;padding:8px 10px;background:#fee2e2;border-radius:6px;"><b>Location mismatch:</b> contact's actual locationId is <code>${esc(d.contact_check.contact_location_id||'—')}</code> but the connected sub-account is <code>${esc(d.diagnostics.location_id||'—')}</code>.</div>`;
+      }
+    }
+    const idHint = (!locHint && /conversationProviderId/i.test(err))
       ? `<div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border-radius:6px;">conversationProviderId on file: <code>${esc(d.diagnostics.provider_id||'(not set)')}</code> — double-check it exactly matches the ID on HighLevel's Conversation Providers screen for the app you connected with "Reconnect".</div>`
       : '';
-    Swal.fire({icon: (d.inbound.ok||d.outbound.ok) ? 'warning' : 'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}${row('Inbound direction', d.inbound)}${row('Outbound direction', d.outbound)}${idHint}</div>`});
+    Swal.fire({icon: (d.inbound.ok||d.outbound.ok) ? 'warning' : 'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}${row('Inbound direction', d.inbound)}${row('Outbound direction', d.outbound)}${locHint}${idHint}</div>`});
   }
 }
 loadProviderStatus();

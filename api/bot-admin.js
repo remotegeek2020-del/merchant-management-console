@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 import { providerAuthUrl, providerDiagnostics, logProviderMessage } from './_bot-ghl-provider.js';
+import { ghlGetContactRaw } from './_ghl.js';
 import * as webflow from './_webflow.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -57,6 +58,18 @@ export default async function handler(req, res) {
             const contactId = String(body.contact_id || '').trim();
             if (!contactId) return bad(res, 'Paste a HighLevel Contact ID to test against.');
             const diag = await providerDiagnostics();
+            // Confirm PROGRAMMATICALLY that this contact actually lives in the
+            // sub-account our OAuth token is for — comparing location IDs by
+            // eye across screenshots is exactly how a "0" vs "O" typo hides.
+            let contactLocationCheck = null;
+            if (diag.location_id) {
+                const contact = await ghlGetContactRaw(diag.location_id, contactId);
+                contactLocationCheck = {
+                    found_via_our_location: !!contact,
+                    contact_location_id: contact?.locationId || null,
+                    matches: !!contact && contact.locationId === diag.location_id
+                };
+            }
             // Test BOTH directions separately — if only one fails, that tells
             // us the direction flag itself (not the provider ID/type) is the
             // actual problem, instead of guessing from one combined result.
@@ -64,7 +77,7 @@ export default async function handler(req, res) {
                 logProviderMessage({ contactId, direction: 'inbound', body: '[PayProTec bot test message — inbound — safe to ignore]' }),
                 logProviderMessage({ contactId, direction: 'outbound', body: '[PayProTec bot test message — outbound — safe to ignore]' })
             ]);
-            return ok(res, { diagnostics: diag, inbound: inboundR, outbound: outboundR });
+            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, inbound: inboundR, outbound: outboundR });
         }
 
         if (action === 'list_bots') {

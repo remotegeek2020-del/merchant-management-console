@@ -283,6 +283,16 @@ export async function ghlListLocations() {
     }
 }
 
+// Raw contact record + which locationId HighLevel says it actually belongs
+// to — used to programmatically confirm a contact is in the sub-account we
+// think it's in, instead of comparing IDs by eye across screenshots (easy to
+// misread — e.g. digit "0" vs letter "O").
+export async function ghlGetContactRaw(locationId, contactId) {
+    if (!contactId) return null;
+    const d = await locGet(locationId, `/contacts/${encodeURIComponent(contactId)}`);
+    return (d && (d.contact || d)) || null;
+}
+
 // Fetch a contact's address block by contact id. Returns null if unavailable.
 // Lower-cased tag list for a contact in a sub-account (via the location token).
 export async function ghlContactTags(locationId, contactId) {
