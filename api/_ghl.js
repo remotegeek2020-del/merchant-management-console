@@ -161,6 +161,34 @@ export async function ghlUpsertContact(locationId, contact = {}, tags = []) {
     } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// Create/update a note on a contact — used to log a bot conversation
+// transcript. Create once per conversation, then keep updating the SAME
+// note (by id) as the conversation continues, rather than spamming a new
+// note per message.
+export async function ghlCreateNote(locationId, contactId, body) {
+    if (!contactId || !body) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}/notes`, {
+            method: 'POST', headers: ghlHeaders(lt), body: JSON.stringify({ body })
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, id: j?.note?.id || j?.id || null, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+export async function ghlUpdateNote(locationId, contactId, noteId, body) {
+    if (!contactId || !noteId || !body) return { ok: false, error: 'missing args' };
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/${encodeURIComponent(contactId)}/notes/${encodeURIComponent(noteId)}`, {
+            method: 'PUT', headers: ghlHeaders(lt), body: JSON.stringify({ body })
+        });
+        return { ok: r.ok, error: r.ok ? null : ('HTTP ' + r.status) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
 // Form submissions for a form within a date window → normalized conversions.
 export async function ghlFormSubmissions(locationId, formId, startMs, endMs) {
     if (!formId) return [];

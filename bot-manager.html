@@ -75,6 +75,30 @@
     <label class="fld">Persona / identity <span class="muted" style="text-transform:none;font-weight:400;">(who it is, how it should sound, what it should and shouldn't do)</span></label>
     <textarea class="inp" id="f_persona" rows="6" placeholder="You are Jordan, a friendly assistant for PayProTec, a payment processing company. Help visitors understand how to become a partner and answer questions about our services. Be conversational and concise. If you don't know something specific, say so honestly and offer to connect them with a person — never make up facts."></textarea>
 
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+      <div style="font-weight:800;font-size:12px;margin-bottom:8px;">HighLevel &amp; booking</div>
+      <label class="fld" style="margin-top:0;">HighLevel sub-account</label>
+      <select class="inp" id="f_location" onchange="onBotLocation()"><option value="">— select —</option></select>
+      <div class="muted" style="font-size:11px;margin:6px 0;">Used when the bot creates/updates a contact and hands over a booking widget.</div>
+      <div style="display:flex;gap:8px;margin:8px 0;">
+        <button type="button" class="btn btn-neutral" id="bookCalBtn" onclick="setBookingMode('calendar')">Calendar</button>
+        <button type="button" class="btn btn-neutral" id="bookFormBtn" onclick="setBookingMode('form')">Form</button>
+      </div>
+      <div id="bookCalWrap">
+        <label class="fld" style="margin-top:0;">Calendar</label>
+        <select class="inp" id="f_calendar"><option value="">Choose a sub-account first…</option></select>
+      </div>
+      <div id="bookFormWrap" style="display:none;">
+        <label class="fld" style="margin-top:0;">Form</label>
+        <select class="inp" id="f_form"><option value="">Choose a sub-account first…</option></select>
+      </div>
+      <div style="font-weight:800;font-size:12px;margin:16px 0 8px;">Prime49 eligibility band <span class="muted" style="font-weight:400;">(used only if it looks up a partner)</span></div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;"><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="f_min_volume" value="20000"></div>
+        <div style="flex:1;"><label class="fld" style="margin-top:0;">Max 30-day volume</label><input class="inp" type="number" id="f_max_volume" value="30000"></div>
+      </div>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px;">
       <button class="btn btn-brand" onclick="saveBot()">Save</button>
       <button class="btn btn-danger" id="deleteBtn" style="display:none;" onclick="deleteBot()">Delete</button>
@@ -132,15 +156,47 @@ function renderBotList(){
       <span style="display:flex;align-items:center;gap:8px;overflow:hidden;"><span class="dot" style="background:${b.is_active?'#16a34a':'#cbd5e1'};"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.name)}</span></span>
     </div>`).join('');
 }
+function marketingApi(body){ return fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
+let _botBookingMode = 'calendar';
+function setBookingMode(mode){
+  _botBookingMode = mode === 'form' ? 'form' : 'calendar';
+  document.getElementById('bookCalBtn').style.background = _botBookingMode==='calendar' ? 'var(--blue)' : '#fff';
+  document.getElementById('bookCalBtn').style.color = _botBookingMode==='calendar' ? '#fff' : 'var(--text)';
+  document.getElementById('bookFormBtn').style.background = _botBookingMode==='form' ? 'var(--blue)' : '#fff';
+  document.getElementById('bookFormBtn').style.color = _botBookingMode==='form' ? '#fff' : 'var(--text)';
+  document.getElementById('bookCalWrap').style.display = _botBookingMode==='calendar' ? 'block' : 'none';
+  document.getElementById('bookFormWrap').style.display = _botBookingMode==='form' ? 'block' : 'none';
+}
+async function loadBotLocations(preId){
+  const sel = document.getElementById('f_location');
+  const r = await marketingApi({action:'ghl_locations'});
+  const locs = (r.success && r.data && r.data.locations) || [];
+  sel.innerHTML = '<option value="">— select —</option>' + locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(preId){ if(!Array.from(sel.options).some(o=>o.value===preId)){ const o=document.createElement('option'); o.value=preId; o.textContent=preId; sel.appendChild(o); } sel.value = preId; }
+}
+async function onBotLocation(preCalId, preFormId){
+  const loc = document.getElementById('f_location').value;
+  const calSel = document.getElementById('f_calendar'), formSel = document.getElementById('f_form');
+  if(!loc){ calSel.innerHTML='<option value="">Choose a sub-account first…</option>'; formSel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
+  calSel.innerHTML='<option value="">Loading…</option>'; formSel.innerHTML='<option value="">Loading…</option>';
+  const [cr, fr] = await Promise.all([marketingApi({action:'ghl_calendars', location_id:loc}), marketingApi({action:'ghl_forms', location_id:loc})]);
+  const cals = (cr.success?cr.data:[])||[], forms = (fr.success?fr.data:[])||[];
+  calSel.innerHTML = '<option value="">— none —</option>' + cals.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join('');
+  formSel.innerHTML = '<option value="">— select a form —</option>' + forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name||f.id)}</option>`).join('');
+  if(preCalId){ if(!Array.from(calSel.options).some(o=>o.value===preCalId)){ const o=document.createElement('option'); o.value=preCalId; o.textContent=preCalId; calSel.appendChild(o); } calSel.value = preCalId; }
+  if(preFormId){ if(!Array.from(formSel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; formSel.appendChild(o); } formSel.value = preFormId; }
+}
 function newBot(){
   current = null;
   document.getElementById('editorTitle').textContent = 'New bot';
   document.getElementById('f_name').value=''; document.getElementById('f_slug').value='';
   document.getElementById('f_welcome').value=''; document.getElementById('f_persona').value='';
   document.getElementById('f_active').checked = true;
+  document.getElementById('f_min_volume').value = '20000'; document.getElementById('f_max_volume').value = '30000';
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('postSaveSections').style.display='none';
   document.getElementById('editorCard').style.display='block';
+  loadBotLocations(); onBotLocation(); setBookingMode('calendar');
   renderBotList();
 }
 async function selectBot(id){
@@ -153,6 +209,11 @@ async function selectBot(id){
   document.getElementById('f_welcome').value = current.welcome_message||'';
   document.getElementById('f_persona').value = current.persona||'';
   document.getElementById('f_active').checked = !!current.is_active;
+  document.getElementById('f_min_volume').value = current.prime49_min_volume!=null?current.prime49_min_volume:20000;
+  document.getElementById('f_max_volume').value = current.prime49_max_volume!=null?current.prime49_max_volume:30000;
+  setBookingMode(current.booking_mode==='form'?'form':'calendar');
+  await loadBotLocations(current.ghl_location_id||'');
+  if(current.ghl_location_id) await onBotLocation(current.booking_calendar_id||'', current.booking_form_id||'');
   document.getElementById('deleteBtn').style.display='inline-flex';
   document.getElementById('postSaveSections').style.display='block';
   document.getElementById('editorCard').style.display='block';
@@ -172,12 +233,21 @@ function copyEmbed(){
   });
 }
 async function saveBot(){
+  const calSel = document.getElementById('f_calendar'), formSel = document.getElementById('f_form');
   const payload = {
     name: document.getElementById('f_name').value.trim(),
     slug: document.getElementById('f_slug').value.trim(),
     welcome_message: document.getElementById('f_welcome').value.trim(),
     persona: document.getElementById('f_persona').value.trim(),
-    is_active: document.getElementById('f_active').checked
+    is_active: document.getElementById('f_active').checked,
+    ghl_location_id: document.getElementById('f_location').value||null,
+    prime49_min_volume: parseFloat(document.getElementById('f_min_volume').value)||20000,
+    prime49_max_volume: parseFloat(document.getElementById('f_max_volume').value)||30000,
+    booking_mode: _botBookingMode,
+    booking_calendar_id: calSel.value||null,
+    booking_calendar_name: (calSel.options[calSel.selectedIndex]||{}).text||null,
+    booking_form_id: formSel.value||null,
+    booking_form_name: (formSel.options[formSel.selectedIndex]||{}).text||null
   };
   if(!payload.name){ Swal.fire('Name required', '', 'warning'); return; }
   let r;

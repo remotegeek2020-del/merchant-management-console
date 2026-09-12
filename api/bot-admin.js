@@ -45,7 +45,15 @@ export default async function handler(req, res) {
             const { data, error } = await supabase.from('bots').insert({
                 name, slug, persona: str(body.persona, 8000) || null,
                 welcome_message: str(body.welcome_message, 500) || null,
-                is_active: body.is_active !== false, created_by: session.userid
+                is_active: body.is_active !== false, created_by: session.userid,
+                ghl_location_id: str(body.ghl_location_id, 100) || null,
+                prime49_min_volume: Number.isFinite(+body.prime49_min_volume) ? +body.prime49_min_volume : 20000,
+                prime49_max_volume: Number.isFinite(+body.prime49_max_volume) ? +body.prime49_max_volume : 30000,
+                booking_mode: body.booking_mode === 'form' ? 'form' : 'calendar',
+                booking_calendar_id: str(body.booking_calendar_id, 100) || null,
+                booking_calendar_name: str(body.booking_calendar_name, 200) || null,
+                booking_form_id: str(body.booking_form_id, 100) || null,
+                booking_form_name: str(body.booking_form_name, 200) || null
             }).select('*').single();
             if (error) return bad(res, error.message);
             return ok(res, data);
@@ -58,6 +66,14 @@ export default async function handler(req, res) {
                 persona: str(body.persona, 8000) || null,
                 welcome_message: str(body.welcome_message, 500) || null,
                 is_active: !!body.is_active,
+                ghl_location_id: str(body.ghl_location_id, 100) || null,
+                prime49_min_volume: Number.isFinite(+body.prime49_min_volume) ? +body.prime49_min_volume : 20000,
+                prime49_max_volume: Number.isFinite(+body.prime49_max_volume) ? +body.prime49_max_volume : 30000,
+                booking_mode: body.booking_mode === 'form' ? 'form' : 'calendar',
+                booking_calendar_id: str(body.booking_calendar_id, 100) || null,
+                booking_calendar_name: str(body.booking_calendar_name, 200) || null,
+                booking_form_id: str(body.booking_form_id, 100) || null,
+                booking_form_name: str(body.booking_form_name, 200) || null,
                 updated_at: new Date().toISOString()
             };
             if (body.slug) {

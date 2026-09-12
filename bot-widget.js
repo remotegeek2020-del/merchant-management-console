@@ -76,6 +76,23 @@
         });
     }
 
+    // Booking always renders as an embedded widget right in the chat panel —
+    // never a new tab. Leaving the chat to book elsewhere is exactly the
+    // drop-off point that matters most to avoid.
+    function bookingHtml(b) {
+        if (!b) return '';
+        var body = document.getElementById(UID + '-body');
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-top:4px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;';
+        var src = b.mode === 'form' && b.form_id
+            ? 'https://api.leadconnectorhq.com/widget/form/' + encodeURIComponent(b.form_id)
+            : (b.calendar_id ? 'https://api.leadconnectorhq.com/widget/booking/' + encodeURIComponent(b.calendar_id) : '');
+        if (!src) return;
+        wrap.innerHTML = '<iframe src="' + src + '" style="width:100%;min-height:420px;border:none;display:block;" scrolling="yes"></iframe>';
+        body.appendChild(wrap);
+        body.scrollTop = body.scrollHeight;
+    }
+
     function send() {
         var input = document.getElementById(UID + '-input');
         var text = (input.value || '').trim();
@@ -86,6 +103,7 @@
         post({ action: 'message', visitor_key: VK, text: text }).then(function (r) {
             typing.remove();
             bubble('bot', r.success ? r.reply : (r.message || 'Something went wrong — please try again.'));
+            if (r.success && r.booking) bookingHtml(r.booking);
         });
     }
 
