@@ -74,7 +74,9 @@ export default async function handler(req, res) {
             try {
                 if (action === 'wire_bot_webflow') {
                     const src = botLoaderSource(reqOrigin(req), bot.slug, position || 'bottom-right');
-                    const displayName = 'PPTBot-' + bot.slug;
+                    // Webflow requires displayName to be strictly alphanumeric
+                    // (no hyphens/underscores), unlike our slugs which use them.
+                    const displayName = ('PPTBot' + bot.slug.replace(/[^a-zA-Z0-9]/g, '')).slice(0, 50) || 'PPTBot';
                     const scriptId = await webflow.ensureInlineScript(site.webflow_site_id, src, displayName, '1.0.0');
                     await webflow.applyFooterScript(site.webflow_site_id, scriptId, '1.0.0');
                     await webflow.publishSite(site.webflow_site_id);
