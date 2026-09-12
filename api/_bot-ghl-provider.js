@@ -121,7 +121,13 @@ export async function providerDiagnostics() {
         token_auth_class: claims?.authClass || null,
         token_auth_class_id: claims?.authClassId || null,
         token_scopes: claims?.oauthMeta?.scopes || claims?.scopes || null,
-        token_client_id: claims?.client_id || claims?.clientKey || null
+        token_client_id: claims?.client_id || claims?.clientKey || null,
+        // Full claim key list + a couple of likely app-identity fields, so we
+        // can see whatever this token ACTUALLY carries instead of guessing
+        // key names — one of these should reveal which Marketplace App this
+        // token really belongs to.
+        token_claim_keys: claims ? Object.keys(claims) : null,
+        token_claims_raw: claims || null
     };
 }
 
