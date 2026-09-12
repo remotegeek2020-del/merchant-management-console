@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="/api/favicon" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Website Bots | PayProTec</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<script src="/js/access-guard.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  :root{--blue:#004990;--navy:#002d5a;--border:#e2e8f0;--surface:#f0f4f8;--text:#0a1628;--muted:#64748b;--green:#16a34a;--amber:#b45309;--red:#dc2626;--shadow:0 1px 3px rgba(0,0,0,0.08);}
+  body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);-webkit-font-smoothing:antialiased;}
+  .topbar{background:linear-gradient(135deg,var(--navy),var(--blue));padding:14px 22px;display:flex;align-items:center;gap:14px;}
+  .topbar h1{font-size:16px;font-weight:800;color:#fff;margin:0;}
+  .topbar .sp{flex:1;}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .btn-brand{background:var(--blue);color:#fff;}
+  .btn-white{background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-neutral{background:#fff;color:var(--text);border:1px solid var(--border);}
+  .btn-danger{background:#fff;color:var(--red);border:1px solid #fecaca;}
+  .wrap{max-width:1300px;margin:0 auto;padding:24px 22px 80px;display:grid;grid-template-columns:280px 1fr;gap:20px;}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr;}}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:16px;}
+  .fld{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:14px;margin-bottom:5px;}
+  .inp{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;}
+  textarea.inp{resize:vertical;}
+  .muted{color:var(--muted);}
+  .bot-item{padding:10px 12px;border-radius:9px;cursor:pointer;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;}
+  .bot-item:hover{background:#f1f5f9;}
+  .bot-item.active{background:#e0f2fe;}
+  .bot-item .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .switch{position:relative;display:inline-block;width:38px;height:21px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:99px;transition:.2s;}
+  .slider:before{content:'';position:absolute;height:15px;width:15px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s;}
+  input:checked+.slider{background:var(--green);}
+  input:checked+.slider:before{transform:translateX(17px);}
+  .knowledge-row{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;}
+  .chat-bubble{max-width:82%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;white-space:pre-wrap;margin-bottom:8px;}
+  .chat-bubble.bot{background:#f1f5f9;color:var(--text);}
+  .chat-bubble.user{background:var(--blue);color:#fff;margin-left:auto;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>🤖 Website Bots</h1>
+  <div class="sp"></div>
+  <button class="btn btn-white" onclick="location.href='/'">← Dashboard</button>
+</div>
+<div class="wrap">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-weight:800;font-size:13px;">Bots</div>
+      <button class="btn btn-brand" style="padding:6px 10px;font-size:12px;" onclick="newBot()">+ New</button>
+    </div>
+    <div id="botList"><div class="muted" style="font-size:12px;">Loading…</div></div>
+  </div>
+
+  <div id="editorCard" class="card" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div id="editorTitle" style="font-weight:800;font-size:15px;">New bot</div>
+      <label class="switch"><input type="checkbox" id="f_active" checked><span class="slider"></span></label>
+    </div>
+
+    <label class="fld" style="margin-top:10px;">Name</label>
+    <input class="inp" id="f_name" placeholder="e.g. Partner Info Bot">
+    <label class="fld">Slug <span class="muted" style="text-transform:none;font-weight:400;">(used in the embed snippet — auto-generated from the name if left blank)</span></label>
+    <input class="inp" id="f_slug" placeholder="e.g. partner-info">
+    <label class="fld">Welcome message</label>
+    <input class="inp" id="f_welcome" placeholder="Hi! I'm here to help you learn about becoming a PayProTec partner.">
+    <label class="fld">Persona / identity <span class="muted" style="text-transform:none;font-weight:400;">(who it is, how it should sound, what it should and shouldn't do)</span></label>
+    <textarea class="inp" id="f_persona" rows="6" placeholder="You are Jordan, a friendly assistant for PayProTec, a payment processing company. Help visitors understand how to become a partner and answer questions about our services. Be conversational and concise. If you don't know something specific, say so honestly and offer to connect them with a person — never make up facts."></textarea>
+
+    <div style="margin-top:16px;display:flex;gap:10px;">
+      <button class="btn btn-brand" onclick="saveBot()">Save</button>
+      <button class="btn btn-danger" id="deleteBtn" style="display:none;" onclick="deleteBot()">Delete</button>
+    </div>
+
+    <div id="postSaveSections" style="display:none;">
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:8px;">Embed snippet</div>
+        <div class="muted" style="font-size:11.5px;margin-bottom:6px;">Paste this on any page (Webflow, GoHighLevel, your own site) — a chat bubble appears in the bottom-right corner.</div>
+        <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:11.5px;word-break:break-all;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+          <span id="embedSnippet"></span>
+          <button class="btn btn-neutral" style="padding:4px 8px;font-size:10px;flex:none;" onclick="copyEmbed()">Copy</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:8px;">Knowledge <span class="muted" style="font-weight:400;">(what it can answer from — manual for now)</span></div>
+        <div id="knowledgeList"></div>
+        <label class="fld" style="margin-top:8px;">Topic <span class="muted" style="text-transform:none;font-weight:400;">(optional label)</span></label>
+        <input class="inp" id="k_topic" placeholder="e.g. Partner Requirements">
+        <label class="fld">Content</label>
+        <textarea class="inp" id="k_content" rows="3" placeholder="Paste the actual info here — a policy, an FAQ answer, service details, etc."></textarea>
+        <button class="btn btn-neutral" style="margin-top:8px;" onclick="addKnowledge()">+ Add knowledge</button>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:8px;">Test it</div>
+        <div id="testChatBody" style="border:1px solid var(--border);border-radius:8px;padding:10px;min-height:120px;max-height:280px;overflow-y:auto;background:#fafbfc;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:8px;">
+          <input class="inp" id="testInput" placeholder="Try asking it something…" onkeydown="if(event.key==='Enter')testSend()">
+          <button class="btn btn-brand" style="flex:none;" onclick="testSend()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_session_token') || '';
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function api(body){ return fetch('/api/bot-admin',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
+function chatApi(body){ return fetch('/api/bot-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json()); }
+
+let bots = [], current = null, testVisitorKey = 'staff-preview-' + Math.random().toString(36).slice(2);
+
+async function loadBots(){
+  const r = await api({action:'list_bots'});
+  bots = r.success ? r.data : [];
+  renderBotList();
+}
+function renderBotList(){
+  const box = document.getElementById('botList');
+  if(!bots.length){ box.innerHTML='<div class="muted" style="font-size:12px;">No bots yet — create one.</div>'; return; }
+  box.innerHTML = bots.map(b=>`<div class="bot-item ${current&&current.id===b.id?'active':''}" onclick='selectBot(${JSON.stringify(b.id)})'>
+      <span style="display:flex;align-items:center;gap:8px;overflow:hidden;"><span class="dot" style="background:${b.is_active?'#16a34a':'#cbd5e1'};"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.name)}</span></span>
+    </div>`).join('');
+}
+function newBot(){
+  current = null;
+  document.getElementById('editorTitle').textContent = 'New bot';
+  document.getElementById('f_name').value=''; document.getElementById('f_slug').value='';
+  document.getElementById('f_welcome').value=''; document.getElementById('f_persona').value='';
+  document.getElementById('f_active').checked = true;
+  document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('postSaveSections').style.display='none';
+  document.getElementById('editorCard').style.display='block';
+  renderBotList();
+}
+async function selectBot(id){
+  const r = await api({action:'get_bot', id});
+  if(!r.success){ Swal.fire('Error', r.message||'Not found', 'error'); return; }
+  current = r.data.bot;
+  document.getElementById('editorTitle').textContent = current.name;
+  document.getElementById('f_name').value = current.name||'';
+  document.getElementById('f_slug').value = current.slug||'';
+  document.getElementById('f_welcome').value = current.welcome_message||'';
+  document.getElementById('f_persona').value = current.persona||'';
+  document.getElementById('f_active').checked = !!current.is_active;
+  document.getElementById('deleteBtn').style.display='inline-flex';
+  document.getElementById('postSaveSections').style.display='block';
+  document.getElementById('editorCard').style.display='block';
+  renderKnowledge(r.data.knowledge||[]);
+  renderEmbed();
+  document.getElementById('testChatBody').innerHTML='';
+  testVisitorKey = 'staff-preview-' + Math.random().toString(36).slice(2);
+  renderBotList();
+}
+function renderEmbed(){
+  const host = window.location.origin;
+  document.getElementById('embedSnippet').textContent = `<script src="${host}/bot-widget.js" data-bot="${current.slug}"><\/script>`;
+}
+function copyEmbed(){
+  navigator.clipboard.writeText(document.getElementById('embedSnippet').textContent).then(()=>{
+    Swal.fire({icon:'success', title:'Copied', timer:900, showConfirmButton:false});
+  });
+}
+async function saveBot(){
+  const payload = {
+    name: document.getElementById('f_name').value.trim(),
+    slug: document.getElementById('f_slug').value.trim(),
+    welcome_message: document.getElementById('f_welcome').value.trim(),
+    persona: document.getElementById('f_persona').value.trim(),
+    is_active: document.getElementById('f_active').checked
+  };
+  if(!payload.name){ Swal.fire('Name required', '', 'warning'); return; }
+  let r;
+  if(current){ r = await api({action:'update_bot', id: current.id, ...payload}); }
+  else { r = await api({action:'create_bot', ...payload}); }
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  await loadBots();
+  await selectBot(current ? current.id : r.data.id);
+  Swal.fire({icon:'success', title:'Saved', timer:1000, showConfirmButton:false});
+}
+async function deleteBot(){
+  if(!current) return;
+  const c = await Swal.fire({icon:'warning', title:'Delete this bot?', text:current.name, showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#dc2626'});
+  if(!c.isConfirmed) return;
+  await api({action:'delete_bot', id: current.id});
+  current = null;
+  document.getElementById('editorCard').style.display='none';
+  await loadBots();
+}
+function renderKnowledge(rows){
+  const box = document.getElementById('knowledgeList');
+  box.innerHTML = rows.length ? rows.map(k=>`<div class="knowledge-row">
+      <div style="display:flex;justify-content:space-between;gap:8px;">
+        <div><b>${esc(k.topic||'(untitled)')}</b><div class="muted" style="margin-top:3px;">${esc(k.content)}</div></div>
+        <button class="btn btn-neutral" style="padding:4px 8px;font-size:10px;flex:none;" onclick='deleteKnowledge(${JSON.stringify(k.id)})'>✕</button>
+      </div>
+    </div>`).join('') : '<div class="muted" style="font-size:12px;margin-bottom:8px;">No knowledge added yet — it will answer generally until you add some.</div>';
+}
+async function addKnowledge(){
+  if(!current) return;
+  const content = document.getElementById('k_content').value.trim();
+  if(!content){ Swal.fire('Content required', '', 'warning'); return; }
+  const r = await api({action:'add_knowledge', bot_id: current.id, topic: document.getElementById('k_topic').value.trim(), content});
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  document.getElementById('k_topic').value=''; document.getElementById('k_content').value='';
+  await selectBot(current.id);
+}
+async function deleteKnowledge(id){
+  await api({action:'delete_knowledge', id});
+  await selectBot(current.id);
+}
+function testBubble(role, text){
+  const box = document.getElementById('testChatBody');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble ' + (role==='user'?'user':'bot');
+  div.textContent = text;
+  box.appendChild(div); box.scrollTop = box.scrollHeight;
+  return div;
+}
+async function testSend(){
+  if(!current) return;
+  const input = document.getElementById('testInput');
+  const text = input.value.trim(); if(!text) return;
+  input.value='';
+  testBubble('user', text);
+  const typing = testBubble('bot', 'thinking…');
+  const r = await chatApi({action:'message', slug: current.slug, visitor_key: testVisitorKey, text});
+  typing.remove();
+  testBubble('bot', r.success ? r.reply : (r.message||'Something went wrong.'));
+}
+loadBots();
+</script>
+</body>
+</html>
