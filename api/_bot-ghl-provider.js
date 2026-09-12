@@ -150,18 +150,34 @@ export async function logProviderMessage({ contactId, direction, body, conversat
     // "/conversations/messages/outbound" for SMS-type providers — that path
     // is Call-log-only (its schema's "type" enum is literally just "Call").
     if (!conversationId) return { ok: false, error: 'No conversationId resolved for this contact — cannot log without one.' };
-    try {
+    const payload = {
+        type: 'SMS', contactId, conversationId, conversationProviderId,
+        direction: direction === 'outbound' ? 'outbound' : 'inbound',
+        message: body
+    };
+    async function attempt(versionHeader) {
         const r = await fetch(`${API_BASE}/conversations/messages/inbound`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Version': '2021-04-15', 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({
-                type: 'SMS', contactId, conversationId, conversationProviderId,
-                direction: direction === 'outbound' ? 'outbound' : 'inbound',
-                message: body
-            })
+            headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Version': versionHeader, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload)
         });
         const j = await r.json().catch(() => null);
-        if (!r.ok) console.error('[bot-ghl-provider] log message failed:', r.status, JSON.stringify(j));
-        return { ok: r.ok, id: j?.messageId || j?.id || null, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+        return { ok: r.ok, status: r.status, id: j?.messageId || j?.id || null, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    }
+    try {
+        // Same documented DTO exists under both the legacy dated version and
+        // the newer "v3" version header — try v3 first (this app was created
+        // today, so it's plausibly the version actually wired up for new
+        // apps' conversation providers on HighLevel's backend), falling back
+        // to the legacy version if v3 itself is rejected outright.
+        let res = await attempt('v3');
+        if (!res.ok && res.status === 400) {
+            const legacy = await attempt('2021-04-15');
+            if (legacy.ok) return legacy;
+            console.error('[bot-ghl-provider] log message failed (both versions):', res.status, res.error, '|', legacy.status, legacy.error);
+            return res.ok ? res : legacy;
+        }
+        if (!res.ok) console.error('[bot-ghl-provider] log message failed:', res.status, res.error);
+        return res;
     } catch (e) { return { ok: false, error: e.message }; }
 }
