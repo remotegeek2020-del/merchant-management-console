@@ -115,13 +115,25 @@
       </div>
 
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
-        <div style="font-weight:800;font-size:13px;margin-bottom:8px;">Knowledge <span class="muted" style="font-weight:400;">(what it can answer from — manual for now)</span></div>
+        <div style="font-weight:800;font-size:13px;margin-bottom:8px;">Knowledge <span class="muted" style="font-weight:400;">(what it can answer from)</span></div>
         <div id="knowledgeList"></div>
         <label class="fld" style="margin-top:8px;">Topic <span class="muted" style="text-transform:none;font-weight:400;">(optional label)</span></label>
         <input class="inp" id="k_topic" placeholder="e.g. Partner Requirements">
         <label class="fld">Content</label>
         <textarea class="inp" id="k_content" rows="3" placeholder="Paste the actual info here — a policy, an FAQ answer, service details, etc."></textarea>
-        <button class="btn btn-neutral" style="margin-top:8px;" onclick="addKnowledge()">+ Add knowledge</button>
+        <button class="btn btn-neutral" style="margin-top:8px;" onclick="addKnowledge()">+ Add knowledge manually</button>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:4px;">Crawl a website</div>
+        <div class="muted" style="font-size:11.5px;margin-bottom:8px;">Follows links on the same domain and pulls out useful facts automatically — no manual pasting. Capped for reliability (max 15 pages per run).</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input class="inp" id="crawl_url" placeholder="https://yourdomain.com" style="flex:2;min-width:180px;">
+          <input class="inp" id="crawl_max" type="number" value="8" style="flex:1;min-width:80px;" title="Max pages">
+          <button class="btn btn-neutral" style="flex:none;" onclick="startCrawl()" id="crawlBtn">Crawl now</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;margin-top:8px;"><input type="checkbox" id="crawl_auto"> Re-crawl this automatically every week</label>
+        <div id="crawlJobsList" style="margin-top:10px;"></div>
       </div>
 
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
@@ -218,6 +230,7 @@ async function selectBot(id){
   document.getElementById('postSaveSections').style.display='block';
   document.getElementById('editorCard').style.display='block';
   renderKnowledge(r.data.knowledge||[]);
+  loadCrawlJobs();
   renderEmbed();
   document.getElementById('testChatBody').innerHTML='';
   testVisitorKey = 'staff-preview-' + Math.random().toString(36).slice(2);
@@ -288,6 +301,43 @@ async function addKnowledge(){
 async function deleteKnowledge(id){
   await api({action:'delete_knowledge', id});
   await selectBot(current.id);
+}
+function crawlApi(body){ return fetch('/api/bot-crawl',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
+async function loadCrawlJobs(){
+  if(!current) return;
+  const r = await crawlApi({action:'list_jobs', bot_id: current.id});
+  renderCrawlJobs(r.success ? r.data : []);
+}
+function renderCrawlJobs(jobs){
+  const box = document.getElementById('crawlJobsList');
+  if(!jobs.length){ box.innerHTML = '<div class="muted" style="font-size:11.5px;">No crawls yet.</div>'; return; }
+  box.innerHTML = jobs.map(j=>`<div class="knowledge-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <div>
+        <div><b>${esc(j.start_url)}</b> ${j.auto_recrawl?'<span class="muted">(auto-weekly)</span>':''}</div>
+        <div class="muted" style="margin-top:2px;">${esc(j.status)} — ${j.pages_crawled||0} page(s), ${j.chunks_added||0} fact(s) added${j.last_run_at?(' · '+new Date(j.last_run_at).toLocaleString()):''}${j.error?(' · '+esc(j.error)):''}</div>
+      </div>
+      <button class="btn btn-neutral" style="padding:4px 8px;font-size:10px;flex:none;" onclick='deleteCrawlJob(${JSON.stringify(j.id)})'>✕</button>
+    </div>`).join('');
+}
+async function startCrawl(){
+  if(!current) return;
+  const url = document.getElementById('crawl_url').value.trim();
+  if(!url){ Swal.fire('URL required', '', 'warning'); return; }
+  const btn = document.getElementById('crawlBtn');
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Crawling…';
+  const r = await crawlApi({
+    action:'crawl', bot_id: current.id, start_url: url,
+    max_pages: parseInt(document.getElementById('crawl_max').value,10)||8,
+    auto_recrawl: document.getElementById('crawl_auto').checked
+  });
+  btn.disabled = false; btn.textContent = orig;
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  await Swal.fire({icon:'success', title:'Crawl complete', html:`Crawled <b>${r.pages_crawled}</b> page(s), added <b>${r.chunks_added}</b> knowledge item(s).`, confirmButtonColor:'#004990'});
+  await selectBot(current.id);
+}
+async function deleteCrawlJob(id){
+  await crawlApi({action:'delete_job', id});
+  loadCrawlJobs();
 }
 function testBubble(role, text){
   const box = document.getElementById('testChatBody');
