@@ -89,6 +89,22 @@ export async function getValidAccessToken() {
     return await saveTokens(r.tokens);
 }
 
+// Raw connection diagnostics for the "Send test message" button in
+// bot-manager.html — surfaces exactly what's missing rather than making the
+// admin guess between "not connected" / "no provider ID" / "bad token".
+export async function providerDiagnostics() {
+    const clientId = await getConfigValue('GHL_BOT_CLIENT_ID');
+    const clientSecret = await getConfigValue('GHL_BOT_CLIENT_SECRET');
+    const providerId = await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID');
+    const tok = await getValidAccessToken();
+    return {
+        client_configured: !!(clientId && clientSecret),
+        provider_id_configured: !!providerId,
+        connected: !!tok,
+        location_id: tok?.location_id || null
+    };
+}
+
 // Logs one message (inbound = from the visitor, outbound = from the bot)
 // into the Custom Conversation Provider channel so it shows in HighLevel's
 // Conversations tab for that contact, without sending a real SMS/email.

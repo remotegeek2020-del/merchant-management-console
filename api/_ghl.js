@@ -78,6 +78,24 @@ async function locGet(locationId, path) {
     } catch { return null; }
 }
 
+// POST variant that surfaces ok/error (not just null-on-failure) — needed for
+// write operations like creating an appointment, where the caller needs to
+// know WHY it failed, not just that it did.
+async function locPost(locationId, path, body) {
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'No location token available.' };
+    try {
+        const r = await fetch(`${GHL_BASE}${path}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return { ok: false, error: d?.message || `HTTP ${r.status}`, raw: d };
+        return { ok: true, data: d };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
 // Forms + calendars in a sub-account (for the campaign conversion pickers).
 export async function ghlListForms(locationId) {
     const d = await locGet(locationId, `/forms/?locationId=${encodeURIComponent(locationId)}&limit=200`);
@@ -103,6 +121,35 @@ export async function ghlCalendarFreeSlots(locationId, calendarId, startMs, endM
         if (v && Array.isArray(v.slots)) count += v.slots.length;
     });
     return count;
+}
+
+// Raw open slots (ISO datetimes) in [startMs, endMs) — used by the bot's
+// auto-book flow to offer real times to a visitor, not just a slot count.
+// Returns [] (not null) on failure, so a caller can fail safe to "no times
+// available right now" rather than crash the conversation.
+export async function ghlCalendarFreeSlotsRaw(locationId, calendarId, startMs, endMs) {
+    if (!calendarId) return [];
+    const d = await locGet(locationId, `/calendars/${encodeURIComponent(calendarId)}/free-slots?startDate=${startMs}&endDate=${endMs}`);
+    if (!d || typeof d !== 'object') return [];
+    const out = [];
+    Object.keys(d).forEach(k => {
+        const v = d[k];
+        if (v && Array.isArray(v.slots)) out.push(...v.slots);
+    });
+    return out.sort();
+}
+
+// Books a real appointment on a calendar, on the visitor's behalf. Standard
+// v2 Calendars endpoint — startTime must be one of the ISO slots returned by
+// free-slots above (HighLevel rejects times outside its own availability).
+export async function ghlCreateAppointment(locationId, { calendarId, contactId, startTime, title }) {
+    if (!calendarId || !contactId || !startTime) return { ok: false, error: 'Missing calendarId/contactId/startTime.' };
+    const r = await locPost(locationId, '/calendars/events/appointments', {
+        calendarId, locationId, contactId, startTime,
+        title: title || 'Appointment', appointmentStatus: 'confirmed'
+    });
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, id: r.data?.id || r.data?.event?.id || null };
 }
 
 // Tags in a sub-account (for the lead-capture tag picker).

@@ -105,13 +105,24 @@
         });
     }
 
-    // Booking always renders as an embedded widget right in the chat panel —
-    // never a new tab. Leaving the chat to book elsewhere is exactly the
-    // drop-off point that matters most to avoid.
+    // Booking modes:
+    //  - 'widget'/'form'/'calendar': embedded iframe right in the chat panel
+    //    (never a new tab — that's the drop-off point that matters most to avoid).
+    //  - 'link': a plain clickable button — for sites where an iframe of this
+    //    size doesn't fit well, or staff just prefer handing over a link.
+    //  - auto_book has no widget at all: the bot books it directly and just
+    //    confirms in the conversation (handled in send(), not here).
     function bookingHtml(b) {
-        if (!b) return '';
+        if (!b) return;
         var body = document.getElementById(UID + '-body');
         var wrap = document.createElement('div');
+        if (b.mode === 'link' && b.url) {
+            wrap.style.cssText = 'margin-top:4px;';
+            wrap.innerHTML = '<a href="' + esc(b.url) + '" target="_blank" rel="noopener" style="display:inline-block;background:' + ACCENT + ';color:#fff;text-decoration:none;font-weight:700;font-size:13px;padding:10px 16px;border-radius:10px;">📅 Pick a time to talk</a>';
+            body.appendChild(wrap);
+            body.scrollTop = body.scrollHeight;
+            return;
+        }
         wrap.style.cssText = 'margin-top:4px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;';
         var src = b.mode === 'form' && b.form_id
             ? 'https://api.leadconnectorhq.com/widget/form/' + encodeURIComponent(b.form_id)

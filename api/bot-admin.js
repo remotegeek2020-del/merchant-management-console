@@ -5,7 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
-import { providerAuthUrl } from './_bot-ghl-provider.js';
+import { providerAuthUrl, providerDiagnostics, logProviderMessage } from './_bot-ghl-provider.js';
 import * as webflow from './_webflow.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -46,6 +46,19 @@ export default async function handler(req, res) {
             const url = await providerAuthUrl(req);
             if (!url) return bad(res, 'Add GHL_BOT_CLIENT_ID in Secret Dungeon → API Manager first.');
             return ok(res, { url });
+        }
+        // Diagnose + actually fire a test message so staff can see the REAL
+        // HighLevel response (not guess from Vercel logs) when "messages
+        // aren't showing up in Conversations" is reported.
+        if (action === 'provider_diagnostics') {
+            return ok(res, await providerDiagnostics());
+        }
+        if (action === 'provider_test_message') {
+            const contactId = String(body.contact_id || '').trim();
+            if (!contactId) return bad(res, 'Paste a HighLevel Contact ID to test against.');
+            const diag = await providerDiagnostics();
+            const r = await logProviderMessage({ contactId, direction: 'outbound', body: '[PayProTec bot test message — safe to ignore]' });
+            return ok(res, { diagnostics: diag, result: r });
         }
 
         if (action === 'list_bots') {
@@ -120,6 +133,7 @@ export default async function handler(req, res) {
                 booking_calendar_name: str(body.booking_calendar_name, 200) || null,
                 booking_form_id: str(body.booking_form_id, 100) || null,
                 booking_form_name: str(body.booking_form_name, 200) || null,
+                booking_style: ['link', 'auto_book'].includes(body.booking_style) ? body.booking_style : 'widget',
                 followup_enabled: !!body.followup_enabled,
                 followup_hours: Number.isFinite(+body.followup_hours) && +body.followup_hours > 0 ? +body.followup_hours : 24,
                 followup_message: str(body.followup_message, 500) || null
@@ -144,6 +158,7 @@ export default async function handler(req, res) {
                 booking_calendar_name: str(body.booking_calendar_name, 200) || null,
                 booking_form_id: str(body.booking_form_id, 100) || null,
                 booking_form_name: str(body.booking_form_name, 200) || null,
+                booking_style: ['link', 'auto_book'].includes(body.booking_style) ? body.booking_style : 'widget',
                 followup_enabled: !!body.followup_enabled,
                 followup_hours: Number.isFinite(+body.followup_hours) && +body.followup_hours > 0 ? +body.followup_hours : 24,
                 followup_message: str(body.followup_message, 500) || null,

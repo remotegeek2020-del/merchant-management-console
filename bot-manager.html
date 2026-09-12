@@ -57,6 +57,7 @@
       <div style="font-weight:800;font-size:13px;" id="providerBannerTitle">Checking HighLevel connection…</div>
       <div class="muted" style="font-size:11.5px;margin-top:2px;" id="providerBannerDesc">Conversations are logged into HighLevel's Conversations tab as a custom "Website Chat" channel — no real texts sent.</div>
     </div>
+    <button class="btn btn-neutral" id="providerTestBtn" style="display:none;" onclick="testProviderMessage()">Send test message</button>
     <button class="btn btn-brand" id="providerConnectBtn" style="display:none;" onclick="connectProvider()">Connect HighLevel</button>
   </div>
 </div>
@@ -106,6 +107,13 @@
         <label class="fld" style="margin-top:0;">Form</label>
         <select class="inp" id="f_form"><option value="">Choose a sub-account first…</option></select>
       </div>
+      <label class="fld">When a visitor is ready to book</label>
+      <select class="inp" id="f_booking_style">
+        <option value="widget">Show an embedded booking widget in the chat (default)</option>
+        <option value="link">Hand over a clickable calendar/form link</option>
+        <option value="auto_book">Book the appointment itself (calendar only — bot asks for a time, checks real availability, and books it)</option>
+      </select>
+      <div class="muted" style="font-size:11px;margin-top:4px;">"Book the appointment itself" only works with Calendar (not Form) selected above, and calls HighLevel's real Calendars API — verify a test booking lands correctly before relying on it.</div>
       <div style="font-weight:800;font-size:12px;margin:16px 0 8px;">Prime49 eligibility band <span class="muted" style="font-weight:400;">(used only if it looks up a partner)</span></div>
       <div style="display:flex;gap:10px;">
         <div style="flex:1;"><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="f_min_volume" value="20000"></div>
@@ -241,6 +249,7 @@ function newBot(){
   document.getElementById('f_active').checked = true;
   document.getElementById('f_min_volume').value = '20000'; document.getElementById('f_max_volume').value = '30000';
   document.getElementById('f_followup_enabled').checked = false; document.getElementById('f_followup_hours').value = '24'; document.getElementById('f_followup_message').value='';
+  document.getElementById('f_booking_style').value = 'widget';
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('postSaveSections').style.display='none';
   document.getElementById('editorCard').style.display='block';
@@ -263,6 +272,7 @@ async function selectBot(id){
   document.getElementById('f_followup_enabled').checked = !!current.followup_enabled;
   document.getElementById('f_followup_hours').value = current.followup_hours!=null?current.followup_hours:24;
   document.getElementById('f_followup_message').value = current.followup_message||'';
+  document.getElementById('f_booking_style').value = current.booking_style||'widget';
   setBookingMode(current.booking_mode==='form'?'form':'calendar');
   await loadBotLocations(current.ghl_location_id||'');
   if(current.ghl_location_id) await onBotLocation(current.booking_calendar_id||'', current.booking_form_id||'');
@@ -305,7 +315,8 @@ async function saveBot(){
     booking_calendar_id: calSel.value||null,
     booking_calendar_name: (calSel.options[calSel.selectedIndex]||{}).text||null,
     booking_form_id: formSel.value||null,
-    booking_form_name: (formSel.options[formSel.selectedIndex]||{}).text||null
+    booking_form_name: (formSel.options[formSel.selectedIndex]||{}).text||null,
+    booking_style: document.getElementById('f_booking_style').value||'widget'
   };
   if(!payload.name){ Swal.fire('Name required', '', 'warning'); return; }
   let r;
@@ -443,26 +454,48 @@ async function loadProviderStatus(){
   const banner = document.getElementById('providerBanner');
   const title = document.getElementById('providerBannerTitle');
   const btn = document.getElementById('providerConnectBtn');
+  const testBtn = document.getElementById('providerTestBtn');
   if(!r.success){ banner.style.display='none'; return; }
   banner.style.display='flex';
   if(!r.data.configured){
     title.textContent = '⚠️ HighLevel Conversation Provider not configured';
     title.style.color = 'var(--amber)';
-    btn.style.display='none';
+    btn.style.display='none'; testBtn.style.display='none';
   } else if(!r.data.connected){
     title.textContent = '⚠️ HighLevel not connected yet';
     title.style.color = 'var(--amber)';
-    btn.style.display='inline-flex'; btn.textContent = 'Connect HighLevel';
+    btn.style.display='inline-flex'; btn.textContent = 'Connect HighLevel'; testBtn.style.display='none';
   } else {
     title.textContent = '✓ HighLevel connected';
     title.style.color = 'var(--green)';
-    btn.style.display='inline-flex'; btn.textContent = 'Reconnect';
+    btn.style.display='inline-flex'; btn.textContent = 'Reconnect'; testBtn.style.display='inline-flex';
   }
 }
 async function connectProvider(){
   const r = await api({action:'provider_connect_url'});
   if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
   window.open(r.data.url, '_blank');
+}
+// "Messages aren't showing up in Conversations" diagnostic: fires one real
+// test message at a contact ID the staff pastes in, and shows the raw
+// HighLevel response — instead of guessing from Vercel logs.
+async function testProviderMessage(){
+  const { value: contactId } = await Swal.fire({
+    title: 'Send a test HighLevel message',
+    input: 'text',
+    inputLabel: 'HighLevel Contact ID (open any contact in HighLevel — it\'s in the URL)',
+    inputPlaceholder: 'e.g. 6aa5...',
+    showCancelButton: true, confirmButtonText: 'Send test'
+  });
+  if(!contactId) return;
+  const r = await api({action:'provider_test_message', contact_id: contactId.trim()});
+  if(!r.success){ Swal.fire('Failed', r.message||'', 'error'); return; }
+  const d = r.data;
+  if(d.result && d.result.ok){
+    Swal.fire({icon:'success', title:'Message sent', html:`HighLevel accepted it. If you still don't see a "Website Chat" tab on that contact's Conversations, open Settings → Conversation Providers in HighLevel and make sure "<b>Always show this Conversation Provider</b>" is checked on the provider — that checkbox controls whether it gets its own tab.`});
+  } else {
+    Swal.fire({icon:'error', title:'Message rejected by HighLevel', html:`<div style="text-align:left;font-size:12.5px;"><b>Connected:</b> ${d.diagnostics.connected?'yes':'no'}<br><b>Location on file:</b> ${esc(d.diagnostics.location_id||'—')}<br><b>Error:</b> ${esc((d.result&&d.result.error)||'unknown')}</div>`});
+  }
 }
 loadProviderStatus();
 loadBots();

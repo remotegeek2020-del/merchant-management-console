@@ -16,7 +16,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getConfigValue } from './api-config.js';
-import { ghlUpsertContact } from './_ghl.js';
+import { ghlUpsertContact, ghlCalendarFreeSlotsRaw, ghlCreateAppointment } from './_ghl.js';
 import { logProviderMessage } from './_bot-ghl-provider.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -82,24 +82,41 @@ async function lookupPartner(bot, partnerId) {
     };
 }
 
-const functionDeclarations = [
-    {
-        name: 'lookup_partner',
-        description: "Look up an existing PayProTec partner by their Partner ID to check their merchants and whether they qualify for a Prime49 upgrade. Use this ONLY when the visitor says they're already a partner and gives you an ID (or asks to check their Prime49 eligibility). Any Partner ID they own works, even if they have several.",
-        parameters: { type: 'object', properties: { partner_id: { type: 'string', description: 'The Partner ID they gave you' } }, required: ['partner_id'] }
-    },
-    {
-        name: 'create_contact_and_offer_booking',
-        description: "Call this ONLY once the visitor is ready to move forward (wants to become a partner, or is an eligible existing partner ready to book) AND you have their name and at least an email or phone number. Creates/updates their record and triggers the booking widget to appear in the chat.",
-        parameters: {
-            type: 'object',
-            properties: {
-                name: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' }
-            },
-            required: ['name']
+function buildFunctionDeclarations(bot) {
+    const decls = [
+        {
+            name: 'lookup_partner',
+            description: "Look up an existing PayProTec partner by their Partner ID to check their merchants and whether they qualify for a Prime49 upgrade. Use this ONLY when the visitor says they're already a partner and gives you an ID (or asks to check their Prime49 eligibility). Any Partner ID they own works, even if they have several.",
+            parameters: { type: 'object', properties: { partner_id: { type: 'string', description: 'The Partner ID they gave you' } }, required: ['partner_id'] }
+        },
+        {
+            name: 'create_contact_and_offer_booking',
+            description: bot.booking_style === 'auto_book'
+                ? "Call this ONCE the visitor is ready to move forward AND you have their name and at least an email or phone number. Creates/updates their contact record. Call check_availability next to actually get them on the calendar."
+                : "Call this ONLY once the visitor is ready to move forward (wants to become a partner, or is an eligible existing partner ready to book) AND you have their name and at least an email or phone number. Creates/updates their record and (if booking is configured for this assistant) hands them a way to schedule a call.",
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' }
+                },
+                required: ['name']
+            }
         }
+    ];
+    if (bot.booking_style === 'auto_book' && bot.booking_mode === 'calendar' && bot.booking_calendar_id) {
+        decls.push({
+            name: 'check_availability',
+            description: "Call this AFTER create_contact_and_offer_booking has succeeded, once the visitor has a rough preference for when they'd like to talk (e.g. 'sometime this week', 'tomorrow afternoon', or no preference at all — this looks ahead automatically). Returns a short list of real open time slots you should read out to the visitor in plain conversational language (their local-sounding format, e.g. 'Tuesday at 2:00 PM'), not raw timestamps.",
+            parameters: { type: 'object', properties: {}, required: [] }
+        });
+        decls.push({
+            name: 'book_appointment',
+            description: "Call this ONLY after the visitor has picked one specific time from the list check_availability gave you. Pass back the EXACT slot_iso value from that list for the time they chose — do not construct or guess a timestamp yourself. Actually books the appointment on the calendar on their behalf and confirms it.",
+            parameters: { type: 'object', properties: { slot_iso: { type: 'string', description: 'The exact ISO datetime string from check_availability that the visitor picked' } }, required: ['slot_iso'] }
+        });
     }
-];
+    return decls;
+}
 
 export default async function handler(req, res) {
     cors(res);
@@ -161,26 +178,64 @@ export default async function handler(req, res) {
                 ? (knowledgeRows || []).map(k => `- ${k.topic ? k.topic + ': ' : ''}${k.content}${(k.source && /^https?:\/\//.test(k.source)) ? ` [source: ${k.source}]` : ''}`).join('\n')
                 : '(no reference material loaded yet — answer generally and honestly say when you do not know something specific)';
 
-            let booking = null; // set by the tool if this turn should surface a booking widget
+            let booking = null; // set by the tool if this turn should surface a booking widget/link
+            let lastSlots = []; // ISO slots offered by check_availability, so book_appointment can validate against them
             async function executeTool(name, args) {
                 if (name === 'lookup_partner') {
                     const r = await lookupPartner(bot, args.partner_id);
                     return r;
                 }
                 if (name === 'create_contact_and_offer_booking') {
-                    if (!bot.ghl_location_id) return { ok: false, error: 'Booking is not configured for this assistant yet.' };
+                    if (!bot.ghl_location_id) return { ok: false, error: 'Booking is not configured for this assistant yet. Do not promise a widget or a link — offer to have a person follow up instead.' };
                     const r = await ghlUpsertContact(bot.ghl_location_id, { name: args.name, email: args.email, phone: args.phone }, []);
-                    if (r.ok && r.id) {
-                        await supabase.from('bot_conversations').update({
-                            hl_contact_id: r.id, visitor_name: args.name || null, visitor_email: args.email || null, visitor_phone: args.phone || null
-                        }).eq('id', convo.id);
-                        convo.hl_contact_id = r.id;
-                        await supabase.from('bot_visitors').update({ hl_contact_id: r.id }).eq('bot_id', bot.id).eq('visitor_key', visitorKey);
-                        if (bot.booking_mode === 'form' && bot.booking_form_id) booking = { mode: 'form', form_id: bot.booking_form_id };
-                        else if (bot.booking_calendar_id) booking = { mode: 'calendar', calendar_id: bot.booking_calendar_id };
-                        return { ok: true };
+                    if (!r.ok || !r.id) return { ok: false, error: r.error || 'Could not create the contact.' };
+                    await supabase.from('bot_conversations').update({
+                        hl_contact_id: r.id, visitor_name: args.name || null, visitor_email: args.email || null, visitor_phone: args.phone || null
+                    }).eq('id', convo.id);
+                    convo.hl_contact_id = r.id;
+                    await supabase.from('bot_visitors').update({ hl_contact_id: r.id }).eq('bot_id', bot.id).eq('visitor_key', visitorKey);
+
+                    // Whether a booking mechanism is actually configured for THIS
+                    // bot — surfaced back to the model so it never claims a
+                    // widget/link is coming when nothing was actually set up in
+                    // bot-manager (the bug the user hit: it said "you should see
+                    // a booking widget appear shortly" with nothing configured).
+                    const hasForm = bot.booking_mode === 'form' && !!bot.booking_form_id;
+                    const hasCalendar = bot.booking_mode === 'calendar' && !!bot.booking_calendar_id;
+                    if (bot.booking_style === 'auto_book' && hasCalendar) {
+                        return { ok: true, booking_available: true, mode: 'auto_book' };
                     }
-                    return { ok: false, error: r.error || 'Could not create the contact.' };
+                    if (bot.booking_style === 'link' && (hasForm || hasCalendar)) {
+                        const url = hasForm
+                            ? `https://api.leadconnectorhq.com/widget/form/${encodeURIComponent(bot.booking_form_id)}`
+                            : `https://api.leadconnectorhq.com/widget/booking/${encodeURIComponent(bot.booking_calendar_id)}`;
+                        booking = { mode: 'link', url };
+                        return { ok: true, booking_available: true, mode: 'link' };
+                    }
+                    if (hasForm) { booking = { mode: 'form', form_id: bot.booking_form_id }; return { ok: true, booking_available: true, mode: 'widget' }; }
+                    if (hasCalendar) { booking = { mode: 'calendar', calendar_id: bot.booking_calendar_id }; return { ok: true, booking_available: true, mode: 'widget' }; }
+                    return { ok: true, booking_available: false, note: 'Contact saved, but no calendar/form is configured for this assistant — do NOT tell the visitor a widget or link is coming. Instead say a team member will follow up with them directly.' };
+                }
+                if (name === 'check_availability') {
+                    if (!bot.ghl_location_id || !bot.booking_calendar_id) return { ok: false, error: 'No calendar configured.' };
+                    const now = Date.now();
+                    const slots = await ghlCalendarFreeSlotsRaw(bot.ghl_location_id, bot.booking_calendar_id, now, now + 9 * 24 * 60 * 60 * 1000);
+                    lastSlots = slots.slice(0, 8);
+                    if (!lastSlots.length) return { ok: true, slots: [], note: 'No open times found in the next 9 days — apologize and offer to have a person follow up instead.' };
+                    return { ok: true, slots: lastSlots };
+                }
+                if (name === 'book_appointment') {
+                    if (!bot.ghl_location_id || !bot.booking_calendar_id) return { ok: false, error: 'No calendar configured.' };
+                    if (!convo.hl_contact_id) return { ok: false, error: 'No contact on file yet — call create_contact_and_offer_booking first.' };
+                    const slot = String(args.slot_iso || '');
+                    if (lastSlots.length && !lastSlots.includes(slot)) {
+                        return { ok: false, error: 'That is not one of the times just offered — re-run check_availability and use an exact slot value, or ask the visitor to pick again.' };
+                    }
+                    const r = await ghlCreateAppointment(bot.ghl_location_id, {
+                        calendarId: bot.booking_calendar_id, contactId: convo.hl_contact_id, startTime: slot, title: `${bot.name} — website chat booking`
+                    });
+                    if (!r.ok) return { ok: false, error: r.error || 'Could not book that time — apologize and offer to have a person follow up instead.' };
+                    return { ok: true, booked: true, start_time: slot };
                 }
                 return { ok: false, error: 'Unknown tool' };
             }
@@ -195,13 +250,15 @@ export default async function handler(req, res) {
                 const model = genAI.getGenerativeModel({
                     model: 'gemini-2.5-flash',
                     generationConfig: { temperature: 0.5 },
-                    tools: [{ functionDeclarations }],
+                    tools: [{ functionDeclarations: buildFunctionDeclarations(bot) }],
                     systemInstruction: `${bot.persona || 'You are a helpful assistant.'}
 
 ${visitorContext}
 
 Reference material you can draw on to answer questions (do not invent facts beyond this and your persona instructions — if you don't know, say so and offer to connect them with a person). Some items include a [source: URL] — when you use one of those, casually mention where it's from or offer the link (e.g. "you can see the full details here: <url>"), so the answer feels grounded, not just asserted. Never show the [source: ...] tag itself verbatim; just describe/link it naturally:
 ${knowledgeBlock}
+
+IMPORTANT about booking: never promise a "widget will appear" or "here's a link" until AFTER create_contact_and_offer_booking actually returns booking_available:true — its response tells you exactly what happened (widget, link, auto_book, or nothing configured). If booking_available is false, say a team member will personally follow up — do not invent a scheduling mechanism that doesn't exist.
 
 Keep replies conversational and concise (a few sentences), like a real chat, not an essay.`
                 });
@@ -241,6 +298,11 @@ Keep replies conversational and concise (a few sentences), like a real chat, not
                     ]);
                     if (!inRes.ok) console.error('[bot-chat] provider log (inbound) failed:', inRes.error);
                     if (!outRes.ok) console.error('[bot-chat] provider log (outbound) failed:', outRes.error);
+                    // Also persist the error where staff can actually see it
+                    // (bot-manager), since "check Vercel logs" isn't a real
+                    // diagnostic path for a non-engineer.
+                    const logErr = (!inRes.ok && inRes.error) || (!outRes.ok && outRes.error) || null;
+                    await supabase.from('bot_conversations').update({ last_provider_log_error: logErr }).eq('id', convo.id);
                 }
 
                 return ok(res, { reply, conversation_id: convo.id, booking });
