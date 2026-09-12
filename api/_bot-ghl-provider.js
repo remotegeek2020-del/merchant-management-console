@@ -92,17 +92,36 @@ export async function getValidAccessToken() {
 // Raw connection diagnostics for the "Send test message" button in
 // bot-manager.html — surfaces exactly what's missing rather than making the
 // admin guess between "not connected" / "no provider ID" / "bad token".
+// HighLevel's OAuth access tokens are JWTs — decode (not verify; we don't
+// need to, we're just reading our own token's claims) the payload so
+// diagnostics can show the REAL scopes/authClass HighLevel granted, instead
+// of only what we asked for. A stale/under-scoped token is invisible from
+// the outside otherwise.
+function decodeJwtPayload(token) {
+    try {
+        const part = String(token || '').split('.')[1];
+        if (!part) return null;
+        const json = Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+        return JSON.parse(json);
+    } catch { return null; }
+}
+
 export async function providerDiagnostics() {
     const clientId = await getConfigValue('GHL_BOT_CLIENT_ID');
     const clientSecret = await getConfigValue('GHL_BOT_CLIENT_SECRET');
     const providerId = await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID');
     const tok = await getValidAccessToken();
+    const claims = tok ? decodeJwtPayload(tok.access_token) : null;
     return {
         client_configured: !!(clientId && clientSecret),
         provider_id_configured: !!providerId,
         provider_id: providerId || null,
         connected: !!tok,
-        location_id: tok?.location_id || null
+        location_id: tok?.location_id || null,
+        token_auth_class: claims?.authClass || null,
+        token_auth_class_id: claims?.authClassId || null,
+        token_scopes: claims?.oauthMeta?.scopes || claims?.scopes || null,
+        token_client_id: claims?.client_id || claims?.clientKey || null
     };
 }
 
