@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 import { providerAuthUrl, providerDiagnostics, logProviderMessage } from './_bot-ghl-provider.js';
-import { ghlGetContactRaw, ghlFindOrCreateConversation } from './_ghl.js';
+import { ghlGetContactRaw, ghlFindOrCreateConversation, ghlGetConversationRaw } from './_ghl.js';
 import * as webflow from './_webflow.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -77,6 +77,13 @@ export default async function handler(req, res) {
             // on a different channel, supplying conversationId directly may
             // route around that.
             const conversationId = diag.location_id ? await ghlFindOrCreateConversation(diag.location_id, contactId) : null;
+            // Pull the conversation's own numeric channel `type` (1=Phone,
+            // 2=Email, 3=FB, 4=Review, 5=Group SMS, 6=Internal Chat) — a
+            // SEPARATE concept from the message-level type string we send.
+            // If this conversation isn't itself a phone/SMS-type
+            // conversation, sending type:"SMS" against it is a very
+            // plausible source of a type mismatch error.
+            const conversationRaw = (diag.location_id && conversationId) ? await ghlGetConversationRaw(diag.location_id, conversationId) : null;
             // Test BOTH directions separately — if only one fails, that tells
             // us the direction flag itself (not the provider ID/type) is the
             // actual problem, instead of guessing from one combined result.
@@ -84,7 +91,7 @@ export default async function handler(req, res) {
                 logProviderMessage({ contactId, conversationId, direction: 'inbound', body: '[PayProTec bot test message — inbound — safe to ignore]' }),
                 logProviderMessage({ contactId, conversationId, direction: 'outbound', body: '[PayProTec bot test message — outbound — safe to ignore]' })
             ]);
-            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, conversation_id: conversationId, inbound: inboundR, outbound: outboundR });
+            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, conversation_id: conversationId, conversation_raw: conversationRaw, inbound: inboundR, outbound: outboundR });
         }
 
         if (action === 'list_bots') {

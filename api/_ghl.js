@@ -312,6 +312,17 @@ export async function ghlFindOrCreateConversation(locationId, contactId) {
     } catch { return null; }
 }
 
+// Raw conversation record — used to check its numeric channel `type`
+// (1=Phone/SMS, 2=Email, 3=FB Messenger, 4=Review, 5=Group SMS, 6=Internal
+// Chat), which is a SEPARATE concept from the message-level type string
+// ("SMS"/"Email"/"Custom"/...). A message declared type:"SMS" against a
+// conversation that isn't itself a phone-type conversation is a plausible
+// cause of "Incorrect conversationProviderId/type".
+export async function ghlGetConversationRaw(locationId, conversationId) {
+    if (!conversationId) return null;
+    return locGet(locationId, `/conversations/${encodeURIComponent(conversationId)}`);
+}
+
 // Raw contact record + which locationId HighLevel says it actually belongs
 // to — used to programmatically confirm a contact is in the sub-account we
 // think it's in, instead of comparing IDs by eye across screenshots (easy to
