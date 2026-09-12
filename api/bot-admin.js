@@ -57,8 +57,14 @@ export default async function handler(req, res) {
             const contactId = String(body.contact_id || '').trim();
             if (!contactId) return bad(res, 'Paste a HighLevel Contact ID to test against.');
             const diag = await providerDiagnostics();
-            const r = await logProviderMessage({ contactId, direction: 'outbound', body: '[PayProTec bot test message — safe to ignore]' });
-            return ok(res, { diagnostics: diag, result: r });
+            // Test BOTH directions separately — if only one fails, that tells
+            // us the direction flag itself (not the provider ID/type) is the
+            // actual problem, instead of guessing from one combined result.
+            const [inboundR, outboundR] = await Promise.all([
+                logProviderMessage({ contactId, direction: 'inbound', body: '[PayProTec bot test message — inbound — safe to ignore]' }),
+                logProviderMessage({ contactId, direction: 'outbound', body: '[PayProTec bot test message — outbound — safe to ignore]' })
+            ]);
+            return ok(res, { diagnostics: diag, inbound: inboundR, outbound: outboundR });
         }
 
         if (action === 'list_bots') {
