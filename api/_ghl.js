@@ -302,7 +302,7 @@ export async function ghlFindOrCreateConversation(locationId, contactId) {
         if (existing?.id) return existing.id;
     } catch { /* fall through to create */ }
     try {
-        const cr = await fetch(`${GHL_BASE}/conversations`, {
+        const cr = await fetch(`${GHL_BASE}/conversations/`, {
             method: 'POST',
             headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({ locationId, contactId })

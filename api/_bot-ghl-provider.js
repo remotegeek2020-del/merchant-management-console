@@ -114,24 +114,29 @@ export async function logProviderMessage({ contactId, direction, body, conversat
     if (!tok) return { ok: false, error: 'HighLevel Conversation Provider is not connected yet.' };
     const conversationProviderId = await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID');
     if (!conversationProviderId) return { ok: false, error: 'GHL_BOT_CONVO_PROVIDER_ID not configured' };
-    // NOTE: there is no separate "/conversations/messages/outbound" endpoint
-    // for an extra SMS-type custom provider (that path is Call-log-specific
-    // and rejects type:"SMS" with "type must be a valid enum value", which is
-    // exactly the error we hit testing this live). The single Add Inbound
-    // Message endpoint logs BOTH directions — it takes its own "direction"
-    // field to say which way the message went.
+    // Verified against HighLevel's own published OpenAPI spec
+    // (ProcessMessageBodyDto, POST /conversations/messages/inbound):
+    // required fields are exactly type + conversationId + contactId +
+    // conversationProviderId. conversationId is REQUIRED — sending it as
+    // undefined silently drops the key from the JSON body, which is almost
+    // certainly what produced the "Incorrect conversationProviderId/type"
+    // error every earlier attempt hit (HighLevel's validator folds a missing
+    // required field into that same generic message). There is no
+    // "/conversations/messages/outbound" for SMS-type providers — that path
+    // is Call-log-only (its schema's "type" enum is literally just "Call").
+    if (!conversationId) return { ok: false, error: 'No conversationId resolved for this contact — cannot log without one.' };
     try {
         const r = await fetch(`${API_BASE}/conversations/messages/inbound`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Version': '2021-04-15', 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
-                type: 'SMS', contactId, conversationId: conversationId || undefined, locationId: tok.location_id || undefined,
-                conversationProviderId, direction: direction === 'outbound' ? 'outbound' : 'inbound',
-                message: body, body
+                type: 'SMS', contactId, conversationId, conversationProviderId,
+                direction: direction === 'outbound' ? 'outbound' : 'inbound',
+                message: body
             })
         });
         const j = await r.json().catch(() => null);
         if (!r.ok) console.error('[bot-ghl-provider] log message failed:', r.status, JSON.stringify(j));
-        return { ok: r.ok, id: j?.id || null, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+        return { ok: r.ok, id: j?.messageId || j?.id || null, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
     } catch (e) { return { ok: false, error: e.message }; }
 }
