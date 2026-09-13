@@ -91,7 +91,19 @@ export default async function handler(req, res) {
                 logProviderMessage({ contactId, conversationId, direction: 'inbound', body: '[PayProTec bot test message — inbound — safe to ignore]' }),
                 logProviderMessage({ contactId, conversationId, direction: 'outbound', body: '[PayProTec bot test message — outbound — safe to ignore]' })
             ]);
-            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, conversation_id: conversationId, conversation_raw: conversationRaw, inbound: inboundR, outbound: outboundR });
+            // A/B test: identical payload, but authenticated with the
+            // literal Private Integration token (GHL_API_KEY, pasted in
+            // Secret Dungeon — the same one every other GHL integration in
+            // this codebase uses) instead of our Marketplace App's OAuth
+            // token — isolates whether the OAuth grant itself is the
+            // problem, since everything else has already checked out
+            // identically between the two.
+            let privateKeyResult = null;
+            const privateKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY || null;
+            if (privateKey) {
+                privateKeyResult = await logProviderMessage({ contactId, conversationId, direction: 'outbound', body: '[PayProTec bot test message — via private key — safe to ignore]', accessTokenOverride: privateKey });
+            }
+            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, conversation_id: conversationId, conversation_raw: conversationRaw, inbound: inboundR, outbound: outboundR, private_key_test: privateKeyResult });
         }
 
         if (action === 'list_bots') {

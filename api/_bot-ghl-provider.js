@@ -134,9 +134,13 @@ export async function providerDiagnostics() {
 // Logs one message (inbound = from the visitor, outbound = from the bot)
 // into the Custom Conversation Provider channel so it shows in HighLevel's
 // Conversations tab for that contact, without sending a real SMS/email.
-export async function logProviderMessage({ contactId, direction, body, conversationId }) {
-    const tok = await getValidAccessToken();
-    if (!tok) return { ok: false, error: 'HighLevel Conversation Provider is not connected yet.' };
+export async function logProviderMessage({ contactId, direction, body, conversationId, accessTokenOverride }) {
+    let accessToken = accessTokenOverride || null;
+    if (!accessToken) {
+        const tok = await getValidAccessToken();
+        if (!tok) return { ok: false, error: 'HighLevel Conversation Provider is not connected yet.' };
+        accessToken = tok.access_token;
+    }
     const conversationProviderId = await getConfigValue('GHL_BOT_CONVO_PROVIDER_ID');
     if (!conversationProviderId) return { ok: false, error: 'GHL_BOT_CONVO_PROVIDER_ID not configured' };
     // Verified against HighLevel's own published OpenAPI spec
@@ -158,7 +162,7 @@ export async function logProviderMessage({ contactId, direction, body, conversat
     async function attempt(versionHeader) {
         const r = await fetch(`${API_BASE}/conversations/messages/inbound`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Version': versionHeader, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Version': versionHeader, 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(payload)
         });
         const j = await r.json().catch(() => null);
