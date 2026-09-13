@@ -16,8 +16,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getConfigValue } from './api-config.js';
-import { ghlUpsertContact, ghlCalendarFreeSlotsRaw, ghlCreateAppointment, ghlFindOrCreateConversation } from './_ghl.js';
+import { ghlUpsertContact, ghlCalendarFreeSlotsRaw, ghlCreateAppointment, ghlFindOrCreateConversation, ghlAddContactToWorkflow } from './_ghl.js';
 import { logProviderMessage } from './_bot-ghl-provider.js';
+import { applyRsvpTagWorkflow } from './rsvp.js';
+import { firstAvailableRep } from './prime49.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 function cors(res) {
@@ -103,16 +105,44 @@ function buildFunctionDeclarations(bot) {
             }
         }
     ];
-    if (bot.booking_style === 'auto_book' && bot.booking_mode === 'calendar' && bot.booking_calendar_id) {
+    const hasAutoBookCalendar = bot.booking_style === 'auto_book' && bot.booking_mode === 'calendar' && bot.booking_calendar_id;
+    const canAssignReps = Array.isArray(bot.survey_reps) && bot.survey_reps.length > 0;
+    if (hasAutoBookCalendar || canAssignReps) {
         decls.push({
             name: 'check_availability',
-            description: "Call this AFTER create_contact_and_offer_booking has succeeded, once the visitor has a rough preference for when they'd like to talk (e.g. 'sometime this week', 'tomorrow afternoon', or no preference at all — this looks ahead automatically). Returns a short list of real open time slots you should read out to the visitor in plain conversational language (their local-sounding format, e.g. 'Tuesday at 2:00 PM'), not raw timestamps.",
+            description: "Call this once you know who to book with (either the bot's default calendar, or a rep just assigned via assess_partner_qualification) AND the visitor has a rough time preference (e.g. 'sometime this week', 'tomorrow afternoon', or no preference — this looks ahead automatically). Returns a short list of real open time slots to read out in plain conversational language (e.g. 'Tuesday at 2:00 PM'), not raw timestamps.",
             parameters: { type: 'object', properties: {}, required: [] }
         });
         decls.push({
             name: 'book_appointment',
             description: "Call this ONLY after the visitor has picked one specific time from the list check_availability gave you. Pass back the EXACT slot_iso value from that list for the time they chose — do not construct or guess a timestamp yourself. Actually books the appointment on the calendar on their behalf and confirms it.",
             parameters: { type: 'object', properties: { slot_iso: { type: 'string', description: 'The exact ISO datetime string from check_availability that the visitor picked' } }, required: ['slot_iso'] }
+        });
+    }
+    if (bot.qualifying_criteria && bot.ghl_location_id) {
+        decls.push({
+            name: 'assess_partner_qualification',
+            description: "Call this ONCE you have asked the qualifying questions described in your instructions AND have the visitor's name and at least an email or phone number. Creates/updates their contact record, records your qualification decision, and — if qualified and reps are configured — assigns the best-fit available rep so booking can proceed. You decide `qualifies` yourself based on the criteria in your instructions and their answers; this tool does not re-check your judgment.",
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' },
+                    qualifies: { type: 'boolean', description: 'Your judgment: does this applicant meet the qualifying criteria you were given?' },
+                    reasoning: { type: 'string', description: 'One or two sentences on why, for the record — not shown to the visitor verbatim.' },
+                    preferred_rep_ids: {
+                        type: 'array', items: { type: 'string' },
+                        description: 'Only if qualifies=true and reps are listed in your instructions: their ghl_user_id values, best-fit first, based on their notes and the conversation. Empty array if unsure — the system will pick from the full pool.'
+                    }
+                },
+                required: ['name', 'qualifies']
+            }
+        });
+    }
+    if (bot.not_eligible_workflow_id) {
+        decls.push({
+            name: 'request_rep_followup',
+            description: "Call this when an EXISTING partner who does NOT currently qualify for Prime49 says they'd still like a sales rep to reach out. Requires that you already have their contact on file (via lookup_partner finding them, or create_contact_and_offer_booking). Does not book anything — just flags them for outreach.",
+            parameters: { type: 'object', properties: {}, required: [] }
         });
     }
     return decls;
@@ -183,7 +213,56 @@ export default async function handler(req, res) {
             async function executeTool(name, args) {
                 if (name === 'lookup_partner') {
                     const r = await lookupPartner(bot, args.partner_id);
+                    // Remember their existing HighLevel contact so later tools
+                    // (request_rep_followup, booking) don't need to re-collect
+                    // name/email/phone for someone we already found.
+                    if (r.found && r.hl_contact_id && !convo.hl_contact_id) {
+                        await supabase.from('bot_conversations').update({
+                            hl_contact_id: r.hl_contact_id, visitor_name: r.name || null, visitor_email: r.email || null, visitor_phone: r.phone || null
+                        }).eq('id', convo.id);
+                        convo.hl_contact_id = r.hl_contact_id;
+                    }
                     return r;
+                }
+                if (name === 'request_rep_followup') {
+                    if (!bot.not_eligible_workflow_id) return { ok: false, error: 'Not configured for this assistant.' };
+                    if (!convo.hl_contact_id) return { ok: false, error: 'No contact on file yet — get their name and email/phone first.' };
+                    const r = await ghlAddContactToWorkflow(bot.ghl_location_id, convo.hl_contact_id, bot.not_eligible_workflow_id);
+                    if (!r.ok) return { ok: false, error: r.error || 'Could not flag them for follow-up.' };
+                    return { ok: true };
+                }
+                if (name === 'assess_partner_qualification') {
+                    const qualifies = !!args.qualifies;
+                    const reps = Array.isArray(bot.survey_reps) ? bot.survey_reps : [];
+                    const preferredIds = Array.isArray(args.preferred_rep_ids) ? args.preferred_rep_ids.map(String) : [];
+                    // Fall back to trying every configured rep (in whatever
+                    // order they were added) if the model didn't rank any —
+                    // still better than assigning no one when reps exist.
+                    const rankOrder = preferredIds.length ? preferredIds : reps.map(r => r.ghl_user_id);
+                    let assignedRep = null;
+                    if (qualifies && rankOrder.length) {
+                        assignedRep = await firstAvailableRep(bot.ghl_location_id, reps, rankOrder);
+                    }
+                    const r = await applyRsvpTagWorkflow(bot.ghl_location_id, { hl_contact_id: convo.hl_contact_id }, args.name, args.email, args.phone,
+                        { assigned_to: assignedRep ? assignedRep.ghl_user_id : undefined });
+                    if (!r.contactId) return { ok: false, error: r.error || 'Could not save their contact record.' };
+                    await supabase.from('bot_conversations').update({
+                        hl_contact_id: r.contactId, visitor_name: args.name || null, visitor_email: args.email || null, visitor_phone: args.phone || null,
+                        qualified: qualifies, ai_reasoning: String(args.reasoning || '').slice(0, 1000),
+                        assigned_rep_ghl_user_id: assignedRep ? assignedRep.ghl_user_id : null,
+                        assigned_rep_name: assignedRep ? assignedRep.name : null,
+                        assigned_rep_calendar_id: assignedRep ? (assignedRep.calendar_id || null) : null
+                    }).eq('id', convo.id);
+                    convo.hl_contact_id = r.contactId;
+                    convo.assigned_rep_calendar_id = assignedRep ? (assignedRep.calendar_id || null) : null;
+                    if (!qualifies) return { ok: true, qualified: false };
+                    const effectiveCalendar = convo.assigned_rep_calendar_id || (bot.booking_mode === 'calendar' ? bot.booking_calendar_id : null);
+                    return {
+                        ok: true, qualified: true,
+                        rep_assigned: !!assignedRep, rep_name: assignedRep ? assignedRep.name : null,
+                        booking_available: !!effectiveCalendar,
+                        note: effectiveCalendar ? 'Call check_availability next.' : 'No calendar available right now — tell them a team member will personally follow up instead of promising a booking.'
+                    };
                 }
                 if (name === 'create_contact_and_offer_booking') {
                     if (!bot.ghl_location_id) return { ok: false, error: 'Booking is not configured for this assistant yet. Do not promise a widget or a link — offer to have a person follow up instead.' };
@@ -217,22 +296,27 @@ export default async function handler(req, res) {
                     return { ok: true, booking_available: false, note: 'Contact saved, but no calendar/form is configured for this assistant — do NOT tell the visitor a widget or link is coming. Instead say a team member will follow up with them directly.' };
                 }
                 if (name === 'check_availability') {
-                    if (!bot.ghl_location_id || !bot.booking_calendar_id) return { ok: false, error: 'No calendar configured.' };
+                    // A rep assigned via assess_partner_qualification books on
+                    // THEIR own calendar; otherwise fall back to the bot's
+                    // single default calendar.
+                    const calendarId = convo.assigned_rep_calendar_id || bot.booking_calendar_id;
+                    if (!bot.ghl_location_id || !calendarId) return { ok: false, error: 'No calendar configured.' };
                     const now = Date.now();
-                    const slots = await ghlCalendarFreeSlotsRaw(bot.ghl_location_id, bot.booking_calendar_id, now, now + 9 * 24 * 60 * 60 * 1000);
+                    const slots = await ghlCalendarFreeSlotsRaw(bot.ghl_location_id, calendarId, now, now + 9 * 24 * 60 * 60 * 1000);
                     lastSlots = slots.slice(0, 8);
                     if (!lastSlots.length) return { ok: true, slots: [], note: 'No open times found in the next 9 days — apologize and offer to have a person follow up instead.' };
                     return { ok: true, slots: lastSlots };
                 }
                 if (name === 'book_appointment') {
-                    if (!bot.ghl_location_id || !bot.booking_calendar_id) return { ok: false, error: 'No calendar configured.' };
+                    const calendarId = convo.assigned_rep_calendar_id || bot.booking_calendar_id;
+                    if (!bot.ghl_location_id || !calendarId) return { ok: false, error: 'No calendar configured.' };
                     if (!convo.hl_contact_id) return { ok: false, error: 'No contact on file yet — call create_contact_and_offer_booking first.' };
                     const slot = String(args.slot_iso || '');
                     if (lastSlots.length && !lastSlots.includes(slot)) {
                         return { ok: false, error: 'That is not one of the times just offered — re-run check_availability and use an exact slot value, or ask the visitor to pick again.' };
                     }
                     const r = await ghlCreateAppointment(bot.ghl_location_id, {
-                        calendarId: bot.booking_calendar_id, contactId: convo.hl_contact_id, startTime: slot, title: `${bot.name} — website chat booking`
+                        calendarId, contactId: convo.hl_contact_id, startTime: slot, title: `${bot.name} — website chat booking`
                     });
                     if (!r.ok) return { ok: false, error: r.error || 'Could not book that time — apologize and offer to have a person follow up instead.' };
                     return { ok: true, booked: true, start_time: slot };
@@ -255,10 +339,25 @@ export default async function handler(req, res) {
 
 ${visitorContext}
 
-Reference material you can draw on to answer questions (do not invent facts beyond this and your persona instructions — if you don't know, say so and offer to connect them with a person). Some items include a [source: URL] — when you use one of those, casually mention where it's from or offer the link (e.g. "you can see the full details here: <url>"), so the answer feels grounded, not just asserted. Never show the [source: ...] tag itself verbatim; just describe/link it naturally:
+Your goal in every conversation is to move things toward ONE of these outcomes, in this order of priority: (1) an existing partner booked/connected for their Prime49 upgrade, (2) a qualified new partner application submitted, (3) a merchant pointed to support. General questions are welcome and should be answered helpfully, but steer naturally back toward figuring out which of those three the visitor is, rather than just answering trivia forever.
+
+── Existing partner (has a Partner ID) ──
+Call lookup_partner with their ID. If eligible for Prime49: offer to book them — call create_contact_and_offer_booking (or assess_partner_qualification is NOT for this path), then check_availability/book_appointment if auto-booking is available. If NOT eligible${bot.not_eligible_workflow_id ? ': ask if they\'d still like a sales rep to reach out, and if yes, call request_rep_followup (their contact is already on file from the lookup).' : ' and no rep follow-up is configured: let them know politely and answer any other questions.'}
+
+── Prospective partner (wants to become one) ──${bot.qualifying_criteria ? `
+Ask about (and use your judgment on qualification against): ${bot.qualifying_criteria}
+Once you have a clear picture AND their name plus email or phone, call assess_partner_qualification with your own qualifies:true/false judgment.` : `
+No qualifying criteria configured for this assistant yet — once they're ready to move forward and you have their name and email or phone, call create_contact_and_offer_booking.`}
+${Array.isArray(bot.survey_reps) && bot.survey_reps.length ? `Reps available to assign if qualified (rank by fit in preferred_rep_ids, best first — an unavailable one is skipped automatically):\n${bot.survey_reps.map(r => `- id:"${r.ghl_user_id}" name:"${r.name || ''}" notes:"${r.notes || ''}"`).join('\n')}` : ''}
+After assess_partner_qualification returns qualified:true with booking_available:true, offer to book (check_availability/book_appointment). If qualified:false, let them down politely per your persona — do not book anything.
+
+── Merchant (not a partner, wants help with their account) ──
+Tell them: "${bot.merchant_message || 'Please call Merchant Support at 800-226-2273, extension 5382, option 1.'}"
+
+Reference material you can draw on to answer general questions (do not invent facts beyond this and your persona instructions — if you don't know, say so and offer to connect them with a person). Some items include a [source: URL] — when you use one of those, casually mention where it's from or offer the link (e.g. "you can see the full details here: <url>"), so the answer feels grounded, not just asserted. Never show the [source: ...] tag itself verbatim; just describe/link it naturally:
 ${knowledgeBlock}
 
-IMPORTANT about booking: never promise a "widget will appear" or "here's a link" until AFTER create_contact_and_offer_booking actually returns booking_available:true — its response tells you exactly what happened (widget, link, auto_book, or nothing configured). If booking_available is false, say a team member will personally follow up — do not invent a scheduling mechanism that doesn't exist.
+IMPORTANT about booking: never promise a "widget will appear" or "here's a link" until AFTER create_contact_and_offer_booking or assess_partner_qualification actually returns booking_available:true — the response tells you exactly what happened. If booking_available is false, say a team member will personally follow up — do not invent a scheduling mechanism that doesn't exist.
 
 Keep replies conversational and concise (a few sentences), like a real chat, not an essay.`
                 });
@@ -313,7 +412,11 @@ Keep replies conversational and concise (a few sentences), like a real chat, not
                     await supabase.from('bot_conversations').update({ last_provider_log_error: logErr }).eq('id', convo.id);
                 }
 
-                return ok(res, { reply, conversation_id: convo.id, booking });
+                // Tells the widget to set a real 30-day cookie now that this
+                // visitor has given contact info — anonymous browsing before
+                // that point isn't specially remembered beyond the plain
+                // visit-count tracking above.
+                return ok(res, { reply, conversation_id: convo.id, booking, identified: !!convo.hl_contact_id });
             } catch (e) {
                 console.error('[bot-chat] Gemini failed:', e.message);
                 return bad(res, "We couldn't process that right now. Please try again shortly.");

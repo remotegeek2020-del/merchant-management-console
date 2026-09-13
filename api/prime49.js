@@ -117,7 +117,7 @@ function fieldQualifies(f, answers) {
 // blocked out never gets assigned just because they were the top pick.
 // Fails open on an availability-check error (treats it as available)
 // rather than skipping a rep just because HighLevel hiccuped.
-async function firstAvailableRep(locationId, reps, rankedIds) {
+export async function firstAvailableRep(locationId, reps, rankedIds) {
     const now = Date.now(), horizon = now + 14 * 24 * 60 * 60 * 1000;
     for (const id of rankedIds) {
         const rep = reps.find(r => String(r.ghl_user_id) === String(id));

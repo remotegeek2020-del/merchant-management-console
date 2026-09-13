@@ -193,7 +193,13 @@ export default async function handler(req, res) {
                 booking_style: ['link', 'auto_book'].includes(body.booking_style) ? body.booking_style : 'widget',
                 followup_enabled: !!body.followup_enabled,
                 followup_hours: Number.isFinite(+body.followup_hours) && +body.followup_hours > 0 ? +body.followup_hours : 24,
-                followup_message: str(body.followup_message, 500) || null
+                followup_message: str(body.followup_message, 500) || null,
+                qualifying_criteria: str(body.qualifying_criteria, 4000) || null,
+                survey_reps: Array.isArray(body.survey_reps) ? body.survey_reps.slice(0, 50).map(r => ({
+                    ghl_user_id: str(r.ghl_user_id, 100), name: str(r.name, 200), notes: str(r.notes, 500), calendar_id: str(r.calendar_id, 100)
+                })) : [],
+                not_eligible_workflow_id: str(body.not_eligible_workflow_id, 100) || null,
+                merchant_message: str(body.merchant_message, 500) || null
             }).select('*').single();
             if (error) return bad(res, error.message);
             return ok(res, data);
@@ -219,6 +225,12 @@ export default async function handler(req, res) {
                 followup_enabled: !!body.followup_enabled,
                 followup_hours: Number.isFinite(+body.followup_hours) && +body.followup_hours > 0 ? +body.followup_hours : 24,
                 followup_message: str(body.followup_message, 500) || null,
+                qualifying_criteria: str(body.qualifying_criteria, 4000) || null,
+                survey_reps: Array.isArray(body.survey_reps) ? body.survey_reps.slice(0, 50).map(r => ({
+                    ghl_user_id: str(r.ghl_user_id, 100), name: str(r.name, 200), notes: str(r.notes, 500), calendar_id: str(r.calendar_id, 100)
+                })) : [],
+                not_eligible_workflow_id: str(body.not_eligible_workflow_id, 100) || null,
+                merchant_message: str(body.merchant_message, 500) || null,
                 updated_at: new Date().toISOString()
             };
             if (body.slug) {

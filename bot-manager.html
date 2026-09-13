@@ -119,8 +119,32 @@
         <div style="flex:1;"><label class="fld" style="margin-top:0;">Min 30-day volume</label><input class="inp" type="number" id="f_min_volume" value="20000"></div>
         <div style="flex:1;"><label class="fld" style="margin-top:0;">Max 30-day volume</label><input class="inp" type="number" id="f_max_volume" value="30000"></div>
       </div>
+      <label class="fld">If NOT eligible, offer to enroll them in this workflow</label>
+      <select class="inp" id="f_not_eligible_workflow"><option value="">— none (just tell them politely) —</option></select>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Only offered if they agree — never enrolled silently.</div>
+    </div>
 
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;margin-top:16px;"><input type="checkbox" id="f_followup_enabled"> Follow up if the conversation goes cold</label>
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+      <div style="font-weight:800;font-size:12px;margin-bottom:4px;">Prospective partners</div>
+      <label class="fld" style="margin-top:0;">Qualifying questions/criteria <span class="muted" style="text-transform:none;font-weight:400;">(plain language — the bot asks about these and judges qualification itself)</span></label>
+      <textarea class="inp" id="f_qualifying_criteria" rows="4" placeholder="Ask about: current monthly processing volume, how long they've been in business, and whether they're currently under contract with another processor. Qualifies if: monthly volume is at least $10,000 and they are not locked into a long-term contract."></textarea>
+      <div class="muted" style="font-size:11px;margin:6px 0;">Leave blank to skip qualifying and just collect contact info when they're ready.</div>
+      <label class="fld">Reps to assign if qualified <span class="muted" style="text-transform:none;font-weight:400;">(bot ranks by fit, skips anyone fully booked)</span></label>
+      <div style="display:flex;gap:8px;">
+        <select class="inp" id="f_rep_picker" style="flex:1;"><option value="">— add a rep —</option></select>
+        <button type="button" class="btn btn-neutral" style="flex:none;" onclick="botAddRep()">+ Add</button>
+      </div>
+      <div id="botRepList" style="margin-top:8px;"></div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+      <div style="font-weight:800;font-size:12px;margin-bottom:4px;">Merchants</div>
+      <label class="fld" style="margin-top:0;">Message when someone identifies as a merchant (not a partner)</label>
+      <textarea class="inp" id="f_merchant_message" rows="2" placeholder="Please call Merchant Support at 800-226-2273, extension 5382, option 1."></textarea>
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;"><input type="checkbox" id="f_followup_enabled"> Follow up if the conversation goes cold</label>
       <div class="muted" style="font-size:11px;margin:4px 0 8px;">If a visitor gave contact info but stops replying, sends one SMS nudge (via their HighLevel contact) after the quiet period below. Checked hourly.</div>
       <div class="row2" style="display:flex;gap:10px;">
         <div style="flex:1;"><label class="fld" style="margin-top:0;">Quiet for (hours)</label><input class="inp" type="number" id="f_followup_hours" value="24"></div>
@@ -251,17 +275,70 @@ async function loadBotLocations(preId){
   sel.innerHTML = '<option value="">— select —</option>' + locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
   if(preId){ if(!Array.from(sel.options).some(o=>o.value===preId)){ const o=document.createElement('option'); o.value=preId; o.textContent=preId; sel.appendChild(o); } sel.value = preId; }
 }
-async function onBotLocation(preCalId, preFormId){
+async function onBotLocation(preCalId, preFormId, preWorkflowId){
   const loc = document.getElementById('f_location').value;
-  const calSel = document.getElementById('f_calendar'), formSel = document.getElementById('f_form');
-  if(!loc){ calSel.innerHTML='<option value="">Choose a sub-account first…</option>'; formSel.innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
-  calSel.innerHTML='<option value="">Loading…</option>'; formSel.innerHTML='<option value="">Loading…</option>';
-  const [cr, fr] = await Promise.all([marketingApi({action:'ghl_calendars', location_id:loc}), marketingApi({action:'ghl_forms', location_id:loc})]);
-  const cals = (cr.success?cr.data:[])||[], forms = (fr.success?fr.data:[])||[];
+  const calSel = document.getElementById('f_calendar'), formSel = document.getElementById('f_form'), wfSel = document.getElementById('f_not_eligible_workflow');
+  if(!loc){
+    calSel.innerHTML='<option value="">Choose a sub-account first…</option>'; formSel.innerHTML='<option value="">Choose a sub-account first…</option>';
+    wfSel.innerHTML='<option value="">Choose a sub-account first…</option>';
+    window._botGhlCalendars=[]; window._botStaffReps=[]; botRenderReps();
+    return;
+  }
+  calSel.innerHTML='<option value="">Loading…</option>'; formSel.innerHTML='<option value="">Loading…</option>'; wfSel.innerHTML='<option value="">Loading…</option>';
+  const [cr, fr, wr, rr] = await Promise.all([
+    marketingApi({action:'ghl_calendars', location_id:loc}), marketingApi({action:'ghl_forms', location_id:loc}),
+    marketingApi({action:'ghl_workflows', location_id:loc}), marketingApi({action:'prime49_reps'})
+  ]);
+  const cals = (cr.success?cr.data:[])||[], forms = (fr.success?fr.data:[])||[], workflows = (wr.success?wr.data:[])||[];
+  window._botGhlCalendars = cals;
+  window._botStaffReps = (rr.success?rr.data:[])||[];
   calSel.innerHTML = '<option value="">— none —</option>' + cals.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join('');
   formSel.innerHTML = '<option value="">— select a form —</option>' + forms.map(f=>`<option value="${esc(f.id)}">${esc(f.name||f.id)}</option>`).join('');
+  wfSel.innerHTML = '<option value="">— none (just tell them politely) —</option>' + workflows.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}</option>`).join('');
   if(preCalId){ if(!Array.from(calSel.options).some(o=>o.value===preCalId)){ const o=document.createElement('option'); o.value=preCalId; o.textContent=preCalId; calSel.appendChild(o); } calSel.value = preCalId; }
   if(preFormId){ if(!Array.from(formSel.options).some(o=>o.value===preFormId)){ const o=document.createElement('option'); o.value=preFormId; o.textContent=preFormId; formSel.appendChild(o); } formSel.value = preFormId; }
+  if(preWorkflowId){ if(!Array.from(wfSel.options).some(o=>o.value===preWorkflowId)){ const o=document.createElement('option'); o.value=preWorkflowId; o.textContent=preWorkflowId; wfSel.appendChild(o); } wfSel.value = preWorkflowId; }
+  botRenderRepPicker();
+  botRenderReps();
+}
+// ── Prospective-partner rep pool (same "Secret Dungeon staff mapped to a
+// HighLevel user" pool Prime49 uses via the prime49_reps action) ───────────
+window._botReps = [];
+function botRenderRepPicker(){
+  const sel = document.getElementById('f_rep_picker');
+  const staff = window._botStaffReps||[];
+  const already = new Set(window._botReps.map(r=>r.ghl_user_id));
+  sel.innerHTML = '<option value="">— add a rep —</option>' + staff.filter(u=>!already.has(u.ghl_user_id)).map(u=>`<option value="${esc(u.ghl_user_id)}">${esc(u.name||u.ghl_user_id)}</option>`).join('');
+}
+function botAddRep(){
+  const sel = document.getElementById('f_rep_picker');
+  const id = sel.value; if(!id) return;
+  const u = (window._botStaffReps||[]).find(x=>x.ghl_user_id===id);
+  window._botReps.push({ ghl_user_id:id, name:(u&&u.name)||id, notes:'', calendar_id:'' });
+  botRenderRepPicker(); botRenderReps();
+}
+function botRemoveRep(i){ window._botReps.splice(i,1); botRenderRepPicker(); botRenderReps(); }
+function botCollectReps(){
+  document.querySelectorAll('#botRepList .bot-rep-notes').forEach(el=>{ window._botReps[+el.dataset.i].notes = el.value; });
+  document.querySelectorAll('#botRepList .bot-rep-cal').forEach(el=>{ window._botReps[+el.dataset.i].calendar_id = el.value; });
+  return window._botReps;
+}
+function botRenderReps(){
+  const box = document.getElementById('botRepList');
+  const cals = window._botGhlCalendars||[];
+  box.innerHTML = window._botReps.map((r,i)=>{
+    const calOpts = '<option value="">— no calendar (won\'t be selectable) —</option>' + cals.map(c=>`<option value="${esc(c.id)}" ${c.id===r.calendar_id?'selected':''}>${esc(c.name||c.id)}</option>`).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:700;font-size:12.5px;">${esc(r.name)}</div>
+        <button type="button" class="btn btn-neutral" style="padding:3px 8px;font-size:11px;" onclick="botRemoveRep(${i})">✕</button>
+      </div>
+      <div class="muted" style="font-size:10px;margin:6px 0 2px;">Fit notes for the bot — what makes this rep a good match</div>
+      <textarea class="inp bot-rep-notes" rows="2" data-i="${i}" oninput="botCollectReps()" placeholder="e.g. Handles high-volume retail merchants, West Coast.">${esc(r.notes||'')}</textarea>
+      <div class="muted" style="font-size:10px;margin:6px 0 2px;">This rep's own booking calendar</div>
+      <select class="inp bot-rep-cal" data-i="${i}" onchange="botCollectReps()">${calOpts}</select>
+    </div>`;
+  }).join('') || '<div class="muted" style="font-size:11px;">No reps added — a qualified applicant will just have their contact saved without a rep assigned.</div>';
 }
 function newBot(){
   current = null;
@@ -273,6 +350,9 @@ function newBot(){
   document.getElementById('f_min_volume').value = '20000'; document.getElementById('f_max_volume').value = '30000';
   document.getElementById('f_followup_enabled').checked = false; document.getElementById('f_followup_hours').value = '24'; document.getElementById('f_followup_message').value='';
   document.getElementById('f_booking_style').value = 'widget';
+  document.getElementById('f_qualifying_criteria').value = '';
+  document.getElementById('f_merchant_message').value = '';
+  window._botReps = [];
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('postSaveSections').style.display='none';
   document.getElementById('editorCard').style.display='block';
@@ -296,9 +376,13 @@ async function selectBot(id){
   document.getElementById('f_followup_hours').value = current.followup_hours!=null?current.followup_hours:24;
   document.getElementById('f_followup_message').value = current.followup_message||'';
   document.getElementById('f_booking_style').value = current.booking_style||'widget';
+  document.getElementById('f_qualifying_criteria').value = current.qualifying_criteria||'';
+  document.getElementById('f_merchant_message').value = current.merchant_message||'';
+  window._botReps = Array.isArray(current.survey_reps) ? current.survey_reps.map(r=>({...r})) : [];
   setBookingMode(current.booking_mode==='form'?'form':'calendar');
   await loadBotLocations(current.ghl_location_id||'');
-  if(current.ghl_location_id) await onBotLocation(current.booking_calendar_id||'', current.booking_form_id||'');
+  if(current.ghl_location_id) await onBotLocation(current.booking_calendar_id||'', current.booking_form_id||'', current.not_eligible_workflow_id||'');
+  else botRenderReps();
   document.getElementById('deleteBtn').style.display='inline-flex';
   document.getElementById('postSaveSections').style.display='block';
   document.getElementById('editorCard').style.display='block';
@@ -339,7 +423,11 @@ async function saveBot(){
     booking_calendar_name: (calSel.options[calSel.selectedIndex]||{}).text||null,
     booking_form_id: formSel.value||null,
     booking_form_name: (formSel.options[formSel.selectedIndex]||{}).text||null,
-    booking_style: document.getElementById('f_booking_style').value||'widget'
+    booking_style: document.getElementById('f_booking_style').value||'widget',
+    not_eligible_workflow_id: document.getElementById('f_not_eligible_workflow').value||null,
+    qualifying_criteria: document.getElementById('f_qualifying_criteria').value.trim()||null,
+    merchant_message: document.getElementById('f_merchant_message').value.trim()||null,
+    survey_reps: botCollectReps()
   };
   if(!payload.name){ Swal.fire('Name required', '', 'warning'); return; }
   let r;

@@ -30,10 +30,26 @@
     }
     // localStorage (not sessionStorage) so the same browser is recognized on
     // a LATER visit too, not just within one tab session — this is what lets
-    // the bot say "welcome back" and remember visit count (Phase 5).
+    // the bot say "welcome back" and remember visit count (Phase 5), even for
+    // an anonymous visitor who never gave contact info.
+    var COOKIE_NAME = 'ppbot_id_' + SLUG;
+    function getCookie(name) {
+        var m = document.cookie.match('(?:^|; )' + name.replace(/[.$?*|{}()[\]\\/+^]/g, '\\$&') + '=([^;]*)');
+        return m ? decodeURIComponent(m[1]) : null;
+    }
+    // Set once a visitor gives name/email/phone — a REAL 30-day cookie,
+    // deliberately separate from the indefinite localStorage key, so someone
+    // who's identified themselves is reliably remembered for exactly 30 days
+    // even if the browser treats localStorage/cookies with different
+    // lifetimes (some private-browsing / cleanup policies do).
+    function setIdentifiedCookie(key) {
+        try { document.cookie = COOKIE_NAME + '=' + encodeURIComponent(key) + ';max-age=' + (30 * 24 * 60 * 60) + ';path=/;SameSite=Lax'; } catch (e) {}
+    }
     function visitorKey() {
         var k = 'ppbot_vk_' + SLUG;
         try {
+            var fromCookie = getCookie(COOKIE_NAME);
+            if (fromCookie) { localStorage.setItem(k, fromCookie); return fromCookie; }
             var v = localStorage.getItem(k);
             if (!v) { v = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(k, v); }
             return v;
@@ -144,6 +160,7 @@
             typing.remove();
             bubble('bot', r.success ? r.reply : (r.message || 'Something went wrong — please try again.'));
             if (r.success && r.booking) bookingHtml(r.booking);
+            if (r.success && r.identified) setIdentifiedCookie(VK);
         });
     }
 
