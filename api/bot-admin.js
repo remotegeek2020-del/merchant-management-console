@@ -103,7 +103,19 @@ export default async function handler(req, res) {
             if (privateKey) {
                 privateKeyResult = await logProviderMessage({ contactId, conversationId, direction: 'outbound', body: '[PayProTec bot test message — via private key — safe to ignore]', accessTokenOverride: privateKey });
             }
-            return ok(res, { diagnostics: diag, contact_check: contactLocationCheck, conversation_id: conversationId, conversation_raw: conversationRaw, inbound: inboundR, outbound: outboundR, private_key_test: privateKeyResult });
+            // Run the WHOLE resolve-and-send sequence a second time against
+            // the same contact, to prove conversationId reuse is actually
+            // happening (not silently re-creating a new one each call) and
+            // that the failure is identical either way — visible side by
+            // side instead of asking for two separate screenshots.
+            const conversationIdRun2 = diag.location_id ? await ghlFindOrCreateConversation(diag.location_id, contactId) : null;
+            const outboundRun2 = await logProviderMessage({ contactId, conversationId: conversationIdRun2, direction: 'outbound', body: '[PayProTec bot test message — run 2 — safe to ignore]' });
+            return ok(res, {
+                diagnostics: diag, contact_check: contactLocationCheck,
+                conversation_id: conversationId, conversation_raw: conversationRaw,
+                inbound: inboundR, outbound: outboundR, private_key_test: privateKeyResult,
+                run2: { conversation_id: conversationIdRun2, same_conversation_id_as_run1: conversationIdRun2 === conversationId, outbound: outboundRun2 }
+            });
         }
 
         if (action === 'list_bots') {
